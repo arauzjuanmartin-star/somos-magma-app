@@ -234,7 +234,7 @@ function Presupuestos({data:initialData}){
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 240px)'}}>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr style={{background:'#1A1A1A'}}>{['N°','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}</tr></thead>
-        <tbody>{filtered.map((p,i)=>{const io=open===p['Columna 1']; return <React.Fragment key={i}>
+        <tbody>{filtered.map((p,i)=>{const io=open===p['Columna 1']; return <>
           <tr style={{background:io?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(io?null:p['Columna 1'])}>
             <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
             <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
@@ -246,7 +246,7 @@ function Presupuestos({data:initialData}){
             <td style={S.td} onClick={e=>e.stopPropagation()}><BadgeEstado p={p} onUpdate={upd}/></td>
           </tr>
           {io&&<tr><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
-        </React.Fragment>})}</tbody>
+        </>})}</tbody>
       </table>
       {filtered.length===0&&<div style={S.nd}>Sin resultados</div>}
     </div>
