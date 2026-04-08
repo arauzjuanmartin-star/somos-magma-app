@@ -269,7 +269,7 @@ function DetallePresupuesto({p}){
 
 function Presupuestos({data:initialData}){
   const [localData,setLocalData]=useState(initialData)
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos')
 
   useEffect(()=>{setLocalData(initialData)},[initialData])
 
@@ -277,6 +277,8 @@ function Presupuestos({data:initialData}){
 
   const pms=[...new Set(presus.map(p=>p['PM Interno']).filter(Boolean))].sort()
 
+  const anios=[...new Set(presus.map(p=>String(p['Fecha Presupuesto']||'').split('/')[2]).filter(a=>a&&a.length===4))].sort().reverse()
+  const MESES=[['1','Enero'],['2','Febrero'],['3','Marzo'],['4','Abril'],['5','Mayo'],['6','Junio'],['7','Julio'],['8','Agosto'],['9','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const filtered=presus.filter(p=>{
     const e=String(p['Estado']||'').toUpperCase()
     const mf=f==='todos'||(f==='ap'&&(e==='APROBADO'||e==='EN CURSO'||e==='ENTREGADO'))
@@ -284,7 +286,10 @@ function Presupuestos({data:initialData}){
       ||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
     const mpm=pm==='todos'||p['PM Interno']===pm
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    return mf&&mpm&&mq
+    const fecha=String(p['Fecha Presupuesto']||'')
+    const manio=anio==='todos'||fecha.includes(anio)
+    const mmes=mes==='todos'||fecha.startsWith(mes+'/')||fecha.startsWith('0'+mes+'/')
+    return mf&&mpm&&mq&&manio&&mmes
   }).reverse()
 
   const handleEstadoUpdate=(num,nuevoEstado)=>{
@@ -296,7 +301,7 @@ function Presupuestos({data:initialData}){
     {toast&&<Toast msg={toast} onDone={()=>setToast('')}/>}
     <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
       <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder="Buscar N°, cliente, proyecto, PM..." value={q} onChange={e=>setQ(e.target.value)}/>
-      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:anio==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={anio} onChange={e=>setAnio(e.target.value)}><option value="todos">Todos los años</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select><select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:mes==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={mes} onChange={e=>setMes(e.target.value)}><option value="todos">Todos los meses</option>{MESES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
         <option value="todos">Todos los PM</option>
         {pms.map(p=><option key={p} value={p}>{p}</option>)}
       </select>
