@@ -22,54 +22,8 @@ const isCobrada = f => {
   return v === true || v === 'TRUE' || String(v).toUpperCase() === 'TRUE'
 }
 
-// ---- DATOS LISTADO ----
-const SVCS_LIST=[
-  {n:'📸 Foto ½',p:220000,fee:true},{n:'📷 Foto 1',p:290000,fee:true},
-  {n:'🎥 Video ½',p:220000,fee:true},{n:'📹 Video 1',p:290000,fee:true},
-  {n:'🎬 Film ½',p:220000,fee:true},{n:'🎞️ Film 1',p:290000,fee:true},
-  {n:'🕛 Film 12hs',p:350000,fee:true},{n:'✂️ Edit 60s',p:116000,fee:true},
-  {n:'🪄 Edit 60s+',p:174000,fee:true},{n:'🤝 Asist ½',p:140000,fee:true},
-  {n:'🙌 Asist 1',p:210000,fee:true},{n:'💻 Vivo 1',p:350000,fee:true},
-  {n:'🖥️ Vivo ½',p:230000,fee:true},{n:'🎛️ DirFoto',p:350000,fee:true},
-  {n:'🎙️ Sonido',p:290000,fee:true},{n:'🚁 Drone',p:290000,fee:true},
-  {n:'🏎️ FPV',p:405000,fee:true},{n:'✨ Motion',p:230000,fee:true},
-  {n:'🗂️ Crudos',p:175000,fee:true},{n:'📲 Edit 15-30s',p:116000,fee:true},
-  {n:'🖼️ Fotos',p:60000,fee:true},{n:'🖲️ Go Pro',p:230000,fee:true},
-  {n:'🌎 Viaticos',p:0,fee:false},{n:'👷🏽 Produ',p:0,fee:false},
-  {n:'💅🏽 MakeUp',p:0,fee:false},{n:'🚚 Rental',p:0,fee:false},
-  {n:'👯‍♂️ Model',p:0,fee:false},{n:'🍽️ Catering',p:0,fee:false},
-  {n:'Otros',p:0,fee:false},
-]
-const AGENCIAS_LIST=['Ostara','Minita','Pop Up','Stadium','ADN','Quilmes','Creators Lab','Mole Media','WeCorp','Louder','Smarketing','Bacardi','Integra','Btlandia','OIR','SPA','ABV','Piet','Nodus','Bermuda','United Scale Arts','Meikin','CMQ','Bar de eventos','The Bloom','Velvet','Mucha','Freelance','Zona Prop','azcuy','Blue Mail','Mercurias','KLM']
-const CLIENTES_LIST=['Santander','Unilever','Austral','Air France','Iveco','Latam','Campari',"L'Oreal",'Maybelline','Betsson','Disney','Quilmes','Chandon','Honda','Peugeot','Endeavor','Baron B','Google','Microsoft','Coca Cola','Adidas','Mercado Libre','YPF','Volkswagen','Personal','Telecom','Brahma','Off','Integra','Rutini','Visa','Natura']
-const CONTACTOS_LIST=[
-  {n:'Agostina Caruso',ag:''},{n:'Alejandra Moreno',ag:'Nodus'},{n:'Balado, Natalia',ag:'KLM'},
-  {n:'Belen Infante',ag:'Stadium'},{n:'Belen ST',ag:'Ostara'},{n:'Bruno Dibattista',ag:'Stadium'},
-  {n:'Camila Cabo',ag:'SPA'},{n:'Camila Carrion',ag:'OIR'},{n:'Caro Persico',ag:'Piet'},
-  {n:'Carolina Forestano',ag:'Pop Up'},{n:'Cristian Di Menna',ag:'azcuy'},{n:'Delfina Felice',ag:'Pop Up'},
-  {n:'Emi Perez',ag:'Minita'},{n:'Eugenia Pelaya',ag:'Meikin'},{n:'Facundo Leiton',ag:'Nodus'},
-  {n:'Fernanda Adriano',ag:'Minita'},{n:'Florencia Julian',ag:'Pop Up'},{n:'Freire, Melisa Daiana',ag:'Quilmes'},
-  {n:'Gabriela Capitani',ag:'Stadium'},{n:'Georgia Etchegaray',ag:'Blue Mail'},{n:'Gina',ag:'United Scale Arts'},
-  {n:'Julieta Actis',ag:'Minita'},{n:'Lali Di Stefano',ag:'ADN'},{n:'Lorena Vilanova',ag:'Austral'},
-  {n:'Lucía Miño',ag:'Ostara'},{n:'Mariana Angulegui',ag:'Ostara'},{n:'Mariel Conti',ag:'ABV'},
-  {n:'Martin Lombardi',ag:'Pop Up'},{n:'Nahuel Corbalan',ag:'Ostara'},{n:'Natalia Dalzotto',ag:'Freelance'},
-  {n:'Natalia Emanuele',ag:'Ostara'},{n:'Natalia Torres',ag:'Ostara'},{n:'Pabla Valenti',ag:'azcuy'},
-  {n:'Pachu Tamargo',ag:'Minita'},{n:'Romina Aguilera',ag:'Stadium'},{n:'Sabrina Segú',ag:'Louder'},
-  {n:'Silvia Colussi',ag:'Ostara'},{n:'Valeria Ibarra',ag:'Ostara'},{n:'Victoria Martinez',ag:'Quilmes'},
-  {n:'Victoria Mithieux',ag:'Integra'},{n:'Daniela Torres',ag:'Ostara'},{n:'Gaston Gandara',ag:'ADN'},
-  {n:'Mariano Castellani',ag:'Pop Up'},{n:'Nahiara Fernandez Roman',ag:'Pop Up'},{n:'Lucila Zicari',ag:'Ostara'},
-  {n:'Melina Martinez Claret',ag:'SPA'},{n:'Agustina Monzon',ag:'ADN'},{n:'Gonzalo Gugliottella',ag:'ADN'},
-  {n:'Agustina Ezcurra',ag:'The Bloom'},{n:'Florencia Kralik',ag:'Btlandia'},{n:'Luis Lasaga',ag:'ADN'},
-  {n:'Christian Konig',ag:'Smarketing'},{n:'Bastian Osella',ag:'CMQ'},{n:'Bruno Rossi',ag:'Ostara'},
-  {n:'Sofia Barandalla',ag:'Minita'},{n:'Juani Rojas',ag:'Velvet'},{n:'Ana Iberlucea',ag:'Bermuda'},
-  {n:'Sabrina Wasserman',ag:'Mucha'},
-]
-
-const CSS="@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;700;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}body{background:#090909;color:#F0F0F0;font-family:'Archivo',system-ui,sans-serif;font-size:14px;overflow:hidden}@keyframes spin{to{transform:rotate(360deg)}}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}input[type=number]::-webkit-inner-spin-button{opacity:0}"
-function GS(){return <style>{CSS}</style>}
-
 export default function App() {
-  const [mail,setMail]=useState(''), [mi,setMi]=useState(''), [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
+  const [mail,setMail]=useState(''), [mi,setMi]=useState(''), [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState('')
 
   useEffect(()=>{ const s=localStorage.getItem('magma_mail'); if(s&&MAILS.includes(s)){setMail(s);load(s)} },[])
 
@@ -109,10 +63,7 @@ export default function App() {
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div><div style={{fontSize:18,fontWeight:700}}>{NAV.find(n=>n.id===mod)?.label}</div><div style={{fontSize:12,color:'#555',marginTop:2}}>Vista general</div></div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {mod==='presupuestos'&&<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}} onClick={()=>setShowNP(true)}>+ Nuevo presupuesto</button>}
-            <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load(mail)}>↻ Actualizar</button>
-          </div>
+          <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load(mail)}>↻ Actualizar</button>
         </div>
         <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
           {err&&<div style={{background:'#E24B4A20',border:'0.5px solid #E24B4A',borderRadius:8,padding:'10px 14px',color:'#E24B4A',fontSize:13,marginBottom:14}}>{err}</div>}
@@ -120,7 +71,6 @@ export default function App() {
         </div>
       </div>
     </div>
-    {showNP&&<NuevoPresupuesto onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}));setShowNP(false)}} data={data}/>}
   </>
 }
 
@@ -128,7 +78,7 @@ function Mod({id,data,onRefresh}){
   switch(id){
     case 'dashboard': return <Dashboard data={data}/>
     case 'presupuestos': return <Presupuestos data={data}/>
-    case 'proyectos': return <Proyectos data={data}/>
+    case 'proyectos': return <Proyectos data={data} mail={mail}/>
     case 'facturacion': return <Facturacion data={data}/>
     case 'pagos': return <PagosStaff data={data}/>
     case 'balance': return <Balance data={data}/>
@@ -167,232 +117,182 @@ function Dashboard({data}){
 }
 
 // ---- PRESUPUESTOS ----
-const ESTADOS_CONFIG = [
-  {val:'APROBADO',   bg:'#1D9E7520', c:'#1D9E75'},
-  {val:'EN ESPERA',  bg:'#BA751720', c:'#BA7517'},
-  {val:'DESAPROBADO',bg:'#E24B4A20', c:'#E24B4A'},
-  {val:'EN CURSO',   bg:'#1543F820', c:'#1543F8'},
-  {val:'ENTREGADO',  bg:'#9635AB20', c:'#9635AB'},
-  {val:'REPRESUPUESTADO', bg:'#55555520', c:'#555'},
-]
-const estadoColor = e => ESTADOS_CONFIG.find(x=>x.val===String(e||'').toUpperCase()) || {bg:'#BA751720',c:'#BA7517'}
-
-function Toast({msg,onDone}){
-  useEffect(()=>{const t=setTimeout(onDone,2200);return()=>clearTimeout(t)},[])
-  return <div style={{position:'fixed',bottom:28,right:28,background:'#1D9E75',color:'#fff',padding:'10px 20px',borderRadius:8,fontSize:13,fontWeight:500,zIndex:9999,boxShadow:'0 4px 20px #0008'}}>
-    {msg}
-  </div>
-}
-
-function BadgeEstado({p, onUpdate}){
-  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [motivo,setMotivo]=useState(''), [pendingE,setPendingE]=useState(null)
-  const ec=estadoColor(p['Estado'])
-
-  const handleSelect=async(estado)=>{
-    if(estado==='REPRESUPUESTADO'){setPendingE(estado);setOpen(false);return}
-    await doSave(estado)
-  }
-
-  const doSave=async(estado, mot='')=>{
-    setSaving(true);setOpen(false)
-    try{
-      await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado,motivo:mot})})
-      onUpdate(p['Columna 1'],estado)
-    }catch(e){}
-    setSaving(false);setPendingE(null);setMotivo('')
-  }
-
-  return <div style={{position:'relative'}}>
-    {pendingE&&<div style={{position:'fixed',inset:0,background:'#000a',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setPendingE(null)}>
-      <div style={{background:'#1E1E1E',border:'0.5px solid #2A2A2A',borderRadius:12,padding:24,minWidth:320}} onClick={e=>e.stopPropagation()}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:12}}>Motivo del represupuesto</div>
-        <input style={{...S.inp,marginBottom:12}} placeholder="Ej: Cambió el scope, ajuste de precios..." value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button style={{...S.fb}} onClick={()=>setPendingE(null)}>Cancelar</button>
-          <button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>doSave(pendingE,motivo)}>Confirmar</button>
-        </div>
-      </div>
-    </div>}
-    <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>
-      {saving?'...':(p['Estado']||'—')}
-    </span>
-    {open&&<div style={{position:'absolute',right:0,top:'110%',background:'#1E1E1E',border:'0.5px solid #333',borderRadius:8,zIndex:100,minWidth:160,boxShadow:'0 8px 24px #000a',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
-      {ESTADOS_CONFIG.map(({val,bg,c})=>(
-        <div key={val} style={{padding:'8px 14px',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',gap:8}} onMouseEnter={e=>e.currentTarget.style.background='#2A2A2A'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} onClick={()=>handleSelect(val)}>
-          <span style={{...S.badge,background:bg,color:c,fontSize:10}}>{val}</span>
-        </div>
-      ))}
-    </div>}
-  </div>
-}
-
-function DetallePresupuesto({p}){
-  const servicios=[]
-  for(let j=1;j<=12;j++){
-    const pedKey=j===1?'Pedido 1':(j<=9?`Pedido ${j}`:`Pedido${j} `)
-    const prcKey=j===1?'Precio 1':`Precio ${j}`
-    const ped=p[pedKey]||p[`Pedido ${j}`]||''
-    const prc=parseMonto(p[prcKey]||p[`Precio ${j}`])
-    if(ped&&prc>0) servicios.push({nombre:ped,precio:prc})
-  }
-  const subtotal=servicios.reduce((s,x)=>s+x.precio,0)
-  const total=parseMonto(p['Precio Final'])
-  const ajuste=parseMonto(p['Ajuste'])||parseMonto(p['Total'])||0
-  const fee=total-subtotal
-
-  return <div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px 16px',background:'#111'}}>
-    <div style={{display:'flex',gap:24,marginBottom:14,flexWrap:'wrap'}}>
-      {[['Fecha evento',p['Fecha Presupuesto']||'—'],['Contacto',p['Contacto']||'—'],['Agencia',p['Agencia']||'—']].map(([k,v])=>(
-        <div key={k}><div style={{fontSize:10,color:'#555',marginBottom:2}}>{k}</div><div style={{fontSize:12,fontWeight:500}}>{v}</div></div>
-      ))}
-    </div>
-    {servicios.length>0?<>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 110px',background:'#1A1A1A',borderRadius:'6px 6px 0 0',overflow:'hidden'}}>
-        {['SERVICIO','PRECIO'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'6px 12px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
-      </div>
-      {servicios.map((s,i)=>(
-        <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 110px',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}>
-          <div style={{padding:'7px 12px'}}>{s.nombre}</div>
-          <div style={{padding:'7px 12px',fontFamily:'monospace'}}>{fmt(s.precio)}</div>
-        </div>
-      ))}
-      <div style={{background:'#1A1A1A',borderRadius:'0 0 6px 6px',padding:'10px 12px',marginBottom:8}}>
-        {[['Subtotal servicios',fmt(subtotal),null],['Fee / Diferencia',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A'],['Precio Final',fmt(total),'#1543F8'],ajuste?['Ajuste',(ajuste>=0?'+':'')+fmt(ajuste),'#BA7517']:null].filter(Boolean).map(([k,v,c])=>(
-          <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}>
-            <span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace',color:c||'inherit',fontWeight:k==='Precio Final'?600:400}}>{v}</span>
-          </div>
-        ))}
-      </div>
-    </>:<div style={{fontSize:12,color:'#555',fontStyle:'italic',marginBottom:10}}>Sin servicios cargados</div>}
-  </div>
-}
-
-function Presupuestos({data:initialData}){
-  const [localData,setLocalData]=useState(initialData)
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos')
-
-  useEffect(()=>{setLocalData(initialData)},[initialData])
-
-  const presus=(localData.presupuestos||[]).filter(p=>p['Columna 1'])
-
-  const pms=[...new Set(presus.map(p=>p['PM Interno']).filter(Boolean))].sort()
-
-  const anios=[...new Set(presus.map(p=>String(p['Fecha Presupuesto']||'').split('/')[2]).filter(a=>a&&a.length===4))].sort().reverse()
-  const MESES=[['1','Enero'],['2','Febrero'],['3','Marzo'],['4','Abril'],['5','Mayo'],['6','Junio'],['7','Julio'],['8','Agosto'],['9','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
-  const filtered=presus.filter(p=>{
-    const e=String(p['Estado']||'').toUpperCase()
-    const mf=f==='todos'||(f==='ap'&&(e==='APROBADO'||e==='EN CURSO'||e==='ENTREGADO'))
-      ||(f==='esp'&&e==='EN ESPERA')||(f==='des'&&e==='DESAPROBADO')
-      ||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
-    const mpm=pm==='todos'||p['PM Interno']===pm
+function Presupuestos({data}){
+  const [q,setQ]=useState(''), [f,setF]=useState('todos')
+  const presus=(data.presupuestos||[]).filter(p=>p['Columna 1']).filter(p=>{
+    const ap=isAprobado(p)
+    const mf=f==='todos'||(f==='ap'&&ap)||(f==='esp'&&!ap)
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    const fecha=String(p['Fecha Presupuesto']||'')
-    const manio=anio==='todos'||fecha.includes(anio)
-    const mmes=mes==='todos'||fecha.startsWith(mes+'/')||fecha.startsWith('0'+mes+'/')
-    return mf&&mpm&&mq&&manio&&mmes
+    return mf&&mq
   }).reverse()
 
-  const handleEstadoUpdate=(num,nuevoEstado)=>{
-    setLocalData(prev=>({...prev,presupuestos:prev.presupuestos.map(p=>String(p['Columna 1'])===String(num)?{...p,Estado:nuevoEstado}:p)}))
-    setToast('Estado actualizado ✓')
+  const estadoColor = e => {
+    const s = String(e||'').toUpperCase()
+    if(s==='APROBADO') return {bg:'#1D9E7520',c:'#1D9E75'}
+    if(s==='EN CURSO') return {bg:'#1543F820',c:'#1543F8'}
+    if(s==='ENTREGADO') return {bg:'#9635AB20',c:'#9635AB'}
+    if(s==='DESAPROBADO') return {bg:'#E24B4A20',c:'#E24B4A'}
+    return {bg:'#BA751720',c:'#BA7517'}
   }
 
   return <div>
-    {toast&&<Toast msg={toast} onDone={()=>setToast('')}/>}
-    <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+    <div style={{display:'flex',gap:10,marginBottom:12,flexWrap:'wrap'}}>
       <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder="Buscar N°, cliente, proyecto, PM..." value={q} onChange={e=>setQ(e.target.value)}/>
-      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:anio==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={anio} onChange={e=>setAnio(e.target.value)}><option value="todos">Todos los años</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select><select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:mes==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={mes} onChange={e=>setMes(e.target.value)}><option value="todos">Todos los meses</option>{MESES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
-        <option value="todos">Todos los PM</option>
-        {pms.map(p=><option key={p} value={p}>{p}</option>)}
-      </select>
+      <div style={{display:'flex',gap:4}}>
+        {[['todos','Todos'],['ap','Aprobados'],['esp','En espera']].map(([id,l])=><button key={id} style={{...S.fb,...(f===id?S.fa:{})}} onClick={()=>setF(id)}>{l}</button>)}
+      </div>
     </div>
-    <div style={{display:'flex',gap:4,marginBottom:12,flexWrap:'wrap'}}>
-      {[['todos','Todos'],['ap','Aprobados'],['cur','En curso'],['esp','En espera'],['des','Desaprobados'],['rep','Represupuestados']].map(([id,l])=>(
-        <button key={id} style={{...S.fb,...(f===id?S.fa:{})}} onClick={()=>setF(id)}>{l}</button>
-      ))}
-    </div>
-    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 240px)'}}>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 210px)'}}>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr style={{background:'#1A1A1A'}}>
-          {['N°','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=>(
-            <th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>
-          ))}
-        </tr></thead>
+        <thead><tr style={{background:'#1A1A1A'}}>{['N°','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}</tr></thead>
         <tbody>
-          {filtered.map((p,i)=>{
-            const isOpen=open===p['Columna 1']
-            return <>
-              <tr key={i} style={{background:isOpen?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(isOpen?null:p['Columna 1'])}>
-                <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
-                <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
-                <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
-                <td style={{...S.td,fontSize:12}}>{p['Agencia']||'—'}</td>
-                <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'—'}</td>
-                <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
-                <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
-                <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
-                  <BadgeEstado p={p} onUpdate={handleEstadoUpdate}/>
-                </td>
-              </tr>
-              {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
-            </>
+          {presus.map((p,i)=>{
+            const ec=estadoColor(p['Estado'])
+            return <tr key={i} style={{background:i%2===0?'#161616':'#1A1A1A'}}>
+              <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
+              <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
+              <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
+              <td style={{...S.td,fontSize:12}}>{p['Agencia']||'—'}</td>
+              <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'—'}</td>
+              <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
+              <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
+              <td style={S.td}><span style={{...S.badge,background:ec.bg,color:ec.c}}>{p['Estado']||'—'}</span></td>
+            </tr>
           })}
         </tbody>
       </table>
-      {filtered.length===0&&<div style={S.nd}>Sin resultados</div>}
+      {presus.length===0&&<div style={S.nd}>Sin resultados</div>}
     </div>
   </div>
 }
 
 // ---- PROYECTOS ----
-function Proyectos({data}){
+function Proyectos({data,mail}){
   const [open,setOpen]=useState(null)
-  // Proyectos vienen de presupuestos aprobados/en curso
-  const proj=(data.presupuestos||[]).filter(p=>isAprobado(p)||String(p['Estado']||'').toUpperCase()==='EN CURSO')
+  const [staffSelections,setStaffSelections]=useState({})
+  const [guardados,setGuardados]=useState({})
+  const [saving,setSaving]=useState(null)
+  const [toast,setToast]=useState('')
 
-  return <div style={{overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
-    {proj.length===0&&<div style={S.nd}>Sin proyectos activos</div>}
-    {proj.map((p,i)=>{
-      const io=open===i
-      const total=parseMonto(p['Precio Final'])
-      // Calcular costo de servicios
-      const servicios=[]
-      for(let j=1;j<=8;j++){
-        const ped=p[`Pedido ${j}`]||p[`Pedido${j} `]||''
-        const prec=parseMonto(p[`Precio ${j}`])
-        if(ped&&prec>0) servicios.push({nombre:ped,precio:prec})
-      }
-      const totalServicios=servicios.reduce((s,x)=>s+x.precio,0)
-      const diferencia=total-totalServicios
+  const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
+  const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
 
-      return <div key={i} style={{...S.card,marginBottom:8}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',cursor:'pointer'}} onClick={()=>setOpen(io?null:i)}>
-          <span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11,flexShrink:0}}>#{p['Columna 1']}</span>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||p['Cliente']}</div>
-            <div style={{fontSize:11,color:'#555',marginTop:2}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')} · PM: {p['PM Interno']||'—'}</div>
+  const getServicios=(proy)=>{
+    const svcs=[]
+    for(let j=1;j<=12;j++){
+      const pedKey=j===1?'Pedido':'Pedido '+j
+      const staffKey=j===1?'Staff':'Staff '+j
+      const precioKey=j===1?'Precio':'Precio '+j
+      const ped=proy[pedKey]||''
+      const staffAsig=proy[staffKey]||''
+      const precio=parseMonto(proy[precioKey])
+      if(ped) svcs.push({pedido:ped,staffAsignado:staffAsig,precio})
+    }
+    return svcs
+  }
+
+  const updateStaff=(num,idx,field,val)=>setStaffSelections(prev=>{
+    const cur=[...(prev[num]||[])]
+    while(cur.length<=idx) cur.push({nombre:'',monto:0})
+    cur[idx]={...cur[idx],[field]:field==='monto'?parseFloat(val)||0:val}
+    return {...prev,[num]:cur}
+  })
+
+  const calcResumen=(num,servicios)=>{
+    const sels=staffSelections[num]||[]
+    const total=servicios.reduce((s,x)=>s+x.precio,0)
+    let freelance=0,magma=0
+    servicios.forEach((s,idx)=>{
+      const nombre=sels[idx]?.nombre??s.staffAsignado
+      const monto=sels[idx]?.monto??s.precio
+      if(nombre==='Somos Magma') magma+=monto
+      else if(nombre) freelance+=monto
+    })
+    return {total,freelance,magma,fee:total-freelance-magma}
+  }
+
+  const guardar=async(num)=>{
+    setSaving(num)
+    const proy=proyectos.find(p=>String(p['N° presupuesto'])===String(num))
+    const servicios=getServicios(proy)
+    const sels=staffSelections[num]||[]
+    const staffData=servicios.map((s,idx)=>({
+      nombre:sels[idx]?.nombre??s.staffAsignado,
+      monto:sels[idx]?.monto??s.precio
+    }))
+    try{
+      await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData})})
+      setGuardados(prev=>({...prev,[num]:true}))
+      setOpen(null)
+      setToast('Staff guardado ✓')
+      setTimeout(()=>setToast(''),2500)
+    }catch(e){}
+    setSaving(null)
+  }
+
+  return <div>
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
+      {proyectos.length===0&&<div style={S.nd}>Sin proyectos activos</div>}
+      {proyectos.map((p,i)=>{
+        const num=p['N° presupuesto']
+        const staffOk=p['Carga Staff']===true||p['Carga Staff']==='TRUE'||guardados[num]
+        const isOpen=open===num
+        const servicios=getServicios(p)
+        const sels=staffSelections[num]||[]
+        const {total,freelance,magma,fee}=calcResumen(num,servicios)
+        const svcsMagma=servicios.filter((s,idx)=>(sels[idx]?.nombre??s.staffAsignado)==='Somos Magma').map(s=>s.pedido)
+
+        return <div key={i} style={{...S.card,marginBottom:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'80px 1fr 160px 70px 110px 90px 90px',alignItems:'center',cursor:'pointer',padding:'10px 0'}} onClick={()=>setOpen(isOpen?null:num)}>
+            <span style={{padding:'0 12px',color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{num}</span>
+            <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</span>
+            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
+            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||'—'}</span>
+            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Total']))}</span>
+            <span style={{padding:'0 12px'}}><span style={{...S.badge,background:staffOk?'#1D9E7520':'#BA751720',color:staffOk?'#1D9E75':'#BA7517'}}>{staffOk?'OK':'Pendiente'}</span></span>
+            <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{staffOk?'Ver':'Cargar'}</button></span>
           </div>
-          <span style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8',marginRight:12}}>{fmt(total)}</span>
-          <span style={{...S.badge,background:'#1D9E7520',color:'#1D9E75',marginRight:8}}>{p['Estado']}</span>
-          <span style={{fontSize:11,color:'#555'}}>{io?'▲':'▶'}</span>
-        </div>
-        {io&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'14px 16px'}}>
-          {servicios.length===0
-            ? <div style={{fontSize:12,color:'#555',fontStyle:'italic'}}>Sin servicios cargados</div>
-            : <>
-              {servicios.map((s,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}>
-                <span>{s.nombre}</span>
-                <span style={{fontFamily:'monospace'}}>{fmt(s.precio)}</span>
-              </div>)}
-              <div style={{display:'flex',gap:20,marginTop:12,padding:'10px 12px',background:'#1E1E1E',borderRadius:8}}>
-                {[['Precio total',fmt(total),null],['Servicios',fmt(totalServicios),null],['Diferencia',(diferencia>=0?'+':'')+fmt(diferencia),diferencia>=0?'#1D9E75':'#E24B4A']].map(([k,v,c])=>(
-                  <div key={k}><div style={{fontSize:10,color:'#555',marginBottom:3}}>{k}</div><div style={{fontFamily:'monospace',fontWeight:500,color:c||'inherit'}}>{v}</div></div>
-                ))}
+          {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px'}}>
+            <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>
+              Asignar staff por servicio — si elegís "Somos Magma" la ganancia va a Magma
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px',gap:8,marginBottom:6}}>
+              {['Servicio','Staff','Monto'].map(h=><span key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',padding:'0 4px'}}>{h}</span>)}
+            </div>
+            {servicios.map((s,idx)=>{
+              const staffActual=sels[idx]?.nombre??s.staffAsignado
+              const montoActual=sels[idx]?.monto??s.precio
+              const esMagma=staffActual==='Somos Magma'
+              return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px',gap:8,alignItems:'center',marginBottom:8,...(esMagma?{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:'4px 0'}:{})}}>
+                <div style={{padding:'8px 10px',background:esMagma?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+                  {s.pedido}
+                  {esMagma&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}
+                </div>
+                <select value={staffActual} onChange={e=>updateStaff(num,idx,'nombre',e.target.value)} style={{padding:'7px 10px',borderRadius:6,border:`0.5px solid ${esMagma?'#9635AB40':'#333'}`,background:'#1E1E1E',color:esMagma?'#9635AB':'#F0F0F0',fontSize:12,outline:'none',width:'100%'}}>
+                  <option value="">— Sin asignar —</option>
+                  {staffRRHH.map(st=><option key={st} value={st}>{st}</option>)}
+                </select>
+                <input type="number" value={montoActual||''} onChange={e=>updateStaff(num,idx,'monto',e.target.value)} style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:esMagma?'#9635AB':'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',width:'100%'}}/>
               </div>
-            </>}
-        </div>}
-      </div>
-    })}
+            })}
+            <div style={{display:'flex',gap:16,padding:'10px 14px',background:'#1E1E1E',borderRadius:8,marginTop:12,flexWrap:'wrap',borderLeft:'3px solid #2A2A2A'}}>
+              {[['Presupuestado',fmt(total),null],['Staff freelance',fmt(freelance),'#BA7517'],['Somos Magma',fmt(magma),'#9635AB'],['Fee Magma',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A']].map(([lbl,val,col])=>(
+                <div key={lbl}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>{lbl}</div><div style={{fontSize:14,fontWeight:500,fontFamily:'monospace',color:col||'inherit'}}>{val}</div></div>
+              ))}
+            </div>
+            {svcsMagma.length>0&&<div style={{fontSize:11,color:'#9635AB',marginTop:8,padding:'6px 10px',background:'#9635AB08',borderRadius:6,border:'0.5px solid #9635AB20'}}>
+              Somos Magma hace {svcsMagma.join(', ')} — los {fmt(magma)} quedan como ingreso interno de Magma.
+            </div>}
+            <div style={{marginTop:12}}>
+              <button onClick={()=>guardar(num)} disabled={saving===num} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%',opacity:saving===num?0.6:1}}>
+                {saving===num?'Guardando...':'Guardar staff'}
+              </button>
+            </div>
+          </div>}
+        </div>
+      })}
+    </div>
   </div>
 }
 
@@ -623,239 +523,6 @@ function Balance({data}){
   </div>
 }
 
-// ---- NUEVO PRESUPUESTO ----
-function NuevoPresupuesto({onClose, onGuardado, data}){
-  const presus=data?.presupuestos||[]
-  const nextNum=presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
-  const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}])
-  const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0'})
-  const [saving,setSaving]=useState(false), [ok,setOk]=useState(false)
-  const [hintAg,setHintAg]=useState(false), [hintCl,setHintCl]=useState(false), [hintCt,setHintCt]=useState(false)
-  const [diasMulti,setDiasMulti]=useState([''])
-
-  const version=form.repr?'V2':''
-  const tieneAg=form.agencia.trim()!==''
-
-  const calcTotales=()=>{
-    const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
-    const feeBase=peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
-    const fee=tieneAg?feeBase:0
-    const base=subtotal+fee
-    const gan=form.gan?fee*0.35:0
-    const iibb=form.iibb?fee*0.094:0
-    const intPct=parseFloat(form.interes)||0
-    const intMto=(base+gan+iibb)*(intPct/100)
-    const ajMto=(parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
-    const total=base+gan+iibb+intMto+ajMto
-    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total}
-  }
-  const T=calcTotales()
-
-  const setSvc=(id,val)=>{
-    const s=SVCS_LIST.find(x=>x.n===val)
-    setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:s?.fee??true,manual:false}:p))
-  }
-  const setPrecio=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,precio:val,manual:true}:p))
-  const setFeeAg=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,feeAg:val}:p))
-  const addPed=()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false}])
-  const delPed=(id)=>setPeds(prev=>prev.filter(p=>p.id!==id))
-  const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
-
-  async function guardar(){
-    if(!form.cliente.trim()||!peds.some(p=>p.svc)){return}
-    setSaving(true)
-    const row={
-      'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,
-      'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,
-      'Contacto':form.contacto,'Fecha Presupuesto':form.fp,
-      'Precio Final':T.total,
-    }
-    peds.filter(p=>p.svc).forEach((p,i)=>{
-      const k=i===0?'':'  '+(i+1)
-      row[`Pedido ${i+1}`]=p.svc
-      row[`Precio ${i+1}`]=p.precio
-    })
-    try{
-      await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
-    }catch(e){}
-    setOk(true)
-    setTimeout(()=>onGuardado(row),1200)
-    setSaving(false)
-  }
-
-  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
-  const sel={...inp}
-  const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
-
-  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}} onClick={onClose}>
-    <div style={{width:860,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
-      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <span style={{background:'#1543F820',color:'#1543F8',border:'0.5px solid #1543F840',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
-        {version&&<span style={{background:'#9635AB20',color:'#9635AB',border:'0.5px solid #9635AB40',borderRadius:4,padding:'2px 8px',fontSize:11}}>{version}</span>}
-        <span style={{background:'#BA751720',color:'#BA7517',borderRadius:3,padding:'2px 8px',fontSize:10}}>En espera</span>
-        <div style={{flex:1}}/>
-        <button style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer',padding:'0 4px'}} onClick={onClose}>×</button>
-      </div>
-
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        <div style={{flex:1,padding:20,overflowY:'auto',borderRight:'0.5px solid #2A2A2A'}}>
-
-          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Datos del proyecto</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type="date" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
-              <select style={sel} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
-                <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
-              </select>
-            </label>
-          </div>
-
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
-            <span style={lbl}>Fecha(s) de evento</span>
-            <div style={{display:'flex',gap:4,marginBottom:6}}>
-              {['dia','rango','multi'].map((m,i)=>(
-                <button key={m} style={{padding:'5px 12px',borderRadius:6,border:'0.5px solid #333',background:form.fechaMode===m?'#1E1E1E':'transparent',color:form.fechaMode===m?'#F0F0F0':'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setF('fechaMode',m)}>
-                  {['1 día','Rango','Múltiples'][i]}
-                </button>
-              ))}
-            </div>
-            {form.fechaMode==='dia'&&<input style={inp} type="date" value={form.fe1} onChange={e=>setF('fe1',e.target.value)}/>}
-            {form.fechaMode==='rango'&&<div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'center'}}>
-              <input style={inp} type="date" value={form.feIni} onChange={e=>setF('feIni',e.target.value)}/>
-              <span style={{fontSize:11,color:'#555'}}>al</span>
-              <input style={inp} type="date" value={form.feFin} onChange={e=>setF('feFin',e.target.value)}/>
-            </div>}
-            {form.fechaMode==='multi'&&<div>
-              {diasMulti.map((d,i)=>(
-                <div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
-                  <input style={{...inp,flex:1}} type="date" value={d} onChange={e=>{const a=[...diasMulti];a[i]=e.target.value;setDiasMulti(a)}}/>
-                  {diasMulti.length>1&&<button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setDiasMulti(prev=>prev.filter((_,j)=>j!==i))}>×</button>}
-                </div>
-              ))}
-              <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setDiasMulti(prev=>[...prev,''])}>+ Agregar día</button>
-            </div>}
-          </div>
-
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={lbl}>Agencia</span>
-              <input style={inp} list="np-ag" value={form.agencia} onChange={e=>{setF('agencia',e.target.value);setHintAg(!!e.target.value&&!AGENCIAS_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Sin agencia / Directo"/>
-              <datalist id="np-ag">{AGENCIAS_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintAg&&<span style={{fontSize:10,color:'#1D9E75'}}>Agencia nueva — se agregará al listado</span>}
-            </div>
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={lbl}>Cliente / Marca</span>
-              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente"/>
-              <datalist id="np-cl">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintCl&&<span style={{fontSize:10,color:'#1D9E75'}}>Cliente nuevo — se agregará al listado</span>}
-            </div>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripción</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="Ej: Evento anual, Film..."/></label>
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={lbl}>Contacto</span>
-              <input style={inp} list="np-ct" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del contacto"/>
-              <datalist id="np-ct">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
-              {hintCt&&<span style={{fontSize:10,color:'#1D9E75'}}>Contacto nuevo — se agregará al listado</span>}
-            </div>
-          </div>
-          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacío si es presupuesto nuevo"/></label>
-
-          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
-            {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}
-          </div>
-          {peds.map(p=>(
-            <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,alignItems:'center',marginBottom:5}}>
-              <select style={sel} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
-                <option value="">— Servicio —</option>
-                {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
-              </select>
-              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8',borderColor:p.manual?'#BA751540':'#333'}} type="number" value={p.precio} placeholder="0" onChange={e=>setPrecio(p.id,e.target.value)}/>
-              <input type="checkbox" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
-              <button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>delPed(p.id)}>×</button>
-            </div>
-          ))}
-          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={addPed}>+ Agregar servicio</button>
-
-          {tieneAg&&<div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6,borderLeft:'2px solid #2A2A2A'}}>
-            Los servicios con fee marcado se cobran ×2. Ganancias e IIBB van sobre el total del fee.
-          </div>}
-
-          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',margin:'16px 0 8px'}}>Condiciones</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Plazo de pago</span>
-              <select style={sel} value={form.plazo} onChange={e=>setF('plazo',e.target.value)}>
-                <option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option>
-              </select>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Interés %</span><input style={inp} type="number" value={form.interes} min="0" step="0.5" onChange={e=>setF('interes',e.target.value)}/></label>
-          </div>
-          {[['gan','Imp. Ganancias (35% sobre fee)'],['iibb','IIBB (9.4% sobre fee)']].map(([k,label])=>(
-            <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:'#1A1A1A',borderRadius:6,marginBottom:5}}>
-              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer'}}>
-                <input type="checkbox" checked={form[k]} onChange={e=>setF(k,e.target.checked)} style={{width:14,height:14,accentColor:'#1543F8'}}/>
-                {label}
-              </label>
-              <span style={{fontFamily:'monospace',fontSize:12,color:'#555'}}>{k==='gan'?fmt(T.fee*0.35):fmt(T.fee*0.094)}</span>
-            </div>
-          ))}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Tipo ajuste</span>
-              <select style={sel} value={form.tajuste} onChange={e=>setF('tajuste',e.target.value)}><option value="1">Recargo (+)</option><option value="-1">Descuento (−)</option></select>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Monto $</span><input style={inp} type="number" value={form.ajuste} onChange={e=>setF('ajuste',e.target.value)}/></label>
-          </div>
-        </div>
-
-        <div style={{width:260,padding:20,background:'#111',display:'flex',flexDirection:'column',gap:0,flexShrink:0}}>
-          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Resumen</div>
-          {[
-            ['Subtotal servicios',fmt(T.subtotal),'#F0F0F0',true],
-            tieneAg&&T.fee>0?['Fee agencia (×1)',fmt(T.fee),'#9635AB',true]:null,
-            tieneAg&&T.fee>0?['Base imponible',fmt(T.base),'#555',true]:null,
-            T.gan>0?['Ganancias 35%',fmt(T.gan),'#E24B4A',true]:null,
-            T.iibb>0?['IIBB 9.4%',fmt(T.iibb),'#E24B4A',true]:null,
-            T.intMto>0?['Interés '+form.interes+'%',fmt(T.intMto),'#BA7517',true]:null,
-            Math.abs(T.ajMto)>0?[(parseInt(form.tajuste)>0?'Recargo':'Descuento'),(parseInt(form.tajuste)>0?'+':'-')+fmt(Math.abs(T.ajMto)),parseInt(form.tajuste)>0?'#1D9E75':'#E24B4A',true]:null,
-          ].filter(Boolean).map(([label,val,color])=>(
-            <div key={label} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',fontSize:12,borderBottom:'0.5px solid #1A1A1A'}}>
-              <span style={{color:'#555',fontSize:11}}>{label}</span>
-              <span style={{fontFamily:'monospace',color}}>{val}</span>
-            </div>
-          ))}
-          <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:15,fontWeight:500,borderTop:'0.5px solid #333',marginTop:6}}>
-            <span>Precio final</span>
-            <span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
-          </div>
-
-          <div style={{background:'#1A1A1A',borderRadius:8,padding:10,marginTop:14}}>
-            <div style={{fontSize:10,color:'#555',marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em'}}>Servicios</div>
-            {peds.filter(p=>p.svc).length===0
-              ?<span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>Ninguno aún</span>
-              :peds.filter(p=>p.svc).map((p,i)=>(
-                <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:11}}>
-                  <span style={{color:p.feeAg&&tieneAg?'#F0F0F0':'#555'}}>{p.svc}</span>
-                  <span style={{fontFamily:'monospace',color:p.feeAg&&tieneAg?'#1543F8':'#555'}}>{fmt(parseFloat(p.precio)||0)}</span>
-                </div>
-              ))
-            }
-          </div>
-
-          {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} → V2</div>}
-
-          <div style={{flex:1}}/>
-          {ok
-            ?<div style={{marginTop:14,background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado ✓</div>
-            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:saving?'#0f35d0':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>
-              {saving?'Guardando...':'Cargar presupuesto'}
-            </button>
-          }
-        </div>
-      </div>
-    </div>
-  </div>
-}
 function K({lbl,val,sub,c}){return <div style={S.kpi}><div style={S.kl}>{lbl}</div><div style={{...S.kv,...(c?{color:c}:{})}}>{val}</div>{sub&&<div style={S.ks}>{sub}</div>}</div>}
 function Row({cols,vc}){return <div style={S.lr}><span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11,flexShrink:0}}>{cols[0]}</span><span style={{flex:1,marginLeft:10,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cols[1]}</span><span style={{fontFamily:'monospace',fontSize:12,color:vc||'inherit'}}>{cols[2]}</span></div>}
 
@@ -885,3 +552,4 @@ const S={
   sp:{width:24,height:24,border:'2px solid #1543F820',borderTop:'2px solid #1543F8',borderRadius:'50%',animation:'spin 1s linear infinite',marginTop:16},
 }
 
+function GS(){return <style>{\`@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;700;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}body{background:#090909;color:#F0F0F0;font-family:'Archivo',sans-serif;font-size:14px;overflow:hidden}@keyframes spin{to{transform:rotate(360deg)}}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}input[type=number]::-webkit-inner-spin-button{opacity:0}\`}</style>}
