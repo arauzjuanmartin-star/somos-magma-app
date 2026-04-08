@@ -179,13 +179,18 @@ function Proyectos({data,mail}){
 
   const getServicios=(proy)=>{
     const svcs=[]
+    // Buscar el presupuesto para cruzar precios
+    const presu=(data.presupuestos||[]).find(p=>String(p['Columna 1'])===String(proy['N° presupuesto']))||{}
     for(let j=1;j<=12;j++){
       const pedKey=j===1?'Pedido':'Pedido '+j
       const staffKey=j===1?'Staff':'Staff '+j
       const precioKey=j===1?'Precio':'Precio '+j
+      const presuPedKey=j===1?'Pedido 1':('Pedido '+j)
+      const presuPrcKey=j===1?'Precio 1':('Precio '+j)
       const ped=proy[pedKey]||''
       const staffAsig=proy[staffKey]||''
-      const precio=parseMonto(proy[precioKey])
+      // Precio: primero de PROYECTOS, si está vacío tomar de PRESUPUESTOS
+      const precio=parseMonto(proy[precioKey])||parseMonto(presu[presuPrcKey])
       if(ped) svcs.push({pedido:ped,staffAsignado:staffAsig,precio})
     }
     return svcs
@@ -249,7 +254,7 @@ function Proyectos({data,mail}){
             <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||'—'}</span>
-            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Total']))}</span>
+            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
             <span style={{padding:'0 12px'}}><span style={{...S.badge,background:staffOk?'#1D9E7520':'#BA751720',color:staffOk?'#1D9E75':'#BA7517'}}>{staffOk?'OK':'Pendiente'}</span></span>
             <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{staffOk?'Ver':'Cargar'}</button></span>
           </div>
