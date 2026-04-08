@@ -169,64 +169,60 @@ function Presupuestos({data}){
 // ---- PROYECTOS ----
 function Proyectos({data,mail}){
   const [open,setOpen]=useState(null)
-  const [staffSelections,setStaffSelections]=useState({})
+  const [sels,setSels]=useState({})
   const [guardados,setGuardados]=useState({})
   const [saving,setSaving]=useState(null)
   const [toast,setToast]=useState('')
 
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
+  const SVCS_OPTS=['📸 Foto ½','📷 Foto 1','🎥 Video ½','📹 Video 1','🎬 Film ½','🎞️ Film 1','🕛 Film 12hs','✂️ Edit 60s','🪄 Edit 60s+','🤝 Asist ½','🙌 Asist 1','💻 Vivo 1','🖥️ Vivo ½','🎛️ DirFoto','🎙️ Sonido','🚁 Drone','🏎️ FPV','✨ Motion','🗂️ Crudos','📲 Edit 15-30s','🖼️ Fotos','🖲️ Go Pro','Viaticos','Produ','MakeUp','Rental','Model','Catering','Otros']
 
-  const getServicios=(proy)=>{
+  const getBase=(proy)=>{
     const svcs=[]
-    // Buscar el presupuesto para cruzar precios
-    const presu=(data.presupuestos||[]).find(p=>String(p['Columna 1'])===String(proy['N° presupuesto']))||{}
     for(let j=1;j<=12;j++){
-      const pedKey=j===1?'Pedido':'Pedido '+j
-      const staffKey=j===1?'Staff':'Staff '+j
-      const precioKey=j===1?'Precio':'Precio '+j
-      const presuPedKey=j===1?'Pedido 1':('Pedido '+j)
-      const presuPrcKey=j===1?'Precio 1':('Precio '+j)
-      const ped=proy[pedKey]||''
-      const staffAsig=proy[staffKey]||''
-      // Precio: primero de PROYECTOS, si está vacío tomar de PRESUPUESTOS
-      const precio=parseMonto(proy[precioKey])||parseMonto(presu[presuPrcKey])
-      if(ped) svcs.push({pedido:ped,staffAsignado:staffAsig,precio})
+      const ped=proy[j===1?'Pedido':'Pedido '+j]||''
+      const qui=proy[j===1?'Staff':'Staff '+j]||''
+      const prc=parseMonto(proy[j===1?'Precio':'Precio '+j])
+      if(ped) svcs.push({pedido:ped,quien:qui,precio:prc,precioRef:prc,esExtra:false})
     }
     return svcs
   }
 
-  const updateStaff=(num,idx,field,val)=>setStaffSelections(prev=>{
-    const cur=[...(prev[num]||[])]
-    while(cur.length<=idx) cur.push({nombre:'',monto:0})
-    cur[idx]={...cur[idx],[field]:field==='monto'?parseFloat(val)||0:val}
+  const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
+
+  const upd=(num,idx,field,val,base)=>setSels(prev=>{
+    const cur=[...getSel(num,base)]
+    cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val}
     return {...prev,[num]:cur}
   })
 
-  const calcResumen=(num,servicios)=>{
-    const sels=staffSelections[num]||[]
-    const total=servicios.reduce((s,x)=>s+x.precio,0)
-    let freelance=0,magma=0
-    servicios.forEach((s,idx)=>{
-      const nombre=sels[idx]?.nombre??s.staffAsignado
-      const monto=sels[idx]?.monto??s.precio
-      if(nombre==='Somos Magma') magma+=monto
-      else if(nombre) freelance+=monto
+  const addExtra=(num,base)=>setSels(prev=>{
+    const cur=[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]
+    return {...prev,[num]:cur}
+  })
+
+  const delExtra=(num,idx,base)=>setSels(prev=>{
+    const cur=getSel(num,base).filter((_,i)=>i!==idx)
+    return {...prev,[num]:cur}
+  })
+
+  const resumen=(items,totalProy)=>{
+    let fl=0,mg=0
+    items.forEach(s=>{
+      if(!s.quien) return
+      const v=s.precio||0
+      if(s.quien==='Somos Magma') mg+=v
+      else fl+=v
     })
-    return {total,freelance,magma,fee:total-freelance-magma}
+    return {fl,mg,fee:totalProy-fl-mg}
   }
 
-  const guardar=async(num)=>{
+  const guardar=async(num,base)=>{
     setSaving(num)
-    const proy=proyectos.find(p=>String(p['N° presupuesto'])===String(num))
-    const servicios=getServicios(proy)
-    const sels=staffSelections[num]||[]
-    const staffData=servicios.map((s,idx)=>({
-      nombre:sels[idx]?.nombre??s.staffAsignado,
-      monto:sels[idx]?.monto??s.precio
-    }))
+    const items=getSel(num,base)
     try{
-      await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData})})
+      await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData:items.map(s=>({nombre:s.quien,monto:s.precio||0,pedido:s.pedido}))})})
       setGuardados(prev=>({...prev,[num]:true}))
       setOpen(null)
       setToast('Staff guardado ✓')
@@ -235,18 +231,21 @@ function Proyectos({data,mail}){
     setSaving(null)
   }
 
+  const inp={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',width:'100%'}
+
   return <div>
     {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
       {proyectos.length===0&&<div style={S.nd}>Sin proyectos activos</div>}
       {proyectos.map((p,i)=>{
         const num=p['N° presupuesto']
-        const staffOk=p['Carga Staff']===true||p['Carga Staff']==='TRUE'||guardados[num]
+        const ok=p['Carga Staff']===true||p['Carga Staff']==='TRUE'||guardados[num]
         const isOpen=open===num
-        const servicios=getServicios(p)
-        const sels=staffSelections[num]||[]
-        const {total,freelance,magma,fee}=calcResumen(num,servicios)
-        const svcsMagma=servicios.filter((s,idx)=>(sels[idx]?.nombre??s.staffAsignado)==='Somos Magma').map(s=>s.pedido)
+        const base=getBase(p)
+        const items=getSel(num,base)
+        const totalProy=parseMonto(p['Total '||'']||p['Total'])
+        const {fl,mg,fee}=resumen(items,totalProy)
+        const magmaSvcs=items.filter(s=>s.quien==='Somos Magma').map(s=>s.pedido).filter(Boolean)
 
         return <div key={i} style={{...S.card,marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'80px 1fr 160px 70px 110px 90px 90px',alignItems:'center',cursor:'pointer',padding:'10px 0'}} onClick={()=>setOpen(isOpen?null:num)}>
@@ -254,46 +253,55 @@ function Proyectos({data,mail}){
             <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||'—'}</span>
-            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
-            <span style={{padding:'0 12px'}}><span style={{...S.badge,background:staffOk?'#1D9E7520':'#BA751720',color:staffOk?'#1D9E75':'#BA7517'}}>{staffOk?'OK':'Pendiente'}</span></span>
-            <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{staffOk?'Ver':'Cargar'}</button></span>
+            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
+            <span style={{padding:'0 12px'}}><span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517'}}>{ok?'OK':'Pendiente'}</span></span>
+            <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button></span>
           </div>
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px'}}>
             <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>
-              Asignar staff por servicio — si elegís "Somos Magma" la ganancia va a Magma
+              Asignar staff por servicio — "Somos Magma" = ganancia interna. Pods agregar servicios extra.
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px',gap:8,marginBottom:6}}>
-              {['Servicio','Staff','Monto'].map(h=><span key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',padding:'0 4px'}}>{h}</span>)}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,marginBottom:6}}>
+              {['Servicio','Staff','Monto',''].map(h=><span key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',padding:'0 4px'}}>{h}</span>)}
             </div>
-            {servicios.map((s,idx)=>{
-              const staffActual=sels[idx]?.nombre??s.staffAsignado
-              const montoActual=sels[idx]?.monto??s.precio
-              const esMagma=staffActual==='Somos Magma'
-              return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px',gap:8,alignItems:'center',marginBottom:8,...(esMagma?{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:'4px 0'}:{})}}>
-                <div style={{padding:'8px 10px',background:esMagma?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
-                  {s.pedido}
-                  {esMagma&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}
-                </div>
-                <select value={staffActual} onChange={e=>updateStaff(num,idx,'nombre',e.target.value)} style={{padding:'7px 10px',borderRadius:6,border:`0.5px solid ${esMagma?'#9635AB40':'#333'}`,background:'#1E1E1E',color:esMagma?'#9635AB':'#F0F0F0',fontSize:12,outline:'none',width:'100%'}}>
+            {items.map((s,idx)=>{
+              const em=s.quien==='Somos Magma'
+              const rowSt=em?{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:'4px 0'}:{}
+              return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,alignItems:'center',marginBottom:6,...rowSt}}>
+                {s.esExtra
+                  ? <select value={s.pedido} onChange={e=>upd(num,idx,'pedido',e.target.value,base)} style={{...inp,color:s.pedido?'#F0F0F0':'#555'}}>
+                      <option value="">— Servicio extra —</option>
+                      {SVCS_OPTS.map(sv=><option key={sv} value={sv}>{sv}</option>)}
+                    </select>
+                  : <div style={{padding:'8px 10px',background:em?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+                      {s.pedido||'—'}
+                      {em&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}
+                    </div>
+                }
+                <select value={s.quien} onChange={e=>upd(num,idx,'quien',e.target.value,base)} style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':'#333')}}>
                   <option value="">— Sin asignar —</option>
                   {staffRRHH.map(st=><option key={st} value={st}>{st}</option>)}
                 </select>
-                <input type="number" value={montoActual||''} onChange={e=>updateStaff(num,idx,'monto',e.target.value)} style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:esMagma?'#9635AB':'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',width:'100%'}}/>
+                <input type="number" value={s.precio||''} onChange={e=>upd(num,idx,'precio',e.target.value,base)} placeholder={s.precioRef?String(s.precioRef):'$'} style={{...inp,color:em?'#9635AB':'#F0F0F0',fontFamily:'monospace'}}/>
+                <button onClick={()=>s.esExtra&&delExtra(num,idx,base)} style={{width:24,height:24,border:'none',background:'transparent',color:s.esExtra?'#E24B4A':'transparent',cursor:s.esExtra?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {s.esExtra?'×':''}
+                </button>
               </div>
             })}
-            <div style={{display:'flex',gap:16,padding:'10px 14px',background:'#1E1E1E',borderRadius:8,marginTop:12,flexWrap:'wrap',borderLeft:'3px solid #2A2A2A'}}>
-              {[['Presupuestado',fmt(total),null],['Staff freelance',fmt(freelance),'#BA7517'],['Somos Magma',fmt(magma),'#9635AB'],['Fee Magma',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A']].map(([lbl,val,col])=>(
+            <button onClick={()=>addExtra(num,base)} style={{width:'100%',padding:'6px',borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4,marginBottom:12}}>
+              + Agregar servicio extra
+            </button>
+            <div style={{display:'flex',gap:16,padding:'10px 14px',background:'#1E1E1E',borderRadius:8,flexWrap:'wrap',borderLeft:'3px solid #2A2A2A'}}>
+              {[['Presupuestado',fmt(totalProy),null],['Freelance',fmt(fl),'#BA7517'],['Somos Magma',fmt(mg),'#9635AB'],['Fee Magma',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A']].map(([lbl,val,col])=>(
                 <div key={lbl}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>{lbl}</div><div style={{fontSize:14,fontWeight:500,fontFamily:'monospace',color:col||'inherit'}}>{val}</div></div>
               ))}
             </div>
-            {svcsMagma.length>0&&<div style={{fontSize:11,color:'#9635AB',marginTop:8,padding:'6px 10px',background:'#9635AB08',borderRadius:6,border:'0.5px solid #9635AB20'}}>
-              Somos Magma hace {svcsMagma.join(', ')} — los {fmt(magma)} quedan como ingreso interno de Magma.
+            {magmaSvcs.length>0&&<div style={{fontSize:11,color:'#9635AB',marginTop:8,padding:'6px 10px',background:'#9635AB08',borderRadius:6,border:'0.5px solid #9635AB20'}}>
+              Somos Magma hace {magmaSvcs.join(', ')} — queda como ingreso interno.
             </div>}
-            <div style={{marginTop:12}}>
-              <button onClick={()=>guardar(num)} disabled={saving===num} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%',opacity:saving===num?0.6:1}}>
-                {saving===num?'Guardando...':'Guardar staff'}
-              </button>
-            </div>
+            <button onClick={()=>guardar(num,base)} disabled={saving===num} style={{marginTop:12,padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%',opacity:saving===num?0.6:1}}>
+              {saving===num?'Guardando...':'Guardar staff'}
+            </button>
           </div>}
         </div>
       })}
