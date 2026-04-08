@@ -67,14 +67,14 @@ export default function App() {
         </div>
         <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
           {err&&<div style={{background:'#E24B4A20',border:'0.5px solid #E24B4A',borderRadius:8,padding:'10px 14px',color:'#E24B4A',fontSize:13,marginBottom:14}}>{err}</div>}
-          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} onRefresh={()=>load(mail)}/>}
+          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} mail={mail} onRefresh={()=>load(mail)}/>}
         </div>
       </div>
     </div>
   </>
 }
 
-function Mod({id,data,onRefresh}){
+function Mod({id,data,mail,onRefresh}){
   switch(id){
     case 'dashboard': return <Dashboard data={data}/>
     case 'presupuestos': return <Presupuestos data={data}/>
