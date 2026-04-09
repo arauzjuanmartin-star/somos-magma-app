@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const p = req.body
   try {
-    const sheets = await getSheets()
+    const { sheets, SHEET_ID } = await getSheets()
     const now = new Date()
     const mesActual = `${String(now.getMonth()+1).padStart(2,'0')} - ${MESES[now.getMonth()]}`
 
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     row.push(p['PM Interno'] || '')
 
     await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.SHEET_ID,
+      spreadsheetId: SHEET_ID,
       range: 'PRESUPUESTOS!A:A',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',

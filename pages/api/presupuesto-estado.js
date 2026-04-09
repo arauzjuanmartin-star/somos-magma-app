@@ -4,9 +4,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { num, estado, motivo } = req.body
   try {
-    const sheets = await getSheets()
+    const { sheets, SHEET_ID } = await getSheets()
     const r = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.SHEET_ID,
+      spreadsheetId: SHEET_ID,
       range: 'PRESUPUESTOS!A:D',
     })
     const rows = r.data.values || []
@@ -16,14 +16,14 @@ export default async function handler(req, res) {
     }
     if (rowIndex === -1) return res.status(404).json({ error: 'No encontrado' })
     await sheets.spreadsheets.values.update({
-      spreadsheetId: process.env.SHEET_ID,
+      spreadsheetId: SHEET_ID,
       range: `PRESUPUESTOS!D${rowIndex}`,
       valueInputOption: 'RAW',
       requestBody: { values: [[estado]] }
     })
     if (motivo) {
       await sheets.spreadsheets.values.update({
-        spreadsheetId: process.env.SHEET_ID,
+        spreadsheetId: SHEET_ID,
         range: `PRESUPUESTOS!AU${rowIndex}`,
         valueInputOption: 'RAW',
         requestBody: { values: [[motivo]] }
