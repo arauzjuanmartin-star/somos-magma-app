@@ -782,6 +782,8 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
   const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0'})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
+  const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
+  const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [diasMulti,setDiasMulti]=useState([''])
   const version=form.repr?'V2':''
   const tieneAg=form.agencia.trim()!==''
@@ -805,6 +807,8 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
     const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Precio Final':T.total}
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})}catch(e){}
+    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
     setOk(true);setTimeout(()=>onGuardado(row),1200);setSaving(false)
   }
   const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
@@ -874,7 +878,7 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
               <span style={lbl}>Contacto</span>
               <input style={inp} list="np-ct" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del contacto"/>
               <datalist id="np-ct">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
-              {hintCt&&<span style={{fontSize:10,color:'#1D9E75'}}>Contacto nuevo</span>}
+              {hintCt&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}><div style={{fontSize:10,color:'#1D9E75',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>Contacto nuevo - completar datos</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}><input style={{...inp,fontSize:11}} placeholder='Mail' value={ctData.mail} onChange={e=>setCtData(p=>({...p,mail:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Telefono' value={ctData.telefono} onChange={e=>setCtData(p=>({...p,telefono:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='CUIT' value={ctData.cuit} onChange={e=>setCtData(p=>({...p,cuit:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Cargo' value={ctData.cargo} onChange={e=>setCtData(p=>({...p,cargo:e.target.value}))}/></div></div>}
             </div>
           </div>
           <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo"/></label>
