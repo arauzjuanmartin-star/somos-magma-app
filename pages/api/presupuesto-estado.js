@@ -6,13 +6,12 @@ export default async function handler(req, res) {
   try {
     const { sheets, SHEET_ID } = await getSheets()
 
-    // Leer PRESUPUESTOS para encontrar la fila
+    // Leer PRESUPUESTOS completo
     const r = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'PRESUPUESTOS!A:AZ',
     })
     const rows = r.data.values || []
-    const headers = rows[0] || []
     let rowIndex = -1
     let presuRow = null
     for (let i = 1; i < rows.length; i++) {
@@ -24,7 +23,7 @@ export default async function handler(req, res) {
     }
     if (rowIndex === -1) return res.status(404).json({ error: 'No encontrado' })
 
-    // Actualizar estado en PRESUPUESTOS col D
+    // Actualizar estado col D (índice 3)
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `PRESUPUESTOS!D${rowIndex}`,
@@ -41,34 +40,22 @@ export default async function handler(req, res) {
       })
     }
 
-    // Si se aprueba, crear fila en PROYECTOS
+    // Si APROBADO → crear fila en PROYECTOS
     if (estado === 'APROBADO' && presuRow) {
-      const get = (key) => {
-        const idx = headers.indexOf(key)
-        return idx >= 0 ? (presuRow[idx] || '') : ''
-      }
+      // Índices por posición (orden real del Sheet):
+      // A=0: Nro, B=1: FechaEvento, C=2: PMInterno, D=3: Estado
+      // E=4: Agencia, F=5: Cliente, G=6: Proyecto, H=7: CantFechas
+      // I=8: PrecioFinal, J=9: FechaPresupuesto, K=10: Contacto
+      // L=11: Pedido1, M=12: Precio1, N=13: Pedido2, O=14: Precio2 ...
+      const nro        = presuRow[0]  || ''
+      const fechaEvento = presuRow[1]  || ''
+      const pmInterno  = presuRow[2]  || ''
+      const agencia    = presuRow[4]  || ''
+      const cliente    = presuRow[5]  || ''
+      const proyecto   = presuRow[6]  || ''
+      const precio     = presuRow[8]  || ''
 
-      // Columnas PROYECTOS: N° presupuesto, Proyecto, Cliente, Agencia, PM Interno, Fecha Evento, Total, + servicios
-      const proyRow = [
-        get('Columna 1'),     // N° presupuesto
-        get('Proyecto'),
-        get('Cliente'),
-        get('Agencia'),
-        get('PM Interno'),
-        get('Fecha Evento') || get('FechaEvento') || '',
-        get('Precio Final'),  // Total
-        '',                   // Carga Staff (vacío)
-      ]
-
-      // Agregar pedidos y precios
-      for (let j = 1; j <= 12; j++) {
-        const pedKey = j === 1 ? 'Pedido 1' : `Pedido ${j}`
-        const precKey = j === 1 ? 'Precio 1' : `Precio ${j}`
-        proyRow.push(get(pedKey))
-        proyRow.push(get(precKey))
-      }
-
-      // Verificar si ya existe en PROYECTOS para no duplicar
+      // Verificar duplicado en PROYECTOS
       const rProy = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
         range: 'PROYECTOS!A:A',
@@ -77,6 +64,13 @@ export default async function handler(req, res) {
       const yaExiste = proyRows.some(r => String(r[0]) === String(num))
 
       if (!yaExiste) {
+        // Columnas PROYECTOS: N° presupuesto, Proyecto, Cliente, Agencia, PM Interno, Fecha Evento, Total, Carga Staff, Pedido1..12 + Precio1..12
+        const proyRow = [nro, proyecto, cliente, agencia, pmInterno, fechaEvento, precio, '']
+        // Pedidos: desde índice 11 de presuRow, de a pares (pedido, precio)
+        for (let j = 0; j < 12; j++) {
+          proyRow.push(presuRow[11 + j*2] || '')  // Pedido
+          proyRow.push(presuRow[12 + j*2] || '')  // Precio
+        }
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: 'PROYECTOS!A:A',
