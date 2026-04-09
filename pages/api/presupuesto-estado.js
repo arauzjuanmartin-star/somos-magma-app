@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   try {
     const { sheets, SHEET_ID } = await getSheets()
 
-    // Leer PRESUPUESTOS completo
     const r = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'PRESUPUESTOS!A:AZ',
@@ -40,37 +39,67 @@ export default async function handler(req, res) {
       })
     }
 
-    // Si APROBADO → crear fila en PROYECTOS
+    // Si APROBADO → crear fila en PROYECTOS con el orden correcto del Sheet
     if (estado === 'APROBADO' && presuRow) {
-      // Índices por posición (orden real del Sheet):
-      // A=0: Nro, B=1: FechaEvento, C=2: PMInterno, D=3: Estado
-      // E=4: Agencia, F=5: Cliente, G=6: Proyecto, H=7: CantFechas
-      // I=8: PrecioFinal, J=9: FechaPresupuesto, K=10: Contacto
-      // L=11: Pedido1, M=12: Precio1, N=13: Pedido2, O=14: Precio2 ...
-      const nro        = presuRow[0]  || ''
-      const fechaEvento = presuRow[1]  || ''
-      const pmInterno  = presuRow[2]  || ''
-      const agencia    = presuRow[4]  || ''
-      const cliente    = presuRow[5]  || ''
-      const proyecto   = presuRow[6]  || ''
-      const precio     = presuRow[8]  || ''
+      // PRESUPUESTOS índices:
+      // 0:Nro, 1:FechaEvento, 2:PMInterno, 3:Estado, 4:Agencia, 5:Cliente
+      // 6:Proyecto, 7:CantFechas, 8:PrecioFinal, 9:FechaPresu, 10:Contacto
+      // 11:Pedido1, 12:Precio1, 13:Pedido2, 14:Precio2 ...
 
-      // Verificar duplicado en PROYECTOS
+      const nro         = presuRow[0]  || ''
+      const fechaEvento = presuRow[1]  || ''
+      const pmInterno   = presuRow[2]  || ''
+      const agencia     = presuRow[4]  || ''
+      const cliente     = presuRow[5]  || ''
+      const proyecto    = presuRow[6]  || ''
+      const precio      = presuRow[8]  || ''
+
+      // Calcular mes para col A de PROYECTOS (formato "MM - NOMBRE")
+      const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
+      let mesStr = ''
+      if (fechaEvento) {
+        const parts = fechaEvento.split('/')
+        if (parts.length >= 2) {
+          const mesNum = parseInt(parts[1]) || parseInt(parts[0])
+          if (mesNum >= 1 && mesNum <= 12) {
+            mesStr = String(mesNum).padStart(2,'0') + ' - ' + MESES[mesNum-1]
+          }
+        }
+      }
+
+      // Verificar duplicado en PROYECTOS (col C tiene el N° presupuesto)
       const rProy = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: 'PROYECTOS!A:A',
+        range: 'PROYECTOS!C:C',
       })
       const proyRows = rProy.data.values || []
-      const yaExiste = proyRows.some(r => String(r[0]) === String(num))
+      const yaExiste = proyRows.some(r => String(r[0]) === String(nro))
 
       if (!yaExiste) {
-        // Columnas PROYECTOS: N° presupuesto, Proyecto, Cliente, Agencia, PM Interno, Fecha Evento, Total, Carga Staff, Pedido1..12 + Precio1..12
-        const proyRow = [nro, proyecto, cliente, agencia, pmInterno, fechaEvento, precio, '']
-        // Pedidos: desde índice 11 de presuRow, de a pares (pedido, precio)
+        // PROYECTOS orden correcto:
+        // A: Mes | B: Carga Staff (vacío) | C: N° Presupuesto | D: Fecha Evento
+        // E: Agencia | F: Cliente | G: Proyecto | H: Total | I: Fee Final
+        // J: Diferencia | K: Fee Agencia | L: Pedido 1 | M: Precio | N: Staff ...
+        const proyRow = [
+          mesStr,    // A: Mes
+          '',        // B: Carga Staff (FALSE/vacío)
+          nro,       // C: N° Presupuesto
+          fechaEvento, // D: Fecha Evento
+          agencia,   // E: Agencia
+          cliente,   // F: Cliente
+          proyecto,  // G: Proyecto
+          precio,    // H: Total
+          '',        // I: Fee Final (calculado por Sheet)
+          '',        // J: Diferencia (calculado)
+          '',        // K: Fee Agencia (calculado)
+        ]
+        // Agregar Pedido1, Precio1, Staff1 ... desde PRESUPUESTOS
         for (let j = 0; j < 12; j++) {
           proyRow.push(presuRow[11 + j*2] || '')  // Pedido
           proyRow.push(presuRow[12 + j*2] || '')  // Precio
+          proyRow.push('')                          // Staff (vacío, se carga en Proyectos)
         }
+
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: 'PROYECTOS!A:A',
