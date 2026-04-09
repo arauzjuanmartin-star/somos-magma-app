@@ -265,13 +265,15 @@ function DetallePresupuesto({p}){
 
 function Presupuestos({data:initialData}){
   const [localData,setLocalData]=useState(initialData)
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
 
   useEffect(()=>{setLocalData(initialData)},[initialData])
 
   const presus=(localData.presupuestos||[]).filter(p=>p['Columna 1'])
 
   const pms=[...new Set(presus.map(p=>p['PM Interno']).filter(Boolean))].sort()
+  const anios=[...new Set(presus.map(p=>{const d=p['Fecha Presupuesto']||'';const m=d.match(/(\d{4})/);return m?m[1]:null}).filter(Boolean))].sort().reverse()
+  const MESES_P=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
 
   const filtered=presus.filter(p=>{
     const e=String(p['Estado']||'').toUpperCase()
@@ -280,7 +282,10 @@ function Presupuestos({data:initialData}){
       ||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
     const mpm=pm==='todos'||p['PM Interno']===pm
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    return mf&&mpm&&mq
+    const fp=p['Fecha Presupuesto']||''
+    const manio=anio==='todos'||fp.includes(anio)
+    const mmes=mes==='todos'||fp.startsWith(mes+'/')||fp.split('/')[1]===mes
+    return mf&&mpm&&manio&&mmes&&mq
   }).reverse()
 
   const handleEstadoUpdate=(num,nuevoEstado)=>{
@@ -295,6 +300,14 @@ function Presupuestos({data:initialData}){
       <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
         <option value='todos'>Todos los PM</option>
         {pms.map(p=><option key={p} value={p}>{p}</option>)}
+      </select>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:anio==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={anio} onChange={e=>setAnio(e.target.value)}>
+        <option value='todos'>Todos los anos</option>
+        {anios.map(a=><option key={a} value={a}>{a}</option>)}
+      </select>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:mes==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={mes} onChange={e=>setMes(e.target.value)}>
+        <option value='todos'>Todos los meses</option>
+        {MESES_P.map(([v,l])=><option key={v} value={v}>{l}</option>)}
       </select>
     </div>
     <div style={{display:'flex',gap:4,marginBottom:12,flexWrap:'wrap'}}>
