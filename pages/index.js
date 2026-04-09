@@ -3,10 +3,10 @@ import Head from 'next/head'
 
 const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
-// Parsear montos del Sheets que vienen como "$2,400,000.00"
+// Parsear montos del Sheets que vienen como \\"$2,400,000.00\\"
 const parseMonto = v => {
   if (!v) return 0
-  const n = parseFloat(String(v).replace(/[$,\s]/g, ''))
+  const n = parseFloat(String(v).replace(/[$,\\\\\\\\s]/g, ''))
   return isNaN(n) ? 0 : n
 }
 const fmt = n => '$' + Math.round(Math.abs(n||0)).toLocaleString('es-AR')
@@ -22,31 +22,48 @@ const isCobrada = f => {
   return v === true || v === 'TRUE' || String(v).toUpperCase() === 'TRUE'
 }
 
+// ---- DATOS LISTADO ----
 const SVCS_LIST=[
-  {n:'📸 Foto ½',p:220000},{n:'📷 Foto 1',p:290000},
-  {n:'🎥 Video ½',p:220000},{n:'📹 Video 1',p:290000},
-  {n:'🎬 Film ½',p:220000},{n:'🎞️ Film 1',p:290000},
-  {n:'🕛 Film 12hs',p:350000},{n:'✂️ Edit 60s',p:116000},
-  {n:'🪄 Edit 60s+',p:174000},{n:'🤝 Asist ½',p:140000},
-  {n:'🙌 Asist 1',p:210000},{n:'💻 Vivo 1',p:350000},
-  {n:'🖥️ Vivo ½',p:230000},{n:'🎛️ DirFoto',p:350000},
-  {n:'🎙️ Sonido',p:290000},{n:'🚁 Drone',p:290000},
-  {n:'🏎️ FPV',p:405000},{n:'✨ Motion',p:230000},
-  {n:'🗂️ Crudos',p:175000},{n:'📲 Edit 15-30s',p:116000},
-  {n:'🖼️ Fotos',p:60000},{n:'🖲️ Go Pro',p:230000},
-  {n:'Viaticos',p:0},{n:'Produ',p:0},{n:'MakeUp',p:0},
-  {n:'Rental',p:0},{n:'Catering',p:0},{n:'Otros',p:0},
+  {n:'\ud83d\udcf8 Foto \u00bd',p:220000,fee:true},{n:'\ud83d\udcf7 Foto 1',p:290000,fee:true},
+  {n:'\ud83c\udfa5 Video \u00bd',p:220000,fee:true},{n:'\ud83d\udcf9 Video 1',p:290000,fee:true},
+  {n:'\ud83c\udfac Film \u00bd',p:220000,fee:true},{n:'\ud83c\udf9e\ufe0f Film 1',p:290000,fee:true},
+  {n:'\ud83d\udd5b Film 12hs',p:350000,fee:true},{n:'\u2702\ufe0f Edit 60s',p:116000,fee:true},
+  {n:'\ud83e\ude84 Edit 60s+',p:174000,fee:true},{n:'\ud83e\udd1d Asist \u00bd',p:140000,fee:true},
+  {n:'\ud83d\ude4c Asist 1',p:210000,fee:true},{n:'\ud83d\udcbb Vivo 1',p:350000,fee:true},
+  {n:'\ud83d\udda5\ufe0f Vivo \u00bd',p:230000,fee:true},{n:'\ud83c\udf9b\ufe0f DirFoto',p:350000,fee:true},
+  {n:'\ud83c\udf99\ufe0f Sonido',p:290000,fee:true},{n:'\ud83d\ude81 Drone',p:290000,fee:true},
+  {n:'\ud83c\udfce\ufe0f FPV',p:405000,fee:true},{n:'\u2728 Motion',p:230000,fee:true},
+  {n:'\ud83d\uddc2\ufe0f Crudos',p:175000,fee:true},{n:'\ud83d\udcf2 Edit 15-30s',p:116000,fee:true},
+  {n:'\ud83d\uddbc\ufe0f Fotos',p:60000,fee:true},{n:'\ud83d\uddb2\ufe0f Go Pro',p:230000,fee:true},
+  {n:'\ud83c\udf0e Viaticos',p:0,fee:false},{n:'\ud83d\udc77\ud83c\udffd Produ',p:0,fee:false},
+  {n:'\ud83d\udc85\ud83c\udffd MakeUp',p:0,fee:false},{n:'\ud83d\ude9a Rental',p:0,fee:false},
+  {n:'\ud83d\udc6f\u200d\u2642\ufe0f Model',p:0,fee:false},{n:'\ud83c\udf7d\ufe0f Catering',p:0,fee:false},
+  {n:'Otros',p:0,fee:false},
 ]
-
-const ESTADOS_CONFIG=[
-  {val:'APROBADO',bg:'#1D9E7520',c:'#1D9E75'},
-  {val:'EN ESPERA',bg:'#BA751720',c:'#BA7517'},
-  {val:'DESAPROBADO',bg:'#E24B4A20',c:'#E24B4A'},
-  {val:'EN CURSO',bg:'#1543F820',c:'#1543F8'},
-  {val:'ENTREGADO',bg:'#9635AB20',c:'#9635AB'},
-  {val:'REPRESUPUESTADO',bg:'#55555520',c:'#555'},
+const AGENCIAS_LIST=['Ostara','Minita','Pop Up','Stadium','ADN','Quilmes','Creators Lab','Mole Media','WeCorp','Louder','Smarketing','Bacardi','Integra','Btlandia','OIR','SPA','ABV','Piet','Nodus','Bermuda','United Scale Arts','Meikin','CMQ','Bar de eventos','The Bloom','Velvet','Mucha','Freelance','Zona Prop','azcuy','Blue Mail','Mercurias','KLM']
+const CLIENTES_LIST=['Santander','Unilever','Austral','Air France','Iveco','Latam','Campari',\\"L'Oreal\\",'Maybelline','Betsson','Disney','Quilmes','Chandon','Honda','Peugeot','Endeavor','Baron B','Google','Microsoft','Coca Cola','Adidas','Mercado Libre','YPF','Volkswagen','Personal','Telecom','Brahma','Off','Integra','Rutini','Visa','Natura']
+const CONTACTOS_LIST=[
+  {n:'Agostina Caruso',ag:''},{n:'Alejandra Moreno',ag:'Nodus'},{n:'Balado, Natalia',ag:'KLM'},
+  {n:'Belen Infante',ag:'Stadium'},{n:'Belen ST',ag:'Ostara'},{n:'Bruno Dibattista',ag:'Stadium'},
+  {n:'Camila Cabo',ag:'SPA'},{n:'Camila Carrion',ag:'OIR'},{n:'Caro Persico',ag:'Piet'},
+  {n:'Carolina Forestano',ag:'Pop Up'},{n:'Cristian Di Menna',ag:'azcuy'},{n:'Delfina Felice',ag:'Pop Up'},
+  {n:'Emi Perez',ag:'Minita'},{n:'Eugenia Pelaya',ag:'Meikin'},{n:'Facundo Leiton',ag:'Nodus'},
+  {n:'Fernanda Adriano',ag:'Minita'},{n:'Florencia Julian',ag:'Pop Up'},{n:'Freire, Melisa Daiana',ag:'Quilmes'},
+  {n:'Gabriela Capitani',ag:'Stadium'},{n:'Georgia Etchegaray',ag:'Blue Mail'},{n:'Gina',ag:'United Scale Arts'},
+  {n:'Julieta Actis',ag:'Minita'},{n:'Lali Di Stefano',ag:'ADN'},{n:'Lorena Vilanova',ag:'Austral'},
+  {n:'Luc\u00eda Mi\u00f1o',ag:'Ostara'},{n:'Mariana Angulegui',ag:'Ostara'},{n:'Mariel Conti',ag:'ABV'},
+  {n:'Martin Lombardi',ag:'Pop Up'},{n:'Nahuel Corbalan',ag:'Ostara'},{n:'Natalia Dalzotto',ag:'Freelance'},
+  {n:'Natalia Emanuele',ag:'Ostara'},{n:'Natalia Torres',ag:'Ostara'},{n:'Pabla Valenti',ag:'azcuy'},
+  {n:'Pachu Tamargo',ag:'Minita'},{n:'Romina Aguilera',ag:'Stadium'},{n:'Sabrina Seg\u00fa',ag:'Louder'},
+  {n:'Silvia Colussi',ag:'Ostara'},{n:'Valeria Ibarra',ag:'Ostara'},{n:'Victoria Martinez',ag:'Quilmes'},
+  {n:'Victoria Mithieux',ag:'Integra'},{n:'Daniela Torres',ag:'Ostara'},{n:'Gaston Gandara',ag:'ADN'},
+  {n:'Mariano Castellani',ag:'Pop Up'},{n:'Nahiara Fernandez Roman',ag:'Pop Up'},{n:'Lucila Zicari',ag:'Ostara'},
+  {n:'Melina Martinez Claret',ag:'SPA'},{n:'Agustina Monzon',ag:'ADN'},{n:'Gonzalo Gugliottella',ag:'ADN'},
+  {n:'Agustina Ezcurra',ag:'The Bloom'},{n:'Florencia Kralik',ag:'Btlandia'},{n:'Luis Lasaga',ag:'ADN'},
+  {n:'Christian Konig',ag:'Smarketing'},{n:'Bastian Osella',ag:'CMQ'},{n:'Bruno Rossi',ag:'Ostara'},
+  {n:'Sofia Barandalla',ag:'Minita'},{n:'Juani Rojas',ag:'Velvet'},{n:'Ana Iberlucea',ag:'Bermuda'},
+  {n:'Sabrina Wasserman',ag:'Mucha'},
 ]
-const estadoColor=e=>ESTADOS_CONFIG.find(x=>x.val===String(e||'').toUpperCase())||{bg:'#BA751720',c:'#BA7517'}
 
 export default function App() {
   const [mail,setMail]=useState(''), [mi,setMi]=useState(''), [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
@@ -60,7 +77,7 @@ export default function App() {
       const j=await r.json()
       if(j.ok) setData(j.data)
       else setErr('Error: '+j.error)
-    } catch(e){setErr('Error de conexión')}
+    } catch(e){setErr('Error de conexi\u00f3n')}
     setLoading(false)
   }
 
@@ -71,9 +88,9 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'balance',label:'Balance',icon:'≡'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'\u25c6'},{id:'presupuestos',label:'Presupuestos',icon:'\u25a1'},{id:'proyectos',label:'Proyectos',icon:'\u25b7'},{id:'facturacion',label:'Facturaci\u00f3n',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'\u2713'},{id:'balance',label:'Balance',icon:'\u2261'}]
 
-  if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type="email" placeholder="tu@somosmagma.com" value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
+  if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingres\u00e1 con tu mail de trabajo</div><input style={S.inp} type=\\"email\\" placeholder=\\"tu@somosmagma.com\\" value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
   if(loading) return <><Head><title>Somos Magma</title></Head><GS/><div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'#090909'}}><div style={S.logo}>M//</div><div style={{color:'#555',marginTop:16}}>Cargando...</div><div style={S.sp}/></div></>
 
@@ -89,7 +106,10 @@ export default function App() {
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div><div style={{fontSize:18,fontWeight:700}}>{NAV.find(n=>n.id===mod)?.label}</div><div style={{fontSize:12,color:'#555',marginTop:2}}>Vista general</div></div>
-          {mod==='presupuestos'&&<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}} onClick={()=>setShowNP(true)}>+ Nuevo presupuesto</button>}<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load(mail)}>↻ Actualizar</button>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {mod==='presupuestos'&&<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}} onClick={()=>setShowNP(true)}>+ Nuevo presupuesto</button>}
+            <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load(mail)}>\u21bb Actualizar</button>
+          </div>
         </div>
         <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
           {err&&<div style={{background:'#E24B4A20',border:'0.5px solid #E24B4A',borderRadius:8,padding:'10px 14px',color:'#E24B4A',fontSize:13,marginBottom:14}}>{err}</div>}
@@ -97,7 +117,7 @@ export default function App() {
         </div>
       </div>
     </div>
-  {showNP&&<NuevoPresupuesto onClose={()=>setShowNP(false)} onGuardado={(row)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),row]}));setShowNP(false)}} data={data}/>}
+    {showNP&&<NuevoPresupuesto onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}));setShowNP(false)}} data={data}/>}
   </>
 }
 
@@ -109,7 +129,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'facturacion': return <Facturacion data={data}/>
     case 'pagos': return <PagosStaff data={data}/>
     case 'balance': return <Balance data={data}/>
-    default: return <div style={S.nd}>En construcción</div>
+    default: return <div style={S.nd}>En construcci\u00f3n</div>
   }
 }
 
@@ -127,103 +147,155 @@ function Dashboard({data}){
 
   return <div>
     <div style={S.k4}>
-      <K lbl="Aprobados" val={ap.length} sub={fmtM(totalAp)} c="#1543F8"/>
-      <K lbl="En espera" val={pend.length} sub={fmtM(totalPend)} c="#BA7517"/>
-      <K lbl="Por cobrar" val={fmtM(totalPc)} sub={pc.length+' facturas'} c="#BA7517"/>
-      <K lbl="Cobrado" val={fmtM(totalCo)} sub={co.length+' facturas'} c="#1D9E75"/>
+      <K lbl=\\"Aprobados\\" val={ap.length} sub={fmtM(totalAp)} c=\\"#1543F8\\"/>
+      <K lbl=\\"En espera\\" val={pend.length} sub={fmtM(totalPend)} c=\\"#BA7517\\"/>
+      <K lbl=\\"Por cobrar\\" val={fmtM(totalPc)} sub={pc.length+' facturas'} c=\\"#BA7517\\"/>
+      <K lbl=\\"Cobrado\\" val={fmtM(totalCo)} sub={co.length+' facturas'} c=\\"#1D9E75\\"/>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
-      <div style={S.card}><div style={S.ch}>Últimos aprobados</div>
+      <div style={S.card}><div style={S.ch}>\u00daltimos aprobados</div>
         {ap.slice(-5).reverse().map((p,i)=><Row key={i} cols={['#'+p['Columna 1'],p['Proyecto']||p['Cliente'],fmt(parseMonto(p['Precio Final']))]}/>)}
       </div>
       <div style={S.card}><div style={S.ch}>Facturas por cobrar</div>
-        {pc.slice(0,5).map((f,i)=><Row key={i} cols={[f['Nro de Factura']||'—',f['Cliente']||f['Proyecto'],fmt(parseMonto(f['Precio FINAL']))]} vc="#BA7517"/>)}
+        {pc.slice(0,5).map((f,i)=><Row key={i} cols={[f['Nro de Factura']||'\u2014',f['Cliente']||f['Proyecto'],fmt(parseMonto(f['Precio FINAL']))]} vc=\\"#BA7517\\"/>)}
       </div>
     </div>
   </div>
 }
 
 // ---- PRESUPUESTOS ----
+const ESTADOS_CONFIG = [
+  {val:'APROBADO',   bg:'#1D9E7520', c:'#1D9E75'},
+  {val:'EN ESPERA',  bg:'#BA751720', c:'#BA7517'},
+  {val:'DESAPROBADO',bg:'#E24B4A20', c:'#E24B4A'},
+  {val:'EN CURSO',   bg:'#1543F820', c:'#1543F8'},
+  {val:'ENTREGADO',  bg:'#9635AB20', c:'#9635AB'},
+  {val:'REPRESUPUESTADO', bg:'#55555520', c:'#555'},
+]
+const estadoColor = e => ESTADOS_CONFIG.find(x=>x.val===String(e||'').toUpperCase()) || {bg:'#BA751720',c:'#BA7517'}
+
 function Toast({msg,onDone}){
   useEffect(()=>{const t=setTimeout(onDone,2200);return()=>clearTimeout(t)},[])
-  return <div style={{position:'fixed',bottom:28,right:28,background:'#1D9E75',color:'#fff',padding:'10px 20px',borderRadius:8,fontSize:13,fontWeight:500,zIndex:9999,boxShadow:'0 4px 20px #0008'}}>{msg}</div>
+  return <div style={{position:'fixed',bottom:28,right:28,background:'#1D9E75',color:'#fff',padding:'10px 20px',borderRadius:8,fontSize:13,fontWeight:500,zIndex:9999,boxShadow:'0 4px 20px #0008'}}>
+    {msg}
+  </div>
 }
-function BadgeEstado({p,onUpdate}){
-  const [open,setOpen]=useState(false),[saving,setSaving]=useState(false),[motivo,setMotivo]=useState(''),[pendingE,setPendingE]=useState(null)
+
+function BadgeEstado({p, onUpdate}){
+  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [motivo,setMotivo]=useState(''), [pendingE,setPendingE]=useState(null)
   const ec=estadoColor(p['Estado'])
-  const doSave=async(estado,mot='')=>{
+
+  const handleSelect=async(estado)=>{
+    if(estado==='REPRESUPUESTADO'){setPendingE(estado);setOpen(false);return}
+    await doSave(estado)
+  }
+
+  const doSave=async(estado, mot='')=>{
     setSaving(true);setOpen(false)
-    try{await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado,motivo:mot})}); onUpdate(p['Columna 1'],estado)}catch(e){}
+    try{
+      await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado,motivo:mot})})
+      onUpdate(p['Columna 1'],estado)
+    }catch(e){}
     setSaving(false);setPendingE(null);setMotivo('')
   }
+
   return <div style={{position:'relative'}}>
     {pendingE&&<div style={{position:'fixed',inset:0,background:'#000a',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setPendingE(null)}>
-      <div style={{background:'#1E1E1E',border:'0.5px solid #2A2A2A',borderRadius:12,padding:24,minWidth:300}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:'#1E1E1E',border:'0.5px solid #2A2A2A',borderRadius:12,padding:24,minWidth:320}} onClick={e=>e.stopPropagation()}>
         <div style={{fontSize:13,fontWeight:500,marginBottom:12}}>Motivo del represupuesto</div>
-        <input style={{...S.inp,marginBottom:12}} placeholder="Cambió el scope..." value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
+        <input style={{...S.inp,marginBottom:12}} placeholder=\\"Ej: Cambi\u00f3 el scope, ajuste de precios...\\" value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button style={S.fb} onClick={()=>setPendingE(null)}>Cancelar</button>
+          <button style={{...S.fb}} onClick={()=>setPendingE(null)}>Cancelar</button>
           <button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>doSave(pendingE,motivo)}>Confirmar</button>
         </div>
       </div>
     </div>}
-    <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>{saving?'...':(p['Estado']||'—')}</span>
+    <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>
+      {saving?'...':(p['Estado']||'\u2014')}
+    </span>
     {open&&<div style={{position:'absolute',right:0,top:'110%',background:'#1E1E1E',border:'0.5px solid #333',borderRadius:8,zIndex:100,minWidth:160,boxShadow:'0 8px 24px #000a',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
       {ESTADOS_CONFIG.map(({val,bg,c})=>(
-        <div key={val} style={{padding:'8px 14px',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',gap:8}} onMouseEnter={e=>e.currentTarget.style.background='#2A2A2A'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} onClick={()=>val==='REPRESUPUESTADO'?(setPendingE(val),setOpen(false)):doSave(val)}>
+        <div key={val} style={{padding:'8px 14px',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',gap:8}} onMouseEnter={e=>e.currentTarget.style.background='#2A2A2A'} onMouseLeave={e=>e.currentTarget.style.background='transparent'} onClick={()=>handleSelect(val)}>
           <span style={{...S.badge,background:bg,color:c,fontSize:10}}>{val}</span>
         </div>
       ))}
     </div>}
   </div>
 }
+
 function DetallePresupuesto({p}){
-  const svcs=[]
+  const servicios=[]
   for(let j=1;j<=12;j++){
-    const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
-    const prc=parseMonto(p['Precio '+j])
-    if(ped&&prc>0) svcs.push({nombre:ped,precio:prc})
+    const pedKey=j===1?'Pedido 1':(j<=9?('Pedido '+j):('Pedido'+j+' '))
+    const prcKey=j===1?'Precio 1':('Precio '+j)
+    const ped=p[pedKey]||p[('Pedido '+j)]||''
+    const prc=parseMonto(p[prcKey]||p[('Precio '+j)])
+    if(ped&&prc>0) servicios.push({nombre:ped,precio:prc})
   }
-  const sub=svcs.reduce((s,x)=>s+x.precio,0),total=parseMonto(p['Precio Final']),fee=total-sub
-  return <div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px',background:'#111'}}>
+  const subtotal=servicios.reduce((s,x)=>s+x.precio,0)
+  const total=parseMonto(p['Precio Final'])
+  const ajuste=parseMonto(p['Ajuste'])||parseMonto(p['Total'])||0
+  const fee=total-subtotal
+
+  return <div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px 16px',background:'#111'}}>
     <div style={{display:'flex',gap:24,marginBottom:14,flexWrap:'wrap'}}>
-      {[['Fecha',p['Fecha Presupuesto']||'—'],['Contacto',p['Contacto']||'—'],['Agencia',p['Agencia']||'—']].map(([k,v])=>(
+      {[['Fecha evento',p['Fecha Presupuesto']||'\u2014'],['Contacto',p['Contacto']||'\u2014'],['Agencia',p['Agencia']||'\u2014']].map(([k,v])=>(
         <div key={k}><div style={{fontSize:10,color:'#555',marginBottom:2}}>{k}</div><div style={{fontSize:12,fontWeight:500}}>{v}</div></div>
       ))}
     </div>
-    {svcs.length>0?<>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 110px',background:'#1A1A1A',borderRadius:'6px 6px 0 0'}}>
+    {servicios.length>0?<>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 110px',background:'#1A1A1A',borderRadius:'6px 6px 0 0',overflow:'hidden'}}>
         {['SERVICIO','PRECIO'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'6px 12px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
       </div>
-      {svcs.map((s,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr 110px',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}><div style={{padding:'7px 12px'}}>{s.nombre}</div><div style={{padding:'7px 12px',fontFamily:'monospace'}}>{fmt(s.precio)}</div></div>)}
-      <div style={{background:'#1A1A1A',borderRadius:'0 0 6px 6px',padding:'10px 12px'}}>
-        {[['Subtotal',fmt(sub),null],['Fee',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A'],['Total',fmt(total),'#1543F8']].map(([k,v,col])=>(
-          <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}><span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace',color:col||'inherit',fontWeight:k==='Total'?600:400}}>{v}</span></div>
+      {servicios.map((s,i)=>(
+        <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 110px',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}>
+          <div style={{padding:'7px 12px'}}>{s.nombre}</div>
+          <div style={{padding:'7px 12px',fontFamily:'monospace'}}>{fmt(s.precio)}</div>
+        </div>
+      ))}
+      <div style={{background:'#1A1A1A',borderRadius:'0 0 6px 6px',padding:'10px 12px',marginBottom:8}}>
+        {[['Subtotal servicios',fmt(subtotal),null],['Fee / Diferencia',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A'],['Precio Final',fmt(total),'#1543F8'],ajuste?['Ajuste',(ajuste>=0?'+':'')+fmt(ajuste),'#BA7517']:null].filter(Boolean).map(([k,v,c])=>(
+          <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}>
+            <span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace',color:c||'inherit',fontWeight:k==='Precio Final'?600:400}}>{v}</span>
+          </div>
         ))}
       </div>
-    </>:<div style={{fontSize:12,color:'#555',fontStyle:'italic'}}>Sin servicios cargados</div>}
+    </>:<div style={{fontSize:12,color:'#555',fontStyle:'italic',marginBottom:10}}>Sin servicios cargados</div>}
   </div>
 }
+
 function Presupuestos({data:initialData}){
   const [localData,setLocalData]=useState(initialData)
-  const [q,setQ]=useState(''),[f,setF]=useState('todos'),[pm,setPm]=useState('todos'),[open,setOpen]=useState(null),[toast,setToast]=useState('')
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+
   useEffect(()=>{setLocalData(initialData)},[initialData])
+
   const presus=(localData.presupuestos||[]).filter(p=>p['Columna 1'])
+
   const pms=[...new Set(presus.map(p=>p['PM Interno']).filter(Boolean))].sort()
+
   const filtered=presus.filter(p=>{
     const e=String(p['Estado']||'').toUpperCase()
-    const mf=f==='todos'||(f==='ap'&&['APROBADO','EN CURSO','ENTREGADO'].includes(e))||(f==='esp'&&e==='EN ESPERA')||(f==='des'&&e==='DESAPROBADO')||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
+    const mf=f==='todos'||(f==='ap'&&(e==='APROBADO'||e==='EN CURSO'||e==='ENTREGADO'))
+      ||(f==='esp'&&e==='EN ESPERA')||(f==='des'&&e==='DESAPROBADO')
+      ||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
     const mpm=pm==='todos'||p['PM Interno']===pm
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mf&&mpm&&mq
   }).reverse()
-  const upd=(num,est)=>{setLocalData(prev=>({...prev,presupuestos:prev.presupuestos.map(p=>String(p['Columna 1'])===String(num)?{...p,Estado:est}:p)}));setToast('Estado actualizado ✓')}
+
+  const handleEstadoUpdate=(num,nuevoEstado)=>{
+    setLocalData(prev=>({...prev,presupuestos:prev.presupuestos.map(p=>String(p['Columna 1'])===String(num)?{...p,Estado:nuevoEstado}:p)}))
+    setToast('Estado actualizado \u2713')
+  }
+
   return <div>
     {toast&&<Toast msg={toast} onDone={()=>setToast('')}/>}
     <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
-      <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder="Buscar N°, cliente, proyecto..." value={q} onChange={e=>setQ(e.target.value)}/>
+      <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder=\\"Buscar N\u00b0, cliente, proyecto, PM...\\" value={q} onChange={e=>setQ(e.target.value)}/>
       <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
-        <option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}
+        <option value=\\"todos\\">Todos los PM</option>
+        {pms.map(p=><option key={p} value={p}>{p}</option>)}
       </select>
     </div>
     <div style={{display:'flex',gap:4,marginBottom:12,flexWrap:'wrap'}}>
@@ -233,239 +305,112 @@ function Presupuestos({data:initialData}){
     </div>
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 240px)'}}>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr style={{background:'#1A1A1A'}}>{['N°','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}</tr></thead>
-        <tbody>{filtered.map((p,i)=>{const io=open===p['Columna 1']; return <>
-          <tr style={{background:io?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(io?null:p['Columna 1'])}>
-            <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
-            <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
-            <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
-            <td style={{...S.td,fontSize:12}}>{p['Agencia']||'—'}</td>
-            <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'—'}</td>
-            <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
-            <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
-            <td style={S.td} onClick={e=>e.stopPropagation()}><BadgeEstado p={p} onUpdate={upd}/></td>
-          </tr>
-          {io&&<tr><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
-        </>})}</tbody>
+        <thead><tr style={{background:'#1A1A1A'}}>
+          {['N\u00b0','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=>(
+            <th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {filtered.map((p,i)=>{
+            const isOpen=open===p['Columna 1']
+            return <>
+              <tr key={i} style={{background:isOpen?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(isOpen?null:p['Columna 1'])}>
+                <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
+                <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'\u2014'}</td>
+                <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'\u2014'}</td>
+                <td style={{...S.td,fontSize:12}}>{p['Agencia']||'\u2014'}</td>
+                <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'\u2014'}</td>
+                <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'\u2014'}</td>
+                <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
+                <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
+                  <BadgeEstado p={p} onUpdate={handleEstadoUpdate}/>
+                </td>
+              </tr>
+              {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
+            </>
+          })}
+        </tbody>
       </table>
       {filtered.length===0&&<div style={S.nd}>Sin resultados</div>}
-    </div>
-  </div>
-}
-function NuevoPresupuesto({onClose,onGuardado,data}){
-  const presus=data?.presupuestos||[]
-  const nextNum=presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
-  const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true},{id:2,svc:'',precio:'',feeAg:true}])
-  const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),agencia:'',cliente:'',proyecto:'',contacto:'',pm:''})
-  const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
-  const tieneAg=form.agencia.trim()!==''
-  const sub=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
-  const fee=tieneAg?peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0):0
-  const total=sub+fee
-  const setSvc=(id,val)=>{const s=SVCS_LIST.find(x=>x.n===val);setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:true}:p))}
-  const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
-  async function guardar(){
-    if(!form.cliente.trim()||!peds.some(p=>p.svc)) return
-    setSaving(true)
-    const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Precio Final':total}
-    peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
-    try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})}catch(e){}
-    setOk(true);setTimeout(()=>onGuardado(row),1200);setSaving(false)
-  }
-  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
-  const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
-  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}} onClick={onClose}>
-    <div style={{width:640,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
-      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
-        <span style={{background:'#BA751720',color:'#BA7517',borderRadius:3,padding:'2px 8px',fontSize:10}}>En espera</span>
-        <div style={{flex:1}}/>
-        <button style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}} onClick={onClose}>×</button>
-      </div>
-      <div style={{flex:1,padding:20,overflowY:'auto'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type="date" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
-            <select style={inp} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
-              <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
-            </select>
-          </label>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Agencia</span><input style={inp} value={form.agencia} onChange={e=>setF('agencia',e.target.value)} placeholder="Sin agencia / Directo"/></label>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Cliente</span><input style={inp} value={form.cliente} onChange={e=>setF('cliente',e.target.value)} placeholder="Nombre del cliente"/></label>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="Descripción"/></label>
-          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Contacto</span><input style={inp} value={form.contacto} onChange={e=>setF('contacto',e.target.value)} placeholder="Nombre"/></label>
-        </div>
-        <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 28px',gap:5,marginBottom:4}}>
-          {['Servicio','Precio','Fee',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555'}}>{h}</span>)}
-        </div>
-        {peds.map(p=>(
-          <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 28px',gap:5,alignItems:'center',marginBottom:5}}>
-            <select style={inp} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
-              <option value="">— Servicio —</option>
-              {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
-            </select>
-            <input style={inp} type="number" value={p.precio} placeholder="0" onChange={e=>setPeds(prev=>prev.map(x=>x.id===p.id?{...x,precio:e.target.value}:x))}/>
-            <input type="checkbox" checked={p.feeAg} onChange={e=>setPeds(prev=>prev.map(x=>x.id===p.id?{...x,feeAg:e.target.checked}:x))} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
-            <button style={{width:24,height:24,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:14}} onClick={()=>setPeds(prev=>prev.filter(x=>x.id!==p.id))}>×</button>
-          </div>
-        ))}
-        <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4,marginBottom:16}} onClick={()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true}])}>+ Agregar servicio</button>
-        <div style={{background:'#1A1A1A',borderRadius:8,padding:12,marginBottom:12}}>
-          {[['Subtotal',fmt(sub),'#F0F0F0'],tieneAg&&fee>0?['Fee agencia',fmt(fee),'#9635AB']:null,['Total',fmt(total),'#1543F8']].filter(Boolean).map(([k,v,col])=>(
-            <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:12}}>
-              <span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace',color:col}}>{v}</span>
-            </div>
-          ))}
-        </div>
-        {ok?<div style={{background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado ✓</div>
-          :<button style={{width:'100%',padding:10,borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>{saving?'Guardando...':'Cargar presupuesto'}</button>
-        }
-      </div>
     </div>
   </div>
 }
 
 // ---- PROYECTOS ----
 function Proyectos({data,mail}){
-  const [open,setOpen]=useState(null)
-  const [sels,setSels]=useState({})
-  const [guardados,setGuardados]=useState({})
-  const [saving,setSaving]=useState(null)
-  const [toast,setToast]=useState('')
-
+  const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
+  const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
+  const [q,setQ]=useState(''),[anio,setAnio]=useState('todos'),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos')
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
-  const SVCS_OPTS=['📸 Foto ½','📷 Foto 1','🎥 Video ½','📹 Video 1','🎬 Film ½','🎞️ Film 1','🕛 Film 12hs','✂️ Edit 60s','🪄 Edit 60s+','🤝 Asist ½','🙌 Asist 1','💻 Vivo 1','🖥️ Vivo ½','🎛️ DirFoto','🎙️ Sonido','🚁 Drone','🏎️ FPV','✨ Motion','🗂️ Crudos','📲 Edit 15-30s','🖼️ Fotos','🖲️ Go Pro','Viaticos','Produ','MakeUp','Rental','Model','Catering','Otros']
-
-  const getBase=(proy)=>{
-    const svcs=[]
-    for(let j=1;j<=12;j++){
-      const ped=proy[j===1?'Pedido':'Pedido '+j]||''
-      const qui=proy[j===1?'Staff':'Staff '+j]||''
-      const prc=parseMonto(proy[j===1?'Precio':'Precio '+j])
-      if(ped) svcs.push({pedido:ped,quien:qui,precio:prc,precioRef:prc,esExtra:false})
-    }
-    return svcs
-  }
-
+  const getPrecioLista=(nombre)=>{if(!nombre)return 0;const s=SVCS_LIST.find(x=>nombre===x.n);return s?s.p:0}
+  const anios=[...new Set(proyectos.map(p=>{const f=p['Fecha Evento']||'';const m=f.match(/(\d{4})/);return m?m[1]:null}).filter(Boolean))].sort().reverse()
+  const pms=[...new Set(proyectos.map(p=>p['PM']||p['PM Interno']||'').filter(Boolean))].sort()
+  const agencias=[...new Set(proyectos.map(p=>p['Agencia']||'').filter(Boolean))].sort()
+  const filtrados=proyectos.filter(p=>{
+    const fecha=p['Fecha Evento']||''
+    const mMatch=mes==='todos'||fecha.startsWith(mes+'/')||fecha.includes('/'+mes+'/')
+    const aMatch=anio==='todos'||fecha.includes(anio)
+    const pmVal=p['PM']||p['PM Interno']||''
+    return (pm==='todos'||pmVal===pm)&&(agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
+  })
+  const getBase=(proy)=>{const svcs=[];for(let j=1;j<=12;j++){const ped=proy[j===1?'Pedido':'Pedido '+j]||'',qui=proy[j===1?'Staff':'Staff '+j]||'',prc=parseMonto(proy[j===1?'Precio':'Precio '+j]),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
   const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
-
-  const upd=(num,idx,field,val,base)=>setSels(prev=>{
-    const cur=[...getSel(num,base)]
-    cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val}
-    return {...prev,[num]:cur}
-  })
-
-  const addExtra=(num,base)=>setSels(prev=>{
-    const cur=[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]
-    return {...prev,[num]:cur}
-  })
-
-  const delExtra=(num,idx,base)=>setSels(prev=>{
-    const cur=getSel(num,base).filter((_,i)=>i!==idx)
-    return {...prev,[num]:cur}
-  })
-
-  const resumen=(items,totalProy)=>{
-    let fl=0,mg=0
-    items.forEach(s=>{
-      if(!s.quien) return
-      const v=s.precio||0
-      if(s.quien==='Somos Magma') mg+=v
-      else fl+=v
-    })
-    return {fl,mg,fee:totalProy-fl-mg}
-  }
-
-  const guardar=async(num,base)=>{
-    setSaving(num)
-    const items=getSel(num,base)
-    try{
-      await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData:items.map(s=>({nombre:s.quien,monto:s.precio||0,pedido:s.pedido}))})})
-      setGuardados(prev=>({...prev,[num]:true}))
-      setOpen(null)
-      setToast('Staff guardado ✓')
-      setTimeout(()=>setToast(''),2500)
-    }catch(e){}
-    setSaving(null)
-  }
-
+  const upd=(num,idx,field,val,base)=>setSels(prev=>{const cur=[...getSel(num,base)];cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val};if(field==='pedido'){const pL=getPrecioLista(val);if(pL>0)cur[idx].precio=pL};return {...prev,[num]:cur}})
+  const addExtra=(num,base)=>setSels(prev=>({...prev,[num]:[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]}))
+  const delExtra=(num,idx,base)=>setSels(prev=>({...prev,[num]:getSel(num,base).filter((_,i)=>i!==idx)}))
+  const resumen=(items,totalProy)=>{let fl=0,mg=0;items.forEach(s=>{if(!s.quien)return;const v=s.precio||0;if(s.quien==='Somos Magma')mg+=v;else fl+=v});return {fl,mg,fee:totalProy-fl-mg}}
+  const guardar=async(num,base)=>{setSaving(num);const items=getSel(num,base);try{await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData:items.map(s=>({nombre:s.quien,monto:s.precio||0,pedido:s.pedido}))})});setGuardados(prev=>({...prev,[num]:true}));setOpen(null);setToast2('Staff guardado ✓');setTimeout(()=>setToast2(''),2500)}catch(e){};setSaving(null)}
   const inp={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',width:'100%'}
-
+  const sel3={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#555',fontSize:12,outline:'none',cursor:'pointer'}
   return <div>
-    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
-    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
-      {proyectos.length===0&&<div style={S.nd}>Sin proyectos activos</div>}
-      {proyectos.map((p,i)=>{
-        const num=p['N° presupuesto']
-        const ok=p['Carga Staff']===true||p['Carga Staff']==='TRUE'||guardados[num]
-        const isOpen=open===num
-        const base=getBase(p)
-        const items=getSel(num,base)
-        const totalProy=parseMonto(p['Total '||'']||p['Total'])
+    {toast2&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast2}</div>}
+    <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+      <input style={{...S.inp,flex:1,minWidth:160,marginBottom:0}} placeholder="Buscar N°, proyecto, cliente..." value={q} onChange={e=>setQ(e.target.value)}/>
+      <select style={sel3} value={anio} onChange={e=>setAnio(e.target.value)}><option value="todos">Todos los años</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
+      <select style={sel3} value={mes} onChange={e=>setMes(e.target.value)}><option value="todos">Todos los meses</option>{MESES_F.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+      <select style={sel3} value={pm} onChange={e=>setPm(e.target.value)}><option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}</select>
+      <select style={sel3} value={agencia} onChange={e=>setAgencia(e.target.value)}><option value="todos">Todas las agencias</option>{agencias.map(a=><option key={a} value={a}>{a}</option>)}</select>
+    </div>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 190px)'}}>
+      {filtrados.length===0&&<div style={S.nd}>Sin proyectos</div>}
+      {filtrados.map((p,i)=>{
+        const num=p['N° presupuesto'],ok=p['Carga Staff']===true||p['Carga Staff']==='TRUE'||guardados[num],isOpen=open===num
+        const base=getBase(p),items=getSel(num,base),totalProy=parseMonto(p['Total '])||parseMonto(p['Total'])
         const {fl,mg,fee}=resumen(items,totalProy)
         const magmaSvcs=items.filter(s=>s.quien==='Somos Magma').map(s=>s.pedido).filter(Boolean)
-
         return <div key={i} style={{...S.card,marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'80px 1fr 160px 70px 110px 90px 90px',alignItems:'center',cursor:'pointer',padding:'10px 0'}} onClick={()=>setOpen(isOpen?null:num)}>
             <span style={{padding:'0 12px',color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{num}</span>
             <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
-            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||'—'}</span>
+            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||p['PM Interno']||'—'}</span>
             <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
             <span style={{padding:'0 12px'}}><span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517'}}>{ok?'OK':'Pendiente'}</span></span>
             <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button></span>
           </div>
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px'}}>
-            <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>
-              Asignar staff por servicio — "Somos Magma" = ganancia interna. Pods agregar servicios extra.
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,marginBottom:6}}>
-              {['Servicio','Staff','Monto',''].map(h=><span key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',padding:'0 4px'}}>{h}</span>)}
-            </div>
+            <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Asignar staff — precio precargado. Pods agregar servicios extra.</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,marginBottom:6}}>{['Servicio','Staff','Monto',''].map(h=><span key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',padding:'0 4px'}}>{h}</span>)}</div>
             {items.map((s,idx)=>{
               const em=s.quien==='Somos Magma'
               const rowSt=em?{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:'4px 0'}:{}
               return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,alignItems:'center',marginBottom:6,...rowSt}}>
-                {s.esExtra
-                  ? <select value={s.pedido} onChange={e=>upd(num,idx,'pedido',e.target.value,base)} style={{...inp,color:s.pedido?'#F0F0F0':'#555'}}>
-                      <option value="">— Servicio extra —</option>
-                      {SVCS_OPTS.map(sv=><option key={sv} value={sv}>{sv}</option>)}
-                    </select>
-                  : <div style={{padding:'8px 10px',background:em?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
-                      {s.pedido||'—'}
-                      {em&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}
-                    </div>
-                }
-                <select value={s.quien} onChange={e=>upd(num,idx,'quien',e.target.value,base)} style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':'#333')}}>
-                  <option value="">— Sin asignar —</option>
-                  {staffRRHH.map(st=><option key={st} value={st}>{st}</option>)}
-                </select>
+                {s.esExtra?<select value={s.pedido} onChange={e=>upd(num,idx,'pedido',e.target.value,base)} style={{...inp,color:s.pedido?'#F0F0F0':'#555'}}><option value="">— Servicio extra —</option>{SVCS_LIST.map(sv=><option key={sv.n} value={sv.n}>{sv.n}</option>)}</select>
+                :<div style={{padding:'8px 10px',background:em?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>{s.pedido||'—'}{em&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}</div>}
+                <select value={s.quien} onChange={e=>upd(num,idx,'quien',e.target.value,base)} style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':'#333')}}><option value="">— Sin asignar —</option>{staffRRHH.map(st=><option key={st} value={st}>{st}</option>)}</select>
                 <input type="number" value={s.precio||''} onChange={e=>upd(num,idx,'precio',e.target.value,base)} placeholder={s.precioRef?String(s.precioRef):'$'} style={{...inp,color:em?'#9635AB':'#F0F0F0',fontFamily:'monospace'}}/>
-                <button onClick={()=>s.esExtra&&delExtra(num,idx,base)} style={{width:24,height:24,border:'none',background:'transparent',color:s.esExtra?'#E24B4A':'transparent',cursor:s.esExtra?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  {s.esExtra?'×':''}
-                </button>
+                <button onClick={()=>s.esExtra&&delExtra(num,idx,base)} style={{width:24,height:24,border:'none',background:'transparent',color:s.esExtra?'#E24B4A':'transparent',cursor:s.esExtra?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>{s.esExtra?'×':''}</button>
               </div>
             })}
-            <button onClick={()=>addExtra(num,base)} style={{width:'100%',padding:'6px',borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4,marginBottom:12}}>
-              + Agregar servicio extra
-            </button>
+            <button onClick={()=>addExtra(num,base)} style={{width:'100%',padding:'6px',borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4,marginBottom:12}}>+ Agregar servicio extra</button>
             <div style={{display:'flex',gap:16,padding:'10px 14px',background:'#1E1E1E',borderRadius:8,flexWrap:'wrap',borderLeft:'3px solid #2A2A2A'}}>
               {[['Presupuestado',fmt(totalProy),null],['Freelance',fmt(fl),'#BA7517'],['Somos Magma',fmt(mg),'#9635AB'],['Fee Magma',(fee>=0?'+':'')+fmt(fee),fee>=0?'#1D9E75':'#E24B4A']].map(([lbl,val,col])=>(
                 <div key={lbl}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>{lbl}</div><div style={{fontSize:14,fontWeight:500,fontFamily:'monospace',color:col||'inherit'}}>{val}</div></div>
               ))}
             </div>
-            {magmaSvcs.length>0&&<div style={{fontSize:11,color:'#9635AB',marginTop:8,padding:'6px 10px',background:'#9635AB08',borderRadius:6,border:'0.5px solid #9635AB20'}}>
-              Somos Magma hace {magmaSvcs.join(', ')} — queda como ingreso interno.
-            </div>}
-            <button onClick={()=>guardar(num,base)} disabled={saving===num} style={{marginTop:12,padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%',opacity:saving===num?0.6:1}}>
-              {saving===num?'Guardando...':'Guardar staff'}
-            </button>
+            {magmaSvcs.length>0&&<div style={{fontSize:11,color:'#9635AB',marginTop:8,padding:'6px 10px',background:'#9635AB08',borderRadius:6,border:'0.5px solid #9635AB20'}}>Somos Magma hace {magmaSvcs.join(', ')} — queda como ingreso interno.</div>}
+            <button onClick={()=>guardar(num,base)} disabled={saving===num} style={{marginTop:12,padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%',opacity:saving===num?0.6:1}}>{saving===num?'Guardando...':'Guardar staff'}</button>
           </div>}
         </div>
       })}
@@ -473,7 +418,7 @@ function Proyectos({data,mail}){
   </div>
 }
 
-// ---- FACTURACIÓN ----
+// ---- FACTURACI\u00d3N ----
 function Facturacion({data}){
   const [f,setF]=useState('todas'), [open,setOpen]=useState(null)
   const fc=data.facturacion||[]
@@ -489,21 +434,21 @@ function Facturacion({data}){
     return false
   })
 
-  const bm={c:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},p:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},v:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},r:{bg:'#E24B4A30',c:'#E24B4A',l:'¡Reclamar!'}}
+  const bm={c:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},p:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},v:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},r:{bg:'#E24B4A30',c:'#E24B4A',l:'\u00a1Reclamar!'}}
   const pc=fc.filter(x=>!isCobrada(x)).reduce((s,x)=>s+parseMonto(x['Precio FINAL']),0)
   const cb=fc.filter(isCobrada).reduce((s,x)=>s+parseMonto(x['Precio FINAL']),0)
   const venc=fc.filter(x=>['r','v'].includes(est(x)))
 
   return <div>
     <div style={S.k4}>
-      <K lbl="Por cobrar" val={fmtM(pc)} sub={fc.filter(x=>!isCobrada(x)).length+' facturas'} c="#BA7517"/>
-      <K lbl="Cobrado" val={fmtM(cb)} sub={fc.filter(isCobrada).length+' facturas'} c="#1D9E75"/>
-      <K lbl="Vencidas" val={venc.length} sub={venc.length>0?'Gestionar':''} c="#E24B4A"/>
-      <K lbl="Total facturado" val={fmtM(pc+cb)}/>
+      <K lbl=\\"Por cobrar\\" val={fmtM(pc)} sub={fc.filter(x=>!isCobrada(x)).length+' facturas'} c=\\"#BA7517\\"/>
+      <K lbl=\\"Cobrado\\" val={fmtM(cb)} sub={fc.filter(isCobrada).length+' facturas'} c=\\"#1D9E75\\"/>
+      <K lbl=\\"Vencidas\\" val={venc.length} sub={venc.length>0?'Gestionar':''} c=\\"#E24B4A\\"/>
+      <K lbl=\\"Total facturado\\" val={fmtM(pc+cb)}/>
     </div>
 
     {venc.map((x,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderRadius:8,background:'#E24B4A10',border:'0.5px solid #E24B4A',color:'#E24B4A',fontSize:13,marginBottom:6}}>
-      <span style={{flex:1}}><strong>{x['Nro de Factura']||'—'}</strong> — {x['Cliente']} · {fmt(parseMonto(x['Precio FINAL']))} · vencida {Math.abs(diffD(x))} días</span>
+      <span style={{flex:1}}><strong>{x['Nro de Factura']||'\u2014'}</strong> \u2014 {x['Cliente']} \u00b7 {fmt(parseMonto(x['Precio FINAL']))} \u00b7 vencida {Math.abs(diffD(x))} d\u00edas</span>
       <button style={{...S.badge,background:'#E24B4A',color:'#fff',cursor:'pointer',border:'none',padding:'4px 10px'}} onClick={()=>setOpen(x['Nro de Factura'])}>Ver</button>
     </div>)}
 
@@ -516,35 +461,35 @@ function Facturacion({data}){
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 340px)'}}>
       {fil.map((x,i)=>{
         const e=est(x), b=bm[e]||bm.p, io=open===x['Nro de Factura'], d=diffD(x)
-        const bl=e==='v'?'Vencida '+Math.abs(d)+'d':e==='r'?'¡Reclamar! '+Math.abs(d)+'d':b.l
+        const bl=e==='v'?'Vencida '+Math.abs(d)+'d':e==='r'?'\u00a1Reclamar! '+Math.abs(d)+'d':b.l
         const neto=parseMonto(x['Precio SIN IVA'])
         const iva=parseMonto(x['IVA'])
         const total=parseMonto(x['Precio FINAL'])
         const ret=parseMonto(x['Retenciones'])
         return <div key={i} style={{...S.card,borderLeft:'3px solid '+(e==='c'?'#1D9E75':['r','v'].includes(e)?'#E24B4A':'#2A2A2A'),marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}} onClick={()=>setOpen(io?null:x['Nro de Factura'])}>
-            <span style={{fontFamily:'monospace',fontSize:10,color:'#1543F8',whiteSpace:'nowrap'}}>{x['Nro de Factura']||'—'}</span>
+            <span style={{fontFamily:'monospace',fontSize:10,color:'#1543F8',whiteSpace:'nowrap'}}>{x['Nro de Factura']||'\u2014'}</span>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x['Proyecto']||x['Cliente']}</div>
-              <div style={{fontSize:11,color:'#555'}}>{x['Agencia']} · {x['Cliente']} · vence {x['Vencimiento']}</div>
+              <div style={{fontSize:11,color:'#555'}}>{x['Agencia']} \u00b7 {x['Cliente']} \u00b7 vence {x['Vencimiento']}</div>
             </div>
             <div style={{textAlign:'right'}}>
               <div style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8'}}>{fmt(neto)}</div>
               <div style={{fontSize:10,color:'#555'}}>+IVA {fmt(iva)}</div>
             </div>
             <span style={{...S.badge,background:b.bg,color:b.c}}>{bl}</span>
-            <span style={{fontSize:11,color:'#555'}}>{io?'▲':'▶'}</span>
+            <span style={{fontSize:11,color:'#555'}}>{io?'\u25b2':'\u25b6'}</span>
           </div>
           {io&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'14px 16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
             <div>
               <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Datos</div>
-              {[['Tipo factura',x['Tipo de Factura']||'—'],['N° factura',x['Nro de Factura']||'—'],['Fecha emisión',x['Fecha emision']||'—'],['Plazo',x['Plazo']||'—'],['Vencimiento',x['Vencimiento']||'—'],['CUIT',x['CUIT']||'—']].map(([k,v])=>(
+              {[['Tipo factura',x['Tipo de Factura']||'\u2014'],['N\u00b0 factura',x['Nro de Factura']||'\u2014'],['Fecha emisi\u00f3n',x['Fecha emision']||'\u2014'],['Plazo',x['Plazo']||'\u2014'],['Vencimiento',x['Vencimiento']||'\u2014'],['CUIT',x['CUIT']||'\u2014']].map(([k,v])=>(
                 <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:12}}><span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace'}}>{v}</span></div>
               ))}
             </div>
             <div>
-              <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Liquidación</div>
-              {[['Neto s/IVA',fmt(neto),null],['IVA',fmt(iva),null],['Total factura',fmt(total),'#1543F8'],['Retenciones',ret>0?'-'+fmt(ret):'—','#E24B4A'],['Disponible Magma',fmt(total-ret),'#1D9E75']].map(([k,v,c])=>(
+              <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Liquidaci\u00f3n</div>
+              {[['Neto s/IVA',fmt(neto),null],['IVA',fmt(iva),null],['Total factura',fmt(total),'#1543F8'],['Retenciones',ret>0?'-'+fmt(ret):'\u2014','#E24B4A'],['Disponible Magma',fmt(total-ret),'#1D9E75']].map(([k,v,c])=>(
                 <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:12}}><span style={{color:'#555'}}>{k}</span><span style={{fontFamily:'monospace',color:c||'inherit'}}>{v}</span></div>
               ))}
             </div>
@@ -559,16 +504,16 @@ function Facturacion({data}){
 // ---- PAGOS STAFF ----
 function PagosStaff({data}){
   const [open,setOpen]=useState(null), [pag,setPag]=useState({})
-  // Staff viene de proyectos — mostrar por presupuesto
+  // Staff viene de proyectos \u2014 mostrar por presupuesto
   const proj=(data.presupuestos||[]).filter(p=>isAprobado(p)||String(p['Estado']||'').toUpperCase()==='EN CURSO')
 
   // Extraer servicios de cada proyecto como si fueran staff
   const trabajos = []
   proj.forEach(p=>{
     for(let j=1;j<=8;j++){
-      const ped=p[`Pedido ${j}`]||p[`Pedido${j} `]||''
-      const prec=parseMonto(p[`Precio ${j}`])
-      if(ped&&prec>0) trabajos.push({proyecto:p['Proyecto']||p['Cliente'],num:p['Columna 1'],servicio:ped,monto:prec,pm:p['PM Interno']||'—'})
+      const ped=p[('Pedido '+j)]||p['Pedido\\\\'+j+' \\']||''
+      const prec=parseMonto(p[('Precio '+j)])
+      if(ped&&prec>0) trabajos.push({proyecto:p['Proyecto']||p['Cliente'],num:p['Columna 1'],servicio:ped,monto:prec,pm:p['PM Interno']||'\u2014'})
     }
   })
 
@@ -586,10 +531,10 @@ function PagosStaff({data}){
 
   return <div>
     <div style={S.k4}>
-      <K lbl="Servicios activos" val={trabajos.length} sub={proj.length+' proyectos'} c="#1543F8"/>
-      <K lbl="Total servicios" val={fmtM(trabajos.reduce((s,t)=>s+t.monto,0))} c="#BA7517"/>
-      <K lbl="PMs con trabajo" val={pms.length}/>
-      <K lbl="Marcados pagados" val={Object.values(pag).filter(Boolean).length} c="#1D9E75"/>
+      <K lbl=\\"Servicios activos\\" val={trabajos.length} sub={proj.length+' proyectos'} c=\\"#1543F8\\"/>
+      <K lbl=\\"Total servicios\\" val={fmtM(trabajos.reduce((s,t)=>s+t.monto,0))} c=\\"#BA7517\\"/>
+      <K lbl=\\"PMs con trabajo\\" val={pms.length}/>
+      <K lbl=\\"Marcados pagados\\" val={Object.values(pag).filter(Boolean).length} c=\\"#1D9E75\\"/>
     </div>
     {pms.length===0&&<div style={S.nd}>Sin proyectos activos con servicios</div>}
     {pms.map((p,i)=>{
@@ -600,7 +545,7 @@ function PagosStaff({data}){
           <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>PM: {p.pm}</div><div style={{fontSize:11,color:'#555',marginTop:2}}>{p.items.length} servicio{p.items.length!==1?'s':''}</div></div>
           <span style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:ip?'#1D9E75':c}}>{fmt(p.total)}</span>
           <span style={{...S.badge,background:ip?'#1D9E7520':'#BA751720',color:ip?'#1D9E75':'#BA7517',marginLeft:8}}>{ip?'Pagado':'Pendiente'}</span>
-          <span style={{fontSize:11,color:'#555'}}>{io?'▲':'▶'}</span>
+          <span style={{fontSize:11,color:'#555'}}>{io?'\u25b2':'\u25b6'}</span>
         </div>
         {io&&<div style={{borderTop:'0.5px solid #2A2A2A'}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 2fr 100px',background:'#1A1A1A'}}>{['Proyecto','Servicio','Monto'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'7px 14px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}</div>
@@ -611,7 +556,7 @@ function PagosStaff({data}){
           </div>)}
           <div style={{padding:'12px 16px',background:'#1A1A1A',display:'flex',justifyContent:'flex-end'}}>
             {ip?<button style={{...S.fb}} onClick={()=>setPag(prev=>({...prev,[p.pm]:false}))}>Desmarcar</button>
-              :<button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>setPag(prev=>({...prev,[p.pm]:true}))}>Marcar pagado ✓</button>}
+              :<button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>setPag(prev=>({...prev,[p.pm]:true}))}>Marcar pagado \u2713</button>}
           </div>
         </div>}
       </div>
@@ -631,7 +576,7 @@ function Balance({data}){
   const gV=()=>vs[mes]||[]
   const ts=SU.reduce((s,g)=>s+gS(g.n),0), tf=GF.reduce((s,g)=>s+gG(g.n),0), tv=gV().reduce((s,g)=>s+(parseFloat(g.m)||0),0)
 
-  // Ingresos reales del Sheets — facturado en el mes
+  // Ingresos reales del Sheets \u2014 facturado en el mes
   const fc=data.facturacion||[]
   const mesNum={'ENE':'01','FEB':'02','MAR':'03','ABR':'04','MAY':'05','JUN':'06','JUL':'07','AGO':'08','SEP':'09','OCT':'10','NOV':'11','DIC':'12'}[mes]||'04'
   const fcMes=fc.filter(f=>{const m=String(f['Mes']||'');return m.includes(mesNum)||m.toUpperCase().includes(mes)})
@@ -643,36 +588,36 @@ function Balance({data}){
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{MESES.map(m=><button key={m} style={{...S.fb,...(mes===m?S.fa:{})}} onClick={()=>setMes(m)}>{m}</button>)}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,background:'#1E1E1E',border:'0.5px solid #333',borderRadius:8,padding:'5px 10px'}}>
         <span style={{fontSize:11,color:'#555'}}>USD blue $</span>
-        <input type="number" value={tc} onChange={e=>setTc(parseFloat(e.target.value)||1405)} style={{width:70,border:'none',background:'transparent',color:'#BA7517',fontFamily:'monospace',fontSize:13,fontWeight:500,outline:'none',textAlign:'right'}}/>
+        <input type=\\"number\\" value={tc} onChange={e=>setTc(parseFloat(e.target.value)||1405)} style={{width:70,border:'none',background:'transparent',color:'#BA7517',fontFamily:'monospace',fontSize:13,fontWeight:500,outline:'none',textAlign:'right'}}/>
       </div>
     </div>
     <div style={S.k4}>
-      <K lbl="Ingresos netos" val={fmtM(ingMes)} sub={fcMes.length+' facturas del mes'} c="#1D9E75"/>
-      <K lbl="Sueldos" val={'-'+fmtM(ts)} sub={SU.filter(g=>!pg[mes+g.n]).length+' pendientes'} c="#E24B4A"/>
-      <K lbl="Gastos fijos" val={'-'+fmtM(tf)} c="#E24B4A"/>
-      <K lbl="Resultado" val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
+      <K lbl=\\"Ingresos netos\\" val={fmtM(ingMes)} sub={fcMes.length+' facturas del mes'} c=\\"#1D9E75\\"/>
+      <K lbl=\\"Sueldos\\" val={'-'+fmtM(ts)} sub={SU.filter(g=>!pg[mes+g.n]).length+' pendientes'} c=\\"#E24B4A\\"/>
+      <K lbl=\\"Gastos fijos\\" val={'-'+fmtM(tf)} c=\\"#E24B4A\\"/>
+      <K lbl=\\"Resultado\\" val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
       <div>
         <div style={S.card}>
           <div style={S.ch}>Sueldos equipo</div>
           {SU.map((g,i)=>{const p=pg[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type="checkbox" checked={!!p} onChange={e=>setPg(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPg(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
-            <input type="number" value={gS(g.n)} onChange={e=>setSe(prev=>({...prev,[mes+g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+            <input type=\\"number\\" value={gS(g.n)} onChange={e=>setSe(prev=>({...prev,[mes+g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
           </div>})}
         </div>
         <div style={{...S.card,marginTop:12}}>
           <div style={S.ch}>Gastos variables</div>
           {gV().map((g,i)=>{const p=pgv[mes+i]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type="checkbox" checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{fontFamily:'monospace',fontSize:12,marginLeft:'auto'}}>{fmt(g.m)}</span>
           </div>})}
           <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'0.5px dashed #2A2A2A'}}>
-            <input placeholder="Descripcion..." value={nv.n} onChange={e=>setNv(p=>({...p,n:e.target.value}))} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
-            <input type="number" placeholder="$" value={nv.m} onChange={e=>setNv(p=>({...p,m:e.target.value}))} style={{width:90,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+            <input placeholder=\\"Descripcion...\\" value={nv.n} onChange={e=>setNv(p=>({...p,n:e.target.value}))} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+            <input type=\\"number\\" placeholder=\\"$\\" value={nv.m} onChange={e=>setNv(p=>({...p,m:e.target.value}))} style={{width:90,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
             <button style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,cursor:'pointer'}} onClick={()=>{if(!nv.n)return;setVs(prev=>({...prev,[mes]:[...(prev[mes]||[]),{n:nv.n,m:parseFloat(nv.m)||0}]}));setNv({n:'',m:''})}}>OK</button>
           </div>
         </div>
@@ -681,10 +626,10 @@ function Balance({data}){
         <div style={S.card}>
           <div style={S.ch}>Gastos fijos</div>
           {GF.map((g,i)=>{const p=pgf[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type="checkbox" checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
-            <input type="number" value={gG(g.n)} onChange={e=>setGe(prev=>({...prev,[g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+            <input type=\\"number\\" value={gG(g.n)} onChange={e=>setGe(prev=>({...prev,[g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
           </div>})}
         </div>
         <div style={{...S.card,marginTop:12,padding:'14px 16px'}}>
@@ -700,6 +645,239 @@ function Balance({data}){
   </div>
 }
 
+// ---- NUEVO PRESUPUESTO ----
+function NuevoPresupuesto({onClose, onGuardado, data}){
+  const presus=data?.presupuestos||[]
+  const nextNum=presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
+  const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}])
+  const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0'})
+  const [saving,setSaving]=useState(false), [ok,setOk]=useState(false)
+  const [hintAg,setHintAg]=useState(false), [hintCl,setHintCl]=useState(false), [hintCt,setHintCt]=useState(false)
+  const [diasMulti,setDiasMulti]=useState([''])
+
+  const version=form.repr?'V2':''
+  const tieneAg=form.agencia.trim()!==''
+
+  const calcTotales=()=>{
+    const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+    const feeBase=peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
+    const fee=tieneAg?feeBase:0
+    const base=subtotal+fee
+    const gan=form.gan?fee*0.35:0
+    const iibb=form.iibb?fee*0.094:0
+    const intPct=parseFloat(form.interes)||0
+    const intMto=(base+gan+iibb)*(intPct/100)
+    const ajMto=(parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
+    const total=base+gan+iibb+intMto+ajMto
+    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total}
+  }
+  const T=calcTotales()
+
+  const setSvc=(id,val)=>{
+    const s=SVCS_LIST.find(x=>x.n===val)
+    setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:s?.fee??true,manual:false}:p))
+  }
+  const setPrecio=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,precio:val,manual:true}:p))
+  const setFeeAg=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,feeAg:val}:p))
+  const addPed=()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false}])
+  const delPed=(id)=>setPeds(prev=>prev.filter(p=>p.id!==id))
+  const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
+
+  async function guardar(){
+    if(!form.cliente.trim()||!peds.some(p=>p.svc)){return}
+    setSaving(true)
+    const row={
+      'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,
+      'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,
+      'Contacto':form.contacto,'Fecha Presupuesto':form.fp,
+      'Precio Final':T.total,
+    }
+    peds.filter(p=>p.svc).forEach((p,i)=>{
+      const k=i===0?'':'  '+(i+1)
+      row['Pedido '+(i+1)]=p.svc
+      row['Precio '+(i+1)]=p.precio
+    })
+    try{
+      await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
+    }catch(e){}
+    setOk(true)
+    setTimeout(()=>onGuardado(row),1200)
+    setSaving(false)
+  }
+
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
+  const sel={...inp}
+  const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
+
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}} onClick={onClose}>
+    <div style={{width:860,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+        <span style={{background:'#1543F820',color:'#1543F8',border:'0.5px solid #1543F840',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
+        {version&&<span style={{background:'#9635AB20',color:'#9635AB',border:'0.5px solid #9635AB40',borderRadius:4,padding:'2px 8px',fontSize:11}}>{version}</span>}
+        <span style={{background:'#BA751720',color:'#BA7517',borderRadius:3,padding:'2px 8px',fontSize:10}}>En espera</span>
+        <div style={{flex:1}}/>
+        <button style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer',padding:'0 4px'}} onClick={onClose}>\u00d7</button>
+      </div>
+
+      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+        <div style={{flex:1,padding:20,overflowY:'auto',borderRight:'0.5px solid #2A2A2A'}}>
+
+          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Datos del proyecto</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type=\\"date\\" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
+              <select style={sel} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
+                <option value=\\"\\">\u2014 PM \u2014</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
+            <span style={lbl}>Fecha(s) de evento</span>
+            <div style={{display:'flex',gap:4,marginBottom:6}}>
+              {['dia','rango','multi'].map((m,i)=>(
+                <button key={m} style={{padding:'5px 12px',borderRadius:6,border:'0.5px solid #333',background:form.fechaMode===m?'#1E1E1E':'transparent',color:form.fechaMode===m?'#F0F0F0':'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setF('fechaMode',m)}>
+                  {['1 d\u00eda','Rango','M\u00faltiples'][i]}
+                </button>
+              ))}
+            </div>
+            {form.fechaMode==='dia'&&<input style={inp} type=\\"date\\" value={form.fe1} onChange={e=>setF('fe1',e.target.value)}/>}
+            {form.fechaMode==='rango'&&<div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'center'}}>
+              <input style={inp} type=\\"date\\" value={form.feIni} onChange={e=>setF('feIni',e.target.value)}/>
+              <span style={{fontSize:11,color:'#555'}}>al</span>
+              <input style={inp} type=\\"date\\" value={form.feFin} onChange={e=>setF('feFin',e.target.value)}/>
+            </div>}
+            {form.fechaMode==='multi'&&<div>
+              {diasMulti.map((d,i)=>(
+                <div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
+                  <input style={{...inp,flex:1}} type=\\"date\\" value={d} onChange={e=>{const a=[...diasMulti];a[i]=e.target.value;setDiasMulti(a)}}/>
+                  {diasMulti.length>1&&<button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setDiasMulti(prev=>prev.filter((_,j)=>j!==i))}>\u00d7</button>}
+                </div>
+              ))}
+              <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setDiasMulti(prev=>[...prev,''])}>+ Agregar d\u00eda</button>
+            </div>}
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Agencia</span>
+              <input style={inp} list=\\"np-ag\\" value={form.agencia} onChange={e=>{setF('agencia',e.target.value);setHintAg(!!e.target.value&&!AGENCIAS_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Sin agencia / Directo\\"/>
+              <datalist id=\\"np-ag\\">{AGENCIAS_LIST.map(a=><option key={a} value={a}/>)}</datalist>
+              {hintAg&&<span style={{fontSize:10,color:'#1D9E75'}}>Agencia nueva \u2014 se agregar\u00e1 al listado</span>}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Cliente / Marca</span>
+              <input style={inp} list=\\"np-cl\\" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Nombre del cliente\\"/>
+              <datalist id=\\"np-cl\\">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
+              {hintCl&&<span style={{fontSize:10,color:'#1D9E75'}}>Cliente nuevo \u2014 se agregar\u00e1 al listado</span>}
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripci\u00f3n</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder=\\"Ej: Evento anual, Film...\\"/></label>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Contacto</span>
+              <input style={inp} list=\\"np-ct\\" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Nombre del contacto\\"/>
+              <datalist id=\\"np-ct\\">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
+              {hintCt&&<span style={{fontSize:10,color:'#1D9E75'}}>Contacto nuevo \u2014 se agregar\u00e1 al listado</span>}
+            </div>
+          </div>
+          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N\u00b0</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder=\\"Dejar vac\u00edo si es presupuesto nuevo\\"/></label>
+
+          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
+            {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}
+          </div>
+          {peds.map(p=>(
+            <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,alignItems:'center',marginBottom:5}}>
+              <select style={sel} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
+                <option value=\\"\\">\u2014 Servicio \u2014</option>
+                {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
+              </select>
+              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8',borderColor:p.manual?'#BA751540':'#333'}} type=\\"number\\" value={p.precio} placeholder=\\"0\\" onChange={e=>setPrecio(p.id,e.target.value)}/>
+              <input type=\\"checkbox\\" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
+              <button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>delPed(p.id)}>\u00d7</button>
+            </div>
+          ))}
+          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={addPed}>+ Agregar servicio</button>
+
+          {tieneAg&&<div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6,borderLeft:'2px solid #2A2A2A'}}>
+            Los servicios con fee marcado se cobran \u00d72. Ganancias e IIBB van sobre el total del fee.
+          </div>}
+
+          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',margin:'16px 0 8px'}}>Condiciones</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Plazo de pago</span>
+              <select style={sel} value={form.plazo} onChange={e=>setF('plazo',e.target.value)}>
+                <option value=\\"0\\">Contado</option><option value=\\"15\\">15 d\u00edas</option><option value=\\"30\\">30 d\u00edas</option><option value=\\"60\\">60 d\u00edas</option>
+              </select>
+            </label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Inter\u00e9s %</span><input style={inp} type=\\"number\\" value={form.interes} min=\\"0\\" step=\\"0.5\\" onChange={e=>setF('interes',e.target.value)}/></label>
+          </div>
+          {[['gan','Imp. Ganancias (35% sobre fee)'],['iibb','IIBB (9.4% sobre fee)']].map(([k,label])=>(
+            <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:'#1A1A1A',borderRadius:6,marginBottom:5}}>
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer'}}>
+                <input type=\\"checkbox\\" checked={form[k]} onChange={e=>setF(k,e.target.checked)} style={{width:14,height:14,accentColor:'#1543F8'}}/>
+                {label}
+              </label>
+              <span style={{fontFamily:'monospace',fontSize:12,color:'#555'}}>{k==='gan'?fmt(T.fee*0.35):fmt(T.fee*0.094)}</span>
+            </div>
+          ))}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Tipo ajuste</span>
+              <select style={sel} value={form.tajuste} onChange={e=>setF('tajuste',e.target.value)}><option value=\\"1\\">Recargo (+)</option><option value=\\"-1\\">Descuento (\u2212)</option></select>
+            </label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Monto $</span><input style={inp} type=\\"number\\" value={form.ajuste} onChange={e=>setF('ajuste',e.target.value)}/></label>
+          </div>
+        </div>
+
+        <div style={{width:260,padding:20,background:'#111',display:'flex',flexDirection:'column',gap:0,flexShrink:0}}>
+          <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Resumen</div>
+          {[
+            ['Subtotal servicios',fmt(T.subtotal),'#F0F0F0',true],
+            tieneAg&&T.fee>0?['Fee agencia (\u00d71)',fmt(T.fee),'#9635AB',true]:null,
+            tieneAg&&T.fee>0?['Base imponible',fmt(T.base),'#555',true]:null,
+            T.gan>0?['Ganancias 35%',fmt(T.gan),'#E24B4A',true]:null,
+            T.iibb>0?['IIBB 9.4%',fmt(T.iibb),'#E24B4A',true]:null,
+            T.intMto>0?['Inter\u00e9s '+form.interes+'%',fmt(T.intMto),'#BA7517',true]:null,
+            Math.abs(T.ajMto)>0?[(parseInt(form.tajuste)>0?'Recargo':'Descuento'),(parseInt(form.tajuste)>0?'+':'-')+fmt(Math.abs(T.ajMto)),parseInt(form.tajuste)>0?'#1D9E75':'#E24B4A',true]:null,
+          ].filter(Boolean).map(([label,val,color])=>(
+            <div key={label} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',fontSize:12,borderBottom:'0.5px solid #1A1A1A'}}>
+              <span style={{color:'#555',fontSize:11}}>{label}</span>
+              <span style={{fontFamily:'monospace',color}}>{val}</span>
+            </div>
+          ))}
+          <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:15,fontWeight:500,borderTop:'0.5px solid #333',marginTop:6}}>
+            <span>Precio final</span>
+            <span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
+          </div>
+
+          <div style={{background:'#1A1A1A',borderRadius:8,padding:10,marginTop:14}}>
+            <div style={{fontSize:10,color:'#555',marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em'}}>Servicios</div>
+            {peds.filter(p=>p.svc).length===0
+              ?<span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>Ninguno a\u00fan</span>
+              :peds.filter(p=>p.svc).map((p,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:11}}>
+                  <span style={{color:p.feeAg&&tieneAg?'#F0F0F0':'#555'}}>{p.svc}</span>
+                  <span style={{fontFamily:'monospace',color:p.feeAg&&tieneAg?'#1543F8':'#555'}}>{fmt(parseFloat(p.precio)||0)}</span>
+                </div>
+              ))
+            }
+          </div>
+
+          {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} \u2192 V2</div>}
+
+          <div style={{flex:1}}/>
+          {ok
+            ?<div style={{marginTop:14,background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado \u2713</div>
+            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:saving?'#0f35d0':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>
+              {saving?'Guardando...':'Cargar presupuesto'}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}
 function K({lbl,val,sub,c}){return <div style={S.kpi}><div style={S.kl}>{lbl}</div><div style={{...S.kv,...(c?{color:c}:{})}}>{val}</div>{sub&&<div style={S.ks}>{sub}</div>}</div>}
 function Row({cols,vc}){return <div style={S.lr}><span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11,flexShrink:0}}>{cols[0]}</span><span style={{flex:1,marginLeft:10,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cols[1]}</span><span style={{fontFamily:'monospace',fontSize:12,color:vc||'inherit'}}>{cols[2]}</span></div>}
 
@@ -707,7 +885,7 @@ const S={
   app:{display:'flex',height:'100vh',overflow:'hidden'},
   sb:{width:220,background:'#161616',borderRight:'1px solid #2A2A2A',display:'flex',flexDirection:'column',flexShrink:0},
   logo:{fontSize:22,fontWeight:900,background:'linear-gradient(135deg,#1543F8,#9635AB,#CE2637)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'},
-  ls:{fontFamily:"'Azeret Mono',monospace",fontSize:9,color:'#555',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
+  ls:{fontFamily:\\"'Azeret Mono',monospace\\",fontSize:9,color:'#555',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
   ni:{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:6,cursor:'pointer',color:'#777',fontSize:13,fontWeight:500,transition:'all 0.15s',marginBottom:2,border:'none',background:'transparent',width:'100%',textAlign:'left'},
   k4:{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:10,marginBottom:12},
   kpi:{background:'#1E1E1E',borderRadius:8,padding:'11px 13px'},
