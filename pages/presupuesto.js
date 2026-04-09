@@ -38,7 +38,7 @@ export default function Presupuesto() {
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'7',
   })
   const [validez, setValidez] = useState(addDays(hoy, 20))
-  const [tc, setTc] = useState([
+  const [clausulas, setClausulas] = useState([
     'No se entregan crudos ni archivos editables salvo acuerdo expreso por escrito.',
     'Se incluyen hasta dos rondas de correcciones sin costo. Cambios adicionales tendrán un costo a convenir. Las revisiones deben solicitarse dentro de los 7 días posteriores a la primera entrega.',
     'El pago debe realizarse dentro del plazo indicado. En caso de demora, Somos Magma se reserva el derecho de pausar la entrega hasta regularizar el pago.',
@@ -215,7 +215,7 @@ export default function Presupuesto() {
 
       const tcTitulos = ['1. Entrega de material','2. Revisiones','3. Pago','4. Validez','5. Derechos de uso']
       const tc = tcTitulos.map((t,i) => {
-        let texto = tc[i] || ''
+        let texto = clausulas[i] || ''
         if(i===3) texto = texto.replace('[fecha]', toDisplay(validez))
         return [t, texto]
       })
@@ -371,8 +371,8 @@ export default function Presupuesto() {
                 <div style={{fontSize:11,color:'#9635AB',fontWeight:600,marginBottom:4}}>{titulo}</div>
                 <textarea
                   style={{...S.inp,minHeight:52,resize:'vertical',fontSize:11}}
-                  value={i===3?tc[i].replace('[fecha]',toDisplay(validez)):tc[i]}
-                  onChange={e=>{const n=[...tc];n[i]=e.target.value;setTc(n)}}
+                  value={i===3?clausulas[i].replace('[fecha]',toDisplay(validez)):clausulas[i]}
+                  onChange={e=>{const n=[...clausulas];n[i]=e.target.value;setClausulas(n)}}
                 />
               </div>
             ))}
