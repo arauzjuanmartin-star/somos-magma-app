@@ -284,7 +284,7 @@ function Presupuestos({data:initialData}){
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     const fp=p['Fecha Presupuesto']||''
     const manio=anio==='todos'||fp.includes(anio)
-    const mmes=mes==='todos'||fp.startsWith(mes+'/')||fp.split('/')[1]===mes
+    const mmes=mes==='todos'||parseInt(fp.split('/')[1])===parseInt(mes)||parseInt(fp.split('/')[0])===parseInt(mes)
     return mf&&mpm&&manio&&mmes&&mq
   }).reverse()
 
@@ -361,7 +361,7 @@ function Proyectos({data,mail}){
   const agencias=[...new Set(proyectos.map(p=>p['Agencia']||'').filter(Boolean))].sort()
   const filtrados=proyectos.filter(p=>{
     const fecha=p['Fecha Evento']||''
-    const mMatch=mes==='todos'||fecha.split('/')[1]===mes
+    const mMatch=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
     const aMatch=anio==='todos'||fecha.includes(anio)
     const pmVal=p['PM']||p['PM Interno']||''
     return (agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(estado==='todos'||(estado==='ok'&&(p['Carga Staff']===true||p['Carga Staff']==='TRUE'))||(estado==='pendiente'&&p['Carga Staff']!==true&&p['Carga Staff']!=='TRUE'))&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
