@@ -12,7 +12,8 @@ export default async function handler(req, res) {
 
     const row = [
       p['Columna 1'] || '',
-      now.toLocaleDateString('es-AR'),
+      p['Fecha Evento'] || '',
+      p['PM Interno'] || '',
       p['Estado'] || 'EN ESPERA',
       p['Agencia'] || '',
       p['Cliente'] || '',
