@@ -663,7 +663,7 @@ function PagosStaff({data}){
     for(let j=1;j<=12;j++){
       const pedido=proy['Pedido '+j]||''
       const precio=parseMonto(proy['Precio '+j]||0)
-      const staff=proy['Staff '+j]||''
+      const staff=proy['Staff '+j]||proy[j===1?'Staff':'']||''
       if(!staff||staff==='Somos Magma'||!pedido||precio<=0)continue
       if(!personas[staff])personas[staff]={nombre:staff,trabajos:[],total:0}
       personas[staff].trabajos.push({nro,proyecto,agencia,pedido,precio})
