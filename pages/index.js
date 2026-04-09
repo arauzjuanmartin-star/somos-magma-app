@@ -646,177 +646,139 @@ function Balance({data}){
 }
 
 // ---- NUEVO PRESUPUESTO ----
-function NuevoPresupuesto({onClose, onGuardado, data}){
+function NuevoPresupuesto({onClose,onGuardado,data}){
   const presus=data?.presupuestos||[]
   const nextNum=presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
   const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}])
   const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0'})
-  const [saving,setSaving]=useState(false), [ok,setOk]=useState(false)
-  const [hintAg,setHintAg]=useState(false), [hintCl,setHintCl]=useState(false), [hintCt,setHintCt]=useState(false)
+  const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
+  const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [diasMulti,setDiasMulti]=useState([''])
-
   const version=form.repr?'V2':''
   const tieneAg=form.agencia.trim()!==''
-
-  const calcTotales=()=>{
+  const calcT=()=>{
     const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
     const feeBase=peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
-    const fee=tieneAg?feeBase:0
-    const base=subtotal+fee
-    const gan=form.gan?fee*0.35:0
-    const iibb=form.iibb?fee*0.094:0
-    const intPct=parseFloat(form.interes)||0
-    const intMto=(base+gan+iibb)*(intPct/100)
+    const fee=tieneAg?feeBase:0,base=subtotal+fee
+    const gan=form.gan?fee*0.35:0,iibb=form.iibb?fee*0.094:0
+    const intMto=(base+gan+iibb)*((parseFloat(form.interes)||0)/100)
     const ajMto=(parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
-    const total=base+gan+iibb+intMto+ajMto
-    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total}
+    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total:base+gan+iibb+intMto+ajMto}
   }
-  const T=calcTotales()
-
-  const setSvc=(id,val)=>{
-    const s=SVCS_LIST.find(x=>x.n===val)
-    setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:s?.fee??true,manual:false}:p))
-  }
+  const T=calcT()
+  const setSvc=(id,val)=>{const s=SVCS_LIST.find(x=>x.n===val);setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:s?.fee??true,manual:false}:p))}
   const setPrecio=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,precio:val,manual:true}:p))
   const setFeeAg=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,feeAg:val}:p))
-  const addPed=()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false}])
-  const delPed=(id)=>setPeds(prev=>prev.filter(p=>p.id!==id))
   const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
-
   async function guardar(){
-    if(!form.cliente.trim()||!peds.some(p=>p.svc)){return}
+    if(!form.cliente.trim()||!peds.some(p=>p.svc))return
     setSaving(true)
-    const row={
-      'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,
-      'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,
-      'Contacto':form.contacto,'Fecha Presupuesto':form.fp,
-      'Precio Final':T.total,
-    }
-    peds.filter(p=>p.svc).forEach((p,i)=>{
-      const k=i===0?'':'  '+(i+1)
-      row['Pedido '+(i+1)]=p.svc
-      row['Precio '+(i+1)]=p.precio
-    })
-    try{
-      await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
-    }catch(e){}
-    setOk(true)
-    setTimeout(()=>onGuardado(row),1200)
-    setSaving(false)
+    const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Precio Final':T.total}
+    peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
+    try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})}catch(e){}
+    setOk(true);setTimeout(()=>onGuardado(row),1200);setSaving(false)
   }
-
   const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
-  const sel={...inp}
   const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
-
   return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}} onClick={onClose}>
     <div style={{width:860,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
       <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <span style={{background:'#1543F820',color:'#1543F8',border:'0.5px solid #1543F840',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
-        {version&&<span style={{background:'#9635AB20',color:'#9635AB',border:'0.5px solid #9635AB40',borderRadius:4,padding:'2px 8px',fontSize:11}}>{version}</span>}
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
+        {version&&<span style={{background:'#9635AB20',color:'#9635AB',borderRadius:4,padding:'2px 8px',fontSize:11}}>{version}</span>}
         <span style={{background:'#BA751720',color:'#BA7517',borderRadius:3,padding:'2px 8px',fontSize:10}}>En espera</span>
         <div style={{flex:1}}/>
-        <button style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer',padding:'0 4px'}} onClick={onClose}>\u00d7</button>
+        <button style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}} onClick={onClose}>×</button>
       </div>
-
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         <div style={{flex:1,padding:20,overflowY:'auto',borderRight:'0.5px solid #2A2A2A'}}>
-
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Datos del proyecto</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type=\\"date\\" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type="date" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
-              <select style={sel} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
-                <option value=\\"\\">\u2014 PM \u2014</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
+              <select style={inp} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
+                <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
               </select>
             </label>
           </div>
-
           <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
             <span style={lbl}>Fecha(s) de evento</span>
             <div style={{display:'flex',gap:4,marginBottom:6}}>
               {['dia','rango','multi'].map((m,i)=>(
                 <button key={m} style={{padding:'5px 12px',borderRadius:6,border:'0.5px solid #333',background:form.fechaMode===m?'#1E1E1E':'transparent',color:form.fechaMode===m?'#F0F0F0':'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setF('fechaMode',m)}>
-                  {['1 d\u00eda','Rango','M\u00faltiples'][i]}
+                  {['1 dia','Rango','Multiples'][i]}
                 </button>
               ))}
             </div>
-            {form.fechaMode==='dia'&&<input style={inp} type=\\"date\\" value={form.fe1} onChange={e=>setF('fe1',e.target.value)}/>}
+            {form.fechaMode==='dia'&&<input style={inp} type="date" value={form.fe1} onChange={e=>setF('fe1',e.target.value)}/>}
             {form.fechaMode==='rango'&&<div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'center'}}>
-              <input style={inp} type=\\"date\\" value={form.feIni} onChange={e=>setF('feIni',e.target.value)}/>
+              <input style={inp} type="date" value={form.feIni} onChange={e=>setF('feIni',e.target.value)}/>
               <span style={{fontSize:11,color:'#555'}}>al</span>
-              <input style={inp} type=\\"date\\" value={form.feFin} onChange={e=>setF('feFin',e.target.value)}/>
+              <input style={inp} type="date" value={form.feFin} onChange={e=>setF('feFin',e.target.value)}/>
             </div>}
             {form.fechaMode==='multi'&&<div>
               {diasMulti.map((d,i)=>(
                 <div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
-                  <input style={{...inp,flex:1}} type=\\"date\\" value={d} onChange={e=>{const a=[...diasMulti];a[i]=e.target.value;setDiasMulti(a)}}/>
-                  {diasMulti.length>1&&<button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setDiasMulti(prev=>prev.filter((_,j)=>j!==i))}>\u00d7</button>}
+                  <input style={{...inp,flex:1}} type="date" value={d} onChange={e=>{const a=[...diasMulti];a[i]=e.target.value;setDiasMulti(a)}}/>
+                  {diasMulti.length>1&&<button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setDiasMulti(prev=>prev.filter((_,j)=>j!==i))}>x</button>}
                 </div>
               ))}
-              <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setDiasMulti(prev=>[...prev,''])}>+ Agregar d\u00eda</button>
+              <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setDiasMulti(prev=>[...prev,''])}>+ Agregar dia</button>
             </div>}
           </div>
-
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <span style={lbl}>Agencia</span>
-              <input style={inp} list=\\"np-ag\\" value={form.agencia} onChange={e=>{setF('agencia',e.target.value);setHintAg(!!e.target.value&&!AGENCIAS_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Sin agencia / Directo\\"/>
-              <datalist id=\\"np-ag\\">{AGENCIAS_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintAg&&<span style={{fontSize:10,color:'#1D9E75'}}>Agencia nueva \u2014 se agregar\u00e1 al listado</span>}
+              <input style={inp} list="np-ag" value={form.agencia} onChange={e=>{setF('agencia',e.target.value);setHintAg(!!e.target.value&&!AGENCIAS_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Sin agencia / Directo"/>
+              <datalist id="np-ag">{AGENCIAS_LIST.map(a=><option key={a} value={a}/>)}</datalist>
+              {hintAg&&<span style={{fontSize:10,color:'#1D9E75'}}>Agencia nueva</span>}
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <span style={lbl}>Cliente / Marca</span>
-              <input style={inp} list=\\"np-cl\\" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Nombre del cliente\\"/>
-              <datalist id=\\"np-cl\\">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintCl&&<span style={{fontSize:10,color:'#1D9E75'}}>Cliente nuevo \u2014 se agregar\u00e1 al listado</span>}
+              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente"/>
+              <datalist id="np-cl">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
+              {hintCl&&<span style={{fontSize:10,color:'#1D9E75'}}>Cliente nuevo</span>}
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripci\u00f3n</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder=\\"Ej: Evento anual, Film...\\"/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripcion</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="Ej: Evento anual, Film..."/></label>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <span style={lbl}>Contacto</span>
-              <input style={inp} list=\\"np-ct\\" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder=\\"Nombre del contacto\\"/>
-              <datalist id=\\"np-ct\\">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
-              {hintCt&&<span style={{fontSize:10,color:'#1D9E75'}}>Contacto nuevo \u2014 se agregar\u00e1 al listado</span>}
+              <input style={inp} list="np-ct" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del contacto"/>
+              <datalist id="np-ct">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
+              {hintCt&&<span style={{fontSize:10,color:'#1D9E75'}}>Contacto nuevo</span>}
             </div>
           </div>
-          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N\u00b0</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder=\\"Dejar vac\u00edo si es presupuesto nuevo\\"/></label>
-
+          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo"/></label>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
             {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}
           </div>
           {peds.map(p=>(
             <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,alignItems:'center',marginBottom:5}}>
-              <select style={sel} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
-                <option value=\\"\\">\u2014 Servicio \u2014</option>
+              <select style={inp} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
+                <option value="">— Servicio —</option>
                 {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
               </select>
-              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8',borderColor:p.manual?'#BA751540':'#333'}} type=\\"number\\" value={p.precio} placeholder=\\"0\\" onChange={e=>setPrecio(p.id,e.target.value)}/>
-              <input type=\\"checkbox\\" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
-              <button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>delPed(p.id)}>\u00d7</button>
+              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8'}} type="number" value={p.precio} placeholder="0" onChange={e=>setPrecio(p.id,e.target.value)}/>
+              <input type="checkbox" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
+              <button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setPeds(prev=>prev.filter(x=>x.id!==p.id))}>x</button>
             </div>
           ))}
-          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={addPed}>+ Agregar servicio</button>
-
-          {tieneAg&&<div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6,borderLeft:'2px solid #2A2A2A'}}>
-            Los servicios con fee marcado se cobran \u00d72. Ganancias e IIBB van sobre el total del fee.
-          </div>}
-
+          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false}])}>+ Agregar servicio</button>
+          {tieneAg&&<div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6}}>Servicios con fee marcado se cobran x2. Ganancias e IIBB van sobre el fee.</div>}
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',margin:'16px 0 8px'}}>Condiciones</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Plazo de pago</span>
-              <select style={sel} value={form.plazo} onChange={e=>setF('plazo',e.target.value)}>
-                <option value=\\"0\\">Contado</option><option value=\\"15\\">15 d\u00edas</option><option value=\\"30\\">30 d\u00edas</option><option value=\\"60\\">60 d\u00edas</option>
+              <select style={inp} value={form.plazo} onChange={e=>setF('plazo',e.target.value)}>
+                <option value="0">Contado</option><option value="15">15 dias</option><option value="30">30 dias</option><option value="60">60 dias</option>
               </select>
             </label>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Inter\u00e9s %</span><input style={inp} type=\\"number\\" value={form.interes} min=\\"0\\" step=\\"0.5\\" onChange={e=>setF('interes',e.target.value)}/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Interes %</span><input style={inp} type="number" value={form.interes} min="0" step="0.5" onChange={e=>setF('interes',e.target.value)}/></label>
           </div>
           {[['gan','Imp. Ganancias (35% sobre fee)'],['iibb','IIBB (9.4% sobre fee)']].map(([k,label])=>(
             <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:'#1A1A1A',borderRadius:6,marginBottom:5}}>
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer'}}>
-                <input type=\\"checkbox\\" checked={form[k]} onChange={e=>setF(k,e.target.checked)} style={{width:14,height:14,accentColor:'#1543F8'}}/>
+                <input type="checkbox" checked={form[k]} onChange={e=>setF(k,e.target.checked)} style={{width:14,height:14,accentColor:'#1543F8'}}/>
                 {label}
               </label>
               <span style={{fontFamily:'monospace',fontSize:12,color:'#555'}}>{k==='gan'?fmt(T.fee*0.35):fmt(T.fee*0.094)}</span>
@@ -824,37 +786,32 @@ function NuevoPresupuesto({onClose, onGuardado, data}){
           ))}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Tipo ajuste</span>
-              <select style={sel} value={form.tajuste} onChange={e=>setF('tajuste',e.target.value)}><option value=\\"1\\">Recargo (+)</option><option value=\\"-1\\">Descuento (\u2212)</option></select>
+              <select style={inp} value={form.tajuste} onChange={e=>setF('tajuste',e.target.value)}><option value="1">Recargo (+)</option><option value="-1">Descuento (-)</option></select>
             </label>
-            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Monto $</span><input style={inp} type=\\"number\\" value={form.ajuste} onChange={e=>setF('ajuste',e.target.value)}/></label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Monto $</span><input style={inp} type="number" value={form.ajuste} onChange={e=>setF('ajuste',e.target.value)}/></label>
           </div>
         </div>
-
-        <div style={{width:260,padding:20,background:'#111',display:'flex',flexDirection:'column',gap:0,flexShrink:0}}>
+        <div style={{width:260,padding:20,background:'#111',display:'flex',flexDirection:'column',flexShrink:0}}>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Resumen</div>
           {[
-            ['Subtotal servicios',fmt(T.subtotal),'#F0F0F0',true],
-            tieneAg&&T.fee>0?['Fee agencia (\u00d71)',fmt(T.fee),'#9635AB',true]:null,
-            tieneAg&&T.fee>0?['Base imponible',fmt(T.base),'#555',true]:null,
-            T.gan>0?['Ganancias 35%',fmt(T.gan),'#E24B4A',true]:null,
-            T.iibb>0?['IIBB 9.4%',fmt(T.iibb),'#E24B4A',true]:null,
-            T.intMto>0?['Inter\u00e9s '+form.interes+'%',fmt(T.intMto),'#BA7517',true]:null,
-            Math.abs(T.ajMto)>0?[(parseInt(form.tajuste)>0?'Recargo':'Descuento'),(parseInt(form.tajuste)>0?'+':'-')+fmt(Math.abs(T.ajMto)),parseInt(form.tajuste)>0?'#1D9E75':'#E24B4A',true]:null,
+            ['Subtotal servicios',fmt(T.subtotal),'#F0F0F0'],
+            tieneAg&&T.fee>0?['Fee agencia (x1)',fmt(T.fee),'#9635AB']:null,
+            tieneAg&&T.fee>0?['Base imponible',fmt(T.base),'#555']:null,
+            T.gan>0?['Ganancias 35%',fmt(T.gan),'#E24B4A']:null,
+            T.iibb>0?['IIBB 9.4%',fmt(T.iibb),'#E24B4A']:null,
+            T.intMto>0?['Interes '+form.interes+'%',fmt(T.intMto),'#BA7517']:null,
+            Math.abs(T.ajMto)>0?[(parseInt(form.tajuste)>0?'Recargo':'Descuento'),(parseInt(form.tajuste)>0?'+':'-')+fmt(Math.abs(T.ajMto)),parseInt(form.tajuste)>0?'#1D9E75':'#E24B4A']:null,
           ].filter(Boolean).map(([label,val,color])=>(
             <div key={label} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',fontSize:12,borderBottom:'0.5px solid #1A1A1A'}}>
-              <span style={{color:'#555',fontSize:11}}>{label}</span>
-              <span style={{fontFamily:'monospace',color}}>{val}</span>
+              <span style={{color:'#555',fontSize:11}}>{label}</span><span style={{fontFamily:'monospace',color}}>{val}</span>
             </div>
           ))}
           <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:15,fontWeight:500,borderTop:'0.5px solid #333',marginTop:6}}>
-            <span>Precio final</span>
-            <span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
+            <span>Precio final</span><span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
           </div>
-
           <div style={{background:'#1A1A1A',borderRadius:8,padding:10,marginTop:14}}>
             <div style={{fontSize:10,color:'#555',marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em'}}>Servicios</div>
-            {peds.filter(p=>p.svc).length===0
-              ?<span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>Ninguno a\u00fan</span>
+            {peds.filter(p=>p.svc).length===0?<span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>Ninguno aun</span>
               :peds.filter(p=>p.svc).map((p,i)=>(
                 <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:11}}>
                   <span style={{color:p.feeAg&&tieneAg?'#F0F0F0':'#555'}}>{p.svc}</span>
@@ -863,13 +820,10 @@ function NuevoPresupuesto({onClose, onGuardado, data}){
               ))
             }
           </div>
-
-          {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} \u2192 V2</div>}
-
+          {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} V2</div>}
           <div style={{flex:1}}/>
-          {ok
-            ?<div style={{marginTop:14,background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado \u2713</div>
-            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:saving?'#0f35d0':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>
+          {ok?<div style={{marginTop:14,background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado</div>
+            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>
               {saving?'Guardando...':'Cargar presupuesto'}
             </button>
           }
@@ -878,6 +832,7 @@ function NuevoPresupuesto({onClose, onGuardado, data}){
     </div>
   </div>
 }
+
 function K({lbl,val,sub,c}){return <div style={S.kpi}><div style={S.kl}>{lbl}</div><div style={{...S.kv,...(c?{color:c}:{})}}>{val}</div>{sub&&<div style={S.ks}>{sub}</div>}</div>}
 function Row({cols,vc}){return <div style={S.lr}><span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11,flexShrink:0}}>{cols[0]}</span><span style={{flex:1,marginLeft:10,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cols[1]}</span><span style={{fontFamily:'monospace',fontSize:12,color:vc||'inherit'}}>{cols[2]}</span></div>}
 
