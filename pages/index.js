@@ -783,7 +783,6 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
-  const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [diasMulti,setDiasMulti]=useState([''])
   const version=form.repr?'V2':''
   const tieneAg=form.agencia.trim()!==''
