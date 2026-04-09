@@ -284,7 +284,7 @@ function Presupuestos({data:initialData}){
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     const fp=p['Fecha Presupuesto']||''
     const manio=anio==='todos'||fp.includes(anio)
-    const mmes=mes==='todos'||parseInt(fp.split('/')[1])===parseInt(mes)||parseInt(fp.split('/')[0])===parseInt(mes)
+    const mmes=mes==='todos'||parseInt(fp.split('/')[1])===parseInt(mes)
     return mf&&mpm&&manio&&mmes&&mq
   }).reverse()
 
