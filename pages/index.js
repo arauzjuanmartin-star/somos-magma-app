@@ -529,7 +529,7 @@ function Facturacion({data,mail}){
             {[['Factura por',' '],['Tipo',' '],['N° factura',' '],['Plazo',' ']].map(([l])=>(
               <div key={l} style={{display:'flex',flexDirection:'column',gap:4}}>
                 <label style={{fontSize:11,color:'#555'}}>{l}</label>
-                {l==='Factura por'&&<select style={inp2} value={formData.entidad} onChange={e=>setFormData(p=>({...p,entidad:e.target.value}))}><option value='SRL'>SRL - BBVA</option><option value='Sofia'>Sofia - Galicia</option><option value='Lulu'>Lulu - Santander</option></select>}
+                {l==='Factura por'&&<select style={inp2} value={formData.entidad} onChange={e=>setFormData(p=>({...p,entidad:e.target.value}))}><option value='SRL'>Somos Magma SRL</option><option value='Sofia'>Sofia Grenier</option><option value='Lulu'>Lucia Grenier</option><option value='Efectivo'>Efectivo (sin factura)</option></select>}
                 {l==='Tipo'&&<select style={inp2} value={formData.tipo} onChange={e=>setFormData(p=>({...p,tipo:e.target.value}))}>{['A','B','C'].map(o=><option key={o}>{o}</option>)}</select>}
                 {l==='N° factura'&&<input style={{...inp2,fontFamily:'monospace'}} value={formData.nroFactura} onChange={e=>setFormData(p=>({...p,nroFactura:e.target.value}))} placeholder='0001-00001234'/>}
                 {l==='Plazo'&&<select style={inp2} value={formData.plazo} onChange={e=>setFormData(p=>({...p,plazo:e.target.value}))}>{[['0','Contado'],['15','15 dias'],['30','30 dias'],['60','60 dias']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>}
