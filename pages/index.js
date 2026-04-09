@@ -433,7 +433,7 @@ function Proyectos({data,mail}){
 
 // ---- FACTURACION ----
 const CUENTAS_FC=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander']
-const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'}}
+const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'},Efectivo:{label:'Efectivo',color:'#BA7517',bg:'#BA751715'}}
 function Facturacion({data,mail}){
   const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false)
   const [presuSel,setPresuSel]=useState(null),[montoTipo,setMontoTipo]=useState('total'),[montoCustom,setMontoCustom]=useState('')
@@ -448,7 +448,7 @@ function Facturacion({data,mail}){
   const fechaHoy=()=>{const d=new Date();return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
   const calcVencF=()=>{const d=new Date();d.setDate(d.getDate()+parseInt(formData.plazo||30));return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
   const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+(f['Nro de Factura']||'')+' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+(f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
-  const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';return'SRL'}
+  const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';if(n.toLowerCase().includes('ef-')||n.toLowerCase().includes('efectivo'))return'Efectivo';return'SRL'}
   const filtradas=fc.filter(f=>{if(filtro==='todas')return true;if(filtro==='pendiente')return!isCobrada(f);if(filtro==='cobrada')return isCobrada(f);return getEntidad(f)===filtro}).sort((a,b)=>(isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b))
   const reclamar=fc.filter(f=>estF(f)==='reclamar')
   const vencidas=fc.filter(f=>estF(f)==='vencida')
@@ -459,6 +459,8 @@ function Facturacion({data,mail}){
   const ivaAFIP=Math.max(0,ivaCobrado-retIVATotal)
   const calcCuentas=()=>{const res={};CUENTAS_FC.forEach(c=>{res[c]={saldo:0,pend:0}});fc.forEach(f=>{const cobro=cobroData[f['N° Presupuesto']]||{};const cuenta=cobro.cuenta||'SRL-BBVA';const total=parseMonto(f['Precio FINAL']);const ll=total-(cobro.retG||0)-(cobro.retI||0)-(cobro.retIV||0)-(cobro.com||0);if(isCobrada(f)){if(res[cuenta])res[cuenta].saldo+=ll}else{if(res[cuenta])res[cuenta].pend+=total}});return res}
   const cuentasSaldos=calcCuentas()
+  const contactos=data.contactos||[]
+  const getCuit=p=>{const ag=p['Agencia']||'';const cl=p['Cliente']||'';const ct=contactos.find(c=>c['Agencia']===ag||c['Agencia']===cl||c['Cliente']===cl);return ct?ct['CUIT']||ct['Cuit']||ct['cuit']||'':''}
   const presusConPendiente=presus.map(p=>{const facturado=fc.filter(f=>String(f['N° Presupuesto'])===String(p['Columna 1'])).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0);const neto=parseMonto(p['Precio Final']);return{...p,facturado,neto,pendiente:neto-facturado,completo:facturado>=neto}}).filter(p=>!p.completo&&p.neto>0)
   const presusFiltrados=presusConPendiente.filter(p=>!pQuery||[String(p['Columna 1']),p['Proyecto']||'',p['Cliente']||'',p['Agencia']||''].some(v=>v.toLowerCase().includes(pQuery.toLowerCase())))
   const calcNeto=()=>{if(!presuSel)return 0;return montoTipo==='total'?presuSel.pendiente:parseFloat(montoCustom)||0}
