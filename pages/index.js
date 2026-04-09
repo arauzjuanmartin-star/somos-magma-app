@@ -432,201 +432,189 @@ function Proyectos({data,mail}){
 }
 
 // ---- FACTURACION ----
-const CUENTAS=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander','Fima Galicia','Fondo Santander']
+const CUENTAS_FC=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander']
+const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'}}
 function Facturacion({data,mail}){
   const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false)
   const [presuSel,setPresuSel]=useState(null),[montoTipo,setMontoTipo]=useState('total'),[montoCustom,setMontoCustom]=useState('')
-  const [formData,setFormData]=useState({entidad:'SRL',tipo:'A',nroFactura:'',fechaEmision:'',plazo:'30',fechaVenc:'',conIVA:true})
+  const [formData,setFormData]=useState({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
   const [saving,setSaving]=useState(false),[toast,setToast]=useState(''),[cobroData,setCobroData]=useState({})
+  const [pQuery,setPQuery]=useState('')
   const fc=data.facturacion||[]
   const presus=(data.presupuestos||[]).filter(p=>isAprobado(p))
-  const parseD=s=>{if(!s)return null;const pts=String(s).split('/');return pts.length===3?new Date(pts[2],pts[1]-1,pts[0]):null}
-  const diffD=x=>{const v=parseD(x['Vencimiento']);if(!v)return 0;return Math.floor((v-new Date())/864e5)}
-  const estF=x=>{if(isCobrada(x))return'c';const d=diffD(x);if(d<-30)return'r';if(d<0)return'v';return'p'}
-  const bm={c:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},p:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},v:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},r:{bg:'#E24B4A30',c:'#E24B4A',l:'Reclamar!'}}
-  const filtradas=fc.filter(x=>{if(filtro==='todas')return true;if(filtro==='pend')return!isCobrada(x);if(filtro==='cob')return isCobrada(x);return true})
-  const pc=fc.filter(x=>!isCobrada(x)).reduce((s,x)=>s+parseMonto(x['Precio FINAL']),0)
-  const cb=fc.filter(isCobrada).reduce((s,x)=>s+parseMonto(x['Precio FINAL']),0)
-  const venc=fc.filter(x=>['r','v'].includes(estF(x)))
-  const ivaTotal=fc.filter(isCobrada).reduce((s,x)=>s+parseMonto(x['IVA']),0)
-  const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+( f['Nro de Factura']||'')+ ' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+( f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
-  const calcNeto=()=>{if(!presuSel)return 0;const base=parseMonto(presuSel['Precio Final']);const monto=montoTipo==='total'?base:parseFloat(montoCustom)||0;return formData.conIVA?Math.round(monto/1.21):monto}
-  const calcIva=()=>formData.conIVA?Math.round(calcNeto()*0.21):0
-  const calcTotal=()=>calcNeto()+calcIva()
+  const parseD=s=>{if(!s)return null;const pts=String(s).split('/');if(pts.length===3){return new Date(pts[2],pts[1]-1,pts[0])}return null}
+  const diffD=f=>{const v=parseD(f['Vencimiento']);if(!v)return 0;return Math.floor((v-new Date())/864e5)}
+  const estF=f=>{if(isCobrada(f))return'cobrada';const d=diffD(f);if(d<-30)return'reclamar';if(d<0)return'vencida';if(d<7)return'por-vencer';return'pendiente'}
   const fechaHoy=()=>{const d=new Date();return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
-  const calcVenc=()=>{const d=new Date();d.setDate(d.getDate()+parseInt(formData.plazo||30));return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
-  const guardarFactura=async()=>{
-    if(!presuSel)return;
-    setSaving(true);
-    try{
-      await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
-        presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],
-        entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,
-        fechaEmision:formData.fechaEmision||fechaHoy(),fechaVenc:formData.fechaVenc||calcVenc(),
-        plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIva(),total:calcTotal()
-      })});
-      setToast('Factura guardada!');setTimeout(()=>setToast(''),2500);
-      setNuevaOpen(false);setPresuSel(null);setMontoCustom('');
-      setFormData({entidad:'SRL',tipo:'A',nroFactura:'',fechaEmision:'',plazo:'30',fechaVenc:'',conIVA:true});
-    }catch(e){setToast('Error: '+e.message);}
-    setSaving(false);
-  }
-  const marcarCobrada=async(f)=>{
-    const cobro=cobroData[f['N° Presupuesto']]||{};
-    const ret=(cobro.retG||0)+(cobro.retI||0)+(cobro.retIV||0)+(cobro.com||0);
-    try{
-      await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
-        nroPresupuesto:f['N° Presupuesto'],cobrado:true,fechaCobro:fechaHoy(),retenciones:ret
-      })});
-      setToast('Marcada como cobrada!');setTimeout(()=>setToast(''),2500);
-    }catch(e){setToast('Error: '+e.message);}
-  }
-  const inp2={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',width:'100%'}
+  const calcVencF=()=>{const d=new Date();d.setDate(d.getDate()+parseInt(formData.plazo||30));return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
+  const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+(f['Nro de Factura']||'')+' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+(f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
+  const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';return'SRL'}
+  const filtradas=fc.filter(f=>{if(filtro==='todas')return true;if(filtro==='pendiente')return!isCobrada(f);if(filtro==='cobrada')return isCobrada(f);return getEntidad(f)===filtro}).sort((a,b)=>(isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b))
+  const reclamar=fc.filter(f=>estF(f)==='reclamar')
+  const vencidas=fc.filter(f=>estF(f)==='vencida')
+  const pcTotal=fc.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const cbTotal=fc.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const ivaCobrado=fc.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['IVA']),0)
+  const retIVATotal=Object.values(cobroData).reduce((s,c)=>s+(c.retIV||0),0)
+  const ivaAFIP=Math.max(0,ivaCobrado-retIVATotal)
+  const calcCuentas=()=>{const res={};CUENTAS_FC.forEach(c=>{res[c]={saldo:0,pend:0}});fc.forEach(f=>{const cobro=cobroData[f['N° Presupuesto']]||{};const cuenta=cobro.cuenta||'SRL-BBVA';const total=parseMonto(f['Precio FINAL']);const ll=total-(cobro.retG||0)-(cobro.retI||0)-(cobro.retIV||0)-(cobro.com||0);if(isCobrada(f)){if(res[cuenta])res[cuenta].saldo+=ll}else{if(res[cuenta])res[cuenta].pend+=total}});return res}
+  const cuentasSaldos=calcCuentas()
+  const presusConPendiente=presus.map(p=>{const facturado=fc.filter(f=>String(f['N° Presupuesto'])===String(p['Columna 1'])).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0);const neto=parseMonto(p['Precio Final']);return{...p,facturado,neto,pendiente:neto-facturado,completo:facturado>=neto}}).filter(p=>!p.completo&&p.neto>0)
+  const presusFiltrados=presusConPendiente.filter(p=>!pQuery||[String(p['Columna 1']),p['Proyecto']||'',p['Cliente']||'',p['Agencia']||''].some(v=>v.toLowerCase().includes(pQuery.toLowerCase())))
+  const calcNeto=()=>{if(!presuSel)return 0;return montoTipo==='total'?presuSel.pendiente:parseFloat(montoCustom)||0}
+  const calcIvaF=()=>formData.conIVA?Math.round(calcNeto()*0.21):0
+  const calcTotalF=()=>calcNeto()+calcIvaF()
+  const guardarFactura=async()=>{if(!presuSel||!calcNeto())return;setSaving(true);try{await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()})});setToast('Factura guardada!');setTimeout(()=>setToast(''),2500);setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})}catch(e){setToast('Error: '+e.message);}setSaving(false)}
+  const marcarCobrada=async(f)=>{const cobro=cobroData[f['N° Presupuesto']]||{};const ret=(cobro.retG||0)+(cobro.retI||0)+(cobro.retIV||0)+(cobro.com||0);try{await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nroPresupuesto:f['N° Presupuesto'],cobrado:true,fechaCobro:fechaHoy(),retenciones:ret})});setToast('Marcada como cobrada!');setTimeout(()=>setToast(''),2500)}catch(e){setToast('Error: '+e.message)}}
+  const inp2={padding:'7px 9px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',width:'100%'}
+  const bmap={cobrada:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},pendiente:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},'por-vencer':{bg:'#BA751720',c:'#BA7517',l:'Por vencer'},vencida:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},reclamar:{bg:'#FCEBEB',c:'#A32D2D',l:'Reclamar!'}}
   return <div>
     {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
-    <div style={S.k4}>
-      <K lbl='Por cobrar' val={fmtM(pc)} sub={fc.filter(x=>!isCobrada(x)).length+' facturas'} c='#BA7517'/>
-      <K lbl='Cobrado' val={fmtM(cb)} sub={fc.filter(isCobrada).length+' facturas'} c='#1D9E75'/>
-      <K lbl='Vencidas' val={venc.length} sub={venc.length>0?'Gestionar':''} c='#E24B4A'/>
-      <K lbl='IVA cobrado' val={fmtM(ivaTotal)} sub='estimado' c='#9635AB'/>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
+      {CUENTAS_FC.map(c=>{const s=cuentasSaldos[c]||{saldo:0,pend:0};return <div key={c} style={{background:'#161616',border:'0.5px solid #2A2A2A',borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>{c}</div><div style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:s.saldo>0?'#1D9E75':'#555'}}>{s.saldo>0?fmtM(s.saldo):'$0'}</div>{s.pend>0&&<div style={{fontSize:10,color:'#555',marginTop:2}}>+{fmtM(s.pend)} pend.</div>}</div>})}
     </div>
-    {venc.map((x,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderRadius:8,background:'#E24B4A10',border:'0.5px solid #E24B4A',color:'#E24B4A',fontSize:13,marginBottom:6}}>
-      <span style={{flex:1}}><strong>{x['Nro de Factura']||'s/n'}</strong> — {x['Cliente']} · {fmt(parseMonto(x['Precio FINAL']))} · vencida {Math.abs(diffD(x))} dias</span>
-      <button style={{...S.badge,background:'#E24B4A',color:'#fff',cursor:'pointer',border:'none',padding:'4px 10px'}} onClick={()=>setAbierto(x['N° Presupuesto'])}>Ver</button>
-    </div>)}
+    <div style={{background:'#161616',border:'0.5px solid #2A2A2A',borderRadius:8,padding:'11px 16px',marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+      <div style={{fontSize:11,fontWeight:500,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em'}}>Posicion IVA</div>
+      {[['IVA cobrado','+'+fmt(ivaCobrado),'#E24B4A'],['Ret. IVA clientes','-'+fmt(retIVATotal),'#1D9E75'],['Credito fiscal (contador)','$0','#1D9E75']].map(([l,v,c])=>(
+        <div key={l}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>{l}</div><div style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:c}}>{v}</div></div>
+      ))}
+      <div style={{borderLeft:'0.5px solid #2A2A2A',paddingLeft:16}}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>A depositar AFIP</div><div style={{fontFamily:'monospace',fontSize:17,fontWeight:500,color:'#E24B4A'}}>{fmt(ivaAFIP)}</div></div>
+    </div>
+    <div style={S.k4}>
+      <K lbl='Por cobrar' val={fmtM(pcTotal)} sub={fc.filter(f=>!isCobrada(f)).length+' facturas'} c='#BA7517'/>
+      <K lbl='Cobrado' val={fmtM(cbTotal)} sub={fc.filter(isCobrada).length+' facturas'} c='#1D9E75'/>
+      <K lbl='Vencidas / Reclamar' val={vencidas.length+reclamar.length} sub={reclamar.length>0?reclamar.length+' para reclamar':''} c='#E24B4A'/>
+      <K lbl='IVA a depositar' val={fmtM(ivaAFIP)} sub='posicion fiscal' c='#E24B4A'/>
+    </div>
+    {[...reclamar,...vencidas].map((f,i)=>{const dias=Math.abs(diffD(f));const esRecl=estF(f)==='reclamar';return <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderRadius:8,background:esRecl?'#FCEBEB':'#FAEEDA',border:'0.5px solid '+(esRecl?'#E24B4A':'#BA7517'),color:esRecl?'#A32D2D':'#633806',fontSize:13,marginBottom:6}}><span style={{flex:1}}><strong>{f['Nro de Factura']||'s/n'}</strong> — {f['Cliente']} · {dias} dias vencida · {fmt(parseMonto(f['Precio FINAL']))}</span><button style={{padding:'3px 10px',borderRadius:3,border:'none',background:esRecl?'#E24B4A':'#BA7517',color:'#fff',fontSize:11,cursor:'pointer',fontWeight:500}} onClick={()=>setAbierto(abierto===f['N° Presupuesto']?null:f['N° Presupuesto'])}>{esRecl?'Ver y reclamar':'Gestionar'}</button></div>})}
+    <div style={{background:'#161616',border:'0.5px solid #1543F8',borderRadius:10,marginBottom:12,overflow:'hidden'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',cursor:'pointer',background:'#1543F808'}} onClick={()=>setNuevaOpen(!nuevaOpen)}>
+        <span style={{fontSize:13,fontWeight:500,color:'#1543F8'}}>+ Nueva factura</span>
+        <span style={{fontSize:11,color:'#1543F8'}}>{nuevaOpen?'Cerrar':'Abrir'}</span>
+      </div>
+      {nuevaOpen&&<div style={{padding:16,borderTop:'0.5px solid #2A2A2A'}}>
+        {!presuSel?<div>
+          <div style={{fontSize:12,color:'#555',marginBottom:10}}>Presupuestos aprobados con saldo pendiente:</div>
+          <input style={{...inp2,marginBottom:8}} placeholder='Buscar N°, cliente, proyecto...' value={pQuery} onChange={e=>setPQuery(e.target.value)}/>
+          <div style={{border:'0.5px solid #2A2A2A',borderRadius:8,overflow:'hidden',maxHeight:220,overflowY:'auto'}}>
+            {presusFiltrados.length===0&&<div style={{padding:14,fontSize:12,color:'#555',fontStyle:'italic'}}>Sin presupuestos pendientes</div>}
+            {presusFiltrados.map(p=>{const pct=p.facturado>0?Math.round(p.facturado/p.neto*100):0;return <div key={p['Columna 1']} style={{padding:'10px 12px',cursor:'pointer',borderBottom:'0.5px solid #2A2A2A'}} onClick={()=>{setPresuSel(p);setPQuery('')}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontFamily:'monospace',fontSize:11,color:'#1543F8',flexShrink:0}}>#{p['Columna 1']}</span>
+                <span style={{fontSize:13,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']}</span>
+                <span style={{fontFamily:'monospace',fontSize:12,fontWeight:500,flexShrink:0}}>{fmt(p.neto)}</span>
+                <span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:p.facturado>0?'#1543F815':'#1D9E7515',color:p.facturado>0?'#1543F8':'#1D9E75',flexShrink:0}}>{p.facturado>0?'Parcial':'Sin facturar'}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4,fontSize:11,color:'#555'}}>
+                <span>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
+                {p.facturado>0&&<><div style={{flex:1,height:3,background:'#2A2A2A',borderRadius:2,maxWidth:100,overflow:'hidden'}}><div style={{height:3,background:'#1543F8',borderRadius:2,width:pct+'%'}}></div></div><span>{pct}%</span></>}
+                <span style={{color:'#1D9E75',fontWeight:500,marginLeft:'auto'}}>Pendiente: {fmt(p.pendiente)}</span>
+              </div>
+            </div>})}
+          </div>
+        </div>
+        :<div>
+          <div style={{padding:'10px 12px',background:'#1543F808',border:'0.5px solid #1543F8',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,cursor:'pointer'}} onClick={()=>setPresuSel(null)}>
+            <span style={{fontSize:13,fontWeight:500,color:'#1543F8'}}>#{presuSel['Columna 1']} — {presuSel['Proyecto']} ({presuSel['Cliente']})</span>
+            <span style={{fontSize:11,color:'#555',textDecoration:'underline'}}>Cambiar</span>
+          </div>
+          <div style={{display:'flex',gap:16,flexWrap:'wrap',padding:'10px 12px',background:'#1E1E1E',borderRadius:8,marginBottom:12}}>
+            {[['Total presupuesto',fmt(presuSel.neto),null],['Ya facturado',fmt(presuSel.facturado),'#555'],['Pendiente',fmt(presuSel.pendiente),'#1D9E75']].map(([l,v,c])=>(
+              <div key={l}><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>{l}</div><div style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:c||'inherit'}}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10,marginBottom:10}}>
+            {[['Factura por',' '],['Tipo',' '],['N° factura',' '],['Plazo',' ']].map(([l])=>(
+              <div key={l} style={{display:'flex',flexDirection:'column',gap:4}}>
+                <label style={{fontSize:11,color:'#555'}}>{l}</label>
+                {l==='Factura por'&&<select style={inp2} value={formData.entidad} onChange={e=>setFormData(p=>({...p,entidad:e.target.value}))}><option value='SRL'>SRL - BBVA</option><option value='Sofia'>Sofia - Galicia</option><option value='Lulu'>Lulu - Santander</option></select>}
+                {l==='Tipo'&&<select style={inp2} value={formData.tipo} onChange={e=>setFormData(p=>({...p,tipo:e.target.value}))}>{['A','B','C'].map(o=><option key={o}>{o}</option>)}</select>}
+                {l==='N° factura'&&<input style={{...inp2,fontFamily:'monospace'}} value={formData.nroFactura} onChange={e=>setFormData(p=>({...p,nroFactura:e.target.value}))} placeholder='0001-00001234'/>}
+                {l==='Plazo'&&<select style={inp2} value={formData.plazo} onChange={e=>setFormData(p=>({...p,plazo:e.target.value}))}>{[['0','Contado'],['15','15 dias'],['30','30 dias'],['60','60 dias']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>}
+              </div>
+            ))}
+          </div>
+          <label style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,background:'#1E1E1E',cursor:'pointer',fontSize:13,marginBottom:12,width:'fit-content'}}><input type='checkbox' checked={formData.conIVA} onChange={e=>setFormData(p=>({...p,conIVA:e.target.checked}))} style={{accentColor:'#1543F8',width:15,height:15}}/> Facturar con IVA (21%)</label>
+          <div style={{fontSize:11,color:'#555',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Monto a facturar</div>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            {[['total','Total pendiente '+fmt(presuSel.pendiente)],['custom','Parcial']].map(([v,l])=>(
+              <label key={v} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,border:'0.5px solid '+(montoTipo===v?'#1543F8':'#333'),background:montoTipo===v?'#1543F808':'transparent',cursor:'pointer',fontSize:13,flex:1}} onClick={()=>setMontoTipo(v)}>
+                <input type='radio' name='mt' value={v} checked={montoTipo===v} onChange={()=>setMontoTipo(v)} style={{accentColor:'#1543F8'}}/>{l}
+              </label>
+            ))}
+          </div>
+          {montoTipo==='custom'&&<input type='number' style={{...inp2,fontFamily:'monospace',marginBottom:12}} value={montoCustom} onChange={e=>setMontoCustom(e.target.value)} placeholder='Monto parcial...'/>}
+          <div style={{background:'#1E1E1E',borderRadius:8,padding:12,marginBottom:12}}>
+            {[['Neto (sin IVA)',fmt(calcNeto()),null],['IVA 21%',formData.conIVA?fmt(calcIvaF()):'No aplica',formData.conIVA?'#E24B4A':'#555']].map(([l,v,c])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:c||'inherit'}}>{v}</span></div>
+            ))}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:13,fontWeight:500}}><span>Total a facturar</span><span style={{fontFamily:'monospace',fontSize:15,color:'#1543F8'}}>{fmt(calcTotalF())}</span></div>
+            {montoTipo==='custom'&&calcNeto()>0&&calcNeto()<presuSel.pendiente&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:12}}><span style={{color:'#BA7517'}}>Queda pendiente</span><span style={{fontFamily:'monospace',color:'#BA7517'}}>{fmt(presuSel.pendiente-calcNeto())}</span></div>}
+          </div>
+          <button onClick={guardarFactura} disabled={!calcNeto()||saving} style={{padding:'10px 24px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',width:'100%',opacity:!calcNeto()||saving?0.4:1}}>{saving?'Guardando...':'Crear factura'}</button>
+        </div>}
+      </div>}
+    </div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-        {[['todas','Todas'],['pend','Pendientes'],['cob','Cobradas']].map(([id,l])=>(
+        {[['todas','Todas'],['pendiente','Pendientes'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
           <button key={id} style={{...S.fb,...(filtro===id?S.fa:{})}} onClick={()=>setFiltro(id)}>{l}</button>
         ))}
       </div>
-      <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>setNuevaOpen(!nuevaOpen)}>+ Nueva factura</button>
     </div>
-    {nuevaOpen&&<div style={{background:'#161616',border:'0.5px solid #2A2A2A',borderRadius:10,padding:'16px',marginBottom:12}}>
-      <div style={{fontSize:13,fontWeight:500,marginBottom:12}}>Nueva factura</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Presupuesto aprobado</div>
-          <select style={inp2} value={presuSel?presuSel['Columna 1']:''} onChange={e=>setPresuSel(presus.find(p=>p['Columna 1']===e.target.value)||null)}>
-            <option value=''>-- Seleccionar --</option>
-            {presus.map(p=><option key={p['Columna 1']} value={p['Columna 1']}>#{p['Columna 1']} {p['Proyecto']||p['Cliente']}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Entidad</div>
-          <select style={inp2} value={formData.entidad} onChange={e=>setFormData(p=>({...p,entidad:e.target.value}))}>
-            {['SRL','Sofia','Lulu'].map(o=><option key={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Tipo</div>
-          <select style={inp2} value={formData.tipo} onChange={e=>setFormData(p=>({...p,tipo:e.target.value}))}>
-            {['A','B','C'].map(o=><option key={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>N° Factura</div>
-          <input style={inp2} value={formData.nroFactura} onChange={e=>setFormData(p=>({...p,nroFactura:e.target.value}))} placeholder='0001-00000001'/>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Plazo (dias)</div>
-          <select style={inp2} value={formData.plazo} onChange={e=>setFormData(p=>({...p,plazo:e.target.value}))}>
-            {['15','30','45','60','90'].map(o=><option key={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:11,color:'#555',marginBottom:4}}>IVA</div>
-          <select style={inp2} value={formData.conIVA?'con':'sin'} onChange={e=>setFormData(p=>({...p,conIVA:e.target.value==='con'}))}>
-            <option value='con'>Con IVA 21%</option>
-            <option value='sin'>Sin IVA</option>
-          </select>
-        </div>
-      </div>
-      {presuSel&&<div style={{background:'#1E1E1E',borderRadius:8,padding:'10px 14px',marginBottom:10}}>
-        <div style={{fontSize:11,color:'#555',marginBottom:6}}>Presupuesto: {presuSel['Proyecto']||presuSel['Cliente']} — {fmt(parseMonto(presuSel['Precio Final']))}</div>
-        <div style={{display:'flex',gap:8,marginBottom:8}}>
-          {[['total','Total'],['parcial','Parcial']].map(([v,l])=>(
-            <button key={v} style={{...S.fb,...(montoTipo===v?S.fa:{})}} onClick={()=>setMontoTipo(v)}>{l}</button>
-          ))}
-        </div>
-        {montoTipo==='parcial'&&<input type='number' style={{...inp2,marginBottom:8}} value={montoCustom} onChange={e=>setMontoCustom(e.target.value)} placeholder='Monto parcial...'/>}
-        <div style={{display:'flex',gap:20,fontSize:13}}>
-          <span>Neto: <strong style={{fontFamily:'monospace'}}>{fmt(calcNeto())}</strong></span>
-          {formData.conIVA&&<span>IVA: <strong style={{fontFamily:'monospace'}}>{fmt(calcIva())}</strong></span>}
-          <span>Total: <strong style={{fontFamily:'monospace',color:'#1543F8'}}>{fmt(calcTotal())}</strong></span>
-        </div>
-      </div>}
-      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-        <button style={{...S.fb}} onClick={()=>setNuevaOpen(false)}>Cancelar</button>
-        <button onClick={guardarFactura} disabled={!presuSel||saving} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:!presuSel||saving?0.5:1}}>{saving?'Guardando...':'Guardar factura'}</button>
-      </div>
-    </div>}
-    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 340px)'}}>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 420px)'}}>
       {filtradas.map((f,i)=>{
-        const e=estF(f),b=bm[e]||bm.p,isOpen=abierto===f['N° Presupuesto'],d=diffD(f)
-        const bl=e==='v'?'Vencida '+Math.abs(d)+'d':e==='r'?'Reclamar! '+Math.abs(d)+'d':b.l
+        const e=estF(f),bm=bmap[e]||bmap.pendiente,isOpen=abierto===f['N° Presupuesto'],d=diffD(f)
+        const bl=e==='vencida'?'Vencida '+Math.abs(d)+'d':e==='reclamar'?'Reclamar! '+Math.abs(d)+'d':e==='por-vencer'?'Vence en '+d+'d':bm.l
         const neto=parseMonto(f['Precio SIN IVA']),iva=parseMonto(f['IVA']),total=parseMonto(f['Precio FINAL'])
         const cobro=cobroData[f['N° Presupuesto']]||{}
         const llego=total-(cobro.retG||0)-(cobro.retI||0)-(cobro.retIV||0)-(cobro.com||0)
-        const disponible=llego-iva+(cobro.retIV||0)
-        const bord='3px solid '+(e==='c'?'#1D9E75':['r','v'].includes(e)?'#E24B4A':'#2A2A2A')
+        const ivaAFIPf=f['IVA']&&parseMonto(f['IVA'])>0?(iva-(cobro.retIV||0)):0
+        const disponible=llego-ivaAFIPf
+        const ent=getEntidad(f),entCfg=ENT_FC[ent]||ENT_FC.SRL
+        const bord=e==='reclamar'?'3px solid #E24B4A':e==='cobrada'?'3px solid #1D9E75':e==='vencida'?'3px solid #BA7517':'3px solid #2A2A2A'
         return <div key={i} style={{background:'#161616',border:'0.5px solid #2A2A2A',borderLeft:bord,borderRadius:10,marginBottom:8,overflow:'hidden'}}>
-          <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
+          <div style={{display:'grid',gridTemplateColumns:'auto auto 1fr auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
             <span style={{fontFamily:'monospace',fontSize:11,color:'#1543F8',whiteSpace:'nowrap'}}>{f['Nro de Factura']||'s/n'}</span>
+            <span style={{fontSize:10,padding:'2px 6px',borderRadius:3,whiteSpace:'nowrap',fontWeight:500,background:entCfg.bg,color:entCfg.color}}>{entCfg.label}</span>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f['Proyecto']||f['Cliente']}</div>
-              <div style={{fontSize:11,color:'#555',marginTop:1}}>{f['Cliente']}{f['Agencia']?' · '+f['Agencia']:''} · vence {f['Vencimiento']||'—'}</div>
+              <div style={{fontSize:11,color:'#555',marginTop:1}}>{f['Cliente']}{f['Agencia']?' · '+f['Agencia']:''} · {isCobrada(f)?'cobrado '+( f['Fecha cobro']||''):'vence '+(f['Vencimiento']||'—')}</div>
             </div>
             <div style={{textAlign:'right',whiteSpace:'nowrap'}}>
               <div style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8'}}>{fmt(neto)}</div>
               <div style={{fontFamily:'monospace',fontSize:10,color:'#555'}}>{iva>0?'+IVA '+fmt(iva):'Sin IVA'}</div>
             </div>
-            <span style={{...S.badge,background:b.bg,color:b.c}}>{bl}</span>
+            <span style={{...S.badge,background:bm.bg,color:bm.c,whiteSpace:'nowrap'}}>{bl}</span>
             <span style={{fontSize:11,color:'#555'}}>{isOpen?'▲':'▶'}</span>
           </div>
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}}>
             <div style={{padding:'14px 16px',borderRight:'0.5px solid #2A2A2A'}}>
               <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Datos del cobro</div>
-              <div style={{marginBottom:8}}>
-                <div style={{fontSize:11,color:'#555',marginBottom:4}}>Acreditar en cuenta</div>
-                <select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none'}} value={cobro.cuenta||CUENTAS[0]} onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,cuenta:e.target.value}}))}>
-                  {CUENTAS.map(c=><option key={c}>{c}</option>)}
-                </select>
-              </div>
+              <div style={{marginBottom:8}}><div style={{fontSize:11,color:'#555',marginBottom:4}}>Forma de pago</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.forma||''} onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,forma:e.target.value}}))}>
+                <option value=''>— Seleccionar —</option>{['Transferencia','eCheq','Efectivo'].map(o=><option key={o}>{o}</option>)}</select></div>
+              <div style={{marginBottom:8}}><div style={{fontSize:11,color:'#555',marginBottom:4}}>Acreditar en cuenta</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.cuenta||'SRL-BBVA'} onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,cuenta:e.target.value}}))}>
+                {CUENTAS_FC.map(c=><option key={c}>{c}</option>)}</select></div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 {[['retG','Ret. Ganancias'],['retI','Ret. IIBB'],['retIV','Ret. IVA'],['com','Comision banco']].map(([k,lbl])=>(
-                  <div key={k}>
-                    <div style={{fontSize:11,color:'#555',marginBottom:4}}>{lbl} $</div>
-                    <input type='number' value={cobro[k]||''} placeholder='0' onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,[k]:parseFloat(e.target.value)||0}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',fontFamily:'monospace'}}/>
-                  </div>
+                  <div key={k}><div style={{fontSize:11,color:'#555',marginBottom:4}}>{lbl} $</div><input type='number' value={cobro[k]||''} placeholder='0' onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,[k]:parseFloat(e.target.value)||0}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',fontFamily:'monospace'}}/></div>
                 ))}
               </div>
-              {e==='r'&&<div style={{background:'#FCEBEB',borderRadius:8,padding:'10px 12px',marginTop:10}}>
-                <div style={{fontSize:10,color:'#A32D2D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Texto para reclamar</div>
-                <div style={{fontSize:11,lineHeight:1.6,color:'#A32D2D',marginBottom:8}}>{textoReclamo(f)}</div>
-                <button onClick={()=>navigator.clipboard.writeText(textoReclamo(f))} style={{padding:'5px 12px',borderRadius:3,border:'none',background:'#E24B4A',color:'#fff',fontSize:11,cursor:'pointer'}}>Copiar mensaje</button>
-              </div>}
+              {e==='reclamar'&&<div style={{background:'#FCEBEB',borderRadius:8,padding:'10px 12px',marginTop:10}}><div style={{fontSize:10,color:'#A32D2D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Texto para reclamar</div><div style={{fontSize:11,lineHeight:1.6,color:'#A32D2D',marginBottom:8}}>{textoReclamo(f)}</div><button onClick={()=>navigator.clipboard.writeText(textoReclamo(f))} style={{padding:'5px 12px',borderRadius:3,border:'none',background:'#E24B4A',color:'#fff',fontSize:11,cursor:'pointer'}}>Copiar mensaje</button></div>}
             </div>
             <div style={{padding:'14px 16px'}}>
               <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Liquidacion real</div>
-              {[['Factura total',fmt(total),null],['− Ret. Ganancias','-'+fmt(cobro.retG||0),'#E24B4A'],['− Ret. IIBB','-'+fmt(cobro.retI||0),'#E24B4A'],['− Ret. IVA','-'+fmt(cobro.retIV||0),'#E24B4A'],['− Comision','-'+fmt(cobro.com||0),'#E24B4A']].map(([l,v,c])=>(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}>
-                <span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:c||'inherit'}}>{v}</span>
-              </div>))}
-              <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}>
-                <span style={{fontWeight:500}}>Llego a la cuenta</span>
-                <span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1543F8'}}>{fmt(llego)}</span>
-              </div>
+              {[['Factura total',fmt(total),null],['− Ret. Ganancias','-'+fmt(cobro.retG||0),'#E24B4A'],['− Ret. IIBB','-'+fmt(cobro.retI||0),'#E24B4A'],['− Ret. IVA','-'+fmt(cobro.retIV||0),'#E24B4A'],['− Comision '+(cobro.forma||''),'-'+fmt(cobro.com||0),'#E24B4A']].map(([l,v,c])=>(
+                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:c||'inherit'}}>{v}</span></div>
+              ))}
+              <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Llego a la cuenta</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1543F8'}}>{fmt(llego)}</span></div>
               <div style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',marginTop:10}}>
                 <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:7}}>{iva>0?'IVA dentro de ese monto':'Sin IVA'}</div>
                 {iva>0&&<>
                   <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}><span style={{color:'#555'}}>IVA cobrado</span><span style={{fontFamily:'monospace',color:'#E24B4A'}}>+{fmt(iva)}</span></div>
                   <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}><span style={{color:'#555'}}>− Ret. IVA ya pagada</span><span style={{fontFamily:'monospace',color:'#1D9E75'}}>-{fmt(cobro.retIV||0)}</span></div>
                 </>}
-                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}>
-                  <span style={{fontWeight:500}}>Disponible Magma</span>
-                  <span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1D9E75'}}>{fmt(disponible)}</span>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Disponible Magma</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1D9E75'}}>{fmt(disponible)}</span></div>
               </div>
               {isCobrada(f)
                 ?<div style={{marginTop:10,padding:'8px',textAlign:'center',fontSize:12,color:'#1D9E75',border:'0.5px solid #1D9E7540',borderRadius:6}}>Cobrada el {f['Fecha cobro']||'—'}</div>
