@@ -159,12 +159,17 @@ export default function Presupuesto() {
       y+=10
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
       doc.text('SERVICIOS', M, y); y+=6
-      const svcs = form.servicios.filter(Boolean)
-      for(const s of svcs){
-        const limpio = s.replace(/[\u{1F300}-\u{1FFFF}]/gu,'').replace(/[\u2600-\u27FF]/g,'').trim()
-        if(!limpio) continue
+      // Agrupar servicios repetidos con cantidad
+      const rawSvcs = form.servicios.filter(Boolean)
+      const svcsMap = {}
+      for(const s of rawSvcs){
+        const k = s.replace(/[\u{1F300}-\u{1FFFF}]/gu,'').replace(/[\u2600-\u27BF]/g,'').replace(/[\u2700-\u27BF]/g,'').trim()
+        if(k) svcsMap[k] = (svcsMap[k]||0)+1
+      }
+      const svcsAgrupados = Object.entries(svcsMap).map(([k,n])=>n>1?n+'x '+k:k)
+      for(const s of svcsAgrupados){
         doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(200,200,200)
-        const lines = doc.splitTextToSize('→  '+limpio, W-M*2)
+        const lines = doc.splitTextToSize('→  '+s, W-M*2)
         doc.text(lines, M+2, y)
         y += lines.length * 5.5
       }

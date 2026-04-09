@@ -806,7 +806,7 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
     setSaving(true)
     const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Precio Final':T.total}
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
-    try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})}catch(e){}
+    try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})}catch(e){}
     if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
     if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
     setOk(true);onGuardado(row);setSaving(false)
