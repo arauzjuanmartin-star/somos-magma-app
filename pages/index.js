@@ -123,7 +123,7 @@ export default function App() {
 function Mod({id,data,mail,onRefresh}){
   switch(id){
     case 'dashboard': return <Dashboard data={data}/>
-    case 'presupuestos': return <Presupuestos data={data}/>
+    case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'proyectos': return <Proyectos data={data} mail={mail}/>
     case 'facturacion': return <Facturacion data={data}/>
     case 'pagos': return <PagosStaff data={data}/>
@@ -180,7 +180,7 @@ function Toast({msg,onDone}){
   </div>
 }
 
-function BadgeEstado({p, onUpdate}){
+function BadgeEstado({p, onUpdate, onRefresh}){
   const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [motivo,setMotivo]=useState(''), [pendingE,setPendingE]=useState(null)
   const ec=estadoColor(p['Estado'])
 
@@ -193,7 +193,7 @@ function BadgeEstado({p, onUpdate}){
     setSaving(true);setOpen(false)
     try{
       await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado,motivo:mot})})
-      onUpdate(p['Columna 1'],estado)
+      onUpdate(p['Columna 1'],estado);if(onRefresh)setTimeout(onRefresh,500)
     }catch(e){}
     setSaving(false);setPendingE(null);setMotivo('')
   }
@@ -263,7 +263,7 @@ function DetallePresupuesto({p}){
   </div>
 }
 
-function Presupuestos({data:initialData}){
+function Presupuestos({data:initialData,mail,onRefresh}){
   const [localData,setLocalData]=useState(initialData)
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
 
@@ -335,7 +335,7 @@ function Presupuestos({data:initialData}){
                 <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
                 <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
                 <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
-                  <BadgeEstado p={p} onUpdate={handleEstadoUpdate}/>
+                  <BadgeEstado p={p} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
                 </td>
               </tr>
               {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
