@@ -38,6 +38,13 @@ export default function Presupuesto() {
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'7',
   })
   const [validez, setValidez] = useState(addDays(hoy, 20))
+  const [tc, setTc] = useState([
+    'No se entregan crudos ni archivos editables salvo acuerdo expreso por escrito.',
+    'Se incluyen hasta dos rondas de correcciones sin costo. Cambios adicionales tendrán un costo a convenir. Las revisiones deben solicitarse dentro de los 7 días posteriores a la primera entrega.',
+    'El pago debe realizarse dentro del plazo indicado. En caso de demora, Somos Magma se reserva el derecho de pausar la entrega hasta regularizar el pago.',
+    'Este presupuesto tiene validez hasta el [fecha]. Pasada esa fecha los precios podrán ser revisados.',
+    'El material es para uso exclusivo del cliente indicado. Somos Magma se reserva el derecho de utilizarlo con fines de portfolio, salvo acuerdo en contrario.',
+  ])
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
 
@@ -206,13 +213,12 @@ export default function Presupuesto() {
       doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(100,100,100)
       doc.text('TÉRMINOS Y CONDICIONES', M, y); y+=7
 
-      const tc = [
-        ['1. Entrega de material', 'No se entregan crudos ni archivos editables salvo acuerdo expreso por escrito.'],
-        ['2. Revisiones', 'Se incluyen hasta dos rondas de correcciones sin costo. Cambios adicionales tendrán un costo a convenir. Las revisiones deben solicitarse dentro de los 7 días posteriores a la primera entrega.'],
-        ['3. Pago', 'Debe realizarse dentro del plazo indicado. En caso de demora, Somos Magma se reserva el derecho de pausar la entrega hasta regularizar el pago.'],
-        ['4. Validez', 'Este presupuesto tiene validez hasta el '+toDisplay(validez)+'. Pasada esa fecha los precios podrán ser revisados.'],
-        ['5. Derechos de uso', 'El material es para uso exclusivo del cliente indicado. Somos Magma se reserva el derecho de utilizarlo con fines de portfolio, salvo acuerdo en contrario.'],
-      ]
+      const tcTitulos = ['1. Entrega de material','2. Revisiones','3. Pago','4. Validez','5. Derechos de uso']
+      const tc = tcTitulos.map((t,i) => {
+        let texto = tc[i] || ''
+        if(i===3) texto = texto.replace('[fecha]', toDisplay(validez))
+        return [t, texto]
+      })
       doc.setFontSize(7.5)
       for(const [titulo, texto] of tc){
         doc.setFont('helvetica','bold'); doc.setTextColor(155,155,155)
@@ -348,6 +354,28 @@ export default function Presupuesto() {
                 </select>
               </label>
             </div>
+          </div>
+
+          {/* T&C editables */}
+          <div style={S.card}>
+            <div style={{...S.sec,color:'#555'}}>Términos y condiciones</div>
+            <div style={{fontSize:11,color:'#555',marginBottom:12}}>Podés editar cada cláusula antes de generar el PDF.</div>
+            {[
+              '1. Entrega de material',
+              '2. Revisiones',
+              '3. Pago',
+              '4. Validez',
+              '5. Derechos de uso',
+            ].map((titulo,i)=>(
+              <div key={i} style={{marginBottom:10}}>
+                <div style={{fontSize:11,color:'#9635AB',fontWeight:600,marginBottom:4}}>{titulo}</div>
+                <textarea
+                  style={{...S.inp,minHeight:52,resize:'vertical',fontSize:11}}
+                  value={i===3?tc[i].replace('[fecha]',toDisplay(validez)):tc[i]}
+                  onChange={e=>{const n=[...tc];n[i]=e.target.value;setTc(n)}}
+                />
+              </div>
+            ))}
           </div>
 
           {/* Botón generar */}
