@@ -648,7 +648,8 @@ function PagosStaff({data}){
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
 
   // Extraer meses disponibles
-  const meses=[...new Set(proyectos.map(p=>p['2']||'').filter(Boolean))].sort()
+  const MESES_VALIDOS=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
+  const meses=[...new Set(proyectos.map(p=>p['2']||'').filter(m=>m&&MESES_VALIDOS.some(mv=>m.includes(mv))))].sort()
   const mesActual=mesSel||(meses[meses.length-1]||'')
 
   // Filtrar proyectos del mes seleccionado
