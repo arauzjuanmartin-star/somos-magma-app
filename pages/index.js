@@ -3,7 +3,7 @@ import Head from 'next/head'
 
 const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
-// Parsear montos del Sheets que vienen como \\"$2,400,000.00\\"
+// Parsear montos del Sheets que vienen como \'$2,400,000.00\'
 const parseMonto = v => {
   if (!v) return 0
   const n = parseFloat(String(v).replace(/[$,\\\\\\\\s]/g, ''))
@@ -41,7 +41,7 @@ const SVCS_LIST=[
   {n:'Otros',p:0,fee:false},
 ]
 const AGENCIAS_LIST=['Ostara','Minita','Pop Up','Stadium','ADN','Quilmes','Creators Lab','Mole Media','WeCorp','Louder','Smarketing','Bacardi','Integra','Btlandia','OIR','SPA','ABV','Piet','Nodus','Bermuda','United Scale Arts','Meikin','CMQ','Bar de eventos','The Bloom','Velvet','Mucha','Freelance','Zona Prop','azcuy','Blue Mail','Mercurias','KLM']
-const CLIENTES_LIST=['Santander','Unilever','Austral','Air France','Iveco','Latam','Campari',\\"L'Oreal\\",'Maybelline','Betsson','Disney','Quilmes','Chandon','Honda','Peugeot','Endeavor','Baron B','Google','Microsoft','Coca Cola','Adidas','Mercado Libre','YPF','Volkswagen','Personal','Telecom','Brahma','Off','Integra','Rutini','Visa','Natura']
+const CLIENTES_LIST=['Santander','Unilever','Austral','Air France','Iveco','Latam','Campari',\'L'Oreal\','Maybelline','Betsson','Disney','Quilmes','Chandon','Honda','Peugeot','Endeavor','Baron B','Google','Microsoft','Coca Cola','Adidas','Mercado Libre','YPF','Volkswagen','Personal','Telecom','Brahma','Off','Integra','Rutini','Visa','Natura']
 const CONTACTOS_LIST=[
   {n:'Agostina Caruso',ag:''},{n:'Alejandra Moreno',ag:'Nodus'},{n:'Balado, Natalia',ag:'KLM'},
   {n:'Belen Infante',ag:'Stadium'},{n:'Belen ST',ag:'Ostara'},{n:'Bruno Dibattista',ag:'Stadium'},
@@ -90,7 +90,7 @@ export default function App() {
 
   const NAV=[{id:'dashboard',label:'Dashboard',icon:'\u25c6'},{id:'presupuestos',label:'Presupuestos',icon:'\u25a1'},{id:'proyectos',label:'Proyectos',icon:'\u25b7'},{id:'facturacion',label:'Facturaci\u00f3n',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'\u2713'},{id:'balance',label:'Balance',icon:'\u2261'}]
 
-  if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingres\u00e1 con tu mail de trabajo</div><input style={S.inp} type=\\"email\\" placeholder=\\"tu@somosmagma.com\\" value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
+  if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingres\u00e1 con tu mail de trabajo</div><input style={S.inp} type=\'email\' placeholder=\'tu@somosmagma.com\' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
   if(loading) return <><Head><title>Somos Magma</title></Head><GS/><div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'#090909'}}><div style={S.logo}>M//</div><div style={{color:'#555',marginTop:16}}>Cargando...</div><div style={S.sp}/></div></>
 
@@ -147,17 +147,17 @@ function Dashboard({data}){
 
   return <div>
     <div style={S.k4}>
-      <K lbl=\\"Aprobados\\" val={ap.length} sub={fmtM(totalAp)} c=\\"#1543F8\\"/>
-      <K lbl=\\"En espera\\" val={pend.length} sub={fmtM(totalPend)} c=\\"#BA7517\\"/>
-      <K lbl=\\"Por cobrar\\" val={fmtM(totalPc)} sub={pc.length+' facturas'} c=\\"#BA7517\\"/>
-      <K lbl=\\"Cobrado\\" val={fmtM(totalCo)} sub={co.length+' facturas'} c=\\"#1D9E75\\"/>
+      <K lbl=\'Aprobados\' val={ap.length} sub={fmtM(totalAp)} c=\'#1543F8\'/>
+      <K lbl=\'En espera\' val={pend.length} sub={fmtM(totalPend)} c=\'#BA7517\'/>
+      <K lbl=\'Por cobrar\' val={fmtM(totalPc)} sub={pc.length+' facturas'} c=\'#BA7517\'/>
+      <K lbl=\'Cobrado\' val={fmtM(totalCo)} sub={co.length+' facturas'} c=\'#1D9E75\'/>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
       <div style={S.card}><div style={S.ch}>\u00daltimos aprobados</div>
         {ap.slice(-5).reverse().map((p,i)=><Row key={i} cols={['#'+p['Columna 1'],p['Proyecto']||p['Cliente'],fmt(parseMonto(p['Precio Final']))]}/>)}
       </div>
       <div style={S.card}><div style={S.ch}>Facturas por cobrar</div>
-        {pc.slice(0,5).map((f,i)=><Row key={i} cols={[f['Nro de Factura']||'\u2014',f['Cliente']||f['Proyecto'],fmt(parseMonto(f['Precio FINAL']))]} vc=\\"#BA7517\\"/>)}
+        {pc.slice(0,5).map((f,i)=><Row key={i} cols={[f['Nro de Factura']||'\u2014',f['Cliente']||f['Proyecto'],fmt(parseMonto(f['Precio FINAL']))]} vc=\'#BA7517\'/>)}
       </div>
     </div>
   </div>
@@ -203,7 +203,7 @@ function BadgeEstado({p, onUpdate}){
     {pendingE&&<div style={{position:'fixed',inset:0,background:'#000a',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setPendingE(null)}>
       <div style={{background:'#1E1E1E',border:'0.5px solid #2A2A2A',borderRadius:12,padding:24,minWidth:320}} onClick={e=>e.stopPropagation()}>
         <div style={{fontSize:13,fontWeight:500,marginBottom:12}}>Motivo del represupuesto</div>
-        <input style={{...S.inp,marginBottom:12}} placeholder=\\"Ej: Cambi\u00f3 el scope, ajuste de precios...\\" value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
+        <input style={{...S.inp,marginBottom:12}} placeholder=\'Ej: Cambi\u00f3 el scope, ajuste de precios...\' value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
           <button style={{...S.fb}} onClick={()=>setPendingE(null)}>Cancelar</button>
           <button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>doSave(pendingE,motivo)}>Confirmar</button>
@@ -292,9 +292,9 @@ function Presupuestos({data:initialData}){
   return <div>
     {toast&&<Toast msg={toast} onDone={()=>setToast('')}/>}
     <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
-      <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder=\\"Buscar N\u00b0, cliente, proyecto, PM...\\" value={q} onChange={e=>setQ(e.target.value)}/>
+      <input style={{...S.inp,flex:1,minWidth:180,marginBottom:0}} placeholder=\'Buscar N\u00b0, cliente, proyecto, PM...\' value={q} onChange={e=>setQ(e.target.value)}/>
       <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:pm==='todos'?'#555':'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={pm} onChange={e=>setPm(e.target.value)}>
-        <option value=\\"todos\\">Todos los PM</option>
+        <option value=\'todos\'>Todos los PM</option>
         {pms.map(p=><option key={p} value={p}>{p}</option>)}
       </select>
     </div>
@@ -441,10 +441,10 @@ function Facturacion({data}){
 
   return <div>
     <div style={S.k4}>
-      <K lbl=\\"Por cobrar\\" val={fmtM(pc)} sub={fc.filter(x=>!isCobrada(x)).length+' facturas'} c=\\"#BA7517\\"/>
-      <K lbl=\\"Cobrado\\" val={fmtM(cb)} sub={fc.filter(isCobrada).length+' facturas'} c=\\"#1D9E75\\"/>
-      <K lbl=\\"Vencidas\\" val={venc.length} sub={venc.length>0?'Gestionar':''} c=\\"#E24B4A\\"/>
-      <K lbl=\\"Total facturado\\" val={fmtM(pc+cb)}/>
+      <K lbl=\'Por cobrar\' val={fmtM(pc)} sub={fc.filter(x=>!isCobrada(x)).length+' facturas'} c=\'#BA7517\'/>
+      <K lbl=\'Cobrado\' val={fmtM(cb)} sub={fc.filter(isCobrada).length+' facturas'} c=\'#1D9E75\'/>
+      <K lbl=\'Vencidas\' val={venc.length} sub={venc.length>0?'Gestionar':''} c=\'#E24B4A\'/>
+      <K lbl=\'Total facturado\' val={fmtM(pc+cb)}/>
     </div>
 
     {venc.map((x,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderRadius:8,background:'#E24B4A10',border:'0.5px solid #E24B4A',color:'#E24B4A',fontSize:13,marginBottom:6}}>
@@ -531,10 +531,10 @@ function PagosStaff({data}){
 
   return <div>
     <div style={S.k4}>
-      <K lbl=\\"Servicios activos\\" val={trabajos.length} sub={proj.length+' proyectos'} c=\\"#1543F8\\"/>
-      <K lbl=\\"Total servicios\\" val={fmtM(trabajos.reduce((s,t)=>s+t.monto,0))} c=\\"#BA7517\\"/>
-      <K lbl=\\"PMs con trabajo\\" val={pms.length}/>
-      <K lbl=\\"Marcados pagados\\" val={Object.values(pag).filter(Boolean).length} c=\\"#1D9E75\\"/>
+      <K lbl=\'Servicios activos\' val={trabajos.length} sub={proj.length+' proyectos'} c=\'#1543F8\'/>
+      <K lbl=\'Total servicios\' val={fmtM(trabajos.reduce((s,t)=>s+t.monto,0))} c=\'#BA7517\'/>
+      <K lbl=\'PMs con trabajo\' val={pms.length}/>
+      <K lbl=\'Marcados pagados\' val={Object.values(pag).filter(Boolean).length} c=\'#1D9E75\'/>
     </div>
     {pms.length===0&&<div style={S.nd}>Sin proyectos activos con servicios</div>}
     {pms.map((p,i)=>{
@@ -588,36 +588,36 @@ function Balance({data}){
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{MESES.map(m=><button key={m} style={{...S.fb,...(mes===m?S.fa:{})}} onClick={()=>setMes(m)}>{m}</button>)}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,background:'#1E1E1E',border:'0.5px solid #333',borderRadius:8,padding:'5px 10px'}}>
         <span style={{fontSize:11,color:'#555'}}>USD blue $</span>
-        <input type=\\"number\\" value={tc} onChange={e=>setTc(parseFloat(e.target.value)||1405)} style={{width:70,border:'none',background:'transparent',color:'#BA7517',fontFamily:'monospace',fontSize:13,fontWeight:500,outline:'none',textAlign:'right'}}/>
+        <input type=\'number\' value={tc} onChange={e=>setTc(parseFloat(e.target.value)||1405)} style={{width:70,border:'none',background:'transparent',color:'#BA7517',fontFamily:'monospace',fontSize:13,fontWeight:500,outline:'none',textAlign:'right'}}/>
       </div>
     </div>
     <div style={S.k4}>
-      <K lbl=\\"Ingresos netos\\" val={fmtM(ingMes)} sub={fcMes.length+' facturas del mes'} c=\\"#1D9E75\\"/>
-      <K lbl=\\"Sueldos\\" val={'-'+fmtM(ts)} sub={SU.filter(g=>!pg[mes+g.n]).length+' pendientes'} c=\\"#E24B4A\\"/>
-      <K lbl=\\"Gastos fijos\\" val={'-'+fmtM(tf)} c=\\"#E24B4A\\"/>
-      <K lbl=\\"Resultado\\" val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
+      <K lbl=\'Ingresos netos\' val={fmtM(ingMes)} sub={fcMes.length+' facturas del mes'} c=\'#1D9E75\'/>
+      <K lbl=\'Sueldos\' val={'-'+fmtM(ts)} sub={SU.filter(g=>!pg[mes+g.n]).length+' pendientes'} c=\'#E24B4A\'/>
+      <K lbl=\'Gastos fijos\' val={'-'+fmtM(tf)} c=\'#E24B4A\'/>
+      <K lbl=\'Resultado\' val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
       <div>
         <div style={S.card}>
           <div style={S.ch}>Sueldos equipo</div>
           {SU.map((g,i)=>{const p=pg[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPg(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\'checkbox\' checked={!!p} onChange={e=>setPg(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
-            <input type=\\"number\\" value={gS(g.n)} onChange={e=>setSe(prev=>({...prev,[mes+g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+            <input type=\'number\' value={gS(g.n)} onChange={e=>setSe(prev=>({...prev,[mes+g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
           </div>})}
         </div>
         <div style={{...S.card,marginTop:12}}>
           <div style={S.ch}>Gastos variables</div>
           {gV().map((g,i)=>{const p=pgv[mes+i]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\'checkbox\' checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{fontFamily:'monospace',fontSize:12,marginLeft:'auto'}}>{fmt(g.m)}</span>
           </div>})}
           <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'0.5px dashed #2A2A2A'}}>
-            <input placeholder=\\"Descripcion...\\" value={nv.n} onChange={e=>setNv(p=>({...p,n:e.target.value}))} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
-            <input type=\\"number\\" placeholder=\\"$\\" value={nv.m} onChange={e=>setNv(p=>({...p,m:e.target.value}))} style={{width:90,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+            <input placeholder=\'Descripcion...\' value={nv.n} onChange={e=>setNv(p=>({...p,n:e.target.value}))} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+            <input type=\'number\' placeholder=\'$\' value={nv.m} onChange={e=>setNv(p=>({...p,m:e.target.value}))} style={{width:90,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
             <button style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,cursor:'pointer'}} onClick={()=>{if(!nv.n)return;setVs(prev=>({...prev,[mes]:[...(prev[mes]||[]),{n:nv.n,m:parseFloat(nv.m)||0}]}));setNv({n:'',m:''})}}>OK</button>
           </div>
         </div>
@@ -626,10 +626,10 @@ function Balance({data}){
         <div style={S.card}>
           <div style={S.ch}>Gastos fijos</div>
           {GF.map((g,i)=>{const p=pgf[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type=\\"checkbox\\" checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+            <input type=\'checkbox\' checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
-            <input type=\\"number\\" value={gG(g.n)} onChange={e=>setGe(prev=>({...prev,[g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+            <input type=\'number\' value={gG(g.n)} onChange={e=>setGe(prev=>({...prev,[g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
           </div>})}
         </div>
         <div style={{...S.card,marginTop:12,padding:'14px 16px'}}>
@@ -840,7 +840,7 @@ const S={
   app:{display:'flex',height:'100vh',overflow:'hidden'},
   sb:{width:220,background:'#161616',borderRight:'1px solid #2A2A2A',display:'flex',flexDirection:'column',flexShrink:0},
   logo:{fontSize:22,fontWeight:900,background:'linear-gradient(135deg,#1543F8,#9635AB,#CE2637)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'},
-  ls:{fontFamily:\\"'Azeret Mono',monospace\\",fontSize:9,color:'#555',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
+  ls:{fontFamily:\''Azeret Mono',monospace\',fontSize:9,color:'#555',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
   ni:{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:6,cursor:'pointer',color:'#777',fontSize:13,fontWeight:500,transition:'all 0.15s',marginBottom:2,border:'none',background:'transparent',width:'100%',textAlign:'left'},
   k4:{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:10,marginBottom:12},
   kpi:{background:'#1E1E1E',borderRadius:8,padding:'11px 13px'},
