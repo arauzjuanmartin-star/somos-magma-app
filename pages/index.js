@@ -366,7 +366,7 @@ function Proyectos({data,mail}){
     const pmVal=p['PM']||p['PM Interno']||''
     return (agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(estado==='todos'||(estado==='ok'&&(p['Carga Staff']===true||p['Carga Staff']==='TRUE'))||(estado==='pendiente'&&p['Carga Staff']!==true&&p['Carga Staff']!=='TRUE'))&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
   })
-  const getBase=(proy)=>{const svcs=[];for(let j=1;j<=12;j++){const ped=proy[j===1?'Pedido':'Pedido '+j]||'',qui=proy[j===1?'Staff':'Staff '+j]||'',prc=parseMonto(proy[j===1?'Precio':'Precio '+j]),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
+  const getBase=(proy)=>{const svcs=[];for(let j=1;j<=12;j++){const ped=proy['Pedido '+j]||proy[j===1?'Pedido':'']||'',qui=proy['Staff '+j]||proy[j===1?'Staff':'']||'',prc=parseMonto(proy['Precio '+j]||proy[j===1?'Precio':'']||0),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
   const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
   const upd=(num,idx,field,val,base)=>setSels(prev=>{const cur=[...getSel(num,base)];cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val};if(field==='pedido'){const pL=getPrecioLista(val);if(pL>0)cur[idx].precio=pL};return {...prev,[num]:cur}})
   const addExtra=(num,base)=>setSels(prev=>({...prev,[num]:[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]}))
