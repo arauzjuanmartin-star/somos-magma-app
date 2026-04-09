@@ -633,115 +633,159 @@ function Facturacion({data,mail}){
 }
 // ---- PAGOS STAFF ----
 function PagosStaff({data}){
-  const [filtroStaff,setFiltroStaff]=useState('todos')
-  const [filtroMes,setFiltroMes]=useState('todos')
-  const [pagados,setPagados]=useState({})
-  const [toast,setToast]=useState('')
+  const CUENTAS=['SRL — BBVA','Sofia — Galicia','Lulu — Santander']
+  const COLORS=['#1543F8','#CE2637','#9635AB','#1D9E75','#BA7517','#E24B4A']
+  const getColor=n=>COLORS[n.charCodeAt(0)%COLORS.length]
+  const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
 
-  const proyectos=data.proyectos||[]
+  const [mesSel,setMesSel]=useState(null)
+  const [abierto,setAbierto]=useState(null)
+  const [showDesc,setShowDesc]=useState(null)
+  const [pagos,setPagos]=useState({})
+  const [cuentas,setCuentas]=useState({})
+  const [copiado,setCopiado]=useState(null)
 
-  // Extraer todos los trabajos por freelancer desde PROYECTOS
-  // Columnas: L=Pedido1, M=Precio1, N=Staff1, O=Pedido2, P=Precio2, Q=Staff2...
-  const trabajos=[]
-  proyectos.forEach(proy=>{
-    const mes=proy['2']||proy['Mes']||''
-    const nro=proy['N° presupuesto']||''
-    const proyecto=proy['Proyecto']||''
-    const cliente=proy['Cliente']||''
-    const fechaEvento=proy['Fecha Evento']||''
-    for(let j=1;j<=12;j++){
-      const pedido=proy['Pedido '+j]||''
-      const precio=parseMonto(proy['Precio '+j]||proy[j===1?'Precio':'']||0)
-      const staff=proy['Staff '+j]||proy[j===1?'Staff':'']||''
-      if(staff&&staff!=='Somos Magma'&&pedido&&precio>0){
-        trabajos.push({mes,nro,proyecto,cliente,fechaEvento,pedido,precio,staff,key:nro+'-'+j})
-      }
-    }
-  })
+  const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
+
+  // Extraer meses disponibles
+  const meses=[...new Set(proyectos.map(p=>p['2']||'').filter(Boolean))].sort()
+  const mesActual=mesSel||(meses[meses.length-1]||'')
+
+  // Filtrar proyectos del mes seleccionado
+  const proyMes=proyectos.filter(p=>(p['2']||'')=== mesActual)
 
   // Agrupar por freelancer
-  const porStaff={}
-  trabajos.forEach(t=>{
-    if(!porStaff[t.staff])porStaff[t.staff]={nombre:t.staff,trabajos:[],total:0,totalPagado:0}
-    const pagado=pagados[t.key]||false
-    porStaff[t.staff].trabajos.push({...t,pagado})
-    if(pagado)porStaff[t.staff].totalPagado+=t.precio
-    else porStaff[t.staff].total+=t.precio
+  const personas={}
+  proyMes.forEach(proy=>{
+    const nro=proy['N° presupuesto']||''
+    const proyecto=proy['Proyecto']||proy['Cliente']||''
+    const agencia=proy['Agencia']||''
+    for(let j=1;j<=12;j++){
+      const pedido=proy['Pedido '+j]||''
+      const precio=parseMonto(proy['Precio '+j]||0)
+      const staff=proy['Staff '+j]||''
+      if(!staff||staff==='Somos Magma'||!pedido||precio<=0)continue
+      if(!personas[staff])personas[staff]={nombre:staff,trabajos:[],total:0}
+      personas[staff].trabajos.push({nro,proyecto,agencia,pedido,precio})
+      personas[staff].total+=precio
+    }
   })
+  const lista=Object.values(personas).sort((a,b)=>b.total-a.total)
 
-  const staffList=Object.values(porStaff).sort((a,b)=>b.total-a.total)
-  const meses=[...new Set(trabajos.map(t=>t.mes).filter(Boolean))].sort()
-  const staffNames=[...new Set(trabajos.map(t=>t.staff).filter(Boolean))].sort()
+  const getPagado=nombre=>pagos[mesActual]&&pagos[mesActual][nombre]
+  const getCuenta=nombre=>(cuentas[mesActual]&&cuentas[mesActual][nombre])||CUENTAS[0]
+  const setCuenta=(nombre,val)=>setCuentas(prev=>({...prev,[mesActual]:{...(prev[mesActual]||{}),[nombre]:val}}))
+  const marcar=(nombre,val)=>setPagos(prev=>({...prev,[mesActual]:{...(prev[mesActual]||{}),[nombre]:val}}))
 
-  const filtrados=staffList.filter(s=>{
-    if(filtroStaff!=='todos'&&s.nombre!==filtroStaff)return false
-    return true
-  })
-
-  const marcarPagado=(keys)=>{
-    setPagados(prev=>{const n={...prev};keys.forEach(k=>n[k]=true);return n})
-    setToast('Marcado como pagado ✓')
-    setTimeout(()=>setToast(''),2500)
+  const generarDesc=(persona)=>{
+    const nombre=persona.nombre.split(' ')[0]
+    const mesLabel=mesActual.split(' - ')[1]||mesActual
+    const items=persona.trabajos.map(t=>'- '+t.pedido+' — '+t.proyecto+(t.agencia?' ('+t.agencia+')':'')+': '+fmt(t.precio)).join('\n')
+    return 'Hola '+nombre+'!\n\nTe paso el detalle de los trabajos de '+mesLabel+' para que nos hagas factura:\n\n'+items+'\n\nTotal: '+fmt(persona.total)+'\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!'
   }
 
-  const totalDeuda=trabajos.filter(t=>!pagados[t.key]).reduce((s,t)=>s+t.precio,0)
-  const totalPagado=trabajos.filter(t=>pagados[t.key]).reduce((s,t)=>s+t.precio,0)
+  const copiar=(nombre,texto)=>{
+    navigator.clipboard.writeText(texto).then(()=>{setCopiado(nombre);setTimeout(()=>setCopiado(null),2000)})
+  }
+
+  const pendientes=lista.filter(p=>!getPagado(p.nombre))
+  const pagados=lista.filter(p=>getPagado(p.nombre))
+  const totalPend=pendientes.reduce((s,p)=>s+p.total,0)
+  const totalPag=pagados.reduce((s,p)=>s+p.total,0)
 
   return <div>
-    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
-    
+    {/* Tabs de meses */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:8}}>
+      <div style={{fontSize:13,fontWeight:500,color:'#555'}}>Pagos staff — se paga el 15 de cada mes</div>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+        {meses.map(m=>{
+          const label=m.split(' - ')
+          return <button key={m} style={{padding:'5px 11px',borderRadius:6,border:'0.5px solid '+(m===mesActual?'#2A2A2A':'#1E1E1E'),background:m===mesActual?'#1E1E1E':'transparent',color:m===mesActual?'#F0F0F0':'#555',fontSize:11,cursor:'pointer'}} onClick={()=>setMesSel(m)}>
+            {label[1]||m}
+          </button>
+        })}
+      </div>
+    </div>
+
+    {/* KPIs */}
     <div style={S.k4}>
-      <K lbl='Total a pagar' val={fmtM(totalDeuda)} sub={trabajos.filter(t=>!pagados[t.key]).length+' trabajos'} c='#E24B4A'/>
-      <K lbl='Ya pagado' val={fmtM(totalPagado)} sub={trabajos.filter(t=>pagados[t.key]).length+' trabajos'} c='#1D9E75'/>
-      <K lbl='Freelancers activos' val={staffList.length} sub='con deuda pendiente'/>
-      <K lbl='Se paga el 15' val='de cada mes' sub='ciclo mensual'/>
+      <K lbl='Total a pagar' val={fmtM(totalPend)} sub={pendientes.length+' persona/s · vence el 15'} c='#E24B4A'/>
+      <K lbl='Ya pagado' val={fmtM(totalPag)} sub={pagados.length+' de '+lista.length+' personas'} c='#1D9E75'/>
+      <K lbl='Total staff mes' val={fmtM(totalPend+totalPag)} sub={lista.length+' personas · '+proyMes.length+' proyectos'}/>
+      <K lbl='Ciclo' val='Pago el 15' sub='del mes siguiente'/>
     </div>
 
-    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={filtroStaff} onChange={e=>setFiltroStaff(e.target.value)}>
-        <option value='todos'>Todos los freelancers</option>
-        {staffNames.map(s=><option key={s} value={s}>{s}</option>)}
-      </select>
-      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={filtroMes} onChange={e=>setFiltroMes(e.target.value)}>
-        <option value='todos'>Todos los meses</option>
-        {meses.map(m=><option key={m} value={m}>{m}</option>)}
-      </select>
-    </div>
-
-    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 260px)'}}>
-      {filtrados.map((s,i)=>{
-        const trabajosFiltrados=filtroMes==='todos'?s.trabajos:s.trabajos.filter(t=>t.mes===filtroMes)
-        if(!trabajosFiltrados.length)return null
-        const deudaStaff=trabajosFiltrados.filter(t=>!t.pagado).reduce((acc,t)=>acc+t.precio,0)
-        const keysPendientes=trabajosFiltrados.filter(t=>!t.pagado).map(t=>t.key)
-        return <div key={i} style={{...S.card,marginBottom:8}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'0.5px solid #2A2A2A'}}>
-            <div>
-              <div style={{fontSize:14,fontWeight:500}}>{s.nombre}</div>
-              <div style={{fontSize:11,color:'#555',marginTop:2}}>{trabajosFiltrados.filter(t=>!t.pagado).length} trabajos pendientes · {trabajosFiltrados.filter(t=>t.pagado).length} pagados</div>
+    {/* Lista */}
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 280px)'}}>
+      {lista.length===0&&<div style={S.nd}>Sin staff asignado en proyectos de {mesActual||'este mes'}</div>}
+      {lista.map((persona,i)=>{
+        const pagado=getPagado(persona.nombre)
+        const isOpen=abierto===persona.nombre
+        const isDesc=showDesc===persona.nombre
+        const color=getColor(persona.nombre)
+        const cuenta=getCuenta(persona.nombre)
+        const desc=generarDesc(persona)
+        return <div key={i} style={{...S.card,marginBottom:8,borderLeft:'3px solid '+(pagado?'#1D9E75':'#2A2A2A'),opacity:pagado?0.75:1}}>
+          {/* Header persona */}
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:persona.nombre)}>
+            <div style={{width:36,height:36,borderRadius:'50%',background:color+'20',color:color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:500,flexShrink:0}}>
+              {initials(persona.nombre)}
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:deudaStaff>0?'#E24B4A':'#1D9E75'}}>{fmt(deudaStaff)}</div>
-                <div style={{fontSize:10,color:'#555'}}>pendiente</div>
-              </div>
-              {keysPendientes.length>0&&<button onClick={()=>marcarPagado(keysPendientes)} style={{padding:'7px 14px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Pagar el 15 ✓</button>}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:500}}>{persona.nombre}</div>
+              <div style={{fontSize:11,color:'#555',marginTop:2}}>{persona.trabajos.length} trabajo{persona.trabajos.length!==1?'s':''} · {mesActual.split(' - ')[1]||mesActual}{pagado?' · pagado desde '+cuenta:''}</div>
             </div>
+            <span style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:pagado?'#1D9E75':color,whiteSpace:'nowrap'}}>{fmt(persona.total)}</span>
+            <span style={{fontSize:10,padding:'3px 9px',borderRadius:3,marginLeft:8,whiteSpace:'nowrap',background:pagado?'#1D9E7520':'#E24B4A20',color:pagado?'#1D9E75':'#E24B4A'}}>{pagado?'Pagado':'Pendiente'}</span>
+            <span style={{fontSize:11,color:'#555',marginLeft:8}}>{isOpen?'▲':'▶'}</span>
           </div>
-          <div style={{padding:'8px 16px'}}>
-            {trabajosFiltrados.map((t,idx)=>(
-              <div key={idx} style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 110px 90px',gap:8,alignItems:'center',padding:'6px 0',borderBottom:'0.5px solid #1A1A1A',opacity:t.pagado?0.4:1}}>
-                <span style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>{t.mes?.split(' - ')[0]||'—'}</span>
-                <span style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.proyecto||t.cliente}</span>
-                <span style={{fontSize:11,color:'#555',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.pedido}</span>
-                <span style={{fontFamily:'monospace',fontSize:12,color:t.pagado?'#1D9E75':'#F0F0F0'}}>{fmt(t.precio)}</span>
-                <span style={{fontSize:10,padding:'2px 8px',borderRadius:3,textAlign:'center',background:t.pagado?'#1D9E7520':'#E24B4A20',color:t.pagado?'#1D9E75':'#E24B4A'}}>{t.pagado?'Pagado':'Pendiente'}</span>
+
+          {/* Panel detalle */}
+          {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A'}}>
+            {/* Headers */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 2fr 110px',background:'#1A1A1A'}}>
+              {['Proyecto','Servicio','Monto'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'7px 14px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
+            </div>
+            {/* Trabajos */}
+            {persona.trabajos.map((t,idx)=>(
+              <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 2fr 110px',borderBottom:'0.5px solid #1A1A1A'}}>
+                <div style={{padding:'9px 14px'}}>
+                  <div style={{fontSize:12}}>{t.proyecto}</div>
+                  <div style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{t.nro}{t.agencia?' · '+t.agencia:''}</div>
+                </div>
+                <div style={{padding:'9px 14px',fontSize:12,color:'#555',display:'flex',alignItems:'center'}}>{t.pedido}</div>
+                <div style={{padding:'9px 14px',fontFamily:'monospace',fontSize:12,fontWeight:500,display:'flex',alignItems:'center',justifyContent:'flex-end'}}>{fmt(t.precio)}</div>
               </div>
             ))}
-          </div>
+
+            {/* Panel acción */}
+            <div style={{padding:'12px 16px',background:'#1A1A1A',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <span style={{fontSize:12,color:'#555',whiteSpace:'nowrap'}}>Pagar desde:</span>
+              <select style={{padding:'6px 10px',borderRadius:6,border:'0.5px solid #333',background:'#0D0D0D',color:'#F0F0F0',fontSize:12,outline:'none'}} value={cuenta} onChange={e=>setCuenta(persona.nombre,e.target.value)}>
+                {CUENTAS.map(c=><option key={c}>{c}</option>)}
+              </select>
+              <button style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={()=>setShowDesc(isDesc?null:persona.nombre)}>
+                {isDesc?'Ocultar descripción':'Ver descripción para factura'}
+              </button>
+              {pagado
+                ?<button style={{marginLeft:'auto',padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={()=>marcar(persona.nombre,false)}>Desmarcar</button>
+                :<button style={{marginLeft:'auto',padding:'8px 18px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer'}} onClick={()=>marcar(persona.nombre,true)}>Marcar pagado ✓</button>
+              }
+            </div>
+
+            {/* Descripción para factura */}
+            {isDesc&&<div style={{padding:'12px 16px',borderTop:'0.5px solid #2A2A2A'}}>
+              <div style={{fontSize:11,color:'#555',marginBottom:8}}>Texto para enviarle a {persona.nombre.split(' ')[0]}:</div>
+              <div style={{background:'#1A1A1A',border:'0.5px solid #2A2A2A',borderRadius:8,padding:'12px 14px',fontSize:12,lineHeight:1.6,fontFamily:'monospace',color:'#F0F0F0',whiteSpace:'pre-wrap',marginBottom:10}}>
+                {desc}
+              </div>
+              <button style={{padding:'6px 14px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#1543F8',fontSize:12,cursor:'pointer'}} onClick={()=>copiar(persona.nombre,desc)}>
+                {copiado===persona.nombre?'¡Copiado! ✓':'Copiar mensaje'}
+              </button>
+            </div>}
+          </div>}
         </div>
       })}
-      {filtrados.length===0&&<div style={S.nd}>Sin datos de staff</div>}
     </div>
   </div>
 }
