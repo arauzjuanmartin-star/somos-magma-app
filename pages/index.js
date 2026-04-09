@@ -633,67 +633,118 @@ function Facturacion({data,mail}){
 }
 // ---- PAGOS STAFF ----
 function PagosStaff({data}){
-  const [open,setOpen]=useState(null), [pag,setPag]=useState({})
-  // Staff viene de proyectos — mostrar por presupuesto
-  const proj=(data.presupuestos||[]).filter(p=>isAprobado(p)||String(p['Estado']||'').toUpperCase()==='EN CURSO')
+  const [filtroStaff,setFiltroStaff]=useState('todos')
+  const [filtroMes,setFiltroMes]=useState('todos')
+  const [pagados,setPagados]=useState({})
+  const [toast,setToast]=useState('')
 
-  // Extraer servicios de cada proyecto como si fueran staff
-  const trabajos = []
-  proj.forEach(p=>{
-    for(let j=1;j<=8;j++){
-      const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
-      const prec=parseMonto(p[('Precio '+j)])
-      if(ped&&prec>0) trabajos.push({proyecto:p['Proyecto']||p['Cliente'],num:p['Columna 1'],servicio:ped,monto:prec,pm:p['PM Interno']||'—'})
+  const proyectos=data.proyectos||[]
+
+  // Extraer todos los trabajos por freelancer desde PROYECTOS
+  // Columnas: L=Pedido1, M=Precio1, N=Staff1, O=Pedido2, P=Precio2, Q=Staff2...
+  const trabajos=[]
+  proyectos.forEach(proy=>{
+    const mes=proy['2']||proy['Mes']||''
+    const nro=proy['N° presupuesto']||''
+    const proyecto=proy['Proyecto']||''
+    const cliente=proy['Cliente']||''
+    const fechaEvento=proy['Fecha Evento']||''
+    for(let j=1;j<=12;j++){
+      const pedido=proy['Pedido '+j]||''
+      const precio=parseMonto(proy['Precio '+j]||proy[j===1?'Precio':'']||0)
+      const staff=proy['Staff '+j]||proy[j===1?'Staff':'']||''
+      if(staff&&staff!=='Somos Magma'&&pedido&&precio>0){
+        trabajos.push({mes,nro,proyecto,cliente,fechaEvento,pedido,precio,staff,key:nro+'-'+j})
+      }
     }
   })
 
-  const byPM={}
+  // Agrupar por freelancer
+  const porStaff={}
   trabajos.forEach(t=>{
-    if(!byPM[t.pm]) byPM[t.pm]={pm:t.pm,items:[],total:0}
-    byPM[t.pm].items.push(t)
-    byPM[t.pm].total+=t.monto
+    if(!porStaff[t.staff])porStaff[t.staff]={nombre:t.staff,trabajos:[],total:0,totalPagado:0}
+    const pagado=pagados[t.key]||false
+    porStaff[t.staff].trabajos.push({...t,pagado})
+    if(pagado)porStaff[t.staff].totalPagado+=t.precio
+    else porStaff[t.staff].total+=t.precio
   })
-  const pms=Object.values(byPM).sort((a,b)=>b.total-a.total)
 
-  const cols=['#1543F8','#CE2637','#9635AB','#1D9E75','#BA7517']
-  const col=n=>cols[n.charCodeAt(0)%cols.length]
-  const init=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+  const staffList=Object.values(porStaff).sort((a,b)=>b.total-a.total)
+  const meses=[...new Set(trabajos.map(t=>t.mes).filter(Boolean))].sort()
+  const staffNames=[...new Set(trabajos.map(t=>t.staff).filter(Boolean))].sort()
+
+  const filtrados=staffList.filter(s=>{
+    if(filtroStaff!=='todos'&&s.nombre!==filtroStaff)return false
+    return true
+  })
+
+  const marcarPagado=(keys)=>{
+    setPagados(prev=>{const n={...prev};keys.forEach(k=>n[k]=true);return n})
+    setToast('Marcado como pagado ✓')
+    setTimeout(()=>setToast(''),2500)
+  }
+
+  const totalDeuda=trabajos.filter(t=>!pagados[t.key]).reduce((s,t)=>s+t.precio,0)
+  const totalPagado=trabajos.filter(t=>pagados[t.key]).reduce((s,t)=>s+t.precio,0)
 
   return <div>
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
+    
     <div style={S.k4}>
-      <K lbl='Servicios activos' val={trabajos.length} sub={proj.length+' proyectos'} c='#1543F8'/>
-      <K lbl='Total servicios' val={fmtM(trabajos.reduce((s,t)=>s+t.monto,0))} c='#BA7517'/>
-      <K lbl='PMs con trabajo' val={pms.length}/>
-      <K lbl='Marcados pagados' val={Object.values(pag).filter(Boolean).length} c='#1D9E75'/>
+      <K lbl='Total a pagar' val={fmtM(totalDeuda)} sub={trabajos.filter(t=>!pagados[t.key]).length+' trabajos'} c='#E24B4A'/>
+      <K lbl='Ya pagado' val={fmtM(totalPagado)} sub={trabajos.filter(t=>pagados[t.key]).length+' trabajos'} c='#1D9E75'/>
+      <K lbl='Freelancers activos' val={staffList.length} sub='con deuda pendiente'/>
+      <K lbl='Se paga el 15' val='de cada mes' sub='ciclo mensual'/>
     </div>
-    {pms.length===0&&<div style={S.nd}>Sin proyectos activos con servicios</div>}
-    {pms.map((p,i)=>{
-      const io=open===p.pm, ip=pag[p.pm], c=col(p.pm)
-      return <div key={i} style={{...S.card,marginBottom:8,opacity:ip?0.7:1}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',cursor:'pointer'}} onClick={()=>setOpen(io?null:p.pm)}>
-          <div style={{width:36,height:36,borderRadius:'50%',background:c+'20',color:c,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:500,flexShrink:0}}>{init(p.pm)}</div>
-          <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500}}>PM: {p.pm}</div><div style={{fontSize:11,color:'#555',marginTop:2}}>{p.items.length} servicio{p.items.length!==1?'s':''}</div></div>
-          <span style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:ip?'#1D9E75':c}}>{fmt(p.total)}</span>
-          <span style={{...S.badge,background:ip?'#1D9E7520':'#BA751720',color:ip?'#1D9E75':'#BA7517',marginLeft:8}}>{ip?'Pagado':'Pendiente'}</span>
-          <span style={{fontSize:11,color:'#555'}}>{io?'▲':'▶'}</span>
-        </div>
-        {io&&<div style={{borderTop:'0.5px solid #2A2A2A'}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 2fr 100px',background:'#1A1A1A'}}>{['Proyecto','Servicio','Monto'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'7px 14px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}</div>
-          {p.items.map((t,j)=><div key={j} style={{display:'grid',gridTemplateColumns:'1fr 2fr 100px',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}>
-            <div style={{padding:'9px 14px'}}><div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.proyecto}</div><div style={{color:'#1543F8',fontFamily:'monospace',fontSize:10}}>#{t.num}</div></div>
-            <div style={{padding:'9px 14px',color:'#666'}}>{t.servicio}</div>
-            <div style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:500}}>{fmt(t.monto)}</div>
-          </div>)}
-          <div style={{padding:'12px 16px',background:'#1A1A1A',display:'flex',justifyContent:'flex-end'}}>
-            {ip?<button style={{...S.fb}} onClick={()=>setPag(prev=>({...prev,[p.pm]:false}))}>Desmarcar</button>
-              :<button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>setPag(prev=>({...prev,[p.pm]:true}))}>Marcar pagado ✓</button>}
+
+    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={filtroStaff} onChange={e=>setFiltroStaff(e.target.value)}>
+        <option value='todos'>Todos los freelancers</option>
+        {staffNames.map(s=><option key={s} value={s}>{s}</option>)}
+      </select>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',cursor:'pointer'}} value={filtroMes} onChange={e=>setFiltroMes(e.target.value)}>
+        <option value='todos'>Todos los meses</option>
+        {meses.map(m=><option key={m} value={m}>{m}</option>)}
+      </select>
+    </div>
+
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 260px)'}}>
+      {filtrados.map((s,i)=>{
+        const trabajosFiltrados=filtroMes==='todos'?s.trabajos:s.trabajos.filter(t=>t.mes===filtroMes)
+        if(!trabajosFiltrados.length)return null
+        const deudaStaff=trabajosFiltrados.filter(t=>!t.pagado).reduce((acc,t)=>acc+t.precio,0)
+        const keysPendientes=trabajosFiltrados.filter(t=>!t.pagado).map(t=>t.key)
+        return <div key={i} style={{...S.card,marginBottom:8}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'0.5px solid #2A2A2A'}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:500}}>{s.nombre}</div>
+              <div style={{fontSize:11,color:'#555',marginTop:2}}>{trabajosFiltrados.filter(t=>!t.pagado).length} trabajos pendientes · {trabajosFiltrados.filter(t=>t.pagado).length} pagados</div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:deudaStaff>0?'#E24B4A':'#1D9E75'}}>{fmt(deudaStaff)}</div>
+                <div style={{fontSize:10,color:'#555'}}>pendiente</div>
+              </div>
+              {keysPendientes.length>0&&<button onClick={()=>marcarPagado(keysPendientes)} style={{padding:'7px 14px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Pagar el 15 ✓</button>}
+            </div>
           </div>
-        </div>}
-      </div>
-    })}
+          <div style={{padding:'8px 16px'}}>
+            {trabajosFiltrados.map((t,idx)=>(
+              <div key={idx} style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 110px 90px',gap:8,alignItems:'center',padding:'6px 0',borderBottom:'0.5px solid #1A1A1A',opacity:t.pagado?0.4:1}}>
+                <span style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>{t.mes?.split(' - ')[0]||'—'}</span>
+                <span style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.proyecto||t.cliente}</span>
+                <span style={{fontSize:11,color:'#555',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.pedido}</span>
+                <span style={{fontFamily:'monospace',fontSize:12,color:t.pagado?'#1D9E75':'#F0F0F0'}}>{fmt(t.precio)}</span>
+                <span style={{fontSize:10,padding:'2px 8px',borderRadius:3,textAlign:'center',background:t.pagado?'#1D9E7520':'#E24B4A20',color:t.pagado?'#1D9E75':'#E24B4A'}}>{t.pagado?'Pagado':'Pendiente'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      })}
+      {filtrados.length===0&&<div style={S.nd}>Sin datos de staff</div>}
+    </div>
   </div>
 }
-
 // ---- BALANCE ----
 function Balance({data}){
   const [mes,setMes]=useState('ABR'), [tc,setTc]=useState(1405)
