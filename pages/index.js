@@ -352,7 +352,7 @@ function Presupuestos({data:initialData}){
 function Proyectos({data,mail}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
-  const [q,setQ]=useState(''),[anio,setAnio]=useState('todos'),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos')
+  const [q,setQ]=useState(''),[anio,setAnio]=useState('todos'),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
   const getPrecioLista=(nombre)=>{if(!nombre)return 0;const s=SVCS_LIST.find(x=>nombre===x.n);return s?s.p:0}
@@ -361,10 +361,10 @@ function Proyectos({data,mail}){
   const agencias=[...new Set(proyectos.map(p=>p['Agencia']||'').filter(Boolean))].sort()
   const filtrados=proyectos.filter(p=>{
     const fecha=p['Fecha Evento']||''
-    const mMatch=mes==='todos'||fecha.startsWith(mes+'/')||fecha.includes('/'+mes+'/')
+    const mMatch=mes==='todos'||fecha.split('/')[1]===mes
     const aMatch=anio==='todos'||fecha.includes(anio)
     const pmVal=p['PM']||p['PM Interno']||''
-    return (pm==='todos'||pmVal===pm)&&(agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
+    return (agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(estado==='todos'||(estado==='ok'&&(p['Carga Staff']===true||p['Carga Staff']==='TRUE'))||(estado==='pendiente'&&p['Carga Staff']!==true&&p['Carga Staff']!=='TRUE'))&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
   })
   const getBase=(proy)=>{const svcs=[];for(let j=1;j<=12;j++){const ped=proy[j===1?'Pedido':'Pedido '+j]||'',qui=proy[j===1?'Staff':'Staff '+j]||'',prc=parseMonto(proy[j===1?'Precio':'Precio '+j]),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
   const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
@@ -381,8 +381,9 @@ function Proyectos({data,mail}){
       <input style={{...S.inp,flex:1,minWidth:160,marginBottom:0}} placeholder="Buscar N°, proyecto, cliente..." value={q} onChange={e=>setQ(e.target.value)}/>
       <select style={sel3} value={anio} onChange={e=>setAnio(e.target.value)}><option value="todos">Todos los años</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
       <select style={sel3} value={mes} onChange={e=>setMes(e.target.value)}><option value="todos">Todos los meses</option>{MESES_F.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-      <select style={sel3} value={pm} onChange={e=>setPm(e.target.value)}><option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}</select>
+
       <select style={sel3} value={agencia} onChange={e=>setAgencia(e.target.value)}><option value="todos">Todas las agencias</option>{agencias.map(a=><option key={a} value={a}>{a}</option>)}</select>
+      <select style={sel3} value={estado} onChange={e=>setEstado(e.target.value)}><option value="todos">Todos</option><option value="ok">OK</option><option value="pendiente">Pendiente</option></select>
     </div>
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 190px)'}}>
       {filtrados.length===0&&<div style={S.nd}>Sin proyectos</div>}
@@ -394,7 +395,7 @@ function Proyectos({data,mail}){
         return <div key={i} style={{...S.card,marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'80px 1fr 160px 70px 110px 90px 90px',alignItems:'center',cursor:'pointer',padding:'10px 0'}} onClick={()=>setOpen(isOpen?null:num)}>
             <span style={{padding:'0 12px',color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{num}</span>
-            <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</span>
+            <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}<span style={{fontSize:10,color:'#555',marginLeft:6}}>{p['Fecha Evento']||''}</span></span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
             <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||p['PM Interno']||'—'}</span>
             <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
