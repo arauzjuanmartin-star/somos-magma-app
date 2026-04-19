@@ -1067,7 +1067,7 @@ function PagosStaff({data,mail,onRefresh}){
   Object.values(personas).forEach(p=>{
     p.trabajos.forEach(t=>{t.pagado=isTrabajoPagado(p.nombre,t);if(t.pagado)p.totalPagado+=t.precio;else p.totalPendiente+=t.precio})
   })
-  const lista=Object.values(personas).sort((a,b)=>b.totalPendiente-a.totalPendiente)
+  const lista=Object.values(personas).sort((a,b)=>b.total-a.total)
 
   const getPersonaPagado=p=>p.trabajos.length>0&&p.trabajos.every(t=>t.pagado)
   const getCuentaPersisted=nombre=>{const r=pagosPersistidos.find(x=>String(x['Persona']||x['Nombre']||x['Staff']||'').trim()===nombre);return r?(r['Cuenta']||''):''}
@@ -1143,9 +1143,12 @@ function PagosStaff({data,mail,onRefresh}){
         const cuenta=getCuenta(persona.nombre)
         const selCount=persona.trabajos.filter(t=>!t.pagado&&isSel(persona.nombre,t.key)).length
         const selTotal=persona.trabajos.filter(t=>!t.pagado&&isSel(persona.nombre,t.key)).reduce((s,t)=>s+t.precio,0)
+        const rank=i+1
+        const rankStyle=rank===1?{background:'#FFD70025',color:'#FFD700'}:rank===2?{background:'#C0C0C025',color:'#C0C0C0'}:rank===3?{background:'#CD7F3225',color:'#CD7F32'}:{background:'#2A2A2A',color:'#555'}
         return <div key={i} style={{...S.card,marginBottom:8,borderLeft:'3px solid '+(fullPagado?'#1D9E75':persona.totalPagado>0?'#BA7517':'#2A2A2A'),opacity:fullPagado?0.65:1}}>
           {/* Header persona */}
           <div style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:persona.nombre)}>
+            <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0,...rankStyle}} title={`#${rank} en el mes`}>#{rank}</div>
             <div style={{width:36,height:36,borderRadius:'50%',background:color+'20',color:color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:500,flexShrink:0}}>
               {initials(persona.nombre)}
             </div>
