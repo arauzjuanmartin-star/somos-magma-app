@@ -447,6 +447,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
   const [fechaEvento,setFechaEvento]=useState(p['Fecha Evento']||'')
   const [precioFinalManual,setPrecioFinalManual]=useState('')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const [creadoVersion,setCreadoVersion]=useState('')
 
   // Al elegir servicio, auto-llena precio de lista (solo si el usuario no lo tocó)
   const updPed=(i,field,val)=>setPedidos(prev=>prev.map((x,idx)=>{
@@ -477,7 +478,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
       if(precioFinalManual!=='') body.precioFinal=parseFloat(precioFinalManual)||0
       const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(body)})
       const j=await r.json()
-      if(j.ok){onDone(j.nuevaVersion);onClose()}
+      if(j.ok){setCreadoVersion(j.nuevaVersion);onDone(j.nuevaVersion)}
       else setErr(j.error||'Error')
     }catch(e){setErr(e.message)}
     setSaving(false)
@@ -553,10 +554,17 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
 
       {err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:10}}>{err}</div>}
 
-      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+      {creadoVersion?<div style={{background:'#0F1A0F',border:'0.5px solid #1D9E75',borderRadius:8,padding:'12px 14px',marginBottom:10}}>
+        <div style={{fontSize:13,fontWeight:500,color:'#1D9E75',marginBottom:4}}>✓ Represupuesto creado: #{creadoVersion}</div>
+        <div style={{fontSize:11,color:'#888',marginBottom:10}}>Ya está en PRESUPUESTOS en estado EN ESPERA. Generá el PDF para mandar al cliente.</div>
+        <div style={{display:'flex',gap:8}}>
+          <a href={`/presupuesto?nro=${encodeURIComponent(creadoVersion)}`} target='_blank' rel='noreferrer' style={{flex:1,padding:'8px 14px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',textAlign:'center',textDecoration:'none'}}>📄 Generar PDF</a>
+          <button onClick={onClose} style={{padding:'8px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cerrar</button>
+        </div>
+      </div>:<div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
         <button style={{padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cancelar</button>
         <button disabled={saving||!motivo.trim()} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving||!motivo.trim()?0.5:1}} onClick={guardar}>{saving?'Creando...':'Crear represupuesto'}</button>
-      </div>
+      </div>}
     </div>
   </div>
 }
