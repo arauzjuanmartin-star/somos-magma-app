@@ -51,12 +51,12 @@ export default async function handler(req, res) {
     nueva[3] = 'EN ESPERA'             // Col D: Estado
     if (fechaEvento) nueva[1] = fechaEvento // Col B: Fecha Evento
 
-    // Calcular subtotal original (para preservar la diferencia fee+impuestos+ajuste)
+    // Calcular ratio del original (precioFinal / subtotal) para escalar fee+impuestos+ajuste proporcional
     const num2 = v => { if (v===undefined||v===null||v==='') return 0; const n=parseFloat(String(v).replace(/[$,\s]/g,'')); return isNaN(n)?0:n }
     let subtotalOriginal = 0
     for (let i = 0; i < 12; i++) { subtotalOriginal += num2(original[12 + i * 2]) }
     const precioFinalOriginal = num2(original[8])
-    const delta = precioFinalOriginal - subtotalOriginal  // fee + gan + iibb + interes + ajuste
+    const ratio = subtotalOriginal > 0 ? (precioFinalOriginal / subtotalOriginal) : 1
 
     // Aplicar overrides de pedidos (si vinieron del modal)
     if (Array.isArray(pedidos) && pedidos.length > 0) {
@@ -73,9 +73,9 @@ export default async function handler(req, res) {
         nueva[col + 1] = p.precio || 0
         subtotalNuevo += Number(p.precio) || 0
       }
-      // Mantener fee + impuestos + ajuste del original (se suman al nuevo subtotal)
-      // Si el usuario mandó precioFinal explícito, respetarlo. Sino: subtotal nuevo + delta
-      const precioFinalNuevo = (req.body.precioFinal != null) ? Number(req.body.precioFinal) : (subtotalNuevo + delta)
+      // Precio Final = subtotal nuevo * ratio (mantiene mismo % de fee+impuestos+ajuste)
+      // Si el usuario mandó precioFinal explícito, respetarlo.
+      const precioFinalNuevo = (req.body.precioFinal != null) ? Number(req.body.precioFinal) : Math.round(subtotalNuevo * ratio)
       nueva[8] = precioFinalNuevo
     }
 

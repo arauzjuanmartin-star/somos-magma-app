@@ -429,12 +429,26 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
   const [precioFinalManual,setPrecioFinalManual]=useState('')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
 
-  const updPed=(i,field,val)=>setPedidos(prev=>prev.map((x,idx)=>idx===i?{...x,[field]:field==='precio'?(parseFloat(val)||0):val}:x))
+  // Al elegir servicio, auto-llena precio de lista (solo si el usuario no lo tocó)
+  const updPed=(i,field,val)=>setPedidos(prev=>prev.map((x,idx)=>{
+    if(idx!==i) return x
+    if(field==='svc'){
+      const svc=SVCS_LIST.find(s=>s.n===val)
+      const nuevoPrecio=svc&&svc.p>0?svc.p:x.precio
+      return {...x,svc:val,precio:nuevoPrecio}
+    }
+    if(field==='precio') return {...x,precio:parseFloat(val)||0}
+    return {...x,[field]:val}
+  }))
   const addPed=()=>{const used=new Set(pedidos.map(x=>x.index));let next=1;while(used.has(next)&&next<=12)next++;if(next>12)return;setPedidos([...pedidos,{index:next,svc:'',precio:0}])}
   const delPed=i=>setPedidos(prev=>prev.filter((_,idx)=>idx!==i))
 
   const subtotalNuevo = pedidos.reduce((s,x)=>s+(x.precio||0),0)
-  const precioFinalCalc = precioFinalManual!==''?(parseFloat(precioFinalManual)||0):(subtotalNuevo+deltaOriginal)
+  // Mantener la misma proporción entre subtotal y total del original
+  // ratio incluye fee+imp+ajuste escalado con el subtotal
+  const ratio = subtotalOriginal>0?(precioFinalOriginal/subtotalOriginal):1
+  const precioFinalCalc = precioFinalManual!==''?(parseFloat(precioFinalManual)||0):Math.round(subtotalNuevo*ratio)
+  const deltaNuevo = precioFinalCalc-subtotalNuevo
 
   const guardar=async()=>{
     if(!motivo.trim()){setErr('El motivo es obligatorio');return}
@@ -502,9 +516,9 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
             <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'6px 0 3px',borderTop:'0.5px solid #2A2A2A',fontWeight:500}}><span>Precio Final original</span><span style={{fontFamily:'monospace',color:'#1543F8'}}>{fmt(precioFinalOriginal)}</span></div>
           </div>
           <div>
-            <div style={{fontSize:10,color:'#444',marginBottom:6}}>NUEVO ({precioFinalManual!==''?'manual':'auto'})</div>
+            <div style={{fontSize:10,color:'#444',marginBottom:6}}>NUEVO ({precioFinalManual!==''?'manual':'auto — ratio ×'+ratio.toFixed(3)})</div>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>Subtotal servicios nuevo</span><span style={{fontFamily:'monospace'}}>{fmt(subtotalNuevo)}</span></div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>+ fee+imp+ajuste (copiado del orig.)</span><span style={{fontFamily:'monospace',color:'#888'}}>{fmt(deltaOriginal)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>+ fee+impuestos+ajuste (escalados)</span><span style={{fontFamily:'monospace',color:deltaNuevo>=0?'#1D9E75':'#E24B4A'}}>{deltaNuevo>=0?'+':''}{fmt(deltaNuevo)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,padding:'6px 0 3px',borderTop:'0.5px solid #2A2A2A',fontWeight:500}}>
               <span>Precio Final nuevo</span>
               <input type='number' value={precioFinalManual} onChange={e=>setPrecioFinalManual(e.target.value)} placeholder={String(Math.round(precioFinalCalc))} style={{width:110,padding:'4px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'#000',color:'#1543F8',fontFamily:'monospace',fontSize:13,outline:'none',textAlign:'right'}}/>
@@ -512,7 +526,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
             {precioFinalManual!==''&&<button onClick={()=>setPrecioFinalManual('')} style={{fontSize:9,color:'#555',background:'transparent',border:'none',cursor:'pointer',padding:0,marginTop:3}}>↺ volver a auto</button>}
           </div>
         </div>
-        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El fee y los impuestos del original se preservan. Si querés cambiar el Precio Final manualmente, escribilo arriba. Sino, se calcula automático: subtotal nuevo + fee/impuestos originales.</div>
+        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El fee + impuestos escala proporcionalmente con el subtotal (manteniendo el mismo % del original). Si cambian los términos con el cliente y necesitás otro Precio Final, escribilo a mano.</div>
       </div>
 
       {err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:10}}>{err}</div>}
