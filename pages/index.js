@@ -100,7 +100,7 @@ export default function App() {
         <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
           {NAV.map(n=><button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)}><span style={{fontSize:12,width:16,textAlign:'center'}}>{n.icon}</span>{n.label}</button>)}
         </nav>
-        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
+        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail} onDataChange={()=>load(mail)}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
       </div>
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
@@ -400,7 +400,7 @@ function Toast({msg,onDone}){
   </div>
 }
 
-function SetupBtn({mail}){
+function SetupBtn({mail,onDataChange}){
   const [status,setStatus]=useState('')
   const [expanded,setExpanded]=useState(false)
   const [working,setWorking]=useState(false)
@@ -425,7 +425,11 @@ function SetupBtn({mail}){
           const ej=j.ejemplos&&j.ejemplos[0]
           const ejStr=ej?`\nEj: ${ej.cliente||'-'} / ${ej.proyecto||'-'} / mes=${ej.mes||'?'} / $${ej.total||0}`:''
           setStatus(`✓ ${año} dry: ${j.totalMapeadas}/${j.totalRowsEnFuente} filas (${j.conCliente} con cliente, ${j.conMes} con mes, ${j.conTotal} con total). Header row #${j.headerRowDetected} (score ${j.headerScore}). Headers: ${(j.headers||[]).slice(0,5).filter(Boolean).join(', ')}${ejStr}`)
-        } else setStatus(`✓ ${año} insertadas ${j.inserted} filas en ${j.target}. Recargá la app para ver.`)
+        } else {
+          setStatus(`✓ ${año} insertadas ${j.inserted} filas en ${j.target}. Refrescando...`)
+          if(onDataChange) await onDataChange()
+          setStatus(`✓ ${año}: ${j.inserted} filas cargadas. Andá a Histórico → ${año}.`)
+        }
       } else setStatus('✗ '+(j.error||'Error'))
     }catch(e){setStatus('✗ '+e.message)}
     setWorking(false)
