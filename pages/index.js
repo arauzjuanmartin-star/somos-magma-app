@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'balance',label:'Balance',icon:'≡'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'balance',label:'Balance',icon:'≡'},{id:'historico',label:'Histórico',icon:'⏱'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -128,6 +128,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'facturacion': return <Facturacion data={data}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
     case 'balance': return <Balance data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'historico': return <Historico data={data}/>
     default: return <div style={S.nd}>En construcción</div>
   }
 }
@@ -401,17 +402,47 @@ function Toast({msg,onDone}){
 
 function SetupBtn({mail}){
   const [status,setStatus]=useState('')
-  const run=async()=>{
-    setStatus('...')
+  const [expanded,setExpanded]=useState(false)
+  const [working,setWorking]=useState(false)
+
+  const runSetup=async()=>{
+    setWorking(true);setStatus('Setup...')
     try{
       const r=await fetch('/api/admin/setup-sheets',{method:'POST',headers:{'x-user-email':mail}})
       const j=await r.json()
-      if(j.ok) setStatus(`✓ Creadas: ${j.created.join(', ')||'ninguna'}. Ya existían: ${j.skipped.join(', ')||'ninguna'}`)
-      else setStatus('✗ '+(j.error||'Error'))
+      setStatus(j.ok?`✓ Creadas: ${j.created.join(', ')||'ninguna'}. Ya existían: ${j.skipped.join(', ')||'ninguna'}`:'✗ '+(j.error||'Error'))
     }catch(e){setStatus('✗ '+e.message)}
+    setWorking(false)
   }
+
+  const runBackfill=async(año,dryRun,replace)=>{
+    setWorking(true);setStatus(`Backfill ${año} ${dryRun?'(dry run)':'(escribiendo)'}...`)
+    try{
+      const r=await fetch('/api/admin/backfill-historico',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({año,dryRun,replaceExisting:replace})})
+      const j=await r.json()
+      if(j.ok){
+        if(dryRun) setStatus(`✓ ${año} dry run: ${j.totalMapeadas}/${j.totalRowsEnFuente} filas. Headers: ${(j.headers||[]).slice(0,6).join(', ')}...`)
+        else setStatus(`✓ ${año} insertadas ${j.inserted} filas en ${j.target}`)
+      } else setStatus('✗ '+(j.error||'Error'))
+    }catch(e){setStatus('✗ '+e.message)}
+    setWorking(false)
+  }
+
+  const btnS={fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid',background:'transparent',cursor:'pointer',whiteSpace:'nowrap'}
   return <div style={{marginTop:8}}>
-    <button style={{fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'transparent',color:'#1543F8',cursor:'pointer'}} onClick={run}>Setup hojas nuevas</button>
+    <button style={{...btnS,borderColor:'#1543F8',color:'#1543F8'}} onClick={()=>setExpanded(!expanded)}>{expanded?'▲':'▼'} Admin tools</button>
+    {expanded&&<div style={{marginTop:6,padding:8,background:'#0A0A0A',border:'0.5px solid #1E1E1E',borderRadius:6,display:'flex',flexDirection:'column',gap:4}}>
+      <button disabled={working} style={{...btnS,borderColor:'#1543F8',color:'#1543F8'}} onClick={runSetup}>Setup hojas nuevas</button>
+      <div style={{fontSize:9,color:'#444',marginTop:4,textTransform:'uppercase',letterSpacing:'.06em'}}>Backfill histórico</div>
+      {['2023','2024','2025'].map(año=>(
+        <div key={año} style={{display:'flex',gap:3}}>
+          <button disabled={working} style={{...btnS,flex:1,borderColor:'#555',color:'#888'}} onClick={()=>runBackfill(año,true,false)}>{año} dry</button>
+          <button disabled={working} style={{...btnS,flex:1,borderColor:'#1D9E75',color:'#1D9E75'}} onClick={()=>{if(confirm(`Escribir ${año} en HISTORICO_${año}? (append)`))runBackfill(año,false,false)}}>{año} escribir</button>
+          <button disabled={working} style={{...btnS,flex:1,borderColor:'#E24B4A',color:'#E24B4A'}} onClick={()=>{if(confirm(`REEMPLAZAR HISTORICO_${año} completo?`))runBackfill(año,false,true)}}>{año} reset</button>
+        </div>
+      ))}
+      <div style={{fontSize:9,color:'#555',marginTop:4,lineHeight:1.4}}>Primero "dry" para ver cuántas filas. Después "escribir" (append) o "reset" (borrar + escribir).</div>
+    </div>}
     {status&&<div style={{fontSize:9,color:'#777',marginTop:4,whiteSpace:'pre-wrap'}}>{status}</div>}
   </div>
 }
@@ -1632,6 +1663,187 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
         </div>
       </div>
     </div>
+  </div>
+}
+
+// ---- HISTORICO ----
+function Historico({data}){
+  const [añoSel,setAñoSel]=useState('2025')
+  const fuentes={
+    '2023':data.historico2023||[],
+    '2024':data.historico2024||[],
+    '2025':data.historico2025||[],
+    '2026':[...(data.facturacion||[]).map(f=>({
+      Año:'2026',Mes:parseInt(String(f['Mes']||'').split(' ')[0])||0,Cliente:f['Cliente']||'',Agencia:f['Agencia']||'',Proyecto:f['Proyecto']||'',
+      Presupuesto:parseMonto(f['Precio SIN IVA']),Total:parseMonto(f['Precio FINAL']),IVA:parseMonto(f['IVA']),
+      Cobrado:isCobrada(f)?'SÍ':'NO',
+    }))],
+  }
+  const años=['2023','2024','2025','2026']
+  const filas=fuentes[añoSel]||[]
+  const totalPresupuestado=filas.reduce((s,r)=>s+parseMonto(r['Presupuesto']),0)
+  const totalFacturado=filas.reduce((s,r)=>s+parseMonto(r['Total']),0)
+  const totalMagma=filas.reduce((s,r)=>s+parseMonto(r['Magma']),0)
+  const totalStaff=filas.reduce((s,r)=>s+['Pago 1','Pago 2','Pago 3','Pago 4'].reduce((a,k)=>a+parseMonto(r[k]),0)+parseMonto(r['Viaticos']),0)
+  const totalIVA=filas.reduce((s,r)=>s+parseMonto(r['IVA']),0)
+  const totalImpuestos=filas.reduce((s,r)=>s+parseMonto(r['Impuestos']),0)
+  const cantidad=filas.length
+  const ganancia=totalMagma
+  const margenPct=totalPresupuestado>0?Math.round(ganancia/totalPresupuestado*100):0
+
+  // Top clientes año
+  const clientesMap={}
+  filas.forEach(r=>{
+    const k=String(r['Cliente']||'—').trim()||'—'
+    if(!clientesMap[k])clientesMap[k]={nombre:k,total:0,cant:0,cobrado:0}
+    clientesMap[k].total+=parseMonto(r['Presupuesto'])
+    clientesMap[k].cant++
+    if(String(r['Cobrado']||'').toUpperCase().match(/SÍ|SI|OK/))clientesMap[k].cobrado+=parseMonto(r['Presupuesto'])
+  })
+  const topClientes=Object.values(clientesMap).sort((a,b)=>b.total-a.total).slice(0,10)
+
+  // Top agencias
+  const agenciasMap={}
+  filas.forEach(r=>{
+    const k=String(r['Agencia']||'').trim()
+    if(!k)return
+    if(!agenciasMap[k])agenciasMap[k]={nombre:k,total:0,cant:0}
+    agenciasMap[k].total+=parseMonto(r['Presupuesto'])
+    agenciasMap[k].cant++
+  })
+  const topAgencias=Object.values(agenciasMap).sort((a,b)=>b.total-a.total).slice(0,10)
+
+  // Top staff
+  const staffMap={}
+  filas.forEach(r=>{
+    for(let i=1;i<=4;i++){
+      const nombre=String(r['Staff '+i]||'').trim()
+      const pago=parseMonto(r['Pago '+i])
+      if(!nombre||pago<=0||nombre.toLowerCase()==='magma'||nombre.toLowerCase()==='somos magma')continue
+      if(!staffMap[nombre])staffMap[nombre]={nombre,total:0,cant:0}
+      staffMap[nombre].total+=pago
+      staffMap[nombre].cant++
+    }
+  })
+  const topStaff=Object.values(staffMap).sort((a,b)=>b.total-a.total).slice(0,15)
+
+  // Por mes
+  const MESES=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const porMes={}
+  for(let i=1;i<=12;i++)porMes[i]={mes:i,cantidad:0,presupuestado:0,facturado:0,magma:0,staff:0}
+  filas.forEach(r=>{
+    const m=parseInt(r['Mes'])||0
+    if(m<1||m>12)return
+    porMes[m].cantidad++
+    porMes[m].presupuestado+=parseMonto(r['Presupuesto'])
+    porMes[m].facturado+=parseMonto(r['Total'])
+    porMes[m].magma+=parseMonto(r['Magma'])
+    porMes[m].staff+=['Pago 1','Pago 2','Pago 3','Pago 4'].reduce((a,k)=>a+parseMonto(r[k]),0)+parseMonto(r['Viaticos'])
+  })
+
+  // Comparativa años
+  const yrStats=años.map(a=>{
+    const rows=fuentes[a]||[]
+    const pres=rows.reduce((s,r)=>s+parseMonto(r['Presupuesto']),0)
+    const magma=rows.reduce((s,r)=>s+parseMonto(r['Magma']),0)
+    return {año:a,cantidad:rows.length,presupuestado:pres,magma,margen:pres>0?magma/pres:0}
+  })
+
+  const mesMax=Math.max(...Object.values(porMes).map(m=>m.presupuestado),1)
+
+  return <div>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+      <div style={{fontSize:13,fontWeight:500,color:'#555'}}>Vista histórica de la productora</div>
+      <div style={{display:'flex',gap:4,marginLeft:'auto'}}>{años.map(a=><button key={a} style={{...S.fb,...(a===añoSel?S.fa:{})}} onClick={()=>setAñoSel(a)}>{a}</button>)}</div>
+    </div>
+
+    {/* KPIs del año */}
+    <div style={S.k4}>
+      <K lbl='Proyectos' val={cantidad} sub={'año '+añoSel} c='#1543F8'/>
+      <K lbl='Facturación' val={fmtM(totalPresupuestado)} sub={fmt(totalPresupuestado)+' sin IVA'} c='#1D9E75'/>
+      <K lbl='Ganancia Magma' val={fmtM(ganancia)} sub={margenPct+'% margen'} c='#1D9E75'/>
+      <K lbl='A Staff' val={'-'+fmtM(totalStaff)} sub={Object.keys(staffMap).length+' personas'} c='#BA7517'/>
+    </div>
+
+    {/* Comparativa años */}
+    <div style={{...S.card,marginBottom:12}}>
+      <div style={S.ch}>Comparativa anual — evolución de la productora</div>
+      <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 1fr 1fr',padding:'8px 14px',background:'#1A1A1A'}}>
+        {['Año','Proyectos','Facturado','Ganancia','Margen'].map(h=><div key={h} style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>{h}</div>)}
+      </div>
+      {yrStats.map((y,i)=>{
+        const prev=i>0?yrStats[i-1]:null
+        const growth=prev&&prev.presupuestado>0?Math.round((y.presupuestado-prev.presupuestado)/prev.presupuestado*100):null
+        return <div key={y.año} style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 1fr 1fr',padding:'9px 14px',borderBottom:'0.5px solid #1A1A1A',fontSize:13}}>
+          <div style={{fontWeight:500,color:y.año===añoSel?'#1543F8':'inherit'}}>{y.año}</div>
+          <div style={{fontFamily:'monospace'}}>{y.cantidad}</div>
+          <div style={{fontFamily:'monospace'}}>{fmtM(y.presupuestado)} {growth!==null&&<span style={{fontSize:10,color:growth>=0?'#1D9E75':'#E24B4A',marginLeft:4}}>{growth>=0?'+':''}{growth}%</span>}</div>
+          <div style={{fontFamily:'monospace',color:'#1D9E75'}}>{fmtM(y.magma)}</div>
+          <div style={{fontFamily:'monospace',color:'#1D9E75'}}>{Math.round(y.margen*100)}%</div>
+        </div>
+      })}
+    </div>
+
+    {/* Evolución mensual */}
+    <div style={{...S.card,marginBottom:12}}>
+      <div style={S.ch}>Evolución mensual {añoSel}</div>
+      <div style={{padding:'12px 14px'}}>
+        {Object.values(porMes).map(m=>{
+          if(m.cantidad===0&&añoSel!=='2026')return null
+          const pct=mesMax>0?Math.round(m.presupuestado/mesMax*100):0
+          return <div key={m.mes} style={{display:'grid',gridTemplateColumns:'40px 1fr 120px 100px 80px',alignItems:'center',gap:8,padding:'4px 0',fontSize:12}}>
+            <div style={{color:'#555',fontSize:11}}>{MESES[m.mes]}</div>
+            <div style={{position:'relative',height:14,background:'#1A1A1A',borderRadius:3,overflow:'hidden'}}>
+              <div style={{position:'absolute',left:0,top:0,bottom:0,width:pct+'%',background:'linear-gradient(90deg,#1543F8,#9635AB)',transition:'width 0.3s'}}/>
+            </div>
+            <div style={{fontFamily:'monospace',textAlign:'right'}}>{fmtM(m.presupuestado)}</div>
+            <div style={{fontFamily:'monospace',textAlign:'right',color:'#1D9E75',fontSize:11}}>+{fmtM(m.magma)}</div>
+            <div style={{fontFamily:'monospace',textAlign:'right',color:'#555',fontSize:11}}>{m.cantidad} proys</div>
+          </div>
+        })}
+      </div>
+    </div>
+
+    {/* Top clientes + staff */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+      <div style={S.card}>
+        <div style={S.ch}>Top 10 clientes {añoSel}</div>
+        {topClientes.length===0?<div style={{padding:14,color:'#555',fontSize:12}}>Sin datos</div>:
+        topClientes.map((c,i)=><div key={i} style={S.lr}>
+          <span style={{width:24,color:'#555',fontSize:11}}>#{i+1}</span>
+          <span style={{flex:1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</span>
+          <span style={{fontSize:10,color:'#555',marginRight:8}}>{c.cant}p</span>
+          <span style={{fontFamily:'monospace',fontSize:12}}>{fmtM(c.total)}</span>
+        </div>)}
+      </div>
+      <div style={S.card}>
+        <div style={S.ch}>Top 15 staff (lo que les pagaste) {añoSel}</div>
+        {topStaff.length===0?<div style={{padding:14,color:'#555',fontSize:12}}>Sin datos</div>:
+        topStaff.map((s,i)=><div key={i} style={S.lr}>
+          <span style={{width:24,color:'#555',fontSize:11}}>#{i+1}</span>
+          <span style={{flex:1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.nombre}</span>
+          <span style={{fontSize:10,color:'#555',marginRight:8}}>{s.cant} trabajos</span>
+          <span style={{fontFamily:'monospace',fontSize:12,color:'#BA7517'}}>{fmtM(s.total)}</span>
+        </div>)}
+      </div>
+    </div>
+
+    {/* Top agencias */}
+    <div style={S.card}>
+      <div style={S.ch}>Top 10 agencias {añoSel}</div>
+      {topAgencias.length===0?<div style={{padding:14,color:'#555',fontSize:12}}>Sin datos</div>:
+      topAgencias.map((a,i)=><div key={i} style={S.lr}>
+        <span style={{width:24,color:'#555',fontSize:11}}>#{i+1}</span>
+        <span style={{flex:1,fontSize:13}}>{a.nombre}</span>
+        <span style={{fontSize:10,color:'#555',marginRight:8}}>{a.cant} proyectos</span>
+        <span style={{fontFamily:'monospace',fontSize:12}}>{fmtM(a.total)}</span>
+      </div>)}
+    </div>
+
+    {filas.length===0&&<div style={{background:'#1E1E1E',border:'0.5px solid #BA7517',borderRadius:8,padding:'14px 18px',marginTop:12}}>
+      <div style={{fontSize:12,color:'#BA7517',fontWeight:500,marginBottom:4}}>Sin datos del {añoSel} cargados todavía</div>
+      <div style={{fontSize:11,color:'#888',lineHeight:1.5}}>Usá el botón "Admin tools" en la sidebar izquierda → "Backfill {añoSel}" para traer los datos. Primero "dry" para ver cuántas filas. Después "escribir" para guardar.<br/>Si es la primera vez, antes corré "Setup hojas nuevas" para crear la hoja HISTORICO_{añoSel} en Master Magma.<br/><br/><strong>IMPORTANTE:</strong> la cuenta de servicio de la app (GOOGLE_CLIENT_EMAIL) tiene que tener permiso de lectura sobre los sheets originales:<br/>• ADMIN MAGMA (2024/2025)<br/>• ADMIN MAGMA Back up (2023)</div>
+    </div>}
   </div>
 }
 
