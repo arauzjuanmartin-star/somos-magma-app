@@ -1126,8 +1126,8 @@ function PagosStaff({data,mail,onRefresh}){
 
     {/* KPIs */}
     <div style={S.k4}>
-      <K lbl='Total a pagar' val={fmtM(totalPend)} sub={pendientes.length+' persona/s · vence el 15'} c='#E24B4A'/>
-      <K lbl='Ya pagado' val={fmtM(totalPag)} sub={pagados.length+' de '+lista.length+' personas'} c='#1D9E75'/>
+      <K lbl='Total a pagar' val={fmtM(totalPend)} sub={lista.filter(p=>p.totalPendiente>0).length+' persona/s · vence el 15'} c='#E24B4A'/>
+      <K lbl='Ya pagado' val={fmtM(totalPag)} sub={personasFullPagadas+' de '+lista.length+' personas'} c='#1D9E75'/>
       <K lbl='Total staff mes' val={fmtM(totalPend+totalPag)} sub={lista.length+' personas · '+proyMes.length+' proyectos'}/>
       <K lbl='Ciclo' val='Pago el 15' sub='del mes siguiente'/>
     </div>
