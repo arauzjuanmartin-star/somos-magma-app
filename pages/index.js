@@ -126,8 +126,8 @@ function Mod({id,data,mail,onRefresh}){
     case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'proyectos': return <Proyectos data={data} mail={mail}/>
     case 'facturacion': return <Facturacion data={data}/>
-    case 'pagos': return <PagosStaff data={data}/>
-    case 'balance': return <Balance data={data}/>
+    case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'balance': return <Balance data={data} mail={mail} onRefresh={onRefresh}/>
     default: return <div style={S.nd}>En construcción</div>
   }
 }
@@ -1017,8 +1017,8 @@ function Facturacion({data,mail}){
   </div>
 }
 // ---- PAGOS STAFF ----
-function PagosStaff({data}){
-  const CUENTAS=['SRL — BBVA','Sofia — Galicia','Lulu — Santander']
+function PagosStaff({data,mail,onRefresh}){
+  const CUENTAS=['SRL — BBVA','Sofia — Galicia','Sofia — Santander','Lucia — Santander','Efectivo']
   const COLORS=['#1543F8','#CE2637','#9635AB','#1D9E75','#BA7517','#E24B4A']
   const getColor=n=>COLORS[n.charCodeAt(0)%COLORS.length]
   const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
@@ -1026,21 +1026,19 @@ function PagosStaff({data}){
   const [mesSel,setMesSel]=useState(null)
   const [abierto,setAbierto]=useState(null)
   const [showDesc,setShowDesc]=useState(null)
-  const [pagos,setPagos]=useState({})
-  const [cuentas,setCuentas]=useState({})
+  const [cuentaLocal,setCuentaLocal]=useState({})
+  const [savingPerson,setSavingPerson]=useState(null)
   const [copiado,setCopiado]=useState(null)
 
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
+  const pagosPersistidos=data.pagosStaff||[]
 
-  // Extraer meses disponibles
   const MESES_VALIDOS=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
   const meses=[...new Set(proyectos.map(p=>p['2']||'').filter(m=>m&&MESES_VALIDOS.some(mv=>m.includes(mv))))].sort()
   const mesActual=mesSel||(meses[meses.length-1]||'')
 
-  // Filtrar proyectos del mes seleccionado
   const proyMes=proyectos.filter(p=>(p['2']||'')=== mesActual)
 
-  // Agrupar por freelancer
   const personas={}
   proyMes.forEach(proy=>{
     const nro=proy['N° presupuesto']||''
@@ -1058,10 +1056,25 @@ function PagosStaff({data}){
   })
   const lista=Object.values(personas).sort((a,b)=>b.total-a.total)
 
-  const getPagado=nombre=>pagos[mesActual]&&pagos[mesActual][nombre]
-  const getCuenta=nombre=>(cuentas[mesActual]&&cuentas[mesActual][nombre])||CUENTAS[0]
-  const setCuenta=(nombre,val)=>setCuentas(prev=>({...prev,[mesActual]:{...(prev[mesActual]||{}),[nombre]:val}}))
-  const marcar=(nombre,val)=>setPagos(prev=>({...prev,[mesActual]:{...(prev[mesActual]||{}),[nombre]:val}}))
+  const findPagoRow=(nombre)=>pagosPersistidos.find(r=>{
+    const m=String(r['Mes']||'').trim(), p=String(r['Persona']||r['Nombre']||r['Staff']||'').trim()
+    return m===mesActual && p===nombre
+  })
+  const getPagado=nombre=>{const r=findPagoRow(nombre);if(!r)return false;const v=String(r['Pagado']||'').toUpperCase();return v==='SÍ'||v==='SI'||r['Pagado']===true}
+  const getCuentaPersisted=nombre=>{const r=findPagoRow(nombre);return r?(r['Cuenta']||''):''}
+  const getCuenta=nombre=>cuentaLocal[nombre]||getCuentaPersisted(nombre)||CUENTAS[0]
+  const setCuenta=(nombre,val)=>setCuentaLocal(prev=>({...prev,[nombre]:val}))
+
+  const marcar=async(nombre,pagado)=>{
+    const persona=lista.find(p=>p.nombre===nombre)
+    if(!persona)return
+    setSavingPerson(nombre)
+    try{
+      await fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesActual,persona:nombre,monto:persona.total,pagado,cuenta:getCuenta(nombre)})})
+      if(onRefresh)await onRefresh()
+    }catch(e){alert('Error: '+e.message)}
+    setSavingPerson(null)
+  }
 
   const generarDesc=(persona)=>{
     const nombre=persona.nombre.split(' ')[0]
@@ -1154,8 +1167,8 @@ function PagosStaff({data}){
                 {isDesc?'Ocultar descripción':'Ver descripción para factura'}
               </button>
               {pagado
-                ?<button style={{marginLeft:'auto',padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={()=>marcar(persona.nombre,false)}>Desmarcar</button>
-                :<button style={{marginLeft:'auto',padding:'8px 18px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer'}} onClick={()=>marcar(persona.nombre,true)}>Marcar pagado ✓</button>
+                ?<button disabled={savingPerson===persona.nombre} style={{marginLeft:'auto',padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:12,cursor:'pointer',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcar(persona.nombre,false)}>{savingPerson===persona.nombre?'...':'Desmarcar'}</button>
+                :<button disabled={savingPerson===persona.nombre} style={{marginLeft:'auto',padding:'8px 18px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcar(persona.nombre,true)}>{savingPerson===persona.nombre?'Marcando...':'Marcar pagado ✓'}</button>
               }
             </div>
 
@@ -1176,27 +1189,62 @@ function PagosStaff({data}){
   </div>
 }
 // ---- BALANCE ----
-function Balance({data}){
-  const [mes,setMes]=useState('ABR'), [tc,setTc]=useState(1405)
-  const MESES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC']
-  const SU=[{n:'Juan Martin',b:3000000},{n:'Sofia',b:3000000},{n:'Lulu',b:1300000},{n:'Dani',b:1900000},{n:'Tomi',b:1300000},{n:'Contador',b:453750}]
-  const GF=[{n:'Alquiler oficina',m:1000000},{n:'Expensas',m:54674},{n:'ABL',m:11793},{n:'Edenor',m:7004},{n:'Metrogas',m:0},{n:'CM',m:1023000}]
-  const [se,setSe]=useState({}), [pg,setPg]=useState({}), [ge,setGe]=useState({}), [pgf,setPgf]=useState({}), [vs,setVs]=useState({}), [pgv,setPgv]=useState({}), [nv,setNv]=useState({n:'',m:''})
-  const gS=n=>se[mes+n]!==undefined?se[mes+n]:SU.find(s=>s.n===n)?.b||0
-  const gG=n=>ge[n]!==undefined?ge[n]:GF.find(g=>g.n===n)?.m||0
-  const gV=()=>vs[mes]||[]
-  const ts=SU.reduce((s,g)=>s+gS(g.n),0), tf=GF.reduce((s,g)=>s+gG(g.n),0), tv=gV().reduce((s,g)=>s+(parseFloat(g.m)||0),0)
+const SU_DEFAULTS=[{n:'Juan Martin',b:3000000},{n:'Sofia',b:3000000},{n:'Lulu',b:1300000},{n:'Dani',b:1900000},{n:'Tomi',b:1300000},{n:'Contador',b:453750}]
+const GF_DEFAULTS=[{n:'Alquiler oficina',m:1000000},{n:'Expensas',m:54674},{n:'ABL',m:11793},{n:'Edenor',m:7004},{n:'Metrogas',m:0},{n:'CM',m:1023000}]
 
-  // Ingresos reales del Sheets — facturado en el mes
+function Balance({data,mail,onRefresh}){
+  const hoy=new Date(), mesActualNum=hoy.getMonth()+1, anioActualNum=hoy.getFullYear()
+  const MESES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC']
+  const mesStrToNum={'ENE':1,'FEB':2,'MAR':3,'ABR':4,'MAY':5,'JUN':6,'JUL':7,'AGO':8,'SEP':9,'OCT':10,'NOV':11,'DIC':12}
+  const [mes,setMes]=useState(MESES[mesActualNum-1]||'ABR')
+  const [anio,setAnio]=useState(String(anioActualNum))
+  const [tc,setTc]=useState(1405)
+  const [saving,setSaving]=useState(null)
+  const [nuevoPersona,setNuevoPersona]=useState('')
+  const mesNum=mesStrToNum[mes]||4
+
+  // SUELDOS desde el Sheet
+  const sueldos=(data.sueldos||[]).filter(s=>{
+    const m=parseInt(s['Mes'])||0; const a=String(s['Año']||'').trim()
+    return m===mesNum && a===anio
+  })
+  const personas=[...new Set([...SU_DEFAULTS.map(x=>x.n),...sueldos.map(s=>s['Persona']).filter(Boolean)])]
+  const getSueldoRow=(persona)=>sueldos.find(s=>String(s['Persona']||'').trim()===persona && String(s['Tipo']||'fijo').trim()==='fijo')
+  const getMonto=(persona)=>{const r=getSueldoRow(persona);if(r)return parseMonto(r['Monto']);return SU_DEFAULTS.find(s=>s.n===persona)?.b||0}
+  const isPagado=(persona)=>{const r=getSueldoRow(persona);return r&&(String(r['Pagado']||'').toUpperCase()==='SÍ'||String(r['Pagado']||'').toUpperCase()==='SI'||r['Pagado']===true)}
+
+  const upsertSueldo=async(persona,updates)=>{
+    setSaving(persona)
+    try{
+      await fetch('/api/sueldo-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesNum,anio,persona,tipo:'fijo',...updates})})
+      if(onRefresh)await onRefresh()
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  const [ge,setGe]=useState({}), [pgf,setPgf]=useState({}), [vs,setVs]=useState({}), [pgv,setPgv]=useState({}), [nv,setNv]=useState({n:'',m:''})
+  const gG=n=>ge[n]!==undefined?ge[n]:GF_DEFAULTS.find(g=>g.n===n)?.m||0
+  const gV=()=>vs[mes+anio]||[]
+  const ts=personas.reduce((s,p)=>s+getMonto(p),0)
+  const tf=GF_DEFAULTS.reduce((s,g)=>s+gG(g.n),0)
+  const tv=gV().reduce((s,g)=>s+(parseFloat(g.m)||0),0)
+
+  // Ingresos reales
   const fc=data.facturacion||[]
-  const mesNum={'ENE':'01','FEB':'02','MAR':'03','ABR':'04','MAY':'05','JUN':'06','JUL':'07','AGO':'08','SEP':'09','OCT':'10','NOV':'11','DIC':'12'}[mes]||'04'
-  const fcMes=fc.filter(f=>{const m=String(f['Mes']||'');return m.includes(mesNum)||m.toUpperCase().includes(mes)})
+  const mesPad=String(mesNum).padStart(2,'0')
+  const fcMes=fc.filter(f=>{const m=String(f['Mes']||'');return m.includes(mesPad)||m.toUpperCase().includes(mes)})
   const ingMes=fcMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
   const resultado=ingMes-(ts+tf+tv)
+  const anios=['2023','2024','2025','2026','2027']
 
   return <div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
-      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{MESES.map(m=><button key={m} style={{...S.fb,...(mes===m?S.fa:{})}} onClick={()=>setMes(m)}>{m}</button>)}</div>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
+        {MESES.map(m=><button key={m} style={{...S.fb,...(mes===m?S.fa:{})}} onClick={()=>setMes(m)}>{m}</button>)}
+        <select value={anio} onChange={e=>setAnio(e.target.value)} style={{padding:'5px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,outline:'none',marginLeft:6}}>
+          {anios.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
       <div style={{display:'flex',alignItems:'center',gap:6,background:'#1E1E1E',border:'0.5px solid #333',borderRadius:8,padding:'5px 10px'}}>
         <span style={{fontSize:11,color:'#555'}}>USD blue $</span>
         <input type='number' value={tc} onChange={e=>setTc(parseFloat(e.target.value)||1405)} style={{width:70,border:'none',background:'transparent',color:'#BA7517',fontFamily:'monospace',fontSize:13,fontWeight:500,outline:'none',textAlign:'right'}}/>
@@ -1204,40 +1252,45 @@ function Balance({data}){
     </div>
     <div style={S.k4}>
       <K lbl='Ingresos netos' val={fmtM(ingMes)} sub={fcMes.length+' facturas del mes'} c='#1D9E75'/>
-      <K lbl='Sueldos' val={'-'+fmtM(ts)} sub={SU.filter(g=>!pg[mes+g.n]).length+' pendientes'} c='#E24B4A'/>
+      <K lbl='Sueldos' val={'-'+fmtM(ts)} sub={personas.filter(p=>!isPagado(p)).length+' pendientes'} c='#E24B4A'/>
       <K lbl='Gastos fijos' val={'-'+fmtM(tf)} c='#E24B4A'/>
       <K lbl='Resultado' val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
       <div>
         <div style={S.card}>
-          <div style={S.ch}>Sueldos equipo</div>
-          {SU.map((g,i)=>{const p=pg[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type='checkbox' checked={!!p} onChange={e=>setPg(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
-            <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
-            <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
-            <input type='number' value={gS(g.n)} onChange={e=>setSe(prev=>({...prev,[mes+g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+          <div style={S.ch}>Sueldos equipo — {mes} {anio}</div>
+          {personas.map((nombre,i)=>{const pagado=isPagado(nombre),monto=getMonto(nombre); return <div key={i} style={{...S.lr,opacity:pagado?0.6:1,gap:8}}>
+            <input type='checkbox' checked={pagado} disabled={saving===nombre} onChange={e=>upsertSueldo(nombre,{pagado:e.target.checked,fechaPago:e.target.checked?(new Date().toLocaleDateString('es-AR')):'',monto})} style={{accentColor:'#1D9E75',flexShrink:0}}/>
+            <span style={{flex:1,marginLeft:4,fontSize:13}}>{nombre}</span>
+            <span style={{...S.badge,background:pagado?'#1D9E7520':'#BA751720',color:pagado?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{pagado?'Pagado':'Pend.'}</span>
+            <input type='number' defaultValue={monto} onBlur={e=>{const v=parseFloat(e.target.value)||0;if(v!==monto)upsertSueldo(nombre,{monto:v,pagado})}} style={{width:110,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>
+            {saving===nombre&&<span style={{fontSize:10,color:'#888'}}>...</span>}
           </div>})}
+          <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'0.5px dashed #2A2A2A'}}>
+            <input placeholder='Nombre de nueva persona...' value={nuevoPersona} onChange={e=>setNuevoPersona(e.target.value)} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+            <button onClick={async()=>{if(!nuevoPersona.trim())return;await upsertSueldo(nuevoPersona.trim(),{monto:0,pagado:false});setNuevoPersona('')}} style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,cursor:'pointer'}}>+ Agregar</button>
+          </div>
         </div>
         <div style={{...S.card,marginTop:12}}>
-          <div style={S.ch}>Gastos variables</div>
-          {gV().map((g,i)=>{const p=pgv[mes+i]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type='checkbox' checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+          <div style={S.ch}>Gastos variables — {mes} {anio}</div>
+          {gV().map((g,i)=>{const p=pgv[mes+anio+i]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
+            <input type='checkbox' checked={!!p} onChange={e=>setPgv(prev=>({...prev,[mes+anio+i]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{fontFamily:'monospace',fontSize:12,marginLeft:'auto'}}>{fmt(g.m)}</span>
           </div>})}
           <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'0.5px dashed #2A2A2A'}}>
             <input placeholder='Descripcion...' value={nv.n} onChange={e=>setNv(p=>({...p,n:e.target.value}))} style={{flex:1,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
             <input type='number' placeholder='$' value={nv.m} onChange={e=>setNv(p=>({...p,m:e.target.value}))} style={{width:90,padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
-            <button style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,cursor:'pointer'}} onClick={()=>{if(!nv.n)return;setVs(prev=>({...prev,[mes]:[...(prev[mes]||[]),{n:nv.n,m:parseFloat(nv.m)||0}]}));setNv({n:'',m:''})}}>OK</button>
+            <button style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,cursor:'pointer'}} onClick={()=>{if(!nv.n)return;setVs(prev=>({...prev,[mes+anio]:[...(prev[mes+anio]||[]),{n:nv.n,m:parseFloat(nv.m)||0}]}));setNv({n:'',m:''})}}>OK</button>
           </div>
         </div>
       </div>
       <div>
         <div style={S.card}>
           <div style={S.ch}>Gastos fijos</div>
-          {GF.map((g,i)=>{const p=pgf[mes+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
-            <input type='checkbox' checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
+          {GF_DEFAULTS.map((g,i)=>{const p=pgf[mes+anio+g.n]; return <div key={i} style={{...S.lr,opacity:p?0.5:1}}>
+            <input type='checkbox' checked={!!p} onChange={e=>setPgf(prev=>({...prev,[mes+anio+g.n]:e.target.checked}))} style={{accentColor:'#1543F8',flexShrink:0}}/>
             <span style={{flex:1,marginLeft:10,fontSize:13}}>{g.n}</span>
             <span style={{...S.badge,background:p?'#1D9E7520':'#BA751720',color:p?'#1D9E75':'#BA7517',marginRight:8,fontSize:10}}>{p?'Pagado':'Pend.'}</span>
             <input type='number' value={gG(g.n)} onChange={e=>setGe(prev=>({...prev,[g.n]:parseFloat(e.target.value)||0}))} style={{width:100,padding:'4px 6px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontFamily:'monospace',fontSize:12,outline:'none',textAlign:'right'}}/>

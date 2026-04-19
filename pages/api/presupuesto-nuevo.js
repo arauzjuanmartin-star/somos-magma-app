@@ -34,23 +34,40 @@ export default async function handler(req, res) {
     row[9] = p['Fecha Presupuesto'] || fechaHoy
     row[10] = p['Contacto'] || ''
 
+    // Sumar pedidos para recalculo defensivo si el cliente no mando subtotal/fee
+    let subtotalCalc = 0
     for (let i = 1; i <= 12; i++) {
-      row[11 + (i - 1) * 2] = p[`Pedido ${i}`] || ''
-      row[12 + (i - 1) * 2] = p[`Precio ${i}`] || ''
+      const svc = p[`Pedido ${i}`] || ''
+      const prc = Number(p[`Precio ${i}`]) || 0
+      row[11 + (i - 1) * 2] = svc
+      row[12 + (i - 1) * 2] = prc
+      subtotalCalc += prc
     }
+
+    const num = v => { const n = Number(v); return isNaN(n) ? 0 : n }
+    const hasAgencia = !!(p['Agencia'] && String(p['Agencia']).trim())
+    const subtotal = num(p['Subtotal']) || subtotalCalc
+    const feeAgencia = num(p['Fee Agencia']) || (hasAgencia ? subtotalCalc : 0)
+    const impGan = num(p['Impuesto a las ganancias'])
+    const iibb = num(p['IIBB'])
+    const intMto = num(p['Interes $'])
+    const ajuste = num(p['Ajuste'])
+    const total = num(p['Total']) || num(p['Precio Final']) || (subtotal + feeAgencia + impGan + iibb + intMto + ajuste)
 
     row[35] = p['Otros'] || ''
     row[36] = p['Precio Otros'] || ''
     row[37] = p['Descuento'] || ''
-    row[38] = p['Subtotal'] || 0
-    row[39] = p['Fee Agencia'] || 0
-    row[40] = p['Impuesto a las ganancias'] || 0
-    row[41] = p['IIBB'] || 0
+    row[38] = subtotal
+    row[39] = feeAgencia
+    row[40] = impGan
+    row[41] = iibb
     row[42] = p['Plazo'] || ''
     row[43] = p['Interes %'] || ''
-    row[44] = p['Interes $'] || 0
-    row[45] = p['Total'] || p['Precio Final'] || 0
-    row[46] = p['Ajuste'] || 0
+    row[44] = intMto
+    row[45] = total
+    row[46] = ajuste
+    // Precio Final (col I) tambien asegurado
+    row[8] = num(p['Precio Final']) || total
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
