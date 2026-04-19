@@ -421,8 +421,11 @@ function SetupBtn({mail}){
       const r=await fetch('/api/admin/backfill-historico',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({año,dryRun,replaceExisting:replace})})
       const j=await r.json()
       if(j.ok){
-        if(dryRun) setStatus(`✓ ${año} dry run: ${j.totalMapeadas}/${j.totalRowsEnFuente} filas. Headers: ${(j.headers||[]).slice(0,6).join(', ')}...`)
-        else setStatus(`✓ ${año} insertadas ${j.inserted} filas en ${j.target}`)
+        if(dryRun){
+          const ej=j.ejemplos&&j.ejemplos[0]
+          const ejStr=ej?`\nEj: ${ej.cliente||'-'} / ${ej.proyecto||'-'} / mes=${ej.mes||'?'} / $${ej.total||0}`:''
+          setStatus(`✓ ${año} dry: ${j.totalMapeadas}/${j.totalRowsEnFuente} filas (${j.conCliente} con cliente, ${j.conMes} con mes, ${j.conTotal} con total). Header row #${j.headerRowDetected} (score ${j.headerScore}). Headers: ${(j.headers||[]).slice(0,5).filter(Boolean).join(', ')}${ejStr}`)
+        } else setStatus(`✓ ${año} insertadas ${j.inserted} filas en ${j.target}. Recargá la app para ver.`)
       } else setStatus('✗ '+(j.error||'Error'))
     }catch(e){setStatus('✗ '+e.message)}
     setWorking(false)

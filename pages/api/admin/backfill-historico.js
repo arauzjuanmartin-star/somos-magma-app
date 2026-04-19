@@ -54,16 +54,17 @@ function makeRow(sourceHeaders, sourceRow, año) {
     return ''
   }
 
-  // Mes: busca col "Mes" o "de" (primer col de ADMIN MAGMA)
-  let mesStr = text(getH('mes','de','month'))
-  let mesNum = MESES_TXT[mesStr.toLowerCase()] || 0
-
-  // Fecha: col "Fecha de realización" o similar
-  const fecha = text(getH('fecha de realización','fecha realización','fecha','fecha evento'))
-  // Si no hay mes pero hay fecha DD/MM/YYYY, extraer
-  if (!mesNum && fecha) {
+  // Fecha: col "Fecha de realización" o similar — LA USAMOS PRIMERO para el mes
+  const fecha = text(getH('fecha de realización','fecha realización','fecha','fecha evento','fecha realizacion'))
+  let mesNum = 0
+  if (fecha) {
     const p = fecha.split('/')
     if (p.length >= 2) mesNum = parseInt(p[1]) || 0
+  }
+  // Fallback: busca col "Mes" o "de" si no hay fecha o no pudimos parsear
+  if (!mesNum) {
+    const mesStr = text(getH('mes','de','month'))
+    mesNum = MESES_TXT[mesStr.toLowerCase()] || 0
   }
 
   const nro = text(getH('nro de proyecto','nro','n° proyecto','n° presupuesto'))
@@ -120,13 +121,15 @@ export default async function handler(req, res) {
     const srcRows = src.data.values || []
     if (srcRows.length < 2) return res.json({ ok: true, inserted: 0, preview: [], msg: 'Sin datos en la fuente' })
 
-    // Detectar fila de headers (busca la primera con "Mes" o "Cliente")
+    // Detectar fila de headers — busca una con combinación fuerte de headers esperados
     let headerRowIdx = 0
-    for (let i = 0; i < Math.min(5, srcRows.length); i++) {
-      const joined = srcRows[i].map(c => String(c||'').toLowerCase()).join('|')
-      if (joined.includes('cliente') && (joined.includes('mes')||joined.includes('proyecto')||joined.includes('trabajo'))) {
-        headerRowIdx = i; break
-      }
+    let bestScore = 0
+    const markers = ['cliente','proyecto','fecha','cobrado','total','cámara','camara','edición','edicion','pago','viáticos','viaticos','magma','factura','presupuesto','trabajo']
+    for (let i = 0; i < Math.min(20, srcRows.length); i++) {
+      const joined = srcRows[i].map(c => String(c||'').toLowerCase().trim()).join('|')
+      let score = 0
+      markers.forEach(m => { if (joined.includes(m)) score++ })
+      if (score > bestScore) { bestScore = score; headerRowIdx = i }
     }
     const headers = srcRows[headerRowIdx]
     const dataRows = srcRows.slice(headerRowIdx + 1).filter(r => r.some(c => c !== ''))
@@ -137,6 +140,16 @@ export default async function handler(req, res) {
       .filter(r => r[4] || r[6]) // require cliente o proyecto
 
     if (dryRun) {
+      // Estadisticas rapidas
+      const conCliente = mapped.filter(r => r[4]).length
+      const conTotal = mapped.filter(r => Number(r[7])>0 || Number(r[13])>0).length
+      const conMes = mapped.filter(r => Number(r[1])>0).length
+      // 3 ejemplos parseados
+      const ejemplos = mapped.slice(0, 3).map(r => ({
+        mes: r[1], fecha: r[2], nro: r[3], cliente: r[4], agencia: r[5], proyecto: r[6],
+        presupuesto: r[7], cobrado: r[8], magma: r[10], total: r[13],
+        staff1: r[14], pago1: r[15],
+      }))
       return res.json({
         ok: true,
         dryRun: true,
@@ -145,10 +158,12 @@ export default async function handler(req, res) {
         fuenteTab: fuente.tab,
         target: fuente.target,
         headerRowDetected: headerRowIdx,
+        headerScore: bestScore,
         headers: headers,
         totalRowsEnFuente: dataRows.length,
         totalMapeadas: mapped.length,
-        preview: mapped.slice(0, 5),
+        conCliente, conTotal, conMes,
+        ejemplos,
       })
     }
 
