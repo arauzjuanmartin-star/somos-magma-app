@@ -116,7 +116,7 @@ export default function App() {
         </div>
       </div>
     </div>
-    {showNP&&<NuevoPresupuesto onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}))}} data={data}/>}
+    {showNP&&<NuevoPresupuesto mail={mail} onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}))}} data={data}/>}
   </>
 }
 
@@ -563,7 +563,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
   </div>
 }
 
-function BadgeEstado({p, mail, onUpdate, onRefresh}){
+function BadgeEstado({p, mail, data, onUpdate, onRefresh}){
   const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [reModalOpen,setReModalOpen]=useState(false)
   const ec=estadoColor(p['Estado'])
 
@@ -582,7 +582,7 @@ function BadgeEstado({p, mail, onUpdate, onRefresh}){
   }
 
   return <div style={{position:'relative'}}>
-    {reModalOpen&&<RepresupuestarModal p={p} mail={mail} onClose={()=>setReModalOpen(false)} onDone={nueva=>{onUpdate(p['Columna 1'],'REPRESUPUESTADO');if(onRefresh)setTimeout(onRefresh,500)}}/>}
+    {reModalOpen&&<NuevoPresupuesto mail={mail} data={data} initialData={p} onClose={()=>setReModalOpen(false)} onGuardado={()=>{onUpdate(p['Columna 1'],'REPRESUPUESTADO');if(onRefresh)setTimeout(onRefresh,500)}}/>}
     <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>
       {saving?'...':(p['Estado']||'—')}
     </span>
@@ -709,7 +709,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                 <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
                 <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
                 <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
-                  <BadgeEstado p={p} mail={mail} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
+                  <BadgeEstado p={p} mail={mail} data={initialData} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
                 </td>
               </tr>
               {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
@@ -1246,16 +1246,76 @@ function Balance({data}){
 }
 
 // ---- NUEVO PRESUPUESTO ----
-function NuevoPresupuesto({onClose,onGuardado,data}){
+// Limpia emojis/simbolos raros del inicio del nombre del servicio para matchear SVCS_LIST
+const stripSvcPrefix = s => String(s||'').replace(/^[^a-zA-Z0-9]+\s*/, '').trim()
+// Reading defensivo de Pedido/Precio con todas las variantes posibles del Sheet
+const readPedidos = p => {
+  if (!p) return []
+  const findKey = (prefix, idx) => {
+    const rx = new RegExp('^\\s*'+prefix+'\\s*'+idx+'\\s*$','i')
+    return Object.keys(p).find(k => rx.test(k)) || null
+  }
+  const out = []
+  for (let i=1;i<=12;i++) {
+    const pk = findKey('pedido', i), ck = findKey('precio', i)
+    const rawSvc = pk ? (p[pk]||'') : ''
+    const svcClean = stripSvcPrefix(rawSvc)
+    // Match contra SVCS_LIST para validar el nombre
+    const match = SVCS_LIST.find(s => stripSvcPrefix(s.n) === svcClean || s.n === rawSvc)
+    const svc = match ? match.n : (svcClean || '')
+    const precio = ck ? parseMonto(p[ck]) : 0
+    if (svc || precio) out.push({svc, precio})
+  }
+  return out
+}
+// Calcula siguiente versión (1805 -> 1805v2 -> 1805v3)
+const nextVersion = (num, todosNums) => {
+  const base = String(num).replace(/v\d+$/i, '').trim()
+  let maxV = 1
+  todosNums.forEach(n => {
+    const s = String(n||'').trim()
+    const m = s.match(/^(.+?)(?:v(\d+))?$/i)
+    if (m && m[1].trim() === base) { const v = m[2]?parseInt(m[2]):1; if (v > maxV) maxV = v }
+  })
+  return base + 'v' + (maxV + 1)
+}
+
+function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const presus=data?.presupuestos||[]
-  const nextNum=presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
-  const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}])
-  const [form,setForm]=useState({fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0'})
+  const isRepresupuestar = !!initialData
+  const defaultNum = presus.length>0?Math.max(...presus.map(p=>parseInt(p['Columna 1'])||0))+1:1000
+  const nextNum = isRepresupuestar ? nextVersion(initialData['Columna 1'], presus.map(x=>x['Columna 1'])) : defaultNum
+  const pedidosIniciales = isRepresupuestar ? readPedidos(initialData) : []
+  const [peds,setPeds]=useState(
+    isRepresupuestar && pedidosIniciales.length > 0
+      ? pedidosIniciales.map((x,i)=>({id:i+1,svc:x.svc,precio:String(x.precio||''),feeAg:(SVCS_LIST.find(s=>s.n===x.svc)?.fee)??true,manual:false}))
+      : [{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}]
+  )
+  const parseFechaSheet = s => { const parts=String(s||'').split('/'); if(parts.length===3){const yr=parts[2].length===4?parts[2]:'20'+parts[2]; return `${yr}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`}; return '' }
+  const [form,setForm]=useState(isRepresupuestar ? {
+    fp:new Date().toISOString().slice(0,10),
+    fechaMode:'dia',
+    fe1:parseFechaSheet(initialData['Fecha Evento']),
+    feIni:'',feFin:'',
+    agencia:initialData['Agencia']||'',
+    cliente:initialData['Cliente']||'',
+    proyecto:initialData['Proyecto']||'',
+    contacto:initialData['Contacto']||'',
+    pm:initialData['PM Interno']||'',
+    repr:String(initialData['Columna 1']||''),
+    plazo:String(initialData['Plazo']||'0').replace(/[^\d]/g,'')||'0',
+    interes:String(initialData['Interes %']||'0').replace(/[^\d.]/g,'')||'0',
+    gan: parseMonto(initialData['Impuesto a las ganancias'])>0,
+    iibb: parseMonto(initialData['IIBB'])>0,
+    tajuste:'1',
+    ajuste:String(parseMonto(initialData['Ajuste'])||'0'),
+    motivo:'',
+  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0',motivo:''})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [diasMulti,setDiasMulti]=useState([''])
-  const version=form.repr?'V2':''
+  const version=isRepresupuestar ? String(nextNum).match(/v\d+$/i)?.[0] || 'V2' : (form.repr?'V2':'')
   const tieneAg=form.agencia.trim()!==''
   const calcT=()=>{
     const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
@@ -1273,11 +1333,18 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
   const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
   async function guardar(){
     if(!form.cliente.trim()||!peds.some(p=>p.svc))return
+    if(isRepresupuestar && !form.motivo.trim())return
     setSaving(true)
-    const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Precio Final':T.total}
+    const fechaEventoOut = form.fe1 ? form.fe1.split('-').reverse().join('/') : (form.feIni?form.feIni.split('-').reverse().join('/'):'')
+    const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Fecha Evento':fechaEventoOut,'Precio Final':T.total}
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
-    try{await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})}catch(e){}
-    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    try{
+      await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})
+      // Si es represupuestar, marcar el original como REPRESUPUESTADO
+      if (isRepresupuestar) {
+        await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
+      }
+    }catch(e){}
     if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
     setOk(true);onGuardado(row);setSaving(false)
   }
@@ -1351,7 +1418,8 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
               {hintCt&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}><div style={{fontSize:10,color:'#1D9E75',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>Contacto nuevo - completar datos</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}><input style={{...inp,fontSize:11}} placeholder='Mail' value={ctData.mail} onChange={e=>setCtData(p=>({...p,mail:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Telefono' value={ctData.telefono} onChange={e=>setCtData(p=>({...p,telefono:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='CUIT' value={ctData.cuit} onChange={e=>setCtData(p=>({...p,cuit:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Cargo' value={ctData.cargo} onChange={e=>setCtData(p=>({...p,cargo:e.target.value}))}/></div></div>}
             </div>
           </div>
-          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo"/></label>
+          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:isRepresupuestar?4:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo" readOnly={isRepresupuestar}/></label>
+          {isRepresupuestar&&<label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={{...lbl,color:'#9635AB'}}>Motivo del represupuesto *</span><input style={{...inp,borderColor:form.motivo?'#333':'#9635AB'}} value={form.motivo||''} onChange={e=>setF('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente..." autoFocus/></label>}
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
             {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}
@@ -1426,8 +1494,8 @@ function NuevoPresupuesto({onClose,onGuardado,data}){
           {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} V2</div>}
           <div style={{flex:1}}/>
           {ok?<div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}><div style={{background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado</div><button style={{width:'100%',padding:10,borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+nextNum,'_blank')}>Generar PDF del presupuesto →</button><button style={{width:'100%',padding:8,borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cerrar</button></div>
-            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving?0.7:1}} onClick={guardar} disabled={saving}>
-              {saving?'Guardando...':'Cargar presupuesto'}
+            :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:isRepresupuestar?'#9635AB':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving||(isRepresupuestar&&!form.motivo?.trim())?0.6:1}} onClick={guardar} disabled={saving||(isRepresupuestar&&!form.motivo?.trim())}>
+              {saving?'Guardando...':(isRepresupuestar?'Crear represupuesto':'Cargar presupuesto')}
             </button>
           }
         </div>
