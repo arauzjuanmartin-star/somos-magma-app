@@ -133,9 +133,42 @@ function Mod({id,data,mail,onRefresh}){
 }
 
 // ---- DASHBOARD HOME SOCIOS ----
-function CuentaCard({c,mail,onSaved}){
+const RESERVA_TIPOS=['IVA','FIMA','Sueldos','Ganancias','IIBB','Otros']
+
+function NuevaReservaForm({cuenta,mail,onDone,onCancel}){
+  const [form,setForm]=useState({concepto:'',monto:'',tipo:'IVA',notas:''})
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const guardar=async()=>{
+    if(!form.concepto||!form.monto){setErr('Faltan concepto o monto');return}
+    setSaving(true);setErr('')
+    try{
+      const r=await fetch('/api/reserva-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({cuenta,concepto:form.concepto,monto:parseFloat(form.monto)||0,tipo:form.tipo,notas:form.notas})})
+      const j=await r.json()
+      if(j.ok){onDone()}else setErr(j.error)
+    }catch(e){setErr(e.message)}
+    setSaving(false)
+  }
+  const i={width:'100%',padding:'4px 6px',borderRadius:3,border:'0.5px solid #333',background:'#000',color:'#F0F0F0',fontSize:10,outline:'none',marginBottom:3}
+  return <div style={{background:'#050505',border:'0.5px solid #BA7517',borderRadius:6,padding:8,marginTop:6}}>
+    <select value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})} style={i}>{RESERVA_TIPOS.map(t=><option key={t}>{t}</option>)}</select>
+    <input value={form.concepto} onChange={e=>setForm({...form,concepto:e.target.value})} placeholder='Concepto (ej: IVA abril)' style={i}/>
+    <input type='number' value={form.monto} onChange={e=>setForm({...form,monto:e.target.value})} placeholder='Monto $' style={i}/>
+    <input value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} placeholder='Notas (opcional)' style={i}/>
+    {err&&<div style={{fontSize:9,color:'#E24B4A',marginBottom:3}}>{err}</div>}
+    <div style={{display:'flex',gap:3}}>
+      <button onClick={guardar} disabled={saving} style={{flex:1,fontSize:9,padding:'3px 6px',borderRadius:3,border:'none',background:'#BA7517',color:'#fff',cursor:'pointer'}}>{saving?'...':'Reservar'}</button>
+      <button onClick={onCancel} style={{flex:1,fontSize:9,padding:'3px 6px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>Cancelar</button>
+    </div>
+  </div>
+}
+
+function CuentaCard({c,reservas,mail,onSaved}){
   const [editing,setEditing]=useState(false),[val,setVal]=useState(String(parseMonto(c['Saldo actual']))),[nota,setNota]=useState(c['Notas']||''),[saving,setSaving]=useState(false)
+  const [expanded,setExpanded]=useState(false),[creatingReserva,setCreatingReserva]=useState(false)
   const s=parseMonto(c['Saldo actual'])
+  const reservasActivas=(reservas||[]).filter(r=>String(r['Activa']||'').toUpperCase()==='SÍ'||String(r['Activa']||'').toUpperCase()==='SI'||r['Activa']===true)
+  const totalReservado=reservasActivas.reduce((acc,r)=>acc+parseMonto(r['Monto']),0)
+  const disponible=s-totalReservado
   const guardar=async()=>{
     setSaving(true)
     try{
@@ -146,8 +179,20 @@ function CuentaCard({c,mail,onSaved}){
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
   }
+  const liberar=async(res)=>{
+    if(!confirm(`Liberar reserva "${res['Concepto']}" de ${fmt(parseMonto(res['Monto']))}?`))return
+    try{
+      const r=await fetch('/api/reserva-liberar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({cuenta:res['Cuenta'],concepto:res['Concepto'],fecha:res['Fecha']})})
+      const j=await r.json()
+      if(j.ok&&onSaved)onSaved()
+      else alert('Error: '+(j.error||'desconocido'))
+    }catch(e){alert('Error: '+e.message)}
+  }
   return <div style={{background:'#0A0A0A',border:'0.5px solid #1D9E7520',borderRadius:8,padding:'10px 12px',position:'relative'}}>
-    <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c['Nombre']}</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
+      <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'0.05em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{c['Nombre']}</div>
+      {reservasActivas.length>0&&<span style={{fontSize:9,color:'#BA7517',marginLeft:4}} title={`${reservasActivas.length} reservas activas`}>●{reservasActivas.length}</span>}
+    </div>
     {editing?<div>
       <input type='number' value={val} onChange={e=>setVal(e.target.value)} autoFocus style={{width:'100%',padding:'4px 6px',borderRadius:4,border:'0.5px solid #1D9E75',background:'#000',color:'#1D9E75',fontFamily:'monospace',fontSize:14,outline:'none',marginBottom:4}}/>
       <input value={nota} onChange={e=>setNota(e.target.value)} placeholder='Nota (opcional)' style={{width:'100%',padding:'3px 6px',borderRadius:4,border:'0.5px solid #333',background:'#000',color:'#aaa',fontSize:10,outline:'none',marginBottom:4}}/>
@@ -156,15 +201,33 @@ function CuentaCard({c,mail,onSaved}){
         <button onClick={()=>{setEditing(false);setVal(String(s));setNota(c['Notas']||'')}} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>✕</button>
       </div>
     </div>:<>
-      <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:s>0?'#1D9E75':'#555',cursor:'pointer'}} onClick={()=>setEditing(true)} title='Click para editar'>{fmtM(s)}</div>
+      <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:s>0?'#1D9E75':'#555',cursor:'pointer'}} onClick={()=>setEditing(true)} title='Click para editar saldo bruto'>{fmtM(s)}</div>
+      {totalReservado>0&&<>
+        <div style={{fontSize:9,color:'#BA7517',marginTop:2}}>-{fmt(totalReservado)} reservado</div>
+        <div style={{fontSize:11,fontFamily:'monospace',color:disponible>=0?'#1D9E75':'#E24B4A',fontWeight:500,marginTop:1}}>= {fmtM(disponible)} disp.</div>
+      </>}
       <div style={{fontSize:9,color:'#555',marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c['Entidad fiscal']||''}</div>
-      {c['Última actualización']&&<div style={{fontSize:9,color:'#444',marginTop:2}}>Act: {c['Última actualización']}</div>}
+      {c['Última actualización']&&<div style={{fontSize:9,color:'#444',marginTop:1}}>Act: {c['Última actualización']}</div>}
+      <div style={{display:'flex',gap:4,marginTop:6}}>
+        <button onClick={()=>setExpanded(!expanded)} style={{flex:1,fontSize:9,padding:'3px 4px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>{expanded?'−':'+'} Reservas</button>
+      </div>
+      {expanded&&<div style={{marginTop:6}}>
+        {reservasActivas.length===0&&<div style={{fontSize:9,color:'#555',textAlign:'center',padding:'4px 0'}}>Sin reservas activas</div>}
+        {reservasActivas.map((r,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 4px',background:'#000',borderRadius:3,marginBottom:2,fontSize:9}}>
+          <span style={{color:'#BA7517',width:30}}>{r['Tipo']||''}</span>
+          <span style={{flex:1,color:'#ccc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r['Concepto']||''}</span>
+          <span style={{fontFamily:'monospace',color:'#BA7517'}}>{fmt(parseMonto(r['Monto']))}</span>
+          <button onClick={()=>liberar(r)} title='Marcar usada (liberar)' style={{width:14,height:14,padding:0,border:'none',background:'transparent',color:'#E24B4A',cursor:'pointer',fontSize:10,lineHeight:1}}>×</button>
+        </div>)}
+        {creatingReserva?<NuevaReservaForm cuenta={c['Nombre']} mail={mail} onDone={()=>{setCreatingReserva(false);if(onSaved)onSaved()}} onCancel={()=>setCreatingReserva(false)}/>
+        :<button onClick={()=>setCreatingReserva(true)} style={{width:'100%',fontSize:9,padding:'3px 4px',borderRadius:3,border:'0.5px dashed #BA7517',background:'transparent',color:'#BA7517',cursor:'pointer',marginTop:2}}>+ Nueva reserva</button>}
+      </div>}
     </>}
   </div>
 }
 
 function Dashboard({data,mail,onRefresh}){
-  const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[]
+  const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[], reservas=data.reservas||[]
 
   const hoy=new Date(), mesActual=hoy.getMonth()+1, anioActual=hoy.getFullYear()
   const mesAnterior=mesActual===1?12:mesActual-1, anioAnterior=mesActual===1?anioActual-1:anioActual
@@ -175,9 +238,13 @@ function Dashboard({data,mail,onRefresh}){
   const esDelMes=(fecha,m,a)=>{const x=mesDe(fecha);return x&&x.m===m&&x.a===a}
   const diasEntre=d=>{const f=parseD(d);return f?Math.floor((hoy-f)/864e5):0}
 
-  // === 1. SALDOS POR CUENTA ===
+  // === 1. SALDOS POR CUENTA + RESERVAS ===
   const cuentasActivas=cuentas.filter(c=>String(c['Activa']||'').toUpperCase()==='SÍ'||String(c['Activa']||'').toUpperCase()==='SI'||c['Activa']===true||c['Activa']==='TRUE')
   const totalCaja=cuentasActivas.reduce((s,c)=>s+parseMonto(c['Saldo actual']),0)
+  const reservasActivasTodas=(reservas||[]).filter(r=>String(r['Activa']||'').toUpperCase()==='SÍ'||String(r['Activa']||'').toUpperCase()==='SI'||r['Activa']===true)
+  const totalReservadoGlobal=reservasActivasTodas.reduce((s,r)=>s+parseMonto(r['Monto']),0)
+  const totalDisponible=totalCaja-totalReservadoGlobal
+  const reservasPorCuenta=reservasActivasTodas.reduce((acc,r)=>{const k=r['Cuenta'];if(!acc[k])acc[k]=[];acc[k].push(r);return acc},{})
 
   // === 2. PROYECTOS ACTIVOS DEL MES ===
   const proyMes=proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
@@ -233,18 +300,28 @@ function Dashboard({data,mail,onRefresh}){
 
     {/* 1. SALDOS EN CUENTA */}
     <div style={{...S.card,marginBottom:12,padding:'14px 18px',background:'#0F1A0F',borderColor:'#1D9E7530'}}>
-      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:12}}>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:12,gap:16,flexWrap:'wrap'}}>
         <div>
-          <div style={{fontSize:11,color:'#1D9E7599',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Caja total</div>
-          <div style={{fontSize:32,fontWeight:600,fontFamily:'monospace',color:'#1D9E75'}}>{fmt(totalCaja)}</div>
+          <div style={{fontSize:11,color:'#1D9E7599',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Caja bruta</div>
+          <div style={{fontSize:28,fontWeight:600,fontFamily:'monospace',color:'#1D9E75'}}>{fmt(totalCaja)}</div>
         </div>
-        <div style={{fontSize:10,color:'#555'}}>Actualizado desde CUENTAS</div>
+        <div>
+          <div style={{fontSize:11,color:'#BA751799',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Reservado</div>
+          <div style={{fontSize:22,fontWeight:500,fontFamily:'monospace',color:'#BA7517'}}>-{fmt(totalReservadoGlobal)}</div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:11,color:'#F0F0F099',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Disponible real</div>
+          <div style={{fontSize:32,fontWeight:700,fontFamily:'monospace',color:totalDisponible>=0?'#F0F0F0':'#E24B4A'}}>{fmt(totalDisponible)}</div>
+        </div>
       </div>
       {cuentasActivas.length===0?<div style={{fontSize:12,color:'#BA7517',padding:'8px 0'}}>Sin cuentas cargadas. Revisá la hoja CUENTAS del Sheet.</div>:
       <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(cuentasActivas.length,5)},minmax(0,1fr))`,gap:8}}>
-        {cuentasActivas.map((c,i)=><CuentaCard key={i} c={c} mail={mail} onSaved={onRefresh}/>)}
+        {cuentasActivas.map((c,i)=><CuentaCard key={i} c={c} reservas={reservasPorCuenta[c['Nombre']]||[]} mail={mail} onSaved={onRefresh}/>)}
       </div>}
-      <div style={{fontSize:10,color:'#555',marginTop:8,textAlign:'right'}}>Click en el saldo para editar</div>
+      <div style={{fontSize:10,color:'#555',marginTop:8,display:'flex',justifyContent:'space-between'}}>
+        <span>Click en monto = editar saldo · Click en "+ Reservas" = gestionar</span>
+        <span>{reservasActivasTodas.length} reservas activas</span>
+      </div>
     </div>
 
     {/* 2. PROYECTOS + 3. RENTABILIDAD (side by side) */}

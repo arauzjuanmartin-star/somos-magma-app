@@ -19,6 +19,10 @@ const TABS = [
     name: 'CUENTAS',
     headers: ['Nombre','Entidad fiscal','Banco','Tipo','Activa','Saldo actual','Última actualización','Notas'],
   },
+  {
+    name: 'RESERVAS',
+    headers: ['Cuenta','Concepto','Monto','Fecha','Tipo','Origen','Activa','Fecha liberación','Notas'],
+  },
 ]
 
 const SEED_CUENTAS = [
