@@ -1688,15 +1688,19 @@ function Historico({data}){
   }
   const años=['2023','2024','2025','2026']
   const filas=fuentes[añoSel]||[]
+  const PAGOS_KEYS=['Pago 1','Pago 2','Pago 3','Pago 4','Pago 5','Pago 6']
   const totalPresupuestado=filas.reduce((s,r)=>s+parseMonto(r['Presupuesto']),0)
   const totalFacturado=filas.reduce((s,r)=>s+parseMonto(r['Total']),0)
-  const totalMagma=filas.reduce((s,r)=>s+parseMonto(r['Magma']),0)
-  const totalStaff=filas.reduce((s,r)=>s+['Pago 1','Pago 2','Pago 3','Pago 4'].reduce((a,k)=>a+parseMonto(r[k]),0)+parseMonto(r['Viaticos']),0)
-  const totalIVA=filas.reduce((s,r)=>s+parseMonto(r['IVA']),0)
+  // Ganancia Magma 2024/2025 = Viáticos + Magma + Impuestos + Extra M (según modelo de Juan)
+  const totalViaticos=filas.reduce((s,r)=>s+parseMonto(r['Viaticos']),0)
+  const totalMagmaCol=filas.reduce((s,r)=>s+parseMonto(r['Magma']),0)
   const totalImpuestos=filas.reduce((s,r)=>s+parseMonto(r['Impuestos']),0)
+  const totalExtraM=filas.reduce((s,r)=>s+parseMonto(r['Extra M']),0)
+  const gananciaMagma=totalViaticos+totalMagmaCol+totalImpuestos+totalExtraM
+  const totalStaff=filas.reduce((s,r)=>s+PAGOS_KEYS.reduce((a,k)=>a+parseMonto(r[k]),0),0)
+  const totalIVA=filas.reduce((s,r)=>s+parseMonto(r['IVA']),0)
   const cantidad=filas.length
-  const ganancia=totalMagma
-  const margenPct=totalPresupuestado>0?Math.round(ganancia/totalPresupuestado*100):0
+  const margenPct=totalPresupuestado>0?Math.round(gananciaMagma/totalPresupuestado*100):0
 
   // Top clientes año
   const clientesMap={}
@@ -1720,13 +1724,15 @@ function Historico({data}){
   })
   const topAgencias=Object.values(agenciasMap).sort((a,b)=>b.total-a.total).slice(0,10)
 
-  // Top staff
+  // Top staff - escanea 6 slots y excluye valores que son gastos internos (viaticos, rental, magma, etc)
   const staffMap={}
+  const NO_STAFF=['magma','somos magma','viaticos','viáticos','rental','catering','produ','producción','produccion','makeup','make up','otros','efectivo']
   filas.forEach(r=>{
-    for(let i=1;i<=4;i++){
+    for(let i=1;i<=6;i++){
       const nombre=String(r['Staff '+i]||'').trim()
       const pago=parseMonto(r['Pago '+i])
-      if(!nombre||pago<=0||nombre.toLowerCase()==='magma'||nombre.toLowerCase()==='somos magma')continue
+      if(!nombre||pago<=0)continue
+      if(NO_STAFF.some(n=>nombre.toLowerCase().includes(n)))continue
       if(!staffMap[nombre])staffMap[nombre]={nombre,total:0,cant:0}
       staffMap[nombre].total+=pago
       staffMap[nombre].cant++
@@ -1744,15 +1750,15 @@ function Historico({data}){
     porMes[m].cantidad++
     porMes[m].presupuestado+=parseMonto(r['Presupuesto'])
     porMes[m].facturado+=parseMonto(r['Total'])
-    porMes[m].magma+=parseMonto(r['Magma'])
-    porMes[m].staff+=['Pago 1','Pago 2','Pago 3','Pago 4'].reduce((a,k)=>a+parseMonto(r[k]),0)+parseMonto(r['Viaticos'])
+    porMes[m].magma+=parseMonto(r['Viaticos'])+parseMonto(r['Magma'])+parseMonto(r['Impuestos'])+parseMonto(r['Extra M'])
+    porMes[m].staff+=PAGOS_KEYS.reduce((a,k)=>a+parseMonto(r[k]),0)
   })
 
-  // Comparativa años
+  // Comparativa años - ganancia = Viaticos+Magma+Impuestos+Extra M
   const yrStats=años.map(a=>{
     const rows=fuentes[a]||[]
     const pres=rows.reduce((s,r)=>s+parseMonto(r['Presupuesto']),0)
-    const magma=rows.reduce((s,r)=>s+parseMonto(r['Magma']),0)
+    const magma=rows.reduce((s,r)=>s+parseMonto(r['Viaticos'])+parseMonto(r['Magma'])+parseMonto(r['Impuestos'])+parseMonto(r['Extra M']),0)
     return {año:a,cantidad:rows.length,presupuestado:pres,magma,margen:pres>0?magma/pres:0}
   })
 
@@ -1768,7 +1774,7 @@ function Historico({data}){
     <div style={S.k4}>
       <K lbl='Proyectos' val={cantidad} sub={'año '+añoSel} c='#1543F8'/>
       <K lbl='Facturación' val={fmtM(totalPresupuestado)} sub={fmt(totalPresupuestado)+' sin IVA'} c='#1D9E75'/>
-      <K lbl='Ganancia Magma' val={fmtM(ganancia)} sub={margenPct+'% margen'} c='#1D9E75'/>
+      <K lbl='Ganancia Magma' val={fmtM(gananciaMagma)} sub={margenPct+'% margen · V '+fmtM(totalViaticos)+' · M '+fmtM(totalMagmaCol)+' · X '+fmtM(totalExtraM)} c='#1D9E75'/>
       <K lbl='A Staff' val={'-'+fmtM(totalStaff)} sub={Object.keys(staffMap).length+' personas'} c='#BA7517'/>
     </div>
 

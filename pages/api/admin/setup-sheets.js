@@ -25,15 +25,15 @@ const TABS = [
   },
   {
     name: 'HISTORICO_2023',
-    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Tipo FC','Nro FC','Entidad','Notas'],
+    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','Extra M','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Staff 5','Pago 5','Staff 6','Pago 6','Tipo FC','Nro FC','Entidad','Notas'],
   },
   {
     name: 'HISTORICO_2024',
-    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Tipo FC','Nro FC','Entidad','Notas'],
+    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','Extra M','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Staff 5','Pago 5','Staff 6','Pago 6','Tipo FC','Nro FC','Entidad','Notas'],
   },
   {
     name: 'HISTORICO_2025',
-    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Tipo FC','Nro FC','Entidad','Notas'],
+    headers: ['Año','Mes','Fecha','Nro','Cliente','Agencia','Proyecto','Presupuesto','Cobrado','Viaticos','Magma','Impuestos','Extra M','IVA','Total','Staff 1','Pago 1','Staff 2','Pago 2','Staff 3','Pago 3','Staff 4','Pago 4','Staff 5','Pago 5','Staff 6','Pago 6','Tipo FC','Nro FC','Entidad','Notas'],
   },
 ]
 
