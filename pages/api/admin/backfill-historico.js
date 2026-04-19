@@ -110,10 +110,13 @@ function parseRow2023(row, año) {
   const pago1 = num(row[10]);  const staff1 = text(row[11])
   const pago2 = num(row[12]);  const staff2 = text(row[13])
   const pago3 = num(row[14]);  const staff3 = text(row[15])
-  const magma = num(row[16])
+  const gananciaBruta = num(row[16])
   const inversion = text(row[17])
   const sofi = num(row[18])
   const juan = num(row[19])
+  // En 2023 la "Ganancia" del sheet incluía lo que Sofi y Juan cobraban por su trabajo
+  // → los tratamos como staff y la ganancia real de Magma es la diferencia
+  const magma = gananciaBruta - sofi - juan
   const nroFC = text(row[22])
   const quienFactura = text(row[23]).toLowerCase()
   const fechaPago = text(row[24])
@@ -127,8 +130,6 @@ function parseRow2023(row, año) {
   const notasParts = []
   if (seña) notasParts.push(`Seña $${seña}`)
   if (inversion) notasParts.push(`Inversión ${inversion}`)
-  if (sofi) notasParts.push(`Sofi $${sofi}`)
-  if (juan) notasParts.push(`Juan $${juan}`)
   const notas = notasParts.join(' · ')
 
   // Staff filter: si nombre es "-" o vacío, limpiar ambos (es placeholder)
@@ -144,8 +145,10 @@ function parseRow2023(row, año) {
     año, mesNum||'', fecha, '', cliente, '', proyecto,
     presupuesto, cobrado,
     viaticos, magma, 0, 0, iva, presupuesto + iva,
-    s1, p1, s2, p2, s3, p3, '', '',
-    '', '', '', '',
+    s1, p1, s2, p2, s3, p3,
+    sofi ? 'Sofia' : '', sofi,
+    juan ? 'Juan' : '', juan,
+    '', '',
     '', nroFC, entidad, notas,
   ]
 }
