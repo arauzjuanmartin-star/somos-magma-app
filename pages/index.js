@@ -1361,8 +1361,20 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   }
   const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
   const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
-  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}} onClick={onClose}>
-    <div style={{width:860,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'flex-end'}}>
+    <div style={{width:860,height:'100vh',background:'#0D0D0D',borderLeft:'0.5px solid #2A2A2A',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
+    {ok&&<div style={{position:'absolute',inset:0,background:'rgba(10,20,10,0.96)',zIndex:10,display:'flex',alignItems:'center',justifyContent:'center',padding:40}}>
+      <div style={{background:'#0F1A0F',border:'1px solid #1D9E75',borderRadius:16,padding:'32px 40px',maxWidth:480,width:'100%',textAlign:'center'}}>
+        <div style={{fontSize:48,marginBottom:12}}>✓</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#1D9E75',marginBottom:6}}>{isRepresupuestar?'Represupuesto creado':'Presupuesto cargado'}</div>
+        <div style={{fontSize:14,color:'#888',marginBottom:8}}>N° <span style={{fontFamily:'monospace',color:'#F0F0F0'}}>#{nextNum}</span></div>
+        <div style={{fontSize:12,color:'#555',marginBottom:24}}>Ya está guardado en PRESUPUESTOS{isRepresupuestar?' y el original quedó marcado como REPRESUPUESTADO':''}.</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <button style={{width:'100%',padding:'12px 20px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+encodeURIComponent(nextNum),'_blank')}>📄 Generar PDF del presupuesto</button>
+          <button style={{width:'100%',padding:'10px 20px',borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:13,cursor:'pointer'}} onClick={onClose}>Cerrar y volver al listado</button>
+        </div>
+      </div>
+    </div>}
       <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
         <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{nextNum}</span>
         {version&&<span style={{background:'#9635AB20',color:'#9635AB',borderRadius:4,padding:'2px 8px',fontSize:11}}>{version}</span>}
