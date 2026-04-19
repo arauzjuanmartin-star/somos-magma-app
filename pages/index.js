@@ -417,10 +417,27 @@ function SetupBtn({mail}){
 }
 
 function RepresupuestarModal({p, mail, onClose, onDone}){
-  // Los headers del Sheet para pedidos 10-12 tienen formato raro (Pedido10 ), probamos varias variantes
-  const getPed = (i, type) => p[type+' '+i] || p[type+i+' '] || p[type+i] || (i===1?p[type]:'') || ''
+  // Busca todas las keys de p que matcheen "Pedido X" / "Precio X" en cualquier formato (espacios, trailing space, etc)
+  const findKeysByPrefix = (prefix) => {
+    const out = {}
+    Object.keys(p).forEach(k => {
+      const trimmed = k.trim().toLowerCase()
+      if (!trimmed.startsWith(prefix.toLowerCase())) return
+      if (prefix === 'Precio' && trimmed.includes('final')) return
+      const m = k.match(/(\d+)/)
+      const idx = m ? parseInt(m[1]) : 1
+      if (idx >= 1 && idx <= 12 && !out[idx]) out[idx] = k
+    })
+    return out
+  }
+  const pedKeys = findKeysByPrefix('Pedido')
+  const prcKeys = findKeysByPrefix('Precio')
   const pedidosIniciales = []
-  for (let i=1;i<=12;i++){const svc=getPed(i,'Pedido');const precio=parseMonto(getPed(i,'Precio'));if(svc||precio)pedidosIniciales.push({index:i,svc,precio})}
+  for (let i=1;i<=12;i++){
+    const svc = pedKeys[i] ? (p[pedKeys[i]]||'') : ''
+    const precio = prcKeys[i] ? parseMonto(p[prcKeys[i]]) : 0
+    if (svc || precio) pedidosIniciales.push({index:i, svc, precio})
+  }
   const subtotalOriginal = pedidosIniciales.reduce((s,x)=>s+(x.precio||0),0)
   const precioFinalOriginal = parseMonto(p['Precio Final'])
   const deltaOriginal = precioFinalOriginal - subtotalOriginal // fee + impuestos + ajuste del original
@@ -523,12 +540,15 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
             <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>+ fee+impuestos+ajuste (escalados)</span><span style={{fontFamily:'monospace',color:deltaNuevo>=0?'#1D9E75':'#E24B4A'}}>{deltaNuevo>=0?'+':''}{fmt(deltaNuevo)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,padding:'6px 0 3px',borderTop:'0.5px solid #2A2A2A',fontWeight:500}}>
               <span>Precio Final nuevo</span>
-              <input type='number' value={precioFinalManual} onChange={e=>setPrecioFinalManual(e.target.value)} placeholder={String(Math.round(precioFinalCalc))} style={{width:110,padding:'4px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'#000',color:'#1543F8',fontFamily:'monospace',fontSize:13,outline:'none',textAlign:'right'}}/>
+              <input type='number' value={precioFinalManual} onChange={e=>setPrecioFinalManual(e.target.value)} placeholder={String(Math.round(precioFinalCalc))} style={{width:130,padding:'4px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'#000',color:'#1543F8',fontFamily:'monospace',fontSize:13,outline:'none',textAlign:'right'}}/>
             </div>
-            {precioFinalManual!==''&&<button onClick={()=>setPrecioFinalManual('')} style={{fontSize:9,color:'#555',background:'transparent',border:'none',cursor:'pointer',padding:0,marginTop:3}}>↺ volver a auto</button>}
+            <div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap'}}>
+              {[[-15,'-15%'],[-10,'-10%'],[-5,'-5%'],[5,'+5%'],[10,'+10%'],[15,'+15%'],[20,'+20%']].map(([pct,lbl])=><button key={pct} onClick={()=>{const base=precioFinalManual!==''?parseFloat(precioFinalManual)||0:precioFinalCalc;setPrecioFinalManual(String(Math.round(base*(1+pct/100))))}} style={{flex:'1 1 auto',fontSize:9,padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:pct<0?'#E24B4A':'#1D9E75',cursor:'pointer'}}>{lbl}</button>)}
+            </div>
+            {precioFinalManual!==''&&<button onClick={()=>setPrecioFinalManual('')} style={{fontSize:9,color:'#555',background:'transparent',border:'none',cursor:'pointer',padding:0,marginTop:6}}>↺ volver a auto</button>}
           </div>
         </div>
-        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El fee + impuestos escala proporcionalmente con el subtotal (manteniendo el mismo % del original). Si cambian los términos con el cliente y necesitás otro Precio Final, escribilo a mano.</div>
+        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El fee + impuestos escala proporcionalmente con el subtotal (manteniendo el mismo % del original). Los botones +%/-% aplican descuento o margen sobre el precio actual. Si querés un valor exacto, escribilo a mano.</div>
       </div>
 
       {err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:10}}>{err}</div>}
