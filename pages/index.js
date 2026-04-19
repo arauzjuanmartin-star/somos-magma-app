@@ -417,12 +417,19 @@ function SetupBtn({mail}){
 }
 
 function RepresupuestarModal({p, mail, onClose, onDone}){
-  // sheets.js ya renumera Pedido/Precio bare-repeated → podemos leer directo 'Pedido N' / 'Precio N'
-  // Fallback defensivo por si algún presupuesto viejo tiene formato raro
+  // Los headers del Sheet son inconsistentes: 'Pedido 1 ' (con trailing space), 'Pedido3 ' (sin espacio antes del número), etc.
+  // Escaneamos TODAS las keys del objeto que matchean /^\s*pedido\s*\d+\s*$/i
+  const findKeyForIndex = (prefix, idx) => {
+    const keys = Object.keys(p)
+    const regex = new RegExp('^\\s*'+prefix+'\\s*'+idx+'\\s*$','i')
+    return keys.find(k => regex.test(k)) || null
+  }
   const pedidosIniciales = []
   for (let i=1;i<=12;i++){
-    const svc = p['Pedido '+i] || p['Pedido'+i] || p['Pedido'+i+' '] || ''
-    const precio = parseMonto(p['Precio '+i] || p['Precio'+i] || p['Precio'+i+' '])
+    const pedKey = findKeyForIndex('pedido', i)
+    const prcKey = findKeyForIndex('precio', i)
+    const svc = pedKey ? (p[pedKey]||'') : ''
+    const precio = prcKey ? parseMonto(p[prcKey]) : 0
     if (svc || precio) pedidosIniciales.push({index:i, svc, precio})
   }
   const subtotalOriginal = pedidosIniciales.reduce((s,x)=>s+(x.precio||0),0)
