@@ -417,33 +417,12 @@ function SetupBtn({mail}){
 }
 
 function RepresupuestarModal({p, mail, onClose, onDone}){
-  // DEBUG: ver qué keys tiene el objeto presupuesto (solo primera vez)
-  if (typeof window !== 'undefined' && !window.__magmaDebug) {
-    window.__magmaDebug = true
-    console.log('🔍 Keys del presupuesto:', Object.keys(p))
-    console.log('🔍 Valores con "Pedido"/"Servicio"/"Concepto" en la key:', Object.keys(p).filter(k=>/pedido|servicio|concepto|item|descrip/i.test(k)).map(k=>({key:k,val:p[k]})))
-    console.log('🔍 Valores no vacíos:', Object.entries(p).filter(([k,v])=>v!==''&&v!=null))
-  }
-  // Busca todas las keys de p que matcheen "Pedido X" / "Precio X" en cualquier formato (espacios, trailing, case, plus alternativas "Servicio", "Item", "Concepto")
-  const findKeysByPrefix = (prefixes, excludePattern) => {
-    const out = {}
-    Object.keys(p).forEach(k => {
-      const trimmed = k.trim().toLowerCase()
-      const matchesAny = prefixes.some(pr => trimmed.startsWith(pr.toLowerCase()))
-      if (!matchesAny) return
-      if (excludePattern && excludePattern.test(trimmed)) return
-      const m = k.match(/(\d+)/)
-      const idx = m ? parseInt(m[1]) : 1
-      if (idx >= 1 && idx <= 12 && !out[idx]) out[idx] = k
-    })
-    return out
-  }
-  const pedKeys = findKeysByPrefix(['Pedido','Servicio','Item','Concepto','Descripcion','Descripción'])
-  const prcKeys = findKeysByPrefix(['Precio','Monto'], /final/)
+  // sheets.js ya renumera Pedido/Precio bare-repeated → podemos leer directo 'Pedido N' / 'Precio N'
+  // Fallback defensivo por si algún presupuesto viejo tiene formato raro
   const pedidosIniciales = []
   for (let i=1;i<=12;i++){
-    const svc = pedKeys[i] ? (p[pedKeys[i]]||'') : ''
-    const precio = prcKeys[i] ? parseMonto(p[prcKeys[i]]) : 0
+    const svc = p['Pedido '+i] || p['Pedido'+i] || p['Pedido'+i+' '] || ''
+    const precio = parseMonto(p['Precio '+i] || p['Precio'+i] || p['Precio'+i+' '])
     if (svc || precio) pedidosIniciales.push({index:i, svc, precio})
   }
   const subtotalOriginal = pedidosIniciales.reduce((s,x)=>s+(x.precio||0),0)
