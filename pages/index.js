@@ -122,7 +122,7 @@ export default function App() {
 
 function Mod({id,data,mail,onRefresh}){
   switch(id){
-    case 'dashboard': return <Dashboard data={data}/>
+    case 'dashboard': return <Dashboard data={data} mail={mail} onRefresh={onRefresh}/>
     case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'proyectos': return <Proyectos data={data} mail={mail}/>
     case 'facturacion': return <Facturacion data={data}/>
@@ -132,31 +132,173 @@ function Mod({id,data,mail,onRefresh}){
   }
 }
 
-// ---- DASHBOARD ----
-function Dashboard({data}){
-  const pr=data.presupuestos||[], fc=data.facturacion||[]
-  const ap=pr.filter(isAprobado)
-  const pend=pr.filter(p=>!isAprobado(p))
-  const pc=fc.filter(f=>!isCobrada(f))
-  const co=fc.filter(isCobrada)
-  const totalAp=ap.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
-  const totalPend=pend.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
-  const totalPc=pc.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
-  const totalCo=co.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+// ---- DASHBOARD HOME SOCIOS ----
+function CuentaCard({c,mail,onSaved}){
+  const [editing,setEditing]=useState(false),[val,setVal]=useState(String(parseMonto(c['Saldo actual']))),[nota,setNota]=useState(c['Notas']||''),[saving,setSaving]=useState(false)
+  const s=parseMonto(c['Saldo actual'])
+  const guardar=async()=>{
+    setSaving(true)
+    try{
+      const r=await fetch('/api/cuenta-saldo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:c['Nombre'],saldo:parseFloat(val)||0,notas:nota})})
+      const j=await r.json()
+      if(j.ok){setEditing(false);if(onSaved)onSaved()}
+      else alert('Error: '+j.error)
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(false)
+  }
+  return <div style={{background:'#0A0A0A',border:'0.5px solid #1D9E7520',borderRadius:8,padding:'10px 12px',position:'relative'}}>
+    <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c['Nombre']}</div>
+    {editing?<div>
+      <input type='number' value={val} onChange={e=>setVal(e.target.value)} autoFocus style={{width:'100%',padding:'4px 6px',borderRadius:4,border:'0.5px solid #1D9E75',background:'#000',color:'#1D9E75',fontFamily:'monospace',fontSize:14,outline:'none',marginBottom:4}}/>
+      <input value={nota} onChange={e=>setNota(e.target.value)} placeholder='Nota (opcional)' style={{width:'100%',padding:'3px 6px',borderRadius:4,border:'0.5px solid #333',background:'#000',color:'#aaa',fontSize:10,outline:'none',marginBottom:4}}/>
+      <div style={{display:'flex',gap:4}}>
+        <button onClick={guardar} disabled={saving} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'none',background:'#1D9E75',color:'#fff',cursor:'pointer'}}>{saving?'...':'✓'}</button>
+        <button onClick={()=>{setEditing(false);setVal(String(s));setNota(c['Notas']||'')}} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>✕</button>
+      </div>
+    </div>:<>
+      <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:s>0?'#1D9E75':'#555',cursor:'pointer'}} onClick={()=>setEditing(true)} title='Click para editar'>{fmtM(s)}</div>
+      <div style={{fontSize:9,color:'#555',marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c['Entidad fiscal']||''}</div>
+      {c['Última actualización']&&<div style={{fontSize:9,color:'#444',marginTop:2}}>Act: {c['Última actualización']}</div>}
+    </>}
+  </div>
+}
+
+function Dashboard({data,mail,onRefresh}){
+  const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[]
+
+  const hoy=new Date(), mesActual=hoy.getMonth()+1, anioActual=hoy.getFullYear()
+  const mesAnterior=mesActual===1?12:mesActual-1, anioAnterior=mesActual===1?anioActual-1:anioActual
+
+  // Parsear fecha DD/MM/YYYY
+  const parseD=s=>{if(!s)return null;const p=String(s).split('/');if(p.length===3)return new Date(+p[2],+p[1]-1,+p[0]);return null}
+  const mesDe=d=>{const f=parseD(d);return f?{m:f.getMonth()+1,a:f.getFullYear()}:null}
+  const esDelMes=(fecha,m,a)=>{const x=mesDe(fecha);return x&&x.m===m&&x.a===a}
+  const diasEntre=d=>{const f=parseD(d);return f?Math.floor((hoy-f)/864e5):0}
+
+  // === 1. SALDOS POR CUENTA ===
+  const cuentasActivas=cuentas.filter(c=>String(c['Activa']||'').toUpperCase()==='SÍ'||String(c['Activa']||'').toUpperCase()==='SI'||c['Activa']===true||c['Activa']==='TRUE')
+  const totalCaja=cuentasActivas.reduce((s,c)=>s+parseMonto(c['Saldo actual']),0)
+
+  // === 2. PROYECTOS ACTIVOS DEL MES ===
+  const proyMes=proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
+  const proyMesTop5=[...proyMes].sort((a,b)=>(parseMonto(b['Total '])||parseMonto(b['Total']))-(parseMonto(a['Total '])||parseMonto(a['Total']))).slice(0,5)
+  const proyMesAnt=proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesAnterior,anioAnterior)).length
+
+  // === 3. RENTABILIDAD DEL MES ===
+  const facMes=fc.filter(f=>esDelMes(f['Fecha emision'],mesActual,anioActual))
+  const facMesCobradas=facMes.filter(isCobrada)
+  const ingresosMes=facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  const facMesTotales=facMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  const egresosMesPagosStaff=pagosStaff.filter(p=>{const m=String(p['Mes']||'').toLowerCase();return m.includes(String(mesActual).padStart(2,'0'))||m.includes(['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][mesActual-1])}).reduce((s,p)=>s+parseMonto(p['Monto']||p['Total']),0)
+  const rentabilidadMes=ingresosMes-egresosMesPagosStaff
+
+  // Mes anterior para comparativa
+  const facMesAnt=fc.filter(f=>esDelMes(f['Fecha emision'],mesAnterior,anioAnterior)).filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  const pctProyectos=proyMesAnt?Math.round((proyMes.length-proyMesAnt)/proyMesAnt*100):0
+  const pctFacturacion=facMesAnt?Math.round((ingresosMes-facMesAnt)/facMesAnt*100):0
+
+  // === 4. POR COBRAR ===
+  const porCobrar=fc.filter(f=>!isCobrada(f)).map(f=>{const venc=parseD(f['Vencimiento']);const dAtraso=venc?Math.floor((hoy-venc)/864e5):0;return {...f,dAtraso,monto:parseMonto(f['Precio FINAL'])}}).sort((a,b)=>b.dAtraso-a.dAtraso)
+  const totalPorCobrar=porCobrar.reduce((s,f)=>s+f.monto,0)
+
+  // === 5. POR PAGAR STAFF ===
+  const diaHoy=hoy.getDate()
+  const proxPagoFecha=new Date(anioActual,diaHoy>=15?mesActual:mesActual-1,15)
+  const mesACobrar=diaHoy>=15?mesActual:mesActual-1 // el 15 paga el mes anterior
+  const staffAPagar=pagosStaff.filter(p=>{const m=String(p['Mes']||'').toLowerCase();const esMesACobrar=m.includes(String(mesACobrar).padStart(2,'0'))||m.includes(['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][(mesACobrar+11)%12]);const yaPagado=String(p['Pagado']||'').toUpperCase()==='TRUE'||p['Pagado']===true;return esMesACobrar&&!yaPagado})
+  const totalAPagar=staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto']||p['Total']),0)
+
+  // === 6. ALERTAS ===
+  const alertas=[]
+  porCobrar.filter(f=>f.dAtraso>0&&f.dAtraso<=30).forEach(f=>alertas.push({tipo:'factura-vencida',texto:`Factura ${f['Nro de Factura']||'s/n'} vencida hace ${f.dAtraso}d — ${f['Cliente']} ${fmt(f.monto)}`,color:'#E24B4A'}))
+  porCobrar.filter(f=>f.dAtraso<0&&f.dAtraso>=-3).forEach(f=>alertas.push({tipo:'factura-por-vencer',texto:`Factura ${f['Nro de Factura']||'s/n'} vence en ${Math.abs(f.dAtraso)}d — ${f['Cliente']}`,color:'#BA7517'}))
+  proyectos.filter(p=>{const fe=parseD(p['Fecha Evento']);if(!fe)return false;const diasAlRodaje=Math.floor((fe-hoy)/864e5);const sinStaff=!(p['Carga Staff']===true||p['Carga Staff']==='TRUE');return diasAlRodaje>=0&&diasAlRodaje<=7&&sinStaff}).forEach(p=>alertas.push({tipo:'proyecto-sin-staff',texto:`#${p['N° presupuesto']} "${p['Proyecto']||'—'}" sin staff — rodaje ${p['Fecha Evento']}`,color:'#BA7517'}))
+
+  // === 7. TOP CLIENTES DEL AÑO ===
+  const clientesAnio={}
+  fc.filter(f=>{const x=mesDe(f['Fecha emision']);return x&&x.a===anioActual}).forEach(f=>{
+    const k=f['Cliente']||f['Agencia']||'—'
+    if(!clientesAnio[k])clientesAnio[k]={nombre:k,total:0,cant:0,cobrado:0}
+    clientesAnio[k].total+=parseMonto(f['Precio SIN IVA'])
+    clientesAnio[k].cant++
+    if(isCobrada(f))clientesAnio[k].cobrado+=parseMonto(f['Precio SIN IVA'])
+  })
+  const topClientes=Object.values(clientesAnio).sort((a,b)=>b.total-a.total).slice(0,5)
+
+  const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mesActual-1]
+  const cColor=(val)=>val===0?'#555':val>0?'#1D9E75':'#E24B4A'
+  const fmtPct=v=>(v>0?'+':'')+v+'%'
 
   return <div>
-    <div style={S.k4}>
-      <K lbl='Aprobados' val={ap.length} sub={fmtM(totalAp)} c='#1543F8'/>
-      <K lbl='En espera' val={pend.length} sub={fmtM(totalPend)} c='#BA7517'/>
-      <K lbl='Por cobrar' val={fmtM(totalPc)} sub={pc.length+' facturas'} c='#BA7517'/>
-      <K lbl='Cobrado' val={fmtM(totalCo)} sub={co.length+' facturas'} c='#1D9E75'/>
-    </div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
-      <div style={S.card}><div style={S.ch}>Últimos aprobados</div>
-        {ap.slice(-5).reverse().map((p,i)=><Row key={i} cols={['#'+p['Columna 1'],p['Proyecto']||p['Cliente'],fmt(parseMonto(p['Precio Final']))]}/>)}
+
+    {/* 1. SALDOS EN CUENTA */}
+    <div style={{...S.card,marginBottom:12,padding:'14px 18px',background:'#0F1A0F',borderColor:'#1D9E7530'}}>
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:12}}>
+        <div>
+          <div style={{fontSize:11,color:'#1D9E7599',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Caja total</div>
+          <div style={{fontSize:32,fontWeight:600,fontFamily:'monospace',color:'#1D9E75'}}>{fmt(totalCaja)}</div>
+        </div>
+        <div style={{fontSize:10,color:'#555'}}>Actualizado desde CUENTAS</div>
       </div>
-      <div style={S.card}><div style={S.ch}>Facturas por cobrar</div>
-        {pc.slice(0,5).map((f,i)=><Row key={i} cols={[f['Nro de Factura']||'—',f['Cliente']||f['Proyecto'],fmt(parseMonto(f['Precio FINAL']))]} vc='#BA7517'/>)}
+      {cuentasActivas.length===0?<div style={{fontSize:12,color:'#BA7517',padding:'8px 0'}}>Sin cuentas cargadas. Revisá la hoja CUENTAS del Sheet.</div>:
+      <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(cuentasActivas.length,5)},minmax(0,1fr))`,gap:8}}>
+        {cuentasActivas.map((c,i)=><CuentaCard key={i} c={c} mail={mail} onSaved={onRefresh}/>)}
+      </div>}
+      <div style={{fontSize:10,color:'#555',marginTop:8,textAlign:'right'}}>Click en el saldo para editar</div>
+    </div>
+
+    {/* 2. PROYECTOS + 3. RENTABILIDAD (side by side) */}
+    <div style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:12,marginBottom:12}}>
+      <div style={S.card}>
+        <div style={{...S.ch,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>Proyectos de {nombreMes}</span>
+          <span style={{fontSize:11,color:'#555',fontWeight:400}}>{proyMes.length} activos · {fmtPct(pctProyectos)} vs {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][mesAnterior-1]}</span>
+        </div>
+        {proyMesTop5.length===0?<div style={{padding:'14px 16px',color:'#555',fontSize:12}}>Sin proyectos este mes</div>:proyMesTop5.map((p,i)=>{const ok=p['Carga Staff']===true||p['Carga Staff']==='TRUE';return <div key={i} style={{...S.lr,gap:10}}>
+          <span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['N° presupuesto']}</span>
+          <span style={{flex:1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||p['Cliente']||'—'} <span style={{fontSize:10,color:'#555'}}>· {p['Fecha Evento']||''}</span></span>
+          <span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517',fontSize:10}}>{ok?'OK':'Staff pend.'}</span>
+          <span style={{fontFamily:'monospace',fontSize:12,minWidth:70,textAlign:'right'}}>{fmt(parseMonto(p['Total '])||parseMonto(p['Total']))}</span>
+        </div>})}
+      </div>
+
+      <div style={{...S.card,padding:'14px 18px'}}>
+        <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Rentabilidad {nombreMes}</div>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12}}><span style={{color:'#888'}}>Ingresos cobrados</span><span style={{fontFamily:'monospace',color:'#1D9E75'}}>+{fmt(ingresosMes)}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12}}><span style={{color:'#888'}}>Facturado (bruto mes)</span><span style={{fontFamily:'monospace',color:'#555'}}>{fmt(facMesTotales)}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12}}><span style={{color:'#888'}}>Pagos staff mes</span><span style={{fontFamily:'monospace',color:'#E24B4A'}}>-{fmt(egresosMesPagosStaff)}</span></div>
+          <div style={{borderTop:'0.5px solid #2A2A2A',margin:'6px 0'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:600}}><span>Resultado</span><span style={{fontFamily:'monospace',color:rentabilidadMes>=0?'#1D9E75':'#E24B4A'}}>{rentabilidadMes>=0?'+':''}{fmt(rentabilidadMes)}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#555'}}><span>Facturación vs mes anterior</span><span style={{color:cColor(pctFacturacion)}}>{fmtPct(pctFacturacion)}</span></div>
+        </div>
+      </div>
+    </div>
+
+    {/* 4. KPIs + 5. POR PAGAR */}
+    <div style={S.k4}>
+      <K lbl='Por cobrar' val={fmtM(totalPorCobrar)} sub={porCobrar.length+' facturas'} c='#BA7517'/>
+      <K lbl={`A pagar staff el 15/${String(proxPagoFecha.getMonth()+1).padStart(2,'0')}`} val={fmtM(totalAPagar)} sub={staffAPagar.length+' freelancers'} c='#E24B4A'/>
+      <K lbl='Aprobados (total)' val={pr.filter(isAprobado).length} sub={fmtM(pr.filter(isAprobado).reduce((s,p)=>s+parseMonto(p['Precio Final']),0))} c='#1543F8'/>
+      <K lbl='Alertas' val={alertas.length} sub={alertas.length===0?'Todo al día':'Revisar abajo'} c={alertas.length>0?'#E24B4A':'#1D9E75'}/>
+    </div>
+
+    {/* 6. ALERTAS + 7. TOP CLIENTES */}
+    <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr',gap:12}}>
+      <div style={S.card}>
+        <div style={S.ch}>Alertas ({alertas.length})</div>
+        {alertas.length===0?<div style={{padding:'14px 16px',color:'#1D9E75',fontSize:12}}>✓ Todo al día</div>:alertas.slice(0,8).map((a,i)=><div key={i} style={{...S.lr,borderLeft:'3px solid '+a.color}}>
+          <span style={{flex:1,fontSize:12,color:'#ccc'}}>{a.texto}</span>
+        </div>)}
+      </div>
+      <div style={S.card}>
+        <div style={S.ch}>Top clientes {anioActual}</div>
+        {topClientes.length===0?<div style={{padding:'14px 16px',color:'#555',fontSize:12}}>Sin datos aún</div>:topClientes.map((c,i)=><div key={i} style={S.lr}>
+          <span style={{width:20,color:'#555',fontSize:11}}>{i+1}.</span>
+          <span style={{flex:1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</span>
+          <span style={{fontSize:10,color:'#555',marginRight:8}}>{c.cant} fac.</span>
+          <span style={{fontFamily:'monospace',fontSize:12}}>{fmtM(c.total)}</span>
+        </div>)}
       </div>
     </div>
   </div>
