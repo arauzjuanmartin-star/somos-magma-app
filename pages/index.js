@@ -563,12 +563,12 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
   </div>
 }
 
-function BadgeEstado({p, mail, data, onUpdate, onRefresh}){
-  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [reModalOpen,setReModalOpen]=useState(false)
+function BadgeEstado({p, mail, data, onUpdate, onRefresh, onRepresupuestar}){
+  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false)
   const ec=estadoColor(p['Estado'])
 
   const handleSelect=async(estado)=>{
-    if(estado==='REPRESUPUESTADO'){setReModalOpen(true);setOpen(false);return}
+    if(estado==='REPRESUPUESTADO'){onRepresupuestar&&onRepresupuestar(p);setOpen(false);return}
     await doSave(estado)
   }
 
@@ -582,7 +582,6 @@ function BadgeEstado({p, mail, data, onUpdate, onRefresh}){
   }
 
   return <div style={{position:'relative'}}>
-    {reModalOpen&&<NuevoPresupuesto mail={mail} data={data} initialData={p} onClose={()=>setReModalOpen(false)} onGuardado={()=>{onUpdate(p['Columna 1'],'REPRESUPUESTADO');if(onRefresh)setTimeout(onRefresh,500)}}/>}
     <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>
       {saving?'...':(p['Estado']||'—')}
     </span>
@@ -640,6 +639,7 @@ function DetallePresupuesto({p}){
 function Presupuestos({data:initialData,mail,onRefresh}){
   const [localData,setLocalData]=useState(initialData)
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+  const [repP,setRepP]=useState(null) // presupuesto a represupuestar (abre NuevoPresupuesto con initialData)
 
   useEffect(()=>{setLocalData(initialData)},[initialData])
 
@@ -699,8 +699,9 @@ function Presupuestos({data:initialData,mail,onRefresh}){
         <tbody>
           {filtered.map((p,i)=>{
             const isOpen=open===p['Columna 1']
+            const key=String(p['Columna 1'])
             return <>
-              <tr key={i} style={{background:isOpen?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(isOpen?null:p['Columna 1'])}>
+              <tr key={key} style={{background:isOpen?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(isOpen?null:p['Columna 1'])}>
                 <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
                 <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
                 <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
@@ -709,16 +710,26 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                 <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
                 <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
                 <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
-                  <BadgeEstado p={p} mail={mail} data={initialData} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <BadgeEstado p={p} mail={mail} data={localData} onUpdate={handleEstadoUpdate} onRefresh={onRefresh} onRepresupuestar={setRepP}/>
+                    <button title='Generar PDF' onClick={e=>{e.stopPropagation();window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1']),'_blank')}} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>PDF</button>
+                  </div>
                 </td>
               </tr>
-              {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
+              {isOpen&&<tr key={key+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
             </>
           })}
         </tbody>
       </table>
       {filtered.length===0&&<div style={S.nd}>Sin resultados</div>}
     </div>
+    {repP&&<NuevoPresupuesto
+      mail={mail}
+      data={localData}
+      initialData={repP}
+      onClose={()=>{setRepP(null);if(onRefresh)setTimeout(onRefresh,500)}}
+      onGuardado={()=>{handleEstadoUpdate(repP['Columna 1'],'REPRESUPUESTADO')}}
+    />}
   </div>
 }
 
