@@ -10,20 +10,17 @@ const FUENTES = {
 
 const MESES_TXT = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12,ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12}
 
-// Parser argentino: $1.156.055,78 -> 1156055.78
+// Parser argentino: . = separador de miles, , = decimal
+// $1.156.055,78 -> 1156055.78 · $232.400 -> 232400 · $232,50 -> 232.5
 const num = v => {
   if (v === undefined || v === null || v === '') return 0
   let s = String(v).replace(/[$\s]/g, '').trim()
   if (!s) return 0
-  const lastComma = s.lastIndexOf(',')
-  const lastDot = s.lastIndexOf('.')
-  if (lastComma > lastDot && lastComma >= 0) s = s.replace(/\./g, '').replace(',', '.')
-  else if (lastDot > lastComma && lastDot >= 0) s = s.replace(/,/g, '')
-  else {
-    if ((s.match(/\./g)||[]).length > 1) s = s.replace(/\./g, '')
-    if ((s.match(/,/g)||[]).length > 1) s = s.replace(/,/g, '')
-    s = s.replace(',', '.')
-  }
+  const hasComma = s.includes(',')
+  const hasDot = s.includes('.')
+  if (hasComma && hasDot) s = s.replace(/\./g, '').replace(',', '.')
+  else if (hasComma) s = s.replace(',', '.')
+  else if (hasDot) s = s.replace(/\./g, '')
   const n = parseFloat(s)
   return isNaN(n) ? 0 : n
 }
@@ -91,33 +88,65 @@ function parseRow2024_2025(row, año) {
 
 // ============ PARSER 2023 ============
 // Posiciones (ADMIN MAGMA Back up, tab 2023):
-// A(0) Mes, B(1) Cliente, C(2) Trabajo/Proyecto, E(4) Presupuesto, F(5) IVA,
-// I(8) Viáticos, K(10) Staff1, L(11) Pago1, M(12) Staff2, N(13) Pago2, O(14) Staff3, P(15) Pago3,
-// Q(16) Magma (ganancia proyecto), R(17) Overhead %, S(18) Sofi, T(19) Juan
+// A(0) Mes, B(1) Cliente, C(2) Trabajo, D(3) Presu USD, E(4) Presupuesto, F(5) IVA,
+// G(6) Seña, H(7) Total (balance, puede ser negativo), I(8) Viáticos/Varios,
+// K(10) Cámara1 importe, L(11) Cámara1 nombre,
+// M(12) Cámara2 importe, N(13) Cámara2 nombre,
+// O(14) Edición importe, P(15) Edición nombre,
+// Q(16) Ganancia (Magma), R(17) Inversión, S(18) Sofi, T(19) Juan,
+// U(20) Fecha grabación, V(21) Fecha facturación, W(22) Nro Factura,
+// X(23) Quien Factura (Sofi/Lulu/...), Y(24) Fecha de pago (cobrado si no vacía)
 function parseRow2023(row, año) {
   const mesTxt = text(row[0]).toLowerCase()
+  const fecha = text(row[20])
   let mesNum = MESES_TXT[mesTxt] || 0
+  if (!mesNum) mesNum = mesFromFecha(fecha)
   const cliente = text(row[1])
   const proyecto = text(row[2])
   const presupuesto = num(row[4])
   const iva = num(row[5])
+  const seña = num(row[6])
   const viaticos = num(row[8])
-  const staff1 = text(row[10]); const pago1 = num(row[11])
-  const staff2 = text(row[12]); const pago2 = num(row[13])
-  const staff3 = text(row[14]); const pago3 = num(row[15])
+  const pago1 = num(row[10]);  const staff1 = text(row[11])
+  const pago2 = num(row[12]);  const staff2 = text(row[13])
+  const pago3 = num(row[14]);  const staff3 = text(row[15])
   const magma = num(row[16])
-  const overheadPct = text(row[17])
+  const inversion = text(row[17])
   const sofi = num(row[18])
   const juan = num(row[19])
-  const notas = (overheadPct||sofi||juan) ? `Overhead ${overheadPct} · Sofi ${sofi} · Juan ${juan}` : ''
+  const nroFC = text(row[22])
+  const quienFactura = text(row[23]).toLowerCase()
+  const fechaPago = text(row[24])
+  const cobrado = fechaPago ? 'SÍ' : 'NO'
+
+  let entidad = ''
+  if (quienFactura.includes('sofi')) entidad = 'Sofia RI'
+  else if (quienFactura.includes('lulu') || quienFactura.includes('lucia')) entidad = 'Lucia Monotributo'
+  else if (quienFactura.includes('magma') || quienFactura.includes('srl')) entidad = 'Magma SRL'
+
+  const notasParts = []
+  if (seña) notasParts.push(`Seña $${seña}`)
+  if (inversion) notasParts.push(`Inversión ${inversion}`)
+  if (sofi) notasParts.push(`Sofi $${sofi}`)
+  if (juan) notasParts.push(`Juan $${juan}`)
+  const notas = notasParts.join(' · ')
+
+  // Staff filter: si nombre es "-" o vacío, limpiar ambos (es placeholder)
+  const clean = (nombre, pago) => {
+    const n = nombre.replace(/^-+$/, '').trim()
+    return [n, n ? pago : 0]
+  }
+  const [s1, p1] = clean(staff1, pago1)
+  const [s2, p2] = clean(staff2, pago2)
+  const [s3, p3] = clean(staff3, pago3)
 
   return [
-    año, mesNum||'', '', '', cliente, '', proyecto,
-    presupuesto, 'NO',
+    año, mesNum||'', fecha, '', cliente, '', proyecto,
+    presupuesto, cobrado,
     viaticos, magma, 0, 0, iva, presupuesto + iva,
-    staff1, pago1, staff2, pago2, staff3, pago3, '', '',
+    s1, p1, s2, p2, s3, p3, '', '',
     '', '', '', '',
-    '', '', '', notas,
+    '', nroFC, entidad, notas,
   ]
 }
 
