@@ -100,7 +100,7 @@ export default function App() {
         <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
           {NAV.map(n=><button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)}><span style={{fontSize:12,width:16,textAlign:'center'}}>{n.icon}</span>{n.label}</button>)}
         </nav>
-        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button><div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
+        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
       </div>
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
@@ -177,6 +177,23 @@ function Toast({msg,onDone}){
   useEffect(()=>{const t=setTimeout(onDone,2200);return()=>clearTimeout(t)},[])
   return <div style={{position:'fixed',bottom:28,right:28,background:'#1D9E75',color:'#fff',padding:'10px 20px',borderRadius:8,fontSize:13,fontWeight:500,zIndex:9999,boxShadow:'0 4px 20px #0008'}}>
     {msg}
+  </div>
+}
+
+function SetupBtn({mail}){
+  const [status,setStatus]=useState('')
+  const run=async()=>{
+    setStatus('...')
+    try{
+      const r=await fetch('/api/admin/setup-sheets',{method:'POST',headers:{'x-user-email':mail}})
+      const j=await r.json()
+      if(j.ok) setStatus(`✓ Creadas: ${j.created.join(', ')||'ninguna'}. Ya existían: ${j.skipped.join(', ')||'ninguna'}`)
+      else setStatus('✗ '+(j.error||'Error'))
+    }catch(e){setStatus('✗ '+e.message)}
+  }
+  return <div style={{marginTop:8}}>
+    <button style={{fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'transparent',color:'#1543F8',cursor:'pointer'}} onClick={run}>Setup hojas nuevas</button>
+    {status&&<div style={{fontSize:9,color:'#777',marginTop:4,whiteSpace:'pre-wrap'}}>{status}</div>}
   </div>
 }
 
