@@ -417,21 +417,29 @@ function SetupBtn({mail}){
 }
 
 function RepresupuestarModal({p, mail, onClose, onDone}){
-  // Busca todas las keys de p que matcheen "Pedido X" / "Precio X" en cualquier formato (espacios, trailing space, etc)
-  const findKeysByPrefix = (prefix) => {
+  // DEBUG: ver qué keys tiene el objeto presupuesto (solo primera vez)
+  if (typeof window !== 'undefined' && !window.__magmaDebug) {
+    window.__magmaDebug = true
+    console.log('🔍 Keys del presupuesto:', Object.keys(p))
+    console.log('🔍 Valores con "Pedido"/"Servicio"/"Concepto" en la key:', Object.keys(p).filter(k=>/pedido|servicio|concepto|item|descrip/i.test(k)).map(k=>({key:k,val:p[k]})))
+    console.log('🔍 Valores no vacíos:', Object.entries(p).filter(([k,v])=>v!==''&&v!=null))
+  }
+  // Busca todas las keys de p que matcheen "Pedido X" / "Precio X" en cualquier formato (espacios, trailing, case, plus alternativas "Servicio", "Item", "Concepto")
+  const findKeysByPrefix = (prefixes, excludePattern) => {
     const out = {}
     Object.keys(p).forEach(k => {
       const trimmed = k.trim().toLowerCase()
-      if (!trimmed.startsWith(prefix.toLowerCase())) return
-      if (prefix === 'Precio' && trimmed.includes('final')) return
+      const matchesAny = prefixes.some(pr => trimmed.startsWith(pr.toLowerCase()))
+      if (!matchesAny) return
+      if (excludePattern && excludePattern.test(trimmed)) return
       const m = k.match(/(\d+)/)
       const idx = m ? parseInt(m[1]) : 1
       if (idx >= 1 && idx <= 12 && !out[idx]) out[idx] = k
     })
     return out
   }
-  const pedKeys = findKeysByPrefix('Pedido')
-  const prcKeys = findKeysByPrefix('Precio')
+  const pedKeys = findKeysByPrefix(['Pedido','Servicio','Item','Concepto','Descripcion','Descripción'])
+  const prcKeys = findKeysByPrefix(['Precio','Monto'], /final/)
   const pedidosIniciales = []
   for (let i=1;i<=12;i++){
     const svc = pedKeys[i] ? (p[pedKeys[i]]||'') : ''
