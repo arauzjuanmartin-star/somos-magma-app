@@ -23,10 +23,28 @@ const FUENTES = {
 
 const MESES_TXT = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12}
 
+// Parser robusto para formato argentino ($1.156.055,78) y americano ($1,156,055.78)
 const num = v => {
   if (v === undefined || v === null || v === '') return 0
-  const cleaned = String(v).replace(/[$\s,]/g, '').replace(/\./g, '').replace(/,/g, '.')
-  const n = parseFloat(cleaned)
+  let s = String(v).replace(/[$\s]/g, '').trim()
+  if (!s) return 0
+  // Detectar separador decimal por ultima posicion de , o .
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+  if (lastComma > lastDot && lastComma >= 0) {
+    // ES: "1.156.055,78" -> puntos son miles, coma es decimal
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (lastDot > lastComma && lastDot >= 0) {
+    // EN: "1,156,055.78" -> comas son miles, punto es decimal
+    s = s.replace(/,/g, '')
+  } else {
+    // Solo puntos o solo comas — si hay mas de uno, asume miles y descarta
+    if ((s.match(/\./g)||[]).length > 1) s = s.replace(/\./g, '')
+    if ((s.match(/,/g)||[]).length > 1) s = s.replace(/,/g, '')
+    // Si hay solo uno, dejarlo como decimal (convierte , a .)
+    s = s.replace(',', '.')
+  }
+  const n = parseFloat(s)
   return isNaN(n) ? 0 : n
 }
 const text = v => (v === undefined || v === null) ? '' : String(v).trim()
