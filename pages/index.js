@@ -419,21 +419,30 @@ function SetupBtn({mail}){
 function RepresupuestarModal({p, mail, onClose, onDone}){
   const pedidosIniciales = []
   for (let i=1;i<=12;i++){const svc=p['Pedido '+i]||'';const precio=parseMonto(p['Precio '+i]);if(svc||precio)pedidosIniciales.push({index:i,svc,precio})}
+  const subtotalOriginal = pedidosIniciales.reduce((s,x)=>s+(x.precio||0),0)
+  const precioFinalOriginal = parseMonto(p['Precio Final'])
+  const deltaOriginal = precioFinalOriginal - subtotalOriginal // fee + impuestos + ajuste del original
+
   const [pedidos,setPedidos]=useState(pedidosIniciales.length?pedidosIniciales:[{index:1,svc:'',precio:0}])
   const [motivo,setMotivo]=useState('')
   const [fechaEvento,setFechaEvento]=useState(p['Fecha Evento']||'')
+  const [precioFinalManual,setPrecioFinalManual]=useState('')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
 
   const updPed=(i,field,val)=>setPedidos(prev=>prev.map((x,idx)=>idx===i?{...x,[field]:field==='precio'?(parseFloat(val)||0):val}:x))
-  const addPed=()=>{const next=Math.max(...pedidos.map(x=>x.index),0)+1;if(next>12)return;setPedidos([...pedidos,{index:next,svc:'',precio:0}])}
+  const addPed=()=>{const used=new Set(pedidos.map(x=>x.index));let next=1;while(used.has(next)&&next<=12)next++;if(next>12)return;setPedidos([...pedidos,{index:next,svc:'',precio:0}])}
   const delPed=i=>setPedidos(prev=>prev.filter((_,idx)=>idx!==i))
-  const subtotal=pedidos.reduce((s,x)=>s+(x.precio||0),0)
+
+  const subtotalNuevo = pedidos.reduce((s,x)=>s+(x.precio||0),0)
+  const precioFinalCalc = precioFinalManual!==''?(parseFloat(precioFinalManual)||0):(subtotalNuevo+deltaOriginal)
 
   const guardar=async()=>{
     if(!motivo.trim()){setErr('El motivo es obligatorio');return}
     setSaving(true);setErr('')
     try{
-      const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['Columna 1'],motivo,fechaEvento,pedidos:pedidos.filter(x=>x.svc||x.precio)})})
+      const body={num:p['Columna 1'],motivo,fechaEvento,pedidos:pedidos.filter(x=>x.svc||x.precio)}
+      if(precioFinalManual!=='') body.precioFinal=parseFloat(precioFinalManual)||0
+      const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(body)})
       const j=await r.json()
       if(j.ok){onDone(j.nuevaVersion);onClose()}
       else setErr(j.error||'Error')
@@ -444,7 +453,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
   const inp={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',width:'100%'}
 
   return <div style={{position:'fixed',inset:0,background:'#000c',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
-    <div style={{background:'#0D0D0D',border:'0.5px solid #2A2A2A',borderRadius:12,padding:20,width:600,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+    <div style={{background:'#0D0D0D',border:'0.5px solid #2A2A2A',borderRadius:12,padding:20,width:680,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
       <div style={{fontSize:16,fontWeight:600,marginBottom:4}}>Represupuestar #{p['Columna 1']}</div>
       <div style={{fontSize:11,color:'#555',marginBottom:16}}>Se crea una copia con nueva versión (ej: v2, v3…) en EN ESPERA. El original queda marcado como REPRESUPUESTADO.</div>
 
@@ -453,14 +462,15 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
         <div><span style={{color:'#555'}}>Proyecto:</span> {p['Proyecto']||'—'}</div>
       </div>
 
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:'#555',marginBottom:4}}>Motivo del represupuesto *</div>
-        <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder='Ej: Cambió el scope, ajuste de precios, cliente pidió más días...' autoFocus/>
-      </div>
-
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:'#555',marginBottom:4}}>Fecha del evento</div>
-        <input style={inp} value={fechaEvento} onChange={e=>setFechaEvento(e.target.value)} placeholder='DD/MM/YYYY'/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+        <div>
+          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Motivo *</div>
+          <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder='Ej: Cambió scope, ajuste precios...' autoFocus/>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:'#555',marginBottom:4}}>Fecha del evento</div>
+          <input style={inp} value={fechaEvento} onChange={e=>setFechaEvento(e.target.value)} placeholder='DD/MM/YYYY'/>
+        </div>
       </div>
 
       <div style={{marginBottom:10}}>
@@ -469,7 +479,8 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
           <button onClick={addPed} style={{fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'transparent',color:'#1543F8',cursor:'pointer'}}>+ Pedido</button>
         </div>
         {pedidos.map((ped,i)=>(
-          <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 120px 24px',gap:6,marginBottom:4}}>
+          <div key={i} style={{display:'grid',gridTemplateColumns:'30px 1fr 120px 24px',gap:6,marginBottom:4,alignItems:'center'}}>
+            <span style={{fontSize:10,color:'#555',textAlign:'center'}}>#{ped.index}</span>
             <select value={ped.svc} onChange={e=>updPed(i,'svc',e.target.value)} style={{...inp,color:ped.svc?'#F0F0F0':'#555'}}>
               <option value=''>— Servicio —</option>
               {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
@@ -478,11 +489,30 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
             <button onClick={()=>delPed(i)} style={{width:24,height:28,border:'none',background:'transparent',color:'#E24B4A',cursor:'pointer',fontSize:16}}>×</button>
           </div>
         ))}
-        <div style={{textAlign:'right',fontSize:12,marginTop:6,padding:'6px 10px',background:'#1E1E1E',borderRadius:6}}>
-          <span style={{color:'#555'}}>Subtotal nuevo: </span>
-          <span style={{fontFamily:'monospace',fontWeight:500}}>{fmt(subtotal)}</span>
-          <span style={{color:'#555',fontSize:10,marginLeft:8}}>(fees / impuestos se recalculan al guardar desde presupuesto)</span>
+      </div>
+
+      {/* Desglose financiero */}
+      <div style={{background:'#1A1A1A',borderRadius:8,padding:'12px 14px',marginBottom:12}}>
+        <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Desglose financiero</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+          <div>
+            <div style={{fontSize:10,color:'#444',marginBottom:6}}>ORIGINAL</div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>Subtotal servicios</span><span style={{fontFamily:'monospace'}}>{fmt(subtotalOriginal)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>Fee + impuestos + ajuste</span><span style={{fontFamily:'monospace',color:deltaOriginal>=0?'#1D9E75':'#E24B4A'}}>{deltaOriginal>=0?'+':''}{fmt(deltaOriginal)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'6px 0 3px',borderTop:'0.5px solid #2A2A2A',fontWeight:500}}><span>Precio Final original</span><span style={{fontFamily:'monospace',color:'#1543F8'}}>{fmt(precioFinalOriginal)}</span></div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:'#444',marginBottom:6}}>NUEVO ({precioFinalManual!==''?'manual':'auto'})</div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>Subtotal servicios nuevo</span><span style={{fontFamily:'monospace'}}>{fmt(subtotalNuevo)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0'}}><span style={{color:'#888'}}>+ fee+imp+ajuste (copiado del orig.)</span><span style={{fontFamily:'monospace',color:'#888'}}>{fmt(deltaOriginal)}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,padding:'6px 0 3px',borderTop:'0.5px solid #2A2A2A',fontWeight:500}}>
+              <span>Precio Final nuevo</span>
+              <input type='number' value={precioFinalManual} onChange={e=>setPrecioFinalManual(e.target.value)} placeholder={String(Math.round(precioFinalCalc))} style={{width:110,padding:'4px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'#000',color:'#1543F8',fontFamily:'monospace',fontSize:13,outline:'none',textAlign:'right'}}/>
+            </div>
+            {precioFinalManual!==''&&<button onClick={()=>setPrecioFinalManual('')} style={{fontSize:9,color:'#555',background:'transparent',border:'none',cursor:'pointer',padding:0,marginTop:3}}>↺ volver a auto</button>}
+          </div>
         </div>
+        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El fee y los impuestos del original se preservan. Si querés cambiar el Precio Final manualmente, escribilo arriba. Sino, se calcula automático: subtotal nuevo + fee/impuestos originales.</div>
       </div>
 
       {err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:10}}>{err}</div>}

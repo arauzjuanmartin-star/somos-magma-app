@@ -51,12 +51,18 @@ export default async function handler(req, res) {
     nueva[3] = 'EN ESPERA'             // Col D: Estado
     if (fechaEvento) nueva[1] = fechaEvento // Col B: Fecha Evento
 
+    // Calcular subtotal original (para preservar la diferencia fee+impuestos+ajuste)
+    const num2 = v => { if (v===undefined||v===null||v==='') return 0; const n=parseFloat(String(v).replace(/[$,\s]/g,'')); return isNaN(n)?0:n }
+    let subtotalOriginal = 0
+    for (let i = 0; i < 12; i++) { subtotalOriginal += num2(original[12 + i * 2]) }
+    const precioFinalOriginal = num2(original[8])
+    const delta = precioFinalOriginal - subtotalOriginal  // fee + gan + iibb + interes + ajuste
+
     // Aplicar overrides de pedidos (si vinieron del modal)
-    // pedidos: [{index: 1..12, svc, precio}, ...]
-    if (Array.isArray(pedidos)) {
-      let subtotal = 0
+    if (Array.isArray(pedidos) && pedidos.length > 0) {
+      let subtotalNuevo = 0
       for (let i = 0; i < 12; i++) {
-        const col = 11 + i * 2       // Pedido N en col L, N, P, R, ...
+        const col = 11 + i * 2
         nueva[col] = ''
         nueva[col + 1] = ''
       }
@@ -65,12 +71,12 @@ export default async function handler(req, res) {
         const col = 11 + idx * 2
         nueva[col] = p.svc || ''
         nueva[col + 1] = p.precio || 0
-        subtotal += Number(p.precio) || 0
+        subtotalNuevo += Number(p.precio) || 0
       }
-      // Si viene subtotal recalculado, actualizar precio final (col I = index 8)
-      // Por ahora copiamos total original si no viene total; si hay pedidos, usamos subtotal como approx Precio Final
-      // (el usuario puede ajustar impuestos/fees desde Presupuestos si hace falta)
-      if (subtotal > 0) nueva[8] = subtotal
+      // Mantener fee + impuestos + ajuste del original (se suman al nuevo subtotal)
+      // Si el usuario mandó precioFinal explícito, respetarlo. Sino: subtotal nuevo + delta
+      const precioFinalNuevo = (req.body.precioFinal != null) ? Number(req.body.precioFinal) : (subtotalNuevo + delta)
+      nueva[8] = precioFinalNuevo
     }
 
     // Fecha presupuesto (col J = index 9) = hoy
