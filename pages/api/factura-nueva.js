@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'FACTURACION!A:Y',
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[mesStr, presupuestoNum, false, false, false, '', '', agencia||'', cliente||'', proyecto||'', neto, iva, total, 'Factura '+tipo, nroFactura||'', fechaEmision||'', true, plazo||'', 0, fechaVenc||'', 0, '', '', '', '']] }
     })
     res.json({ ok: true })

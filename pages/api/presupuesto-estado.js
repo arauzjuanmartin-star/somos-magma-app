@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `PRESUPUESTOS!D${rowIndex}`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[estado]] }
     })
 
@@ -95,7 +95,7 @@ export default async function handler(req, res) {
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: 'PROYECTOS!A:A',
-          valueInputOption: 'RAW',
+          valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [proyRow] }
         })

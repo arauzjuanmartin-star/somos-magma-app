@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     ]
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SHEET_ID,
-      requestBody: { valueInputOption: 'RAW', data: updates },
+      requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
     })
 
     // 2. Si hay cuentaDestino y montoReal, sumar al saldo de la cuenta

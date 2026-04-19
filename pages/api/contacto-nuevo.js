@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'Contactos/agencias!A:H',
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [[nombre, mail||'', agencia||'', '', cargo||'', telefono||'', '', cuit||'']] }
     })

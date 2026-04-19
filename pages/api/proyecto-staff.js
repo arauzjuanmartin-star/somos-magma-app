@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       if (colStaff >= 0 && s.nombre) data.push({ range: 'PROYECTOS!' + colToLetter(colStaff) + rowIndex, values: [[s.nombre]] })
       if (colPrecio >= 0 && s.monto) data.push({ range: 'PROYECTOS!' + colToLetter(colPrecio) + rowIndex, values: [[s.monto]] })
     })
-    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data } })
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data } })
     res.json({ ok: true })
   } catch (e) { console.error(e); res.status(500).json({ error: e.message }) }
 }

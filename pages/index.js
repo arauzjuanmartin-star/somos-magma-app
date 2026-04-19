@@ -1039,58 +1039,76 @@ function PagosStaff({data,mail,onRefresh}){
 
   const proyMes=proyectos.filter(p=>(p['2']||'')=== mesActual)
 
+  const [seleccionados,setSeleccionados]=useState({}) // {personaKey_nro_pedido: true}
   const personas={}
   proyMes.forEach(proy=>{
     const nro=proy['N° presupuesto']||''
     const proyecto=proy['Proyecto']||proy['Cliente']||''
     const agencia=proy['Agencia']||''
+    const fechaEvento=proy['Fecha Evento']||''
     for(let j=1;j<=12;j++){
       const pedido=proy['Pedido '+j]||''
       const precio=parseMonto(proy['Precio '+j]||0)
       const staff=proy['Staff '+j]||''
       if(!staff||staff==='Somos Magma'||!pedido||precio<=0)continue
-      if(!personas[staff])personas[staff]={nombre:staff,trabajos:[],total:0}
-      personas[staff].trabajos.push({nro,proyecto,agencia,pedido,precio})
+      if(!personas[staff])personas[staff]={nombre:staff,trabajos:[],total:0,totalPendiente:0,totalPagado:0}
+      personas[staff].trabajos.push({nro,proyecto,agencia,pedido,precio,fechaEvento,key:nro+'|'+pedido+'|'+j})
       personas[staff].total+=precio
     }
   })
-  const lista=Object.values(personas).sort((a,b)=>b.total-a.total)
-
-  const findPagoRow=(nombre)=>pagosPersistidos.find(r=>{
-    const m=String(r['Mes']||'').trim(), p=String(r['Persona']||r['Nombre']||r['Staff']||'').trim()
-    return m===mesActual && p===nombre
+  const findPagoTrabajo=(persona,nro,pedido)=>pagosPersistidos.find(r=>{
+    const m=String(r['Mes']||'').trim()
+    const p=String(r['Persona']||r['Nombre']||r['Staff']||'').trim()
+    const n=String(r['N° Proyecto']||r['N° presupuesto']||r['Nro']||r['Proyecto']||'').trim()
+    const pd=String(r['Pedido']||r['Servicio']||'').trim()
+    return m===mesActual && p===persona && (n===String(nro).trim() || pd===String(pedido).trim() && n==='')
   })
-  const getPagado=nombre=>{const r=findPagoRow(nombre);if(!r)return false;const v=String(r['Pagado']||'').toUpperCase();return v==='SÍ'||v==='SI'||r['Pagado']===true}
-  const getCuentaPersisted=nombre=>{const r=findPagoRow(nombre);return r?(r['Cuenta']||''):''}
+  const isTrabajoPagado=(persona,t)=>{const r=findPagoTrabajo(persona,t.nro,t.pedido);if(!r)return false;const v=String(r['Pagado']||'').toUpperCase();return v==='SÍ'||v==='SI'||r['Pagado']===true}
+  Object.values(personas).forEach(p=>{
+    p.trabajos.forEach(t=>{t.pagado=isTrabajoPagado(p.nombre,t);if(t.pagado)p.totalPagado+=t.precio;else p.totalPendiente+=t.precio})
+  })
+  const lista=Object.values(personas).sort((a,b)=>b.totalPendiente-a.totalPendiente)
+
+  const getPersonaPagado=p=>p.trabajos.length>0&&p.trabajos.every(t=>t.pagado)
+  const getCuentaPersisted=nombre=>{const r=pagosPersistidos.find(x=>String(x['Persona']||x['Nombre']||x['Staff']||'').trim()===nombre);return r?(r['Cuenta']||''):''}
   const getCuenta=nombre=>cuentaLocal[nombre]||getCuentaPersisted(nombre)||CUENTAS[0]
   const setCuenta=(nombre,val)=>setCuentaLocal(prev=>({...prev,[nombre]:val}))
 
-  const marcar=async(nombre,pagado)=>{
-    const persona=lista.find(p=>p.nombre===nombre)
-    if(!persona)return
-    setSavingPerson(nombre)
+  const toggleSel=(personaKey,trabajoKey)=>setSeleccionados(prev=>{const k=personaKey+'||'+trabajoKey;return {...prev,[k]:!prev[k]}})
+  const isSel=(personaKey,trabajoKey)=>!!seleccionados[personaKey+'||'+trabajoKey]
+  const selectAllPendientes=(persona)=>{const p={...seleccionados};persona.trabajos.filter(t=>!t.pagado).forEach(t=>{p[persona.nombre+'||'+t.key]=true});setSeleccionados(p)}
+  const clearSelPersona=(persona)=>{const p={...seleccionados};persona.trabajos.forEach(t=>{delete p[persona.nombre+'||'+t.key]});setSeleccionados(p)}
+
+  const marcarSeleccionados=async(persona,pagado=true)=>{
+    const trabajosAMarcar=persona.trabajos.filter(t=>pagado?(isSel(persona.nombre,t.key)&&!t.pagado):(t.pagado))
+    if(trabajosAMarcar.length===0){alert(pagado?'No hay trabajos seleccionados':'No hay trabajos pagados para desmarcar');return}
+    setSavingPerson(persona.nombre)
     try{
-      await fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesActual,persona:nombre,monto:persona.total,pagado,cuenta:getCuenta(nombre)})})
+      for(const t of trabajosAMarcar){
+        await fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesActual,persona:persona.nombre,nroProyecto:t.nro,proyecto:t.proyecto,pedido:t.pedido,monto:t.precio,fechaEvento:t.fechaEvento,agencia:t.agencia,pagado,cuenta:getCuenta(persona.nombre)})})
+      }
+      clearSelPersona(persona)
       if(onRefresh)await onRefresh()
     }catch(e){alert('Error: '+e.message)}
     setSavingPerson(null)
   }
 
-  const generarDesc=(persona)=>{
+  const generarDesc=(persona,soloPendientes=false)=>{
     const nombre=persona.nombre.split(' ')[0]
     const mesLabel=mesActual.split(' - ')[1]||mesActual
-    const items=persona.trabajos.map(t=>'- '+t.pedido+' — '+t.proyecto+(t.agencia?' ('+t.agencia+')':'')+': '+fmt(t.precio)).join('\n')
-    return 'Hola '+nombre+'!\n\nTe paso el detalle de los trabajos de '+mesLabel+' para que nos hagas factura:\n\n'+items+'\n\nTotal: '+fmt(persona.total)+'\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!'
+    const trabajos=soloPendientes?persona.trabajos.filter(t=>!t.pagado):persona.trabajos
+    const items=trabajos.map(t=>'- '+t.pedido+' — '+t.proyecto+(t.agencia?' ('+t.agencia+')':'')+(t.fechaEvento?' ['+t.fechaEvento+']':'')+': '+fmt(t.precio)).join('\n')
+    const total=trabajos.reduce((s,t)=>s+t.precio,0)
+    return 'Hola '+nombre+'!\n\nTe paso el detalle de los trabajos de '+mesLabel+' para que nos hagas factura:\n\n'+items+'\n\nTotal: '+fmt(total)+'\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!'
   }
 
   const copiar=(nombre,texto)=>{
     navigator.clipboard.writeText(texto).then(()=>{setCopiado(nombre);setTimeout(()=>setCopiado(null),2000)})
   }
 
-  const pendientes=lista.filter(p=>!getPagado(p.nombre))
-  const pagados=lista.filter(p=>getPagado(p.nombre))
-  const totalPend=pendientes.reduce((s,p)=>s+p.total,0)
-  const totalPag=pagados.reduce((s,p)=>s+p.total,0)
+  const totalPend=lista.reduce((s,p)=>s+p.totalPendiente,0)
+  const totalPag=lista.reduce((s,p)=>s+p.totalPagado,0)
+  const personasFullPagadas=lista.filter(p=>getPersonaPagado(p)).length
 
   return <div>
     {/* Tabs de meses */}
@@ -1118,13 +1136,14 @@ function PagosStaff({data,mail,onRefresh}){
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 280px)'}}>
       {lista.length===0&&<div style={S.nd}>Sin staff asignado en proyectos de {mesActual||'este mes'}</div>}
       {lista.map((persona,i)=>{
-        const pagado=getPagado(persona.nombre)
+        const fullPagado=getPersonaPagado(persona)
         const isOpen=abierto===persona.nombre
         const isDesc=showDesc===persona.nombre
         const color=getColor(persona.nombre)
         const cuenta=getCuenta(persona.nombre)
-        const desc=generarDesc(persona)
-        return <div key={i} style={{...S.card,marginBottom:8,borderLeft:'3px solid '+(pagado?'#1D9E75':'#2A2A2A'),opacity:pagado?0.75:1}}>
+        const selCount=persona.trabajos.filter(t=>!t.pagado&&isSel(persona.nombre,t.key)).length
+        const selTotal=persona.trabajos.filter(t=>!t.pagado&&isSel(persona.nombre,t.key)).reduce((s,t)=>s+t.precio,0)
+        return <div key={i} style={{...S.card,marginBottom:8,borderLeft:'3px solid '+(fullPagado?'#1D9E75':persona.totalPagado>0?'#BA7517':'#2A2A2A'),opacity:fullPagado?0.65:1}}>
           {/* Header persona */}
           <div style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:persona.nombre)}>
             <div style={{width:36,height:36,borderRadius:'50%',background:color+'20',color:color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:500,flexShrink:0}}>
@@ -1132,33 +1151,43 @@ function PagosStaff({data,mail,onRefresh}){
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:14,fontWeight:500}}>{persona.nombre}</div>
-              <div style={{fontSize:11,color:'#555',marginTop:2}}>{persona.trabajos.length} trabajo{persona.trabajos.length!==1?'s':''} · {mesActual.split(' - ')[1]||mesActual}{pagado?' · pagado desde '+cuenta:''}</div>
+              <div style={{fontSize:11,color:'#555',marginTop:2}}>{persona.trabajos.length} trabajo{persona.trabajos.length!==1?'s':''} · {mesActual.split(' - ')[1]||mesActual}{persona.totalPagado>0?' · pagado '+fmt(persona.totalPagado):''}</div>
             </div>
-            <span style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:pagado?'#1D9E75':color,whiteSpace:'nowrap'}}>{fmt(persona.total)}</span>
-            <span style={{fontSize:10,padding:'3px 9px',borderRadius:3,marginLeft:8,whiteSpace:'nowrap',background:pagado?'#1D9E7520':'#E24B4A20',color:pagado?'#1D9E75':'#E24B4A'}}>{pagado?'Pagado':'Pendiente'}</span>
+            <span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:persona.totalPendiente>0?color:'#1D9E75',whiteSpace:'nowrap'}}>{persona.totalPendiente>0?fmt(persona.totalPendiente)+' pend.':fmt(persona.total)}</span>
+            <span style={{fontSize:10,padding:'3px 9px',borderRadius:3,marginLeft:8,whiteSpace:'nowrap',background:fullPagado?'#1D9E7520':persona.totalPagado>0?'#BA751720':'#E24B4A20',color:fullPagado?'#1D9E75':persona.totalPagado>0?'#BA7517':'#E24B4A'}}>{fullPagado?'Pagado':persona.totalPagado>0?'Parcial':'Pendiente'}</span>
             <span style={{fontSize:11,color:'#555',marginLeft:8}}>{isOpen?'▲':'▶'}</span>
           </div>
 
           {/* Panel detalle */}
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A'}}>
             {/* Headers */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 2fr 110px',background:'#1A1A1A'}}>
-              {['Proyecto','Servicio','Monto'].map(h=><div key={h} style={{fontSize:10,color:'#555',padding:'7px 14px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
+            <div style={{display:'grid',gridTemplateColumns:'32px 1fr 2fr 80px 110px',background:'#1A1A1A'}}>
+              {['','Proyecto','Servicio','Fecha','Monto'].map((h,k)=><div key={k} style={{fontSize:10,color:'#555',padding:'7px 10px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
             </div>
             {/* Trabajos */}
-            {persona.trabajos.map((t,idx)=>(
-              <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 2fr 110px',borderBottom:'0.5px solid #1A1A1A'}}>
-                <div style={{padding:'9px 14px'}}>
-                  <div style={{fontSize:12}}>{t.proyecto}</div>
+            {persona.trabajos.map((t,idx)=>{
+              const sel=isSel(persona.nombre,t.key)
+              return <div key={idx} style={{display:'grid',gridTemplateColumns:'32px 1fr 2fr 80px 110px',borderBottom:'0.5px solid #1A1A1A',opacity:t.pagado?0.5:1,background:sel&&!t.pagado?'#1D9E7510':'transparent'}}>
+                <div style={{padding:'9px 10px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {t.pagado?<span style={{fontSize:14,color:'#1D9E75'}}>✓</span>
+                    :<input type='checkbox' checked={sel} onChange={()=>toggleSel(persona.nombre,t.key)} style={{width:15,height:15,accentColor:'#1D9E75',cursor:'pointer'}}/>}
+                </div>
+                <div style={{padding:'9px 10px'}}>
+                  <div style={{fontSize:12,textDecoration:t.pagado?'line-through':'none'}}>{t.proyecto}</div>
                   <div style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{t.nro}{t.agencia?' · '+t.agencia:''}</div>
                 </div>
-                <div style={{padding:'9px 14px',fontSize:12,color:'#555',display:'flex',alignItems:'center'}}>{t.pedido}</div>
-                <div style={{padding:'9px 14px',fontFamily:'monospace',fontSize:12,fontWeight:500,display:'flex',alignItems:'center',justifyContent:'flex-end'}}>{fmt(t.precio)}</div>
+                <div style={{padding:'9px 10px',fontSize:12,color:'#555',display:'flex',alignItems:'center'}}>{t.pedido}</div>
+                <div style={{padding:'9px 10px',fontSize:11,color:'#777',display:'flex',alignItems:'center'}}>{t.fechaEvento||'—'}</div>
+                <div style={{padding:'9px 10px',fontFamily:'monospace',fontSize:12,fontWeight:500,display:'flex',alignItems:'center',justifyContent:'flex-end',textDecoration:t.pagado?'line-through':'none'}}>{fmt(t.precio)}</div>
               </div>
-            ))}
+            })}
 
             {/* Panel acción */}
             <div style={{padding:'12px 16px',background:'#1A1A1A',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <div style={{display:'flex',gap:4}}>
+                <button style={{padding:'5px 10px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}} onClick={()=>selectAllPendientes(persona)}>Seleccionar todos</button>
+                <button style={{padding:'5px 10px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}} onClick={()=>clearSelPersona(persona)}>Limpiar</button>
+              </div>
               <span style={{fontSize:12,color:'#555',whiteSpace:'nowrap'}}>Pagar desde:</span>
               <select style={{padding:'6px 10px',borderRadius:6,border:'0.5px solid #333',background:'#0D0D0D',color:'#F0F0F0',fontSize:12,outline:'none'}} value={cuenta} onChange={e=>setCuenta(persona.nombre,e.target.value)}>
                 {CUENTAS.map(c=><option key={c}>{c}</option>)}
@@ -1166,19 +1195,21 @@ function PagosStaff({data,mail,onRefresh}){
               <button style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={()=>setShowDesc(isDesc?null:persona.nombre)}>
                 {isDesc?'Ocultar descripción':'Ver descripción para factura'}
               </button>
-              {pagado
-                ?<button disabled={savingPerson===persona.nombre} style={{marginLeft:'auto',padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:12,cursor:'pointer',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcar(persona.nombre,false)}>{savingPerson===persona.nombre?'...':'Desmarcar'}</button>
-                :<button disabled={savingPerson===persona.nombre} style={{marginLeft:'auto',padding:'8px 18px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcar(persona.nombre,true)}>{savingPerson===persona.nombre?'Marcando...':'Marcar pagado ✓'}</button>
-              }
+              <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+                {persona.totalPagado>0&&<button disabled={savingPerson===persona.nombre} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #BA7517',background:'transparent',color:'#BA7517',fontSize:11,cursor:'pointer',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcarSeleccionados(persona,false)}>Desmarcar pagados</button>}
+                <button disabled={savingPerson===persona.nombre||selCount===0} style={{padding:'8px 16px',borderRadius:6,border:'none',background:selCount>0?'#1D9E75':'#2A2A2A',color:selCount>0?'#fff':'#555',fontSize:13,fontWeight:500,cursor:selCount>0?'pointer':'default',opacity:savingPerson===persona.nombre?0.5:1}} onClick={()=>marcarSeleccionados(persona,true)}>
+                  {savingPerson===persona.nombre?'Marcando...':(selCount>0?'Pagar '+selCount+' ('+fmt(selTotal)+')':'Marcar pagado ✓')}
+                </button>
+              </div>
             </div>
 
             {/* Descripción para factura */}
             {isDesc&&<div style={{padding:'12px 16px',borderTop:'0.5px solid #2A2A2A'}}>
-              <div style={{fontSize:11,color:'#555',marginBottom:8}}>Texto para enviarle a {persona.nombre.split(' ')[0]}:</div>
+              <div style={{fontSize:11,color:'#555',marginBottom:8}}>Texto para enviarle a {persona.nombre.split(' ')[0]} (solo pendientes):</div>
               <div style={{background:'#1A1A1A',border:'0.5px solid #2A2A2A',borderRadius:8,padding:'12px 14px',fontSize:12,lineHeight:1.6,fontFamily:'monospace',color:'#F0F0F0',whiteSpace:'pre-wrap',marginBottom:10}}>
-                {desc}
+                {generarDesc(persona,true)}
               </div>
-              <button style={{padding:'6px 14px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#1543F8',fontSize:12,cursor:'pointer'}} onClick={()=>copiar(persona.nombre,desc)}>
+              <button style={{padding:'6px 14px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#1543F8',fontSize:12,cursor:'pointer'}} onClick={()=>copiar(persona.nombre,generarDesc(persona,true))}>
                 {copiado===persona.nombre?'¡Copiado! ✓':'Copiar mensaje'}
               </button>
             </div>}
