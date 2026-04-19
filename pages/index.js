@@ -339,35 +339,105 @@ function SetupBtn({mail}){
   </div>
 }
 
-function BadgeEstado({p, onUpdate, onRefresh}){
-  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [motivo,setMotivo]=useState(''), [pendingE,setPendingE]=useState(null)
+function RepresupuestarModal({p, mail, onClose, onDone}){
+  const pedidosIniciales = []
+  for (let i=1;i<=12;i++){const svc=p['Pedido '+i]||'';const precio=parseMonto(p['Precio '+i]);if(svc||precio)pedidosIniciales.push({index:i,svc,precio})}
+  const [pedidos,setPedidos]=useState(pedidosIniciales.length?pedidosIniciales:[{index:1,svc:'',precio:0}])
+  const [motivo,setMotivo]=useState('')
+  const [fechaEvento,setFechaEvento]=useState(p['Fecha Evento']||'')
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+
+  const updPed=(i,field,val)=>setPedidos(prev=>prev.map((x,idx)=>idx===i?{...x,[field]:field==='precio'?(parseFloat(val)||0):val}:x))
+  const addPed=()=>{const next=Math.max(...pedidos.map(x=>x.index),0)+1;if(next>12)return;setPedidos([...pedidos,{index:next,svc:'',precio:0}])}
+  const delPed=i=>setPedidos(prev=>prev.filter((_,idx)=>idx!==i))
+  const subtotal=pedidos.reduce((s,x)=>s+(x.precio||0),0)
+
+  const guardar=async()=>{
+    if(!motivo.trim()){setErr('El motivo es obligatorio');return}
+    setSaving(true);setErr('')
+    try{
+      const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['Columna 1'],motivo,fechaEvento,pedidos:pedidos.filter(x=>x.svc||x.precio)})})
+      const j=await r.json()
+      if(j.ok){onDone(j.nuevaVersion);onClose()}
+      else setErr(j.error||'Error')
+    }catch(e){setErr(e.message)}
+    setSaving(false)
+  }
+
+  const inp={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',width:'100%'}
+
+  return <div style={{position:'fixed',inset:0,background:'#000c',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
+    <div style={{background:'#0D0D0D',border:'0.5px solid #2A2A2A',borderRadius:12,padding:20,width:600,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+      <div style={{fontSize:16,fontWeight:600,marginBottom:4}}>Represupuestar #{p['Columna 1']}</div>
+      <div style={{fontSize:11,color:'#555',marginBottom:16}}>Se crea una copia con nueva versión (ej: v2, v3…) en EN ESPERA. El original queda marcado como REPRESUPUESTADO.</div>
+
+      <div style={{background:'#161616',border:'0.5px solid #2A2A2A',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'#888'}}>
+        <div style={{marginBottom:3}}><span style={{color:'#555'}}>Cliente:</span> {p['Cliente']||'—'} · <span style={{color:'#555'}}>Agencia:</span> {p['Agencia']||'—'}</div>
+        <div><span style={{color:'#555'}}>Proyecto:</span> {p['Proyecto']||'—'}</div>
+      </div>
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:'#555',marginBottom:4}}>Motivo del represupuesto *</div>
+        <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder='Ej: Cambió el scope, ajuste de precios, cliente pidió más días...' autoFocus/>
+      </div>
+
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:'#555',marginBottom:4}}>Fecha del evento</div>
+        <input style={inp} value={fechaEvento} onChange={e=>setFechaEvento(e.target.value)} placeholder='DD/MM/YYYY'/>
+      </div>
+
+      <div style={{marginBottom:10}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+          <div style={{fontSize:11,color:'#555'}}>Pedidos (editá precios o servicios)</div>
+          <button onClick={addPed} style={{fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid #1543F8',background:'transparent',color:'#1543F8',cursor:'pointer'}}>+ Pedido</button>
+        </div>
+        {pedidos.map((ped,i)=>(
+          <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 120px 24px',gap:6,marginBottom:4}}>
+            <select value={ped.svc} onChange={e=>updPed(i,'svc',e.target.value)} style={{...inp,color:ped.svc?'#F0F0F0':'#555'}}>
+              <option value=''>— Servicio —</option>
+              {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
+            </select>
+            <input type='number' value={ped.precio||''} onChange={e=>updPed(i,'precio',e.target.value)} placeholder='$' style={{...inp,fontFamily:'monospace'}}/>
+            <button onClick={()=>delPed(i)} style={{width:24,height:28,border:'none',background:'transparent',color:'#E24B4A',cursor:'pointer',fontSize:16}}>×</button>
+          </div>
+        ))}
+        <div style={{textAlign:'right',fontSize:12,marginTop:6,padding:'6px 10px',background:'#1E1E1E',borderRadius:6}}>
+          <span style={{color:'#555'}}>Subtotal nuevo: </span>
+          <span style={{fontFamily:'monospace',fontWeight:500}}>{fmt(subtotal)}</span>
+          <span style={{color:'#555',fontSize:10,marginLeft:8}}>(fees / impuestos se recalculan al guardar desde presupuesto)</span>
+        </div>
+      </div>
+
+      {err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:10}}>{err}</div>}
+
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button style={{padding:'7px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cancelar</button>
+        <button disabled={saving||!motivo.trim()} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving||!motivo.trim()?0.5:1}} onClick={guardar}>{saving?'Creando...':'Crear represupuesto'}</button>
+      </div>
+    </div>
+  </div>
+}
+
+function BadgeEstado({p, mail, onUpdate, onRefresh}){
+  const [open,setOpen]=useState(false), [saving,setSaving]=useState(false), [reModalOpen,setReModalOpen]=useState(false)
   const ec=estadoColor(p['Estado'])
 
   const handleSelect=async(estado)=>{
-    if(estado==='REPRESUPUESTADO'){setPendingE(estado);setOpen(false);return}
+    if(estado==='REPRESUPUESTADO'){setReModalOpen(true);setOpen(false);return}
     await doSave(estado)
   }
 
-  const doSave=async(estado, mot='')=>{
+  const doSave=async(estado)=>{
     setSaving(true);setOpen(false)
     try{
-      await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado,motivo:mot})})
+      await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],estado})})
       onUpdate(p['Columna 1'],estado);if(onRefresh)setTimeout(onRefresh,500)
     }catch(e){}
-    setSaving(false);setPendingE(null);setMotivo('')
+    setSaving(false)
   }
 
   return <div style={{position:'relative'}}>
-    {pendingE&&<div style={{position:'fixed',inset:0,background:'#000a',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setPendingE(null)}>
-      <div style={{background:'#1E1E1E',border:'0.5px solid #2A2A2A',borderRadius:12,padding:24,minWidth:320}} onClick={e=>e.stopPropagation()}>
-        <div style={{fontSize:13,fontWeight:500,marginBottom:12}}>Motivo del represupuesto</div>
-        <input style={{...S.inp,marginBottom:12}} placeholder='Ej: Cambió el scope, ajuste de precios...' value={motivo} onChange={e=>setMotivo(e.target.value)} autoFocus/>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button style={{...S.fb}} onClick={()=>setPendingE(null)}>Cancelar</button>
-          <button style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}} onClick={()=>doSave(pendingE,motivo)}>Confirmar</button>
-        </div>
-      </div>
-    </div>}
+    {reModalOpen&&<RepresupuestarModal p={p} mail={mail} onClose={()=>setReModalOpen(false)} onDone={nueva=>{onUpdate(p['Columna 1'],'REPRESUPUESTADO');if(onRefresh)setTimeout(onRefresh,500)}}/>}
     <span style={{...S.badge,background:ec.bg,color:ec.c,cursor:'pointer',userSelect:'none',opacity:saving?0.5:1}} onClick={e=>{e.stopPropagation();setOpen(o=>!o)}}>
       {saving?'...':(p['Estado']||'—')}
     </span>
@@ -494,7 +564,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                 <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
                 <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(p['Precio Final']))}</td>
                 <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
-                  <BadgeEstado p={p} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
+                  <BadgeEstado p={p} mail={mail} onUpdate={handleEstadoUpdate} onRefresh={onRefresh}/>
                 </td>
               </tr>
               {isOpen&&<tr key={i+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
