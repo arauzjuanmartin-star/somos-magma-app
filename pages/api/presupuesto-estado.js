@@ -2,6 +2,7 @@ import { getSheets } from '../../lib/sheets'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  const mail = req.headers['x-user-email'] || ''
   const { num, estado, motivo } = req.body
   try {
     const { sheets, SHEET_ID } = await getSheets()
@@ -30,22 +31,30 @@ export default async function handler(req, res) {
       requestBody: { values: [[estado]] }
     })
 
+    // El motivo NO se escribe en una columna de PRESUPUESTOS (antes iba a AU y pisaba Ajuste).
+    // Va solo al LOG para auditoría.
     if (motivo) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: `PRESUPUESTOS!AU${rowIndex}`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [[motivo]] }
-      })
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SHEET_ID,
+          range: 'LOG!A:F',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-estado', 'PRESUPUESTOS', String(num), `${estado} | motivo: ${motivo}`]] },
+        })
+      } catch (e) {}
+    } else {
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SHEET_ID,
+          range: 'LOG!A:F',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-estado', 'PRESUPUESTOS', String(num), estado]] },
+        })
+      } catch (e) {}
     }
 
     // Si APROBADO → crear fila en PROYECTOS con el orden correcto del Sheet
     if (estado === 'APROBADO' && presuRow) {
-      // PRESUPUESTOS índices:
-      // 0:Nro, 1:FechaEvento, 2:PMInterno, 3:Estado, 4:Agencia, 5:Cliente
-      // 6:Proyecto, 7:CantFechas, 8:PrecioFinal, 9:FechaPresu, 10:Contacto
-      // 11:Pedido1, 12:Precio1, 13:Pedido2, 14:Precio2 ...
-
       const nro         = presuRow[0]  || ''
       const fechaEvento = presuRow[1]  || ''
       const pmInterno   = presuRow[2]  || ''
@@ -54,7 +63,6 @@ export default async function handler(req, res) {
       const proyecto    = presuRow[6]  || ''
       const precio      = presuRow[8]  || ''
 
-      // Calcular mes para col A de PROYECTOS (formato "MM - NOMBRE")
       const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
       let mesStr = ''
       if (fechaEvento) {
@@ -67,7 +75,6 @@ export default async function handler(req, res) {
         }
       }
 
-      // Verificar duplicado en PROYECTOS (col C tiene el N° presupuesto)
       const rProy = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
         range: 'PROYECTOS!C:C',
@@ -76,28 +83,13 @@ export default async function handler(req, res) {
       const yaExiste = proyRows.some(r => String(r[0]) === String(nro))
 
       if (!yaExiste) {
-        // PROYECTOS orden correcto:
-        // A: Mes | B: Carga Staff (vacío) | C: N° Presupuesto | D: Fecha Evento
-        // E: Agencia | F: Cliente | G: Proyecto | H: Total | I: Fee Final
-        // J: Diferencia | K: Fee Agencia | L: Pedido 1 | M: Precio | N: Staff ...
         const proyRow = [
-          mesStr,    // A: Mes
-          '',        // B: Carga Staff (FALSE/vacío)
-          nro,       // C: N° Presupuesto
-          fechaEvento, // D: Fecha Evento
-          agencia,   // E: Agencia
-          cliente,   // F: Cliente
-          proyecto,  // G: Proyecto
-          precio,    // H: Total
-          '',        // I: Fee Final (calculado por Sheet)
-          '',        // J: Diferencia (calculado)
-          '',        // K: Fee Agencia (calculado)
+          mesStr, '', nro, fechaEvento, agencia, cliente, proyecto, precio, '', '', '',
         ]
-        // Agregar Pedido1, Precio1, Staff1 ... desde PRESUPUESTOS
         for (let j = 0; j < 12; j++) {
           proyRow.push(presuRow[11 + j*2] || '')  // Pedido
           proyRow.push(presuRow[12 + j*2] || '')  // Precio
-          proyRow.push('')                          // Staff (vacío, se carga en Proyectos)
+          proyRow.push('')                         // Staff
         }
 
         await sheets.spreadsheets.values.append({

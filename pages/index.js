@@ -1347,11 +1347,32 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     if(isRepresupuestar && !form.motivo.trim())return
     setSaving(true)
     const fechaEventoOut = form.fe1 ? form.fe1.split('-').reverse().join('/') : (form.feIni?form.feIni.split('-').reverse().join('/'):'')
-    const row={'Columna 1':nextNum,'Estado':'EN ESPERA','PM Interno':form.pm,'Agencia':form.agencia,'Cliente':form.cliente,'Proyecto':form.proyecto,'Contacto':form.contacto,'Fecha Presupuesto':form.fp,'Fecha Evento':fechaEventoOut,'Precio Final':T.total}
+    const cantFechas = form.fechaMode==='multi' ? diasMulti.filter(Boolean).length : (form.fechaMode==='rango' && form.feIni && form.feFin ? Math.max(1,Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1) : 1)
+    const row={
+      'Columna 1':nextNum,
+      'Estado':'EN ESPERA',
+      'PM Interno':form.pm,
+      'Agencia':form.agencia,
+      'Cliente':form.cliente,
+      'Proyecto':form.proyecto,
+      'Contacto':form.contacto,
+      'Fecha Presupuesto':form.fp,
+      'Fecha Evento':fechaEventoOut,
+      'Cant. Fechas':cantFechas,
+      'Precio Final':T.total,
+      'Subtotal':T.subtotal,
+      'Fee Agencia':T.fee,
+      'Impuesto a las ganancias':T.gan,
+      'IIBB':T.iibb,
+      'Plazo':form.plazo?String(form.plazo)+(form.plazo==='0'?'':' días'):'Contado',
+      'Interes %':form.interes?form.interes+'%':'',
+      'Interes $':T.intMto,
+      'Total':T.total,
+      'Ajuste':T.ajMto,
+    }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
       await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})
-      // Si es represupuestar, marcar el original como REPRESUPUESTADO
       if (isRepresupuestar) {
         await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
       }
