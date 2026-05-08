@@ -1717,6 +1717,7 @@ function Egresos({data,mail,onRefresh}){
     <SEC titulo='Operativos (alquiler, servicios, suscripciones)' items={gfPorCat['Operativos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#BA7517'/>
     <SEC titulo={`Tarjetas (${MESES[mesNum-1]} ${anio})`} items={tarjMes} hoja='TARJETAS' arrFuente={tarjetas} color='#1543F8' renderExtra={t=>`${t['Tarjeta']} ${t['Moneda']==='USD'?'(USD)':''}`}/>
     <SEC titulo={`Préstamos (vto ${MESES[mesNum-1]} ${anio})`} items={prestMes} hoja='PRESTAMOS' arrFuente={prestamos} color='#9635AB' renderExtra={p=>`${p['Prestamo']} cuota ${p['Cuota nro']}/${p['Cuotas total']}`}/>
+    <MovimientosTarjeta data={data} mail={mail} mesNum={mesNum} anio={anio} onRefresh={onRefresh}/>
     <div style={{...S.card,padding:'14px 18px',marginTop:12}}>
       <div style={{fontSize:12,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontWeight:500}}>Resumen del mes</div>
       {[['Ingresos cobrados',ingresos,'#1D9E75','+'],['Sueldos',totalSueldos,'#E24B4A','-'],['Impuestos',totalImpuestos,'#9635AB','-'],['Operativos',totalOperativos,'#BA7517','-'],['Tarjetas',totalTarjetas,'#1543F8','-'],['Préstamos',totalPrestamos,'#9635AB','-'],['Resultado',resultado,resultado>=0?'#1D9E75':'#E24B4A',resultado>=0?'+':'']].map(([l,v,c,s])=>(
@@ -1724,6 +1725,102 @@ function Egresos({data,mail,onRefresh}){
       ))}
     </div>
     <div style={{fontSize:10,color:'#555',marginTop:12,textAlign:'center'}}>Para cargar nuevos gastos / tarjetas / préstamos: editá las hojas GASTOS_FIJOS, TARJETAS, PRESTAMOS del Sheet (después agregamos UI para crearlos desde acá)</div>
+  </div>
+}
+
+// ---- Vista de movimientos de tarjeta cargados (detalle) ----
+function MovimientosTarjeta({data,mail,mesNum,anio,onRefresh}){
+  const movs=(data.movimientosTarjeta||[]).filter(m=>String(m['Mes'])===String(mesNum)&&String(m['Año'])===String(anio))
+  const [open,setOpen]=useState(false)
+  const [filtroCat,setFiltroCat]=useState('todas')
+  const [filtroTar,setFiltroTar]=useState('todas')
+  const [busq,setBusq]=useState('')
+  const [saving,setSaving]=useState(null)
+
+  if(movs.length===0&&!open)return <div style={{...S.card,padding:'10px 14px',marginBottom:10,fontSize:11,color:'#555',textAlign:'center'}}>Sin movimientos de tarjeta cargados para {mesNum}/{anio}. Subí un PDF arriba para agregar.</div>
+
+  const tarjetas=[...new Set(movs.map(m=>m['Tarjeta']).filter(Boolean))]
+  const categorias=[...new Set(movs.map(m=>m['Categoria']).filter(Boolean))]
+  const isRev=v=>String(v||'').toUpperCase().match(/SI|SÍ|TRUE/)
+  const filtrados=movs.filter(m=>{
+    if(filtroCat!=='todas'&&m['Categoria']!==filtroCat)return false
+    if(filtroTar!=='todas'&&m['Tarjeta']!==filtroTar)return false
+    if(busq){const q=busq.toLowerCase();const hay=[m['Comercio'],m['Descripcion'],m['Notas']].map(v=>String(v||'').toLowerCase()).join(' ');if(!hay.includes(q))return false}
+    return true
+  })
+  const totARS=filtrados.filter(m=>m['Moneda']==='ARS').reduce((s,m)=>s+parseMonto(m['Monto']),0)
+  const totUSD=filtrados.filter(m=>m['Moneda']==='USD').reduce((s,m)=>s+parseMonto(m['Monto']),0)
+  const revisados=filtrados.filter(m=>isRev(m['Revisado'])).length
+  const totalesPorCat={}
+  filtrados.forEach(m=>{const c=m['Categoria']||'Otros';if(!totalesPorCat[c])totalesPorCat[c]={ars:0,usd:0,cant:0};const mon=parseMonto(m['Monto']);if(m['Moneda']==='USD')totalesPorCat[c].usd+=mon;else totalesPorCat[c].ars+=mon;totalesPorCat[c].cant++})
+
+  // findFila: en data.movimientosTarjeta, buscar el index. Las filas en sheet son index+2 (1-based + header)
+  const findFilaOriginal=(m)=>{const idx=(data.movimientosTarjeta||[]).indexOf(m);return idx>=0?idx+2:null}
+
+  const toggleRevisado=async(m)=>{
+    const fila=findFilaOriginal(m);if(!fila)return
+    setSaving(fila)
+    try{
+      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({fila,revisado:!isRev(m['Revisado'])})})
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  const cambiarCategoria=async(m,nueva)=>{
+    const fila=findFilaOriginal(m);if(!fila)return
+    setSaving(fila)
+    try{
+      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({fila,categoria:nueva})})
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  return <div style={{...S.card,marginBottom:10,border:'0.5px solid #1543F840'}}>
+    <div style={{...S.ch,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setOpen(!open)}>
+      <span style={{color:'#1543F8'}}>📋 Movimientos de tarjeta cargados ({movs.length}) <span style={{color:'#555',fontWeight:400,fontSize:11,marginLeft:6}}>· {revisados} revisados · ${fmt(movs.reduce((s,m)=>s+(m['Moneda']==='ARS'?parseMonto(m['Monto']):0),0))}</span></span>
+      <span style={{fontSize:11,color:'#555'}}>{open?'▲ cerrar':'▼ ver detalle'}</span>
+    </div>
+    {open&&<div style={{padding:'12px 14px'}}>
+      <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+        <select value={filtroTar} onChange={e=>setFiltroTar(e.target.value)} style={{padding:'5px 8px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11}}>
+          <option value='todas'>Todas las tarjetas</option>
+          {tarjetas.map(t=><option key={t}>{t}</option>)}
+        </select>
+        <select value={filtroCat} onChange={e=>setFiltroCat(e.target.value)} style={{padding:'5px 8px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11}}>
+          <option value='todas'>Todas las categorías</option>
+          {categorias.map(c=><option key={c}>{c}</option>)}
+        </select>
+        <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder='🔍 buscar comercio/descripcion' style={{padding:'5px 8px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,flex:1,minWidth:180}}/>
+        <span style={{fontSize:10,color:'#555'}}>{filtrados.length} mov · ARS {fmt(totARS)} {totUSD?'· USD '+totUSD.toFixed(2):''}</span>
+      </div>
+      {Object.keys(totalesPorCat).length>0&&<div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+        {Object.entries(totalesPorCat).sort((a,b)=>(b[1].ars+b[1].usd*1500)-(a[1].ars+a[1].usd*1500)).map(([cat,t])=>(
+          <span key={cat} style={{padding:'3px 8px',borderRadius:3,background:'#1E1E1E',fontSize:10,color:'#888'}}>{cat}: <strong style={{color:'#F0F0F0'}}>{fmt(t.ars)}</strong>{t.usd>0?' + US$'+t.usd.toFixed(0):''} <span style={{color:'#555'}}>· {t.cant}</span></span>
+        ))}
+      </div>}
+      <div style={{maxHeight:'50vh',overflowY:'auto',border:'0.5px solid #2A2A2A',borderRadius:6}}>
+        <div style={{display:'grid',gridTemplateColumns:'30px 70px 1fr 80px 100px 150px',gap:6,padding:'6px 8px',background:'#1A1A1A',fontSize:10,color:'#555',textTransform:'uppercase',position:'sticky',top:0}}>
+          <span></span><span>Fecha</span><span>Comercio</span><span>Tarjeta</span><span style={{textAlign:'right'}}>Monto</span><span>Categoría</span>
+        </div>
+        {filtrados.map((m,i)=>{
+          const fila=findFilaOriginal(m)
+          const rev=isRev(m['Revisado'])
+          return <div key={i} style={{display:'grid',gridTemplateColumns:'30px 70px 1fr 80px 100px 150px',gap:6,padding:'5px 8px',borderTop:'0.5px solid #2A2A2A',fontSize:11,alignItems:'center',opacity:rev?0.5:1}}>
+            <input type='checkbox' checked={rev} disabled={saving===fila} onChange={()=>toggleRevisado(m)} style={{accentColor:'#1D9E75'}}/>
+            <span style={{fontFamily:'monospace',fontSize:10,color:'#888'}}>{m['Fecha']||''}</span>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11}}>{m['Comercio']||m['Descripcion']||'—'}</span>
+            <span style={{fontSize:10,color:'#555'}}>{m['Tarjeta']}</span>
+            <span style={{fontFamily:'monospace',fontSize:11,textAlign:'right',color:parseMonto(m['Monto'])<0?'#1D9E75':'inherit'}}>{m['Moneda']==='USD'?'US$':''}{fmt(parseMonto(m['Monto']))}</span>
+            <select value={m['Categoria']||'Otros'} disabled={saving===fila} onChange={e=>cambiarCategoria(m,e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:10}}>
+              {['Comida y bebida','Transporte','Viajes','Suscripciones','Producción audiovisual','Profesional/Servicios','Equipos/Tecnología','Personal','Pagos/Transferencias','Cargos bancarios','Otros'].map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+        })}
+      </div>
+      <div style={{fontSize:10,color:'#555',marginTop:8,textAlign:'center'}}>Tildá los movimientos a medida que los revisás. Podés cambiar categoría desde acá si ves alguno mal clasificado.</div>
+    </div>}
   </div>
 }
 
