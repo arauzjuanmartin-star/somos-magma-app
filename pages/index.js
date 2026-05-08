@@ -125,7 +125,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'dashboard': return <Dashboard data={data} mail={mail} onRefresh={onRefresh}/>
     case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'proyectos': return <Proyectos data={data} mail={mail}/>
-    case 'facturacion': return <Facturacion data={data}/>
+    case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
     case 'balance': return <Balance data={data} mail={mail} onRefresh={onRefresh}/>
     case 'historico': return <Historico data={data}/>
@@ -857,7 +857,7 @@ function Proyectos({data,mail}){
 // ---- FACTURACION ----
 const CUENTAS_FC=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander']
 const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'},Efectivo:{label:'Efectivo',color:'#BA7517',bg:'#BA751715'}}
-function Facturacion({data,mail}){
+function Facturacion({data,mail,onRefresh}){
   const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false)
   const [presuSel,setPresuSel]=useState(null),[montoTipo,setMontoTipo]=useState('total'),[montoCustom,setMontoCustom]=useState('')
   const [formData,setFormData]=useState({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
@@ -891,7 +891,49 @@ function Facturacion({data,mail}){
   const calcIvaF=()=>formData.conIVA?Math.round(calcNeto()*0.21):0
   const calcTotalF=()=>calcNeto()+calcIvaF()
   const guardarFactura=async()=>{if(!presuSel||!calcNeto())return;setSaving(true);try{await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()})});setToast('Factura guardada!');setTimeout(()=>setToast(''),2500);if(pdfFile){try{const fd=new FormData();fd.append('file',pdfFile,pdfFile.name);fd.append('entidad',formData.entidad);fd.append('nroFactura',formData.nroFactura);const now=new Date();fd.append('mes',String(now.getMonth()+1));fd.append('anio',String(now.getFullYear()));await fetch('/api/factura-upload',{method:'POST',body:fd});}catch(eu){console.error('upload error',eu)}}setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setCuitAuto('');setPdfFile(null);setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})}catch(e){setToast('Error: '+e.message);}setSaving(false)}
-  const marcarCobrada=async(f)=>{const cobro=cobroData[f['N° Presupuesto']]||{};const ret=(cobro.retG||0)+(cobro.retI||0)+(cobro.retIV||0)+(cobro.com||0);try{await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nroPresupuesto:f['N° Presupuesto'],cobrado:true,fechaCobro:fechaHoy(),retenciones:ret})});setToast('Marcada como cobrada!');setTimeout(()=>setToast(''),2500)}catch(e){setToast('Error: '+e.message)}}
+  const registrarCobro=async(f,tipoCobro,opts={})=>{
+    const nro=f['N° Presupuesto']
+    const cobro=cobroData[nro]||{}
+    const total=parseMonto(f['Precio FINAL'])
+    const yaCobrado=parseMonto(f['Monto cobrado'])||(isCobrada(f)?total:0)
+    const pendiente=Math.max(0,total-yaCobrado)
+    let monto=opts.monto
+    if(monto===undefined){
+      if(tipoCobro==='total')monto=pendiente
+      else if(tipoCobro==='adelanto'){const pctStr=prompt('% del adelanto (ej 30, 50)','30');if(!pctStr)return;const pct=parseFloat(pctStr)||30;monto=Math.round(total*pct/100);opts.porcentajeAdelanto=pct}
+      else{const m=prompt(`Monto del pago parcial (pendiente: ${fmt(pendiente)})`,String(pendiente));if(!m)return;monto=parseFloat(m)||0}
+    }
+    if(!monto||monto<=0){setToast('Monto invalido');return}
+    if(!cobro.cuenta){setToast('Elegi cuenta destino');return}
+    const tipoFC=String(f['Tipo de Factura']||'').toUpperCase()
+    const reservarIVA=tipoFC==='A'&&parseMonto(f['IVA'])>0&&(opts.reservarIVA!==false)
+    try{
+      const resp=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+        nroPresupuesto:nro,
+        tipoCobro,
+        monto,
+        cuentaDestino:cobro.cuenta,
+        formaPago:cobro.forma||'',
+        retGanancias:cobro.retG||0,
+        retIIBB:cobro.retI||0,
+        retIVA:cobro.retIV||0,
+        comision:cobro.com||0,
+        fechaCobro:fechaHoy(),
+        reservarIVA,
+        porcentajeAdelanto:opts.porcentajeAdelanto,
+      })}).then(r=>r.json())
+      if(resp.error){setToast('Error: '+resp.error);return}
+      const partes=[`+${fmt(resp.llegoACuenta)} en ${cobro.cuenta}`]
+      if(resp.reservaCreada)partes.push(`Reserva IVA ${fmt(resp.reservaCreada.monto)}`)
+      if(resp.completa)partes.push('FACTURA COMPLETA')
+      else partes.push(`acum ${fmt(resp.acumulado)}/${fmt(resp.precioFinal)}`)
+      setToast(partes.join(' · '))
+      setTimeout(()=>setToast(''),5000)
+      setCobroData(prev=>({...prev,[nro]:{...cobro,retG:0,retI:0,retIV:0,com:0}}))
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){setToast('Error: '+e.message)}
+  }
+  const marcarCobrada=f=>registrarCobro(f,'total')
   const inp2={padding:'7px 9px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',width:'100%'}
   const bmap={cobrada:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},pendiente:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},'por-vencer':{bg:'#BA751720',c:'#BA7517',l:'Por vencer'},vencida:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},reclamar:{bg:'#FCEBEB',c:'#A32D2D',l:'Reclamar!'}}
   return <div>
@@ -1042,10 +1084,20 @@ function Facturacion({data,mail}){
                 </>}
                 <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Disponible Magma</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1D9E75'}}>{fmt(disponible)}</span></div>
               </div>
-              {isCobrada(f)
-                ?<div style={{marginTop:10,padding:'8px',textAlign:'center',fontSize:12,color:'#1D9E75',border:'0.5px solid #1D9E7540',borderRadius:6}}>Cobrada el {f['Fecha cobro']||'—'}</div>
-                :<button onClick={()=>marcarCobrada(f)} style={{padding:'8px 18px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',marginTop:12,width:'100%'}}>Marcar como cobrada</button>
-              }
+              {(()=>{
+                const yaCob=parseMonto(f['Monto cobrado'])||(isCobrada(f)?total:0)
+                const pendiente=Math.max(0,total-yaCob)
+                if(isCobrada(f))return <div style={{marginTop:10,padding:'8px',textAlign:'center',fontSize:12,color:'#1D9E75',border:'0.5px solid #1D9E7540',borderRadius:6}}>Cobrada el {f['Fecha cobro']||'—'}</div>
+                return <div style={{marginTop:12}}>
+                  {yaCob>0&&<div style={{padding:'6px 10px',background:'#1543F810',borderRadius:6,fontSize:11,color:'#1543F8',marginBottom:8,textAlign:'center'}}>Acumulado: {fmt(yaCob)} / {fmt(total)} · Pendiente: {fmt(pendiente)}</div>}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                    <button onClick={()=>registrarCobro(f,'adelanto')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #BA7517',background:'transparent',color:'#BA7517',fontSize:12,fontWeight:500,cursor:'pointer'}}>Adelanto / Seña</button>
+                    <button onClick={()=>registrarCobro(f,'parcial')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:12,fontWeight:500,cursor:'pointer'}}>Pago parcial</button>
+                    <button onClick={()=>registrarCobro(f,'total')} style={{padding:'8px 6px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Cobro total</button>
+                  </div>
+                  <div style={{fontSize:10,color:'#555',marginTop:6,textAlign:'center'}}>Antes de cobrar, completá cuenta destino y retenciones (si las hay)</div>
+                </div>
+              })()}
             </div>
           </div>}
         </div>
