@@ -1519,17 +1519,42 @@ function Egresos({data,mail,onRefresh}){
     const fila=findFila(arrFuente,item)
     if(!fila){setToast('No encuentro la fila');return}
     const nuevoPagado=!isPagado(item['Pagado'])
-    const tipoH=hoja==='PRESTAMOS'?'Monto cuota':'Monto'
-    const monto=parseMonto(item[tipoH])
     setSaving(`${hoja}-${fila}`)
     try{
-      await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
-        hoja,fila,pagado:nuevoPagado,
+      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+        hoja,fila,pagado:nuevoPagado,tipoPago:'total',
         fechaPago:nuevoPagado?(hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear()):'',
-        ...extras,monto:nuevoPagado?monto:undefined,
-      })})
-      setToast(nuevoPagado?`Pagado ${fmt(monto)} ${extras.cuentaPago?'desde '+extras.cuentaPago:''}`:'Marcado pendiente')
+        ...extras,
+      })}).then(r=>r.json())
+      setToast(nuevoPagado?`Pagado ${fmt(r.pagoEvento||0)} ${extras.cuentaPago?'desde '+extras.cuentaPago:''}`:'Marcado pendiente')
       setTimeout(()=>setToast(''),3000)
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){setToast('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  const pagoParcial=async(hoja,arrFuente,item)=>{
+    const fila=findFila(arrFuente,item);if(!fila)return
+    const cuenta=item['Cuenta pago']
+    if(!cuenta){setToast('Elegí cuenta de pago primero');return}
+    const tipoH=hoja==='PRESTAMOS'?'Monto cuota':'Monto'
+    const total=parseMonto(item[tipoH])
+    const yaPagado=parseMonto(item['Monto pagado'])
+    const pendiente=Math.max(0,total-yaPagado)
+    const m=prompt(`Monto del pago parcial (pendiente: ${fmt(pendiente)})`,String(pendiente))
+    if(!m)return
+    const montoNum=parseFloat(m);if(!montoNum||montoNum<=0){setToast('Monto invalido');return}
+    setSaving(`${hoja}-${fila}-pp`)
+    try{
+      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+        hoja,fila,tipoPago:'parcial',montoParcial:montoNum,cuentaPago:cuenta,
+        fechaPago:hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear(),
+      })}).then(r=>r.json())
+      const partes=[`-${fmt(montoNum)} de ${cuenta}`]
+      if(r.completado)partes.push('PAGO COMPLETO')
+      else partes.push(`acum ${fmt(r.acumulado)}/${fmt(total)}`)
+      setToast(partes.join(' · '))
+      setTimeout(()=>setToast(''),4000)
       if(typeof onRefresh==='function')await onRefresh()
     }catch(e){setToast('Error: '+e.message)}
     setSaving(null)
@@ -1599,21 +1624,29 @@ function Egresos({data,mail,onRefresh}){
       const pag=isPagado(it['Pagado'])
       const fila=findFila(arrFuente,it)
       const monto=parseMonto(it['Monto']||it['Monto cuota'])
+      const yaPagado=parseMonto(it['Monto pagado'])
+      const pendiente=Math.max(0,monto-yaPagado)
+      const tieneParcial=yaPagado>0&&!pag
       const cuenta=it['Cuenta pago']||''
-      const isSaving=saving===`${hoja}-${fila}`||saving===`${hoja}-${fila}-cta`
-      return <div key={i} style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto auto',gap:10,padding:'8px 14px',borderTop:'0.5px solid #2A2A2A',alignItems:'center',opacity:pag?0.6:1,fontSize:12}}>
-        <input type='checkbox' checked={pag} disabled={isSaving} onChange={()=>togglePagado(hoja,arrFuente,it,{cuentaPago:cuenta})} style={{accentColor:'#1D9E75'}}/>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{renderExtra?renderExtra(it):(it['Concepto']||it['Tarjeta']||it['Prestamo'])}</div>
-          {(it['Vencimiento']||it['Dia pago'])&&<div style={{fontSize:10,color:'#555'}}>{it['Vencimiento']?'vto '+it['Vencimiento']:'dia '+it['Dia pago']}{it['Moneda']&&it['Moneda']!=='ARS'?' · '+it['Moneda']:''}</div>}
+      const isSaving=saving===`${hoja}-${fila}`||saving===`${hoja}-${fila}-cta`||saving===`${hoja}-${fila}-pp`
+      const permiteParcial=hoja==='TARJETAS'||hoja==='PRESTAMOS'
+      return <div key={i} style={{padding:'8px 14px',borderTop:'0.5px solid #2A2A2A',opacity:pag?0.6:1,fontSize:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto auto auto',gap:10,alignItems:'center'}}>
+          <input type='checkbox' checked={pag} disabled={isSaving} onChange={()=>togglePagado(hoja,arrFuente,it,{cuentaPago:cuenta})} style={{accentColor:'#1D9E75'}}/>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{renderExtra?renderExtra(it):(it['Concepto']||it['Tarjeta']||it['Prestamo'])}</div>
+            {(it['Vencimiento']||it['Dia pago'])&&<div style={{fontSize:10,color:'#555'}}>{it['Vencimiento']?'vto '+it['Vencimiento']:'dia '+it['Dia pago']}{it['Moneda']&&it['Moneda']!=='ARS'?' · '+it['Moneda']:''}</div>}
+          </div>
+          <select value={cuenta} disabled={pag||isSaving} onChange={e=>cambiarCuenta(hoja,arrFuente,it,e.target.value)} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,minWidth:110}}>
+            <option value=''>— cuenta —</option>
+            {cuentasNombres.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <span style={{fontFamily:'monospace',fontSize:13,minWidth:90,textAlign:'right'}}>{fmt(monto)}</span>
+          {permiteParcial&&!pag&&<button onClick={()=>pagoParcial(hoja,arrFuente,it)} disabled={isSaving} style={{padding:'3px 8px',borderRadius:4,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:10,cursor:'pointer'}}>Parcial</button>}
+          <span style={{...S.badge,background:pag?'#1D9E7520':(tieneParcial?'#9635AB20':'#BA751720'),color:pag?'#1D9E75':(tieneParcial?'#9635AB':'#BA7517'),fontSize:10}}>{pag?'PAGADO':(tieneParcial?'PARCIAL':'PEND')}</span>
+          <span style={{fontSize:10,color:'#555',minWidth:40}}>{isSaving?'...':(pag?(it['Fecha pago']||''):'')}</span>
         </div>
-        <select value={cuenta} disabled={pag||isSaving} onChange={e=>cambiarCuenta(hoja,arrFuente,it,e.target.value)} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,minWidth:110}}>
-          <option value=''>— cuenta —</option>
-          {cuentasNombres.map(c=><option key={c} value={c}>{c}</option>)}
-        </select>
-        <span style={{fontFamily:'monospace',fontSize:13,minWidth:90,textAlign:'right'}}>{fmt(monto)}</span>
-        <span style={{...S.badge,background:pag?'#1D9E7520':'#BA751720',color:pag?'#1D9E75':'#BA7517',fontSize:10}}>{pag?'PAGADO':'PEND'}</span>
-        <span style={{fontSize:10,color:'#555',minWidth:40}}>{isSaving?'...':(pag?(it['Fecha pago']||''):'')}</span>
+        {tieneParcial&&<div style={{marginTop:4,marginLeft:30,padding:'4px 8px',background:'#9635AB10',borderRadius:4,fontSize:10,color:'#9635AB'}}>Pagado {fmt(yaPagado)} / {fmt(monto)} · falta {fmt(pendiente)}</div>}
       </div>
     })}
   </div>)
@@ -1660,7 +1693,7 @@ function Egresos({data,mail,onRefresh}){
               <select value={m.moneda||'ARS'} onChange={e=>updateMov(m._idx,'moneda',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:10}}><option>ARS</option><option>USD</option></select>
               <input type='number' value={m.monto||0} onChange={e=>updateMov(m._idx,'monto',parseFloat(e.target.value)||0)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:11,fontFamily:'monospace',textAlign:'right',width:'100%'}}/>
               <select value={m.categoria||'Otros'} onChange={e=>updateMov(m._idx,'categoria',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:11}}>
-                {['Comida y bebida','Transporte','Viajes','Suscripciones','Producción audiovisual','Profesional/Servicios','Equipos/Tecnología','Personal','Pagos/Transferencias','Otros'].map(c=><option key={c}>{c}</option>)}
+                {['Comida y bebida','Transporte','Viajes','Suscripciones','Producción audiovisual','Profesional/Servicios','Equipos/Tecnología','Personal','Pagos/Transferencias','Cargos bancarios','Otros'].map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
           ))}
