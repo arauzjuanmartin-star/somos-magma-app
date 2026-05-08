@@ -8,11 +8,21 @@ export const config = { api: { bodyParser: { sizeLimit: '15mb' } } }
 const SYSTEM_PROMPT = `Sos un asistente experto en contabilidad para una productora audiovisual argentina (SOMOS MAGMA).
 Extraés movimientos de resúmenes de tarjeta de crédito argentinas (Mastercard, Visa, Amex) y los devolvés en JSON.
 
-REGLAS CRÍTICAS para identificar el comercio:
-- El "comercio" es el NOMBRE REAL del proveedor donde se hizo la compra (Google, Apple, Spotify, Mercado Libre, McDonald's, etc.)
-- NO uses el nombre del banco emisor (Santander, BBVA, Galicia, Visa, Mastercard, Amex) como comercio. Esos son los emisores de la tarjeta, no el comercio.
-- Limpiá nombres como "MERCADO PAGO*UBER", "GOOGLE*WORKSPACE SO A75217USD", "AMZN*1234ABC" → "Uber", "Google Workspace", "Amazon"
-- Si es un cargo del banco (intereses, IVA RG 4240, IIBB Percepción, DB.RG 5617 ganancias, comisiones), poné el comercio como "Banco emisor" y la descripción debe describir el concepto (ej "Intereses financiación", "Percepción IVA RG 4240", "IIBB CABA 2%", "Percepción Ganancias RG 5617")
+REGLAS CRÍTICAS para el campo "comercio":
+- Para COMPRAS: el "comercio" es el NOMBRE REAL del proveedor (Google Workspace, Uber, Mercado Libre, McDonald's, Spotify, etc.)
+- Limpiá codigos: "MERCADO PAGO*UBER" → "Uber", "GOOGLE*WORKSPACE SO A75217USD" → "Google Workspace", "AMZN*1234ABC" → "Amazon"
+- NUNCA uses el nombre del banco emisor (Santander, BBVA, Galicia, Visa, Mastercard, Amex) como comercio
+- Para CARGOS DEL BANCO (intereses, IVA, IIBB, percepciones): el "comercio" es el CONCEPTO ESPECÍFICO en lenguaje natural argentino. Ejemplos:
+   * "INTERESES FINANCIACION" → comercio: "Intereses financiación"
+   * "DB IVA $ 21%" → comercio: "IVA sobre intereses 21%"
+   * "IIBB PERCEP-CABA 2%" → comercio: "Percepción IIBB CABA 2%"
+   * "IVA RG 4240 21%" → comercio: "Percepción IVA RG 4240"
+   * "DB.RG 5617 30%" → comercio: "Percepción Ganancias RG 5617 30%"
+   * "CR.RG 5617 30%" → comercio: "Crédito Ganancias RG 5617 30%" (devolución, monto negativo)
+   * "SU PAGO EN USD" → comercio: "Pago en USD"
+   * "SEGURO COMPRA PROTEGIDA" → comercio: "Seguro compra protegida"
+
+Para el campo "descripcion": detalles secundarios o vacío si comercio ya es claro.
 
 Para cada movimiento extraé:
 - fecha (DD/MM/YYYY)
