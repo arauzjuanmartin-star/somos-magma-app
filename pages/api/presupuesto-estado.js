@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       const agencia     = presuRow[4]  || ''
       const cliente     = presuRow[5]  || ''
       const proyecto    = presuRow[6]  || ''
-      const precio      = presuRow[8]  || ''
+      const precioFinal = presuRow[8]  || ''  // I — lo que cliente paga
       const fechaPresu  = presuRow[9]  || ''
       // Financieros del presu
       const subtotal    = presuRow[38] || ''  // AM
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
       const plazo       = presuRow[42] || ''  // AQ
       const interesPct  = presuRow[43] || ''  // AR
       const interesAmt  = presuRow[44] || ''  // AS
-      const total       = presuRow[45] || ''  // AT
+      const totalBruto  = presuRow[45] || ''  // AT — antes del ajuste/descuento
       const ajuste      = presuRow[46] || ''  // AU
 
       const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       proyRow[4]  = agencia
       proyRow[5]  = cliente
       proyRow[6]  = proyecto
-      proyRow[7]  = total || precio    // Total (con IVA si aplica) — usa AT del presu
+      proyRow[7]  = precioFinal        // Total (lo que cliente paga, ya con descuento aplicado)
       proyRow[8]  = fee                // Fee Final
       proyRow[9]  = ''                 // Diferencia (vs presu inicial)
       proyRow[10] = fee                // Fee Agencia (mismo que Fee Final inicialmente)
@@ -119,8 +119,8 @@ export default async function handler(req, res) {
       proyRow[55] = plazo
       proyRow[56] = interesPct
       proyRow[57] = interesAmt
-      proyRow[58] = total
-      proyRow[59] = ajuste
+      proyRow[58] = precioFinal        // BG Total (lo que cliente paga, igual que H)
+      proyRow[59] = ajuste              // BH Ajuste (descuento aplicado, negativo si descuento)
 
       // Buscar si ya existe fila para este presupuesto
       const rProy = await sheets.spreadsheets.values.get({
@@ -142,18 +142,17 @@ export default async function handler(req, res) {
           requestBody: { values: [proyRow] }
         })
       } else {
-        // Update fila existente — solo BB-BH y los financieros de I,K (Fee), preservar Carga Staff y Staff slots
+        // Update fila existente — completar BB-BH y H/I/K (Fee/Total), preservar Carga Staff y Staff slots
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
           range: `PROYECTOS!BA${proyRowIdx}:BH${proyRowIdx}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[subtotal, impGan, iibb, plazo, interesPct, interesAmt, total, ajuste]] }
+          requestBody: { values: [[subtotal, impGan, iibb, plazo, interesPct, interesAmt, precioFinal, ajuste]] }
         })
-        // También actualizar I (Fee Final) y K (Fee Agencia) por si cambiaron
         await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SHEET_ID,
           requestBody: { valueInputOption: 'USER_ENTERED', data: [
-            { range: `PROYECTOS!H${proyRowIdx}`, values: [[total]] },
+            { range: `PROYECTOS!H${proyRowIdx}`, values: [[precioFinal]] },
             { range: `PROYECTOS!I${proyRowIdx}`, values: [[fee]] },
             { range: `PROYECTOS!K${proyRowIdx}`, values: [[fee]] },
           ]},
