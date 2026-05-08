@@ -1871,13 +1871,12 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
 // ---- HISTORICO ----
 function Historico({data}){
   const [añoSel,setAñoSel]=useState('2025')
-  // Para 2026: derivamos del Sheet en vivo - PROYECTOS (con BB-BH llenas) + FACTURACION (cobrado) + Pagos_Staff
+  // Para 2026: derivamos del Sheet en vivo - PROYECTOS (con BB-BH llenas) + FACTURACION (cobrado)
+  // Staff: para 2026 lo calculamos APARTE desde Pagos_Staff por año (los nros de presu no siempre matchean proyectos)
   const facByPresu={};(data.facturacion||[]).forEach(f=>{facByPresu[String(f['N° Presupuesto'])]=f})
-  const pagosByPresu={};(data.pagosStaff||[]).forEach(p=>{const k=String(p['N° Presupuesto']);if(!pagosByPresu[k])pagosByPresu[k]=[];pagosByPresu[k].push(p)})
   const proy2026=(data.proyectos||[]).filter(p=>{const fe=String(p['Fecha Evento']||'').split('/');return fe[2]==='2026'}).map(p=>{
     const nro=String(p['N° presupuesto']||'')
     const f=facByPresu[nro]
-    const pagos=pagosByPresu[nro]||[]
     const subtotal=parseMonto(p['Subtotal'])
     const fee=parseMonto(p['Fee Agencia'])||parseMonto(p['Fee Final'])
     const impGan=parseMonto(p['Imp. Ganancias'])
@@ -1886,7 +1885,7 @@ function Historico({data}){
     const ivaCalc=f?parseMonto(f['IVA']):0
     const fechaEv=String(p['Fecha Evento']||'')
     const mesNum=parseInt((fechaEv.split('/')[1])||'0')||0
-    const obj={
+    return {
       Año:'2026',Mes:mesNum,Fecha:fechaEv,Nro:nro,
       Cliente:p['Cliente']||(f?f['Cliente']:''),Agencia:p['Agencia']||(f?f['Agencia']:''),
       Proyecto:p['Proyecto']||(f?f['Proyecto']:''),
@@ -1895,11 +1894,6 @@ function Historico({data}){
       Cobrado:f&&isCobrada(f)?'SÍ':'NO',
       'Tipo FC':f?f['Tipo de Factura']:'','Nro FC':f?f['Nro de Factura']:'',
     }
-    pagos.slice(0,6).forEach((pg,i)=>{
-      obj['Staff '+(i+1)]=pg['Freelancer']||''
-      obj['Pago '+(i+1)]=parseMonto(pg['Monto Pagado']||pg['Monto Adeudado'])
-    })
-    return obj
   })
   const fuentes={
     '2023':data.historico2023||[],
@@ -1907,6 +1901,25 @@ function Historico({data}){
     '2025':data.historico2025||[],
     '2026':proy2026,
   }
+  // Staff 2026: calcular desde Pagos_Staff filtrado por fecha de pago o mes referencia
+  const NO_STAFF_2026=['magma','somos magma','viaticos','viáticos','rental','catering','produ','producción','produccion','makeup','make up','otros','efectivo']
+  const staff2026={}
+  let totalStaff2026=0
+  ;(data.pagosStaff||[]).forEach(p=>{
+    const fp=String(p['Fecha Pago']||'').split('/')
+    const mr=String(p['Mes Referencia']||'')
+    const esDe2026=fp[2]==='2026'||mr.includes('2026')
+    if(!esDe2026)return
+    const nombre=String(p['Freelancer']||'').trim()
+    if(!nombre)return
+    if(NO_STAFF_2026.some(n=>nombre.toLowerCase().includes(n)))return
+    const monto=parseMonto(p['Monto Pagado'])||parseMonto(p['Monto Adeudado'])
+    if(monto<=0)return
+    totalStaff2026+=monto
+    if(!staff2026[nombre])staff2026[nombre]={nombre,total:0,cant:0}
+    staff2026[nombre].total+=monto
+    staff2026[nombre].cant++
+  })
   const años=['2023','2024','2025','2026']
   const filas=fuentes[añoSel]||[]
   const PAGOS_KEYS=['Pago 1','Pago 2','Pago 3','Pago 4','Pago 5','Pago 6']
@@ -1918,7 +1931,8 @@ function Historico({data}){
   const totalImpuestos=filas.reduce((s,r)=>s+parseMonto(r['Impuestos']),0)
   const totalExtraM=filas.reduce((s,r)=>s+parseMonto(r['Extra M']),0)
   const gananciaMagma=totalViaticos+totalMagmaCol+totalImpuestos+totalExtraM
-  const totalStaff=filas.reduce((s,r)=>s+PAGOS_KEYS.reduce((a,k)=>a+parseMonto(r[k]),0),0)
+  const totalStaffFromFilas=filas.reduce((s,r)=>s+PAGOS_KEYS.reduce((a,k)=>a+parseMonto(r[k]),0),0)
+  const totalStaff=añoSel==='2026'?totalStaff2026:totalStaffFromFilas
   const totalIVA=filas.reduce((s,r)=>s+parseMonto(r['IVA']),0)
   const cantidad=filas.length
   const margenPct=totalPresupuestado>0?Math.round(gananciaMagma/totalPresupuestado*100):0
@@ -1946,7 +1960,7 @@ function Historico({data}){
   const topAgencias=Object.values(agenciasMap).sort((a,b)=>b.total-a.total).slice(0,10)
 
   // Top staff - escanea 6 slots y excluye valores que son gastos internos (viaticos, rental, magma, etc)
-  const staffMap={}
+  const staffMapFromFilas={}
   const NO_STAFF=['magma','somos magma','viaticos','viáticos','rental','catering','produ','producción','produccion','makeup','make up','otros','efectivo']
   filas.forEach(r=>{
     for(let i=1;i<=6;i++){
@@ -1954,11 +1968,13 @@ function Historico({data}){
       const pago=parseMonto(r['Pago '+i])
       if(!nombre||pago<=0)continue
       if(NO_STAFF.some(n=>nombre.toLowerCase().includes(n)))continue
-      if(!staffMap[nombre])staffMap[nombre]={nombre,total:0,cant:0}
-      staffMap[nombre].total+=pago
-      staffMap[nombre].cant++
+      if(!staffMapFromFilas[nombre])staffMapFromFilas[nombre]={nombre,total:0,cant:0}
+      staffMapFromFilas[nombre].total+=pago
+      staffMapFromFilas[nombre].cant++
     }
   })
+  // Para 2026 usamos staff2026 calculado desde Pagos_Staff por año
+  const staffMap=añoSel==='2026'?staff2026:staffMapFromFilas
   const topStaff=Object.values(staffMap).sort((a,b)=>b.total-a.total).slice(0,15)
 
   // Por mes
