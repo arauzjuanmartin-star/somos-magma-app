@@ -66,6 +66,12 @@ export default async function handler(req, res) {
     }
     if (rowIndex === -1) return res.status(404).json({ error: 'Factura no encontrada' })
 
+    // Bloquear cobros duplicados a facturas ya marcadas como cobradas
+    const yaCobradaTotal = String(facturaRow[idx.cobrado] || '').toUpperCase() === 'TRUE'
+    if (yaCobradaTotal) {
+      return res.status(409).json({ error: 'Esta factura ya está marcada como cobrada. Si necesitás corregir, editá manualmente.' })
+    }
+
     const precioFinal = num(facturaRow[idx.precioFinal])
     const montoCobradoActual = num(facturaRow[idx.montoCob])
     const montoEvento = num(monto) || (tipoCobro === 'total' ? precioFinal - montoCobradoActual : 0)

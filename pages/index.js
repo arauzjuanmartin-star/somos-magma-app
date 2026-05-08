@@ -868,12 +868,12 @@ function Facturacion({data,mail,onRefresh}){
   const presus=(data.presupuestos||[]).filter(p=>isAprobado(p))
   const parseD=s=>{if(!s)return null;const pts=String(s).split('/');if(pts.length===3){return new Date(pts[2],pts[1]-1,pts[0])}return null}
   const diffD=f=>{const v=parseD(f['Vencimiento']);if(!v)return 0;return Math.floor((v-new Date())/864e5)}
-  const estF=f=>{if(isCobrada(f))return'cobrada';const d=diffD(f);if(d<-30)return'reclamar';if(d<0)return'vencida';if(d<7)return'por-vencer';return'pendiente'}
+  const estF=f=>{if(isCobrada(f))return'cobrada';const yaCob=parseMonto(f['Monto cobrado']);if(yaCob>0)return'parcial';const d=diffD(f);if(d<-30)return'reclamar';if(d<0)return'vencida';if(d<7)return'por-vencer';return'pendiente'}
   const fechaHoy=()=>{const d=new Date();return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
   const calcVencF=()=>{const d=new Date();d.setDate(d.getDate()+parseInt(formData.plazo||30));return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
   const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+(f['Nro de Factura']||'')+' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+(f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
   const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';if(n.toLowerCase().includes('ef-')||n.toLowerCase().includes('efectivo'))return'Efectivo';return'SRL'}
-  const filtradas=fc.filter(f=>{if(filtro==='todas')return true;if(filtro==='pendiente')return!isCobrada(f);if(filtro==='cobrada')return isCobrada(f);return getEntidad(f)===filtro}).sort((a,b)=>(isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b))
+  const filtradas=fc.filter(f=>{if(filtro==='todas')return true;if(filtro==='pendiente')return!isCobrada(f)&&estF(f)!=='parcial';if(filtro==='parcial')return estF(f)==='parcial';if(filtro==='cobrada')return isCobrada(f);return getEntidad(f)===filtro}).sort((a,b)=>(isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b))
   const reclamar=fc.filter(f=>estF(f)==='reclamar')
   const vencidas=fc.filter(f=>estF(f)==='vencida')
   const pcTotal=fc.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
@@ -935,7 +935,8 @@ function Facturacion({data,mail,onRefresh}){
   }
   const marcarCobrada=f=>registrarCobro(f,'total')
   const inp2={padding:'7px 9px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',width:'100%'}
-  const bmap={cobrada:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},pendiente:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},'por-vencer':{bg:'#BA751720',c:'#BA7517',l:'Por vencer'},vencida:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},reclamar:{bg:'#FCEBEB',c:'#A32D2D',l:'Reclamar!'}}
+  const bmap={cobrada:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},parcial:{bg:'#9635AB20',c:'#9635AB',l:'Parcial'},pendiente:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},'por-vencer':{bg:'#BA751720',c:'#BA7517',l:'Por vencer'},vencida:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},reclamar:{bg:'#FCEBEB',c:'#A32D2D',l:'Reclamar!'}}
+  const cobrosForFc=(nro)=>(data.cobros||[]).filter(c=>String(c['N° Presupuesto'])===String(nro))
   return <div>
     {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
@@ -1025,7 +1026,7 @@ function Facturacion({data,mail,onRefresh}){
     </div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-        {[['todas','Todas'],['pendiente','Pendientes'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
+        {[['todas','Todas'],['pendiente','Pendientes'],['parcial','Parciales'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
           <button key={id} style={{...S.fb,...(filtro===id?S.fa:{})}} onClick={()=>setFiltro(id)}>{l}</button>
         ))}
       </div>
@@ -1056,50 +1057,79 @@ function Facturacion({data,mail,onRefresh}){
             <span style={{...S.badge,background:bm.bg,color:bm.c,whiteSpace:'nowrap'}}>{bl}</span>
             <span style={{fontSize:11,color:'#555'}}>{isOpen?'▲':'▶'}</span>
           </div>
-          {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}}>
-            <div style={{padding:'14px 16px',borderRight:'0.5px solid #2A2A2A'}}>
-              <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Datos del cobro</div>
-              <div style={{marginBottom:8}}><div style={{fontSize:11,color:'#555',marginBottom:4}}>Forma de pago</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.forma||''} onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,forma:e.target.value}}))}>
-                <option value=''>— Seleccionar —</option>{['Transferencia','eCheq','Efectivo'].map(o=><option key={o}>{o}</option>)}</select></div>
-              <div style={{marginBottom:8}}><div style={{fontSize:11,color:'#555',marginBottom:4}}>Acreditar en cuenta</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.cuenta||'SRL-BBVA'} onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,cuenta:e.target.value}}))}>
-                {CUENTAS_FC.map(c=><option key={c}>{c}</option>)}</select></div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {[['retG','Ret. Ganancias'],['retI','Ret. IIBB'],['retIV','Ret. IVA'],['com','Comision banco']].map(([k,lbl])=>(
-                  <div key={k}><div style={{fontSize:11,color:'#555',marginBottom:4}}>{lbl} $</div><input type='number' value={cobro[k]||''} placeholder='0' onChange={e=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,[k]:parseFloat(e.target.value)||0}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',fontFamily:'monospace'}}/></div>
-                ))}
-              </div>
-              {e==='reclamar'&&<div style={{background:'#FCEBEB',borderRadius:8,padding:'10px 12px',marginTop:10}}><div style={{fontSize:10,color:'#A32D2D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Texto para reclamar</div><div style={{fontSize:11,lineHeight:1.6,color:'#A32D2D',marginBottom:8}}>{textoReclamo(f)}</div><button onClick={()=>navigator.clipboard.writeText(textoReclamo(f))} style={{padding:'5px 12px',borderRadius:3,border:'none',background:'#E24B4A',color:'#fff',fontSize:11,cursor:'pointer'}}>Copiar mensaje</button></div>}
-            </div>
-            <div style={{padding:'14px 16px'}}>
-              <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Liquidacion real</div>
-              {[['Factura total',fmt(total),null],['− Ret. Ganancias','-'+fmt(cobro.retG||0),'#E24B4A'],['− Ret. IIBB','-'+fmt(cobro.retI||0),'#E24B4A'],['− Ret. IVA','-'+fmt(cobro.retIV||0),'#E24B4A'],['− Comision '+(cobro.forma||''),'-'+fmt(cobro.com||0),'#E24B4A']].map(([l,v,c])=>(
-                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:c||'inherit'}}>{v}</span></div>
-              ))}
-              <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Llego a la cuenta</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1543F8'}}>{fmt(llego)}</span></div>
-              <div style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',marginTop:10}}>
-                <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:7}}>{iva>0?'IVA dentro de ese monto':'Sin IVA'}</div>
-                {iva>0&&<>
-                  <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}><span style={{color:'#555'}}>IVA cobrado</span><span style={{fontFamily:'monospace',color:'#E24B4A'}}>+{fmt(iva)}</span></div>
-                  <div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:12}}><span style={{color:'#555'}}>− Ret. IVA ya pagada</span><span style={{fontFamily:'monospace',color:'#1D9E75'}}>-{fmt(cobro.retIV||0)}</span></div>
-                </>}
-                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Disponible Magma</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1D9E75'}}>{fmt(disponible)}</span></div>
-              </div>
-              {(()=>{
-                const yaCob=parseMonto(f['Monto cobrado'])||(isCobrada(f)?total:0)
-                const pendiente=Math.max(0,total-yaCob)
-                if(isCobrada(f))return <div style={{marginTop:10,padding:'8px',textAlign:'center',fontSize:12,color:'#1D9E75',border:'0.5px solid #1D9E7540',borderRadius:6}}>Cobrada el {f['Fecha cobro']||'—'}</div>
-                return <div style={{marginTop:12}}>
-                  {yaCob>0&&<div style={{padding:'6px 10px',background:'#1543F810',borderRadius:6,fontSize:11,color:'#1543F8',marginBottom:8,textAlign:'center'}}>Acumulado: {fmt(yaCob)} / {fmt(total)} · Pendiente: {fmt(pendiente)}</div>}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-                    <button onClick={()=>registrarCobro(f,'adelanto')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #BA7517',background:'transparent',color:'#BA7517',fontSize:12,fontWeight:500,cursor:'pointer'}}>Adelanto / Seña</button>
-                    <button onClick={()=>registrarCobro(f,'parcial')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:12,fontWeight:500,cursor:'pointer'}}>Pago parcial</button>
-                    <button onClick={()=>registrarCobro(f,'total')} style={{padding:'8px 6px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Cobro total</button>
-                  </div>
-                  <div style={{fontSize:10,color:'#555',marginTop:6,textAlign:'center'}}>Antes de cobrar, completá cuenta destino y retenciones (si las hay)</div>
+          {isOpen&&(()=>{
+            const yaCob=parseMonto(f['Monto cobrado'])||(isCobrada(f)?total:0)
+            const pendiente=Math.max(0,total-yaCob)
+            const pctCob=total>0?Math.round(yaCob/total*100):0
+            const cobrosFc=cobrosForFc(f['N° Presupuesto'])
+            const fpago=f['Forma de pago'],cuenta=f['Cuenta destino'],retG=parseMonto(f['Ret. Ganancias']),retI=parseMonto(f['Ret. IIBB']),retV=parseMonto(f['Ret. IVA']),com=parseMonto(f['Comision banco'])
+            const llegoReal=yaCob-retG-retI-retV-com
+            const cobrosTabla=cobrosFc.length>0&&<div style={{marginTop:10,background:'#1E1E1E',borderRadius:8,overflow:'hidden'}}>
+              <div style={{padding:'7px 10px',background:'#161616',fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Historial de cobros ({cobrosFc.length})</div>
+              {cobrosFc.map((c,k)=><div key={k} style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto',gap:8,padding:'6px 10px',fontSize:12,borderTop:'0.5px solid #2A2A2A'}}>
+                <span style={{color:'#9635AB',textTransform:'uppercase',fontSize:10}}>{c['Tipo']||'—'}</span>
+                <span style={{color:'#888',fontSize:11}}>{(c['Timestamp']||'').slice(0,10)} · {c['Cuenta destino']||'—'} · {c['Forma de pago']||''}</span>
+                <span style={{fontFamily:'monospace',fontSize:12}}>{fmt(parseMonto(c['Monto']))}</span>
+              </div>)}
+            </div>;
+            if(isCobrada(f))return <div style={{borderTop:'0.5px solid #2A2A2A',padding:'14px 16px',background:'#1D9E7508'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+                <div>
+                  <div style={{fontSize:11,color:'#1D9E75',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10,fontWeight:500}}>✓ Cobrada el {f['Fecha cobro']||'—'}</div>
+                  {[['Forma de pago',fpago||'—'],['Cuenta destino',cuenta||'—'],['Monto cobrado',fmt(yaCob)],['Llego a la cuenta',fmt(llegoReal)]].map(([l,v])=>(
+                    <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12}}>{v}</span></div>
+                  ))}
                 </div>
-              })()}
+                <div>
+                  <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Retenciones aplicadas</div>
+                  {[['Ret. Ganancias',retG],['Ret. IIBB',retI],['Ret. IVA',retV],['Comision banco',com]].map(([l,v])=>(
+                    <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:v>0?'#E24B4A':'#555'}}>{v>0?'-'+fmt(v):'$0'}</span></div>
+                  ))}
+                </div>
+              </div>
+              {cobrosTabla}
+            </div>;
+            const eCobr=estF(f)
+            const sinCuenta=!cobro.cuenta
+            const btnDis={opacity:sinCuenta?0.4:1,cursor:sinCuenta?'not-allowed':'pointer'}
+            return <div style={{borderTop:'0.5px solid #2A2A2A',display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}}>
+              <div style={{padding:'14px 16px',borderRight:'0.5px solid #2A2A2A'}}>
+                <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>1. Datos del cobro</div>
+                <div style={{marginBottom:8}}><div style={{fontSize:11,color:'#555',marginBottom:4}}>Forma de pago</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.forma||''} onChange={ev=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,forma:ev.target.value}}))}>
+                  <option value=''>— Seleccionar —</option>{['Transferencia','eCheq','Efectivo'].map(o=><option key={o}>{o}</option>)}</select></div>
+                <div style={{marginBottom:8}}><div style={{fontSize:11,color:sinCuenta?'#E24B4A':'#555',marginBottom:4}}>Acreditar en cuenta {sinCuenta&&<span style={{color:'#E24B4A',fontWeight:500}}>· requerido</span>}</div><select style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid '+(sinCuenta?'#E24B4A':'#333'),background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',marginTop:4}} value={cobro.cuenta||''} onChange={ev=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,cuenta:ev.target.value}}))}>
+                  <option value=''>— Elegir cuenta —</option>{CUENTAS_FC.map(c=><option key={c}>{c}</option>)}</select></div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[['retG','Ret. Ganancias'],['retI','Ret. IIBB'],['retIV','Ret. IVA'],['com','Comision banco']].map(([k,lbl])=>(
+                    <div key={k}><div style={{fontSize:11,color:'#555',marginBottom:4}}>{lbl} $</div><input type='number' value={cobro[k]||''} placeholder='0' onChange={ev=>setCobroData(prev=>({...prev,[f['N° Presupuesto']]:{...cobro,[k]:parseFloat(ev.target.value)||0}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',fontFamily:'monospace'}}/></div>
+                  ))}
+                </div>
+                {eCobr==='reclamar'&&<div style={{background:'#FCEBEB',borderRadius:8,padding:'10px 12px',marginTop:10}}><div style={{fontSize:10,color:'#A32D2D',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Texto para reclamar</div><div style={{fontSize:11,lineHeight:1.6,color:'#A32D2D',marginBottom:8}}>{textoReclamo(f)}</div><button onClick={()=>navigator.clipboard.writeText(textoReclamo(f))} style={{padding:'5px 12px',borderRadius:3,border:'none',background:'#E24B4A',color:'#fff',fontSize:11,cursor:'pointer'}}>Copiar mensaje</button></div>}
+              </div>
+              <div style={{padding:'14px 16px'}}>
+                {yaCob>0&&<div style={{marginBottom:14,padding:'10px 12px',background:'#9635AB10',borderRadius:8,border:'0.5px solid #9635AB30'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:6,color:'#9635AB',fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em'}}><span>Avance</span><span>{pctCob}%</span></div>
+                  <div style={{height:8,background:'#2A2A2A',borderRadius:4,overflow:'hidden',marginBottom:6}}><div style={{height:'100%',width:pctCob+'%',background:'linear-gradient(90deg,#9635AB,#1D9E75)'}}/></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#888'}}><span>Cobrado: <strong style={{color:'#1D9E75'}}>{fmt(yaCob)}</strong></span><span>Falta: <strong style={{color:'#BA7517'}}>{fmt(pendiente)}</strong></span></div>
+                </div>}
+                <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>{yaCob>0?'2. Próximo cobro':'Liquidacion proyectada'}</div>
+                {[['Factura total',fmt(total),null],['− Ret. Ganancias','-'+fmt(cobro.retG||0),'#E24B4A'],['− Ret. IIBB','-'+fmt(cobro.retI||0),'#E24B4A'],['− Ret. IVA','-'+fmt(cobro.retIV||0),'#E24B4A'],['− Comision '+(cobro.forma||''),'-'+fmt(cobro.com||0),'#E24B4A']].map(([l,v,c])=>(
+                  <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:12,color:c||'inherit'}}>{v}</span></div>
+                ))}
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderTop:'1px solid #2A2A2A',marginTop:4}}><span style={{fontWeight:500}}>Llegaria a la cuenta</span><span style={{fontFamily:'monospace',fontSize:14,fontWeight:500,color:'#1543F8'}}>{fmt(llego)}</span></div>
+                <div style={{marginTop:14,paddingTop:10,borderTop:'0.5px dashed #2A2A2A'}}>
+                  <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>3. Registrar cobro</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                    <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'adelanto')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #BA7517',background:'transparent',color:'#BA7517',fontSize:12,fontWeight:500,...btnDis}}>Adelanto / Seña</button>
+                    <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'parcial')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:12,fontWeight:500,...btnDis}}>Pago parcial</button>
+                    <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'total')} style={{padding:'8px 6px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,...btnDis}}>Cobro total</button>
+                  </div>
+                  {sinCuenta&&<div style={{fontSize:10,color:'#E24B4A',marginTop:6,textAlign:'center'}}>↑ Elegí una cuenta para poder cobrar</div>}
+                </div>
+                {cobrosTabla}
+              </div>
             </div>
-          </div>}
+          })()}
         </div>
       })}
       {filtradas.length===0&&<div style={S.nd}>Sin facturas</div>}
