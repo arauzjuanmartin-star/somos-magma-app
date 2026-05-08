@@ -1467,6 +1467,11 @@ function Egresos({data,mail,onRefresh}){
   const [anio,setAnio]=useState(String(hoy.getFullYear()))
   const [saving,setSaving]=useState(null)
   const [toast,setToast]=useState('')
+  // Upload PDF tarjeta
+  const [uploadOpen,setUploadOpen]=useState(false)
+  const [uploading,setUploading]=useState(false)
+  const [previewData,setPreviewData]=useState(null)
+  const [pdfFileName,setPdfFileName]=useState('')
 
   const gastosFijos=data.gastosFijos||[]
   const tarjetas=data.tarjetas||[]
@@ -1540,6 +1545,51 @@ function Egresos({data,mail,onRefresh}){
     setSaving(null)
   }
 
+  const procesarPDF=async(file)=>{
+    if(!file)return
+    setUploading(true);setPreviewData(null);setPdfFileName(file.name)
+    try{
+      const buf=await file.arrayBuffer()
+      const bytes=new Uint8Array(buf)
+      let bin='';for(let i=0;i<bytes.byteLength;i++)bin+=String.fromCharCode(bytes[i])
+      const b64=btoa(bin)
+      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({pdfBase64:b64,fileName:file.name})}).then(r=>r.json())
+      if(r.error){setToast('Error: '+r.error);setUploading(false);return}
+      // Pre-llenar datos editables con default mes/año
+      const d=r.data
+      setPreviewData({
+        tarjeta:d.tarjeta||'',
+        mes:String(mesNum),
+        anio:anio,
+        movimientos:(d.movimientos||[]).map((m,i)=>({...m,_keep:true,_idx:i})),
+        meta:{titular:d.titular,periodo:d.periodo,vencimiento:d.vencimiento,total_ars:d.total_ars,total_usd:d.total_usd},
+      })
+      setToast(`Extraídos ${d.movimientos?.length||0} movimientos`)
+      setTimeout(()=>setToast(''),3000)
+    }catch(e){setToast('Error al procesar PDF: '+e.message)}
+    setUploading(false)
+  }
+
+  const guardarMovs=async()=>{
+    if(!previewData)return
+    const movs=previewData.movimientos.filter(m=>m._keep)
+    if(movs.length===0){setToast('No hay movimientos para guardar');return}
+    setUploading(true)
+    try{
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({tarjeta:previewData.tarjeta,mes:Number(previewData.mes),anio:Number(previewData.anio),movimientos:movs})}).then(r=>r.json())
+      if(r.error){setToast('Error: '+r.error);setUploading(false);return}
+      setToast(`Guardados ${r.guardados} movimientos en ${previewData.tarjeta}`)
+      setTimeout(()=>setToast(''),4000)
+      setPreviewData(null);setUploadOpen(false);setPdfFileName('')
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){setToast('Error: '+e.message)}
+    setUploading(false)
+  }
+
+  const updateMov=(idx,campo,val)=>{
+    setPreviewData(p=>({...p,movimientos:p.movimientos.map(m=>m._idx===idx?{...m,[campo]:val}:m)}))
+  }
+
   const SEC=({titulo,items,hoja,arrFuente,color,renderExtra})=>(<div style={{...S.card,marginBottom:10}}>
     <div style={{...S.ch,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
       <span>{titulo} <span style={{color:'#555',fontWeight:400,fontSize:11,marginLeft:8}}>{items.length} items</span></span>
@@ -1578,7 +1628,51 @@ function Egresos({data,mail,onRefresh}){
           {anios.map(a=><option key={a}>{a}</option>)}
         </select>
       </div>
+      <button onClick={()=>setUploadOpen(!uploadOpen)} style={{padding:'7px 14px',borderRadius:6,border:'0.5px solid #1543F8',background:uploadOpen?'#1543F8':'transparent',color:uploadOpen?'#fff':'#1543F8',fontSize:12,fontWeight:500,cursor:'pointer'}}>📄 {uploadOpen?'Cerrar':'Subir resumen tarjeta PDF'}</button>
     </div>
+    {uploadOpen&&<div style={{...S.card,padding:'14px 18px',marginBottom:12,border:'0.5px solid #1543F840'}}>
+      <div style={{fontSize:11,color:'#1543F8',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:500}}>Subir resumen de tarjeta</div>
+      {!previewData&&<div>
+        <div style={{fontSize:12,color:'#888',marginBottom:10,lineHeight:1.5}}>Subí el PDF del resumen de Master / Visa / Amex. Lo proceso con IA, extraigo todos los movimientos, los categorizo y vos confirmás antes de guardarlos en la hoja MOVIMIENTOS_TARJETA.</div>
+        <input type='file' accept='.pdf' disabled={uploading} onChange={e=>procesarPDF(e.target.files?.[0])} style={{padding:8,border:'0.5px dashed #333',borderRadius:6,background:'#1E1E1E',color:'#F0F0F0',fontSize:12,width:'100%',cursor:'pointer'}}/>
+        {uploading&&<div style={{marginTop:10,fontSize:12,color:'#1543F8'}}>Procesando "{pdfFileName}"... esto puede tardar 30-60s para PDFs grandes.</div>}
+      </div>}
+      {previewData&&<div>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr 1fr 1fr 1fr',gap:10,marginBottom:10,padding:'10px 12px',background:'#1E1E1E',borderRadius:8,fontSize:12}}>
+          <div><div style={{fontSize:10,color:'#555'}}>Tarjeta</div><select value={previewData.tarjeta} onChange={e=>setPreviewData(p=>({...p,tarjeta:e.target.value}))} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:12}}>
+            {['Master','Santander Visa','Amex','Visa','Otra'].map(t=><option key={t}>{t}</option>)}
+          </select></div>
+          <div><div style={{fontSize:10,color:'#555'}}>Mes</div><input type='number' min='1' max='12' value={previewData.mes} onChange={e=>setPreviewData(p=>({...p,mes:e.target.value}))} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:12,width:60}}/></div>
+          <div><div style={{fontSize:10,color:'#555'}}>Año</div><input value={previewData.anio} onChange={e=>setPreviewData(p=>({...p,anio:e.target.value}))} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:12,width:80}}/></div>
+          <div><div style={{fontSize:10,color:'#555'}}>Total ARS</div><div style={{fontFamily:'monospace',fontSize:13,color:'#1D9E75'}}>{fmt(previewData.meta?.total_ars||0)}</div></div>
+          <div><div style={{fontSize:10,color:'#555'}}>Total USD</div><div style={{fontFamily:'monospace',fontSize:13,color:'#1D9E75'}}>{previewData.meta?.total_usd?'US$'+previewData.meta.total_usd:'—'}</div></div>
+        </div>
+        <div style={{fontSize:11,color:'#555',marginBottom:6}}>Revisá y editá los movimientos. Destildá los que no quieras guardar.</div>
+        <div style={{maxHeight:'50vh',overflowY:'auto',border:'0.5px solid #2A2A2A',borderRadius:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'30px 80px 1fr 60px 100px 150px',gap:6,padding:'6px 8px',background:'#1A1A1A',fontSize:10,color:'#555',textTransform:'uppercase',position:'sticky',top:0}}>
+            <span></span><span>Fecha</span><span>Comercio / Descripción</span><span>Mon</span><span style={{textAlign:'right'}}>Monto</span><span>Categoria</span>
+          </div>
+          {previewData.movimientos.map(m=>(
+            <div key={m._idx} style={{display:'grid',gridTemplateColumns:'30px 80px 1fr 60px 100px 150px',gap:6,padding:'5px 8px',borderTop:'0.5px solid #2A2A2A',fontSize:11,alignItems:'center',opacity:m._keep?1:0.4}}>
+              <input type='checkbox' checked={m._keep} onChange={e=>updateMov(m._idx,'_keep',e.target.checked)} style={{accentColor:'#1D9E75'}}/>
+              <input value={m.fecha||''} onChange={e=>updateMov(m._idx,'fecha',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:10,fontFamily:'monospace',width:'100%'}}/>
+              <input value={m.comercio||m.descripcion||''} onChange={e=>updateMov(m._idx,'comercio',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:11,width:'100%'}}/>
+              <select value={m.moneda||'ARS'} onChange={e=>updateMov(m._idx,'moneda',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:10}}><option>ARS</option><option>USD</option></select>
+              <input type='number' value={m.monto||0} onChange={e=>updateMov(m._idx,'monto',parseFloat(e.target.value)||0)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:11,fontFamily:'monospace',textAlign:'right',width:'100%'}}/>
+              <select value={m.categoria||'Otros'} onChange={e=>updateMov(m._idx,'categoria',e.target.value)} style={{padding:'2px 4px',borderRadius:3,border:'0.5px solid #333',background:'#161616',color:'#F0F0F0',fontSize:11}}>
+                {['Comida y bebida','Transporte','Viajes','Suscripciones','Producción audiovisual','Profesional/Servicios','Equipos/Tecnología','Personal','Pagos/Transferencias','Otros'].map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:10}}>
+          <button onClick={()=>{setPreviewData(null);setPdfFileName('')}} style={{padding:'8px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Descartar</button>
+          <button onClick={guardarMovs} disabled={uploading} style={{padding:'8px 18px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:uploading?0.5:1,marginLeft:'auto'}}>
+            {uploading?'Guardando...':`Guardar ${previewData.movimientos.filter(m=>m._keep).length} movimientos`}
+          </button>
+        </div>
+      </div>}
+    </div>}
     <div style={S.k4}>
       <K lbl='Ingresos cobrados' val={fmtM(ingresos)} sub={facMesCob.length+' facturas'} c='#1D9E75'/>
       <K lbl='Total a pagar' val={'-'+fmtM(totalEgresos)} sub='sueldos+imp+oper+tarj+prest' c='#E24B4A'/>
