@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'balance',label:'Balance',icon:'≡'},{id:'historico',label:'Histórico',icon:'⏱'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'historico',label:'Histórico',icon:'⏱'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -127,7 +127,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'proyectos': return <Proyectos data={data} mail={mail}/>
     case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
-    case 'balance': return <Balance data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'egresos': return <Egresos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'historico': return <Historico data={data}/>
     default: return <div style={S.nd}>En construcción</div>
   }
@@ -1458,6 +1458,147 @@ function PagosStaff({data,mail,onRefresh}){
 // ---- BALANCE ----
 const SU_DEFAULTS=[{n:'Juan Martin',b:3000000},{n:'Sofia',b:3000000},{n:'Lulu',b:1300000},{n:'Dani',b:1900000},{n:'Tomi',b:1300000},{n:'Contador',b:453750}]
 const GF_DEFAULTS=[{n:'Alquiler oficina',m:1000000},{n:'Expensas',m:54674},{n:'ABL',m:11793},{n:'Edenor',m:7004},{n:'Metrogas',m:0},{n:'CM',m:1023000}]
+
+// ---- EGRESOS (gastos fijos / tarjetas / préstamos) ----
+function Egresos({data,mail,onRefresh}){
+  const MESES=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC']
+  const hoy=new Date()
+  const [mesNum,setMesNum]=useState(hoy.getMonth()+1)
+  const [anio,setAnio]=useState(String(hoy.getFullYear()))
+  const [saving,setSaving]=useState(null)
+  const [toast,setToast]=useState('')
+
+  const gastosFijos=data.gastosFijos||[]
+  const tarjetas=data.tarjetas||[]
+  const prestamos=data.prestamos||[]
+  const fc=data.facturacion||[]
+  const cuentas=data.cuentas||[]
+  const cuentasNombres=cuentas.filter(c=>String(c['Activa']||'').toUpperCase().match(/SI|SÍ|TRUE/)).map(c=>c['Nombre']).filter(Boolean)
+
+  const isPagado=v=>String(v||'').toUpperCase().match(/SI|SÍ|TRUE|OK/)
+  const parseD=s=>{if(!s)return null;const p=String(s).split('/');if(p.length===3)return new Date(+p[2],+p[1]-1,+p[0]);return null}
+
+  // Filtrar gastos fijos del mes seleccionado: usamos los activos (Mes carga puede ser referencia, pero tomamos todos los activos)
+  const gfActivos=gastosFijos.filter(g=>{
+    const activo=String(g['Activo']||'').toUpperCase().match(/SI|SÍ|TRUE/)
+    if(!activo)return false
+    return true
+  })
+  const gfPorCat={}
+  gfActivos.forEach(g=>{const c=g['Categoria']||'Otros';if(!gfPorCat[c])gfPorCat[c]=[];gfPorCat[c].push(g)})
+
+  // Tarjetas del mes/año
+  const tarjMes=tarjetas.filter(t=>String(t['Mes'])===String(mesNum)&&String(t['Año'])===String(anio))
+  // Préstamos con vencimiento en mes/año
+  const prestMes=prestamos.filter(p=>{const d=parseD(p['Vencimiento']);return d&&d.getMonth()+1===mesNum&&d.getFullYear()===Number(anio)})
+
+  // Totales
+  const sumActivos=arr=>arr.reduce((s,r)=>s+parseMonto(r['Monto']||r['Monto cuota']),0)
+  const sumPagados=arr=>arr.filter(r=>isPagado(r['Pagado'])).reduce((s,r)=>s+parseMonto(r['Monto']||r['Monto cuota']),0)
+  const totalSueldos=sumActivos(gfPorCat['Sueldos']||[])
+  const totalImpuestos=sumActivos(gfPorCat['Impuestos']||[])
+  const totalOperativos=sumActivos(gfPorCat['Operativos']||[])
+  const totalTarjetas=sumActivos(tarjMes)
+  const totalPrestamos=sumActivos(prestMes)
+  const totalEgresos=totalSueldos+totalImpuestos+totalOperativos+totalTarjetas+totalPrestamos
+
+  // Ingresos cobrados del mes
+  const facMesCob=fc.filter(f=>{const d=parseD(f['Fecha cobro']);return d&&d.getMonth()+1===mesNum&&d.getFullYear()===Number(anio)})
+  const ingresos=facMesCob.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  const resultado=ingresos-totalEgresos
+
+  // Encontrar índice de fila en el sheet (1-based, +1 por header)
+  const findFila=(arr,item)=>{const i=arr.indexOf(item);return i>=0?i+2:null}
+
+  const togglePagado=async(hoja,arrFuente,item,extras={})=>{
+    const fila=findFila(arrFuente,item)
+    if(!fila){setToast('No encuentro la fila');return}
+    const nuevoPagado=!isPagado(item['Pagado'])
+    const tipoH=hoja==='PRESTAMOS'?'Monto cuota':'Monto'
+    const monto=parseMonto(item[tipoH])
+    setSaving(`${hoja}-${fila}`)
+    try{
+      await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+        hoja,fila,pagado:nuevoPagado,
+        fechaPago:nuevoPagado?(hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear()):'',
+        ...extras,monto:nuevoPagado?monto:undefined,
+      })})
+      setToast(nuevoPagado?`Pagado ${fmt(monto)} ${extras.cuentaPago?'desde '+extras.cuentaPago:''}`:'Marcado pendiente')
+      setTimeout(()=>setToast(''),3000)
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){setToast('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  const cambiarCuenta=async(hoja,arrFuente,item,nuevaCuenta)=>{
+    const fila=findFila(arrFuente,item);if(!fila)return
+    setSaving(`${hoja}-${fila}-cta`)
+    try{
+      await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({hoja,fila,cuentaPago:nuevaCuenta})})
+      if(typeof onRefresh==='function')await onRefresh()
+    }catch(e){setToast('Error: '+e.message)}
+    setSaving(null)
+  }
+
+  const SEC=({titulo,items,hoja,arrFuente,color,renderExtra})=>(<div style={{...S.card,marginBottom:10}}>
+    <div style={{...S.ch,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <span>{titulo} <span style={{color:'#555',fontWeight:400,fontSize:11,marginLeft:8}}>{items.length} items</span></span>
+      <span style={{fontFamily:'monospace',fontSize:13,color}}>{fmt(sumActivos(items))} <span style={{fontSize:10,color:'#555'}}>· pagado {fmt(sumPagados(items))}</span></span>
+    </div>
+    {items.length===0?<div style={{padding:'12px 16px',color:'#555',fontSize:12}}>Sin items</div>:items.map((it,i)=>{
+      const pag=isPagado(it['Pagado'])
+      const fila=findFila(arrFuente,it)
+      const monto=parseMonto(it['Monto']||it['Monto cuota'])
+      const cuenta=it['Cuenta pago']||''
+      const isSaving=saving===`${hoja}-${fila}`||saving===`${hoja}-${fila}-cta`
+      return <div key={i} style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto auto',gap:10,padding:'8px 14px',borderTop:'0.5px solid #2A2A2A',alignItems:'center',opacity:pag?0.6:1,fontSize:12}}>
+        <input type='checkbox' checked={pag} disabled={isSaving} onChange={()=>togglePagado(hoja,arrFuente,it,{cuentaPago:cuenta})} style={{accentColor:'#1D9E75'}}/>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{renderExtra?renderExtra(it):(it['Concepto']||it['Tarjeta']||it['Prestamo'])}</div>
+          {(it['Vencimiento']||it['Dia pago'])&&<div style={{fontSize:10,color:'#555'}}>{it['Vencimiento']?'vto '+it['Vencimiento']:'dia '+it['Dia pago']}{it['Moneda']&&it['Moneda']!=='ARS'?' · '+it['Moneda']:''}</div>}
+        </div>
+        <select value={cuenta} disabled={pag||isSaving} onChange={e=>cambiarCuenta(hoja,arrFuente,it,e.target.value)} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,minWidth:110}}>
+          <option value=''>— cuenta —</option>
+          {cuentasNombres.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <span style={{fontFamily:'monospace',fontSize:13,minWidth:90,textAlign:'right'}}>{fmt(monto)}</span>
+        <span style={{...S.badge,background:pag?'#1D9E7520':'#BA751720',color:pag?'#1D9E75':'#BA7517',fontSize:10}}>{pag?'PAGADO':'PEND'}</span>
+        <span style={{fontSize:10,color:'#555',minWidth:40}}>{isSaving?'...':(pag?(it['Fecha pago']||''):'')}</span>
+      </div>
+    })}
+  </div>)
+
+  const anios=['2025','2026','2027']
+  return <div>
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
+        {MESES.map((m,i)=><button key={m} style={{...S.fb,...(mesNum===i+1?S.fa:{})}} onClick={()=>setMesNum(i+1)}>{m}</button>)}
+        <select value={anio} onChange={e=>setAnio(e.target.value)} style={{padding:'5px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,outline:'none',marginLeft:6}}>
+          {anios.map(a=><option key={a}>{a}</option>)}
+        </select>
+      </div>
+    </div>
+    <div style={S.k4}>
+      <K lbl='Ingresos cobrados' val={fmtM(ingresos)} sub={facMesCob.length+' facturas'} c='#1D9E75'/>
+      <K lbl='Total a pagar' val={'-'+fmtM(totalEgresos)} sub='sueldos+imp+oper+tarj+prest' c='#E24B4A'/>
+      <K lbl='Pagado' val={fmtM(sumPagados(gfActivos)+sumPagados(tarjMes)+sumPagados(prestMes))} sub={`${[...gfActivos,...tarjMes,...prestMes].filter(r=>isPagado(r['Pagado'])).length} items`} c='#1D9E75'/>
+      <K lbl='Resultado' val={fmtM(resultado)} c={resultado>=0?'#1D9E75':'#E24B4A'}/>
+    </div>
+    <SEC titulo='Sueldos equipo' items={gfPorCat['Sueldos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#E24B4A'/>
+    <SEC titulo='Impuestos / Monotributos / IIBB' items={gfPorCat['Impuestos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#9635AB'/>
+    <SEC titulo='Operativos (alquiler, servicios, suscripciones)' items={gfPorCat['Operativos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#BA7517'/>
+    <SEC titulo={`Tarjetas (${MESES[mesNum-1]} ${anio})`} items={tarjMes} hoja='TARJETAS' arrFuente={tarjetas} color='#1543F8' renderExtra={t=>`${t['Tarjeta']} ${t['Moneda']==='USD'?'(USD)':''}`}/>
+    <SEC titulo={`Préstamos (vto ${MESES[mesNum-1]} ${anio})`} items={prestMes} hoja='PRESTAMOS' arrFuente={prestamos} color='#9635AB' renderExtra={p=>`${p['Prestamo']} cuota ${p['Cuota nro']}/${p['Cuotas total']}`}/>
+    <div style={{...S.card,padding:'14px 18px',marginTop:12}}>
+      <div style={{fontSize:12,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontWeight:500}}>Resumen del mes</div>
+      {[['Ingresos cobrados',ingresos,'#1D9E75','+'],['Sueldos',totalSueldos,'#E24B4A','-'],['Impuestos',totalImpuestos,'#9635AB','-'],['Operativos',totalOperativos,'#BA7517','-'],['Tarjetas',totalTarjetas,'#1543F8','-'],['Préstamos',totalPrestamos,'#9635AB','-'],['Resultado',resultado,resultado>=0?'#1D9E75':'#E24B4A',resultado>=0?'+':'']].map(([l,v,c,s])=>(
+        <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'0.5px solid #2A2A2A',fontSize:13}}><span style={{color:'#555',fontSize:12}}>{l}</span><span style={{fontFamily:'monospace',fontSize:l==='Resultado'?14:12,color:c,fontWeight:l==='Resultado'?600:400}}>{s}{fmt(Math.abs(v))}</span></div>
+      ))}
+    </div>
+    <div style={{fontSize:10,color:'#555',marginTop:12,textAlign:'center'}}>Para cargar nuevos gastos / tarjetas / préstamos: editá las hojas GASTOS_FIJOS, TARJETAS, PRESTAMOS del Sheet (después agregamos UI para crearlos desde acá)</div>
+  </div>
+}
 
 function Balance({data,mail,onRefresh}){
   const hoy=new Date(), mesActualNum=hoy.getMonth()+1, anioActualNum=hoy.getFullYear()
