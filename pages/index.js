@@ -277,11 +277,15 @@ function Dashboard({data,mail,onRefresh}){
   const proxMeses=[]
   for(let i=0;i<3;i++){const m=((mesActual-1+i)%12)+1;const a=anioActual+Math.floor((mesActual-1+i)/12);proxMeses.push({m,a})}
   const pipeline=proxMeses.map(({m,a})=>{
-    const ps=presusAprobados.filter(p=>esDelMes(p['Fecha Evento'],m,a))
-    const facEsperada=ps.reduce((s,p)=>s+parseMonto(p['Precio Final']),0) // sin IVA en este sheet
+    const psAll=pr.filter(p=>esDelMes(p['Fecha Evento'],m,a))
+    const ps=psAll.filter(isAprobado)
+    const psEnEspera=psAll.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA')
+    const psDesaprobados=psAll.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO')
+    const facEsperada=ps.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
     const ganancia=ps.reduce((s,p)=>s+parseMonto(p['Fee Agencia']),0)
+    const enEspera=psEnEspera.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
     const yaFacturado=ps.filter(p=>fcByPresu[String(p['Columna 1'])]).length
-    return {m,a,cant:ps.length,facEsperada,ganancia,yaFacturado}
+    return {m,a,cant:ps.length,facEsperada,ganancia,yaFacturado,enEspera,cantEspera:psEnEspera.length,cantTotal:psAll.length,cantDesa:psDesaprobados.length}
   })
 
   // === 4c. TASA CONVERSIÓN + TICKET PROMEDIO (último mes con datos) ===
@@ -403,16 +407,28 @@ function Dashboard({data,mail,onRefresh}){
         <div>
           <div style={{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Pipeline próximos 3 meses (presus aprobados con fecha evento)</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-            {pipeline.map(({m,a,cant,facEsperada,ganancia,yaFacturado},i)=>(
+            {pipeline.map(({m,a,cant,facEsperada,ganancia,yaFacturado,enEspera,cantEspera,cantTotal,cantDesa},i)=>(
               <div key={i} style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',border:'0.5px solid '+(i===0?'#1543F840':'#2A2A2A')}}>
-                <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {a} {i===0&&'(actual)'}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                  <span style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.06em'}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {a}{i===0?' (actual)':''}</span>
+                  <span style={{fontSize:9,color:'#555'}}>{cantTotal} presus</span>
+                </div>
                 <div style={{fontFamily:'monospace',fontSize:15,fontWeight:600,color:'#1543F8'}}>{fmtM(facEsperada)}</div>
-                <div style={{fontSize:10,color:'#555'}}>facturación esperada</div>
+                <div style={{fontSize:10,color:'#555'}}>facturación aprobada</div>
                 <div style={{borderTop:'0.5px solid #2A2A2A',marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontSize:11}}>
                   <span style={{color:'#888'}}>Ganancia</span>
                   <span style={{fontFamily:'monospace',color:'#1D9E75',fontWeight:500}}>{fmtM(ganancia)}</span>
                 </div>
-                <div style={{fontSize:10,color:'#555',marginTop:3}}>{cant} proys · {yaFacturado} ya facturados</div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginTop:4}}>
+                  <span style={{color:'#888'}}>En espera</span>
+                  <span style={{fontFamily:'monospace',color:'#BA7517'}}>{fmtM(enEspera)}</span>
+                </div>
+                <div style={{fontSize:10,color:'#555',marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <span style={{color:'#1D9E75'}}>✓{cant}</span>
+                  <span style={{color:'#BA7517'}}>⏳{cantEspera}</span>
+                  {cantDesa>0&&<span style={{color:'#E24B4A'}}>✗{cantDesa}</span>}
+                  <span style={{marginLeft:'auto'}}>{yaFacturado} fact</span>
+                </div>
               </div>
             ))}
           </div>
