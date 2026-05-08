@@ -265,9 +265,39 @@ function Dashboard({data,mail,onRefresh}){
   const pctProyectos=proyMesAnt?Math.round((proyMes.length-proyMesAnt)/proyMesAnt*100):0
   const pctFacturacion=facMesAnt?Math.round((ingresosMes-facMesAnt)/facMesAnt*100):0
 
-  // === 4. POR COBRAR ===
-  const porCobrar=fc.filter(f=>!isCobrada(f)).map(f=>{const venc=parseD(f['Vencimiento']);const dAtraso=venc?Math.floor((hoy-venc)/864e5):0;return {...f,dAtraso,monto:parseMonto(f['Precio FINAL'])}}).sort((a,b)=>b.dAtraso-a.dAtraso)
+  // === 4. POR COBRAR (separado IVA / sin IVA) ===
+  const porCobrar=fc.filter(f=>!isCobrada(f)).map(f=>{const venc=parseD(f['Vencimiento']);const dAtraso=venc?Math.floor((hoy-venc)/864e5):0;return {...f,dAtraso,monto:parseMonto(f['Precio FINAL']),neto:parseMonto(f['Precio SIN IVA']),iva:parseMonto(f['IVA'])}}).sort((a,b)=>b.dAtraso-a.dAtraso)
   const totalPorCobrar=porCobrar.reduce((s,f)=>s+f.monto,0)
+  const totalPorCobrarSinIVA=porCobrar.reduce((s,f)=>s+f.neto,0)
+  const totalIVAporCobrar=porCobrar.reduce((s,f)=>s+f.iva,0)
+
+  // === 4b. PIPELINE PRÓXIMOS 3 MESES (presus aprobados con fecha evento futura) ===
+  const presusAprobados=pr.filter(isAprobado)
+  const fcByPresu={}; fc.forEach(f=>{fcByPresu[String(f['N° Presupuesto'])]=f})
+  const proxMeses=[]
+  for(let i=0;i<3;i++){const m=((mesActual-1+i)%12)+1;const a=anioActual+Math.floor((mesActual-1+i)/12);proxMeses.push({m,a})}
+  const pipeline=proxMeses.map(({m,a})=>{
+    const ps=presusAprobados.filter(p=>esDelMes(p['Fecha Evento'],m,a))
+    const facEsperada=ps.reduce((s,p)=>s+parseMonto(p['Precio Final']),0) // sin IVA en este sheet
+    const ganancia=ps.reduce((s,p)=>s+parseMonto(p['Fee Agencia']),0)
+    const yaFacturado=ps.filter(p=>fcByPresu[String(p['Columna 1'])]).length
+    return {m,a,cant:ps.length,facEsperada,ganancia,yaFacturado}
+  })
+
+  // === 4c. TASA CONVERSIÓN + TICKET PROMEDIO (último mes con datos) ===
+  const presusMes=pr.filter(p=>esDelMes(p['Fecha Presupuesto'],mesActual,anioActual))
+  const presusMesAprobados=presusMes.filter(isAprobado).length
+  const presusMesEnEspera=presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA').length
+  const presusMesDesaprobados=presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
+  const denom=presusMesAprobados+presusMesEnEspera+presusMesDesaprobados
+  const tasaConversion=denom>0?Math.round(presusMesAprobados/denom*100):0
+  const ticketPromedio=facMesCobradas.length>0?Math.round(ingresosMes/facMesCobradas.length):0
+
+  // === 4d. PUNTO EQUILIBRIO (subsistencia) ===
+  const gastosFijosMes=SU_DEFAULTS.reduce((s,x)=>s+x.b,0)+GF_DEFAULTS.reduce((s,g)=>s+g.m,0)
+  const gananciaEsperadaMes=pipeline[0]?.ganancia||0
+  const dif=gananciaEsperadaMes-gastosFijosMes
+  const subsistencia=dif>=0?{ok:true,texto:`Mes rentable +${fmt(dif)}`,color:'#1D9E75'}:{ok:false,texto:`Faltan ${fmt(Math.abs(dif))} para cubrir gastos fijos`,color:'#E24B4A'}
 
   // === 5. POR PAGAR STAFF ===
   const diaHoy=hoy.getDate()
@@ -353,11 +383,54 @@ function Dashboard({data,mail,onRefresh}){
       </div>
     </div>
 
-    {/* 4. KPIs + 5. POR PAGAR */}
+    {/* 4. FORECAST: POR COBRAR + PIPELINE 3 MESES + KPIs OPERATIVOS */}
+    <div style={{...S.card,marginBottom:12,padding:'14px 18px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:500}}>Forecast — lo que viene</div>
+        <div style={{fontSize:10,color:subsistencia.color,fontWeight:500}}>{subsistencia.texto}</div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1.2fr 2fr',gap:14}}>
+        <div style={{background:'#1E1E1E',borderRadius:8,padding:'12px 14px'}}>
+          <div style={{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Por cobrar (ya facturado)</div>
+          <div style={{fontFamily:'monospace',fontSize:24,fontWeight:600,color:'#BA7517'}}>{fmtM(totalPorCobrarSinIVA)}</div>
+          <div style={{fontSize:11,color:'#555',marginTop:2}}>{porCobrar.length} facturas · sin IVA</div>
+          <div style={{borderTop:'0.5px solid #2A2A2A',marginTop:8,paddingTop:8,display:'flex',justifyContent:'space-between',fontSize:12}}>
+            <span style={{color:'#888'}}>+ IVA por cobrar</span>
+            <span style={{fontFamily:'monospace',color:'#E24B4A'}}>{fmtM(totalIVAporCobrar)}</span>
+          </div>
+          <div style={{fontSize:10,color:'#555',marginTop:4,fontStyle:'italic'}}>El IVA se separa cuando entra → AFIP</div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Pipeline próximos 3 meses (presus aprobados con fecha evento)</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            {pipeline.map(({m,a,cant,facEsperada,ganancia,yaFacturado},i)=>(
+              <div key={i} style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',border:'0.5px solid '+(i===0?'#1543F840':'#2A2A2A')}}>
+                <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {a} {i===0&&'(actual)'}</div>
+                <div style={{fontFamily:'monospace',fontSize:15,fontWeight:600,color:'#1543F8'}}>{fmtM(facEsperada)}</div>
+                <div style={{fontSize:10,color:'#555'}}>facturación esperada</div>
+                <div style={{borderTop:'0.5px solid #2A2A2A',marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontSize:11}}>
+                  <span style={{color:'#888'}}>Ganancia</span>
+                  <span style={{fontFamily:'monospace',color:'#1D9E75',fontWeight:500}}>{fmtM(ganancia)}</span>
+                </div>
+                <div style={{fontSize:10,color:'#555',marginTop:3}}>{cant} proys · {yaFacturado} ya facturados</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginTop:12,paddingTop:12,borderTop:'0.5px solid #2A2A2A'}}>
+        <div><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Tasa conversión {nombreMes}</div><div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:'#1543F8'}}>{tasaConversion}%</div><div style={{fontSize:10,color:'#555'}}>{presusMesAprobados} aprobados de {denom}</div></div>
+        <div><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Ticket promedio</div><div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:'#1D9E75'}}>{fmtM(ticketPromedio)}</div><div style={{fontSize:10,color:'#555'}}>{facMesCobradas.length} cobros del mes</div></div>
+        <div><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Gastos fijos mes</div><div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:'#E24B4A'}}>{fmtM(gastosFijosMes)}</div><div style={{fontSize:10,color:'#555',fontStyle:'italic'}}>aprox · cargar en Egresos</div></div>
+        <div><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Subsistencia mes</div><div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:subsistencia.color}}>{dif>=0?'+':''}{fmtM(dif)}</div><div style={{fontSize:10,color:'#555'}}>ganancia esperada − gastos fijos</div></div>
+      </div>
+    </div>
+
+    {/* 5. KPIs PAGOS + ALERTAS */}
     <div style={S.k4}>
-      <K lbl='Por cobrar' val={fmtM(totalPorCobrar)} sub={porCobrar.length+' facturas'} c='#BA7517'/>
       <K lbl={`A pagar staff el 15/${String(proxPagoFecha.getMonth()+1).padStart(2,'0')}`} val={fmtM(totalAPagar)} sub={staffAPagar.length+' freelancers'} c='#E24B4A'/>
       <K lbl='Aprobados (total)' val={pr.filter(isAprobado).length} sub={fmtM(pr.filter(isAprobado).reduce((s,p)=>s+parseMonto(p['Precio Final']),0))} c='#1543F8'/>
+      <K lbl='Por cobrar (con IVA)' val={fmtM(totalPorCobrar)} sub={porCobrar.length+' facturas'} c='#BA7517'/>
       <K lbl='Alertas' val={alertas.length} sub={alertas.length===0?'Todo al día':'Revisar abajo'} c={alertas.length>0?'#E24B4A':'#1D9E75'}/>
     </div>
 
