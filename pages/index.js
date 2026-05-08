@@ -1715,7 +1715,7 @@ function Egresos({data,mail,onRefresh}){
     <SEC titulo='Sueldos equipo' items={gfPorCat['Sueldos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#E24B4A'/>
     <SEC titulo='Impuestos / Monotributos / IIBB' items={gfPorCat['Impuestos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#9635AB'/>
     <SEC titulo='Operativos (alquiler, servicios, suscripciones)' items={gfPorCat['Operativos']||[]} hoja='GASTOS_FIJOS' arrFuente={gastosFijos} color='#BA7517'/>
-    <SEC titulo={`Tarjetas (${MESES[mesNum-1]} ${anio})`} items={tarjMes} hoja='TARJETAS' arrFuente={tarjetas} color='#1543F8' renderExtra={t=>`${t['Tarjeta']} ${t['Moneda']==='USD'?'(USD)':''}`}/>
+    <TarjetasPorPersona items={tarjMes} arrFuente={tarjetas} mesNum={mesNum} anio={anio} mesesNombres={MESES} cuentasNombres={cuentasNombres} mail={mail} onRefresh={onRefresh} saving={saving} setSaving={setSaving} setToast={setToast} findFila={findFila} togglePagado={togglePagado} cambiarCuenta={cambiarCuenta} pagoParcial={pagoParcial}/>
     <SEC titulo={`Préstamos (vto ${MESES[mesNum-1]} ${anio})`} items={prestMes} hoja='PRESTAMOS' arrFuente={prestamos} color='#9635AB' renderExtra={p=>`${p['Prestamo']} cuota ${p['Cuota nro']}/${p['Cuotas total']}`}/>
     <MovimientosTarjeta data={data} mail={mail} mesNum={mesNum} anio={anio} onRefresh={onRefresh}/>
     <div style={{...S.card,padding:'14px 18px',marginTop:12}}>
@@ -1725,6 +1725,84 @@ function Egresos({data,mail,onRefresh}){
       ))}
     </div>
     <div style={{fontSize:10,color:'#555',marginTop:12,textAlign:'center'}}>Para cargar nuevos gastos / tarjetas / préstamos: editá las hojas GASTOS_FIJOS, TARJETAS, PRESTAMOS del Sheet (después agregamos UI para crearlos desde acá)</div>
+  </div>
+}
+
+// ---- Tarjetas agrupadas por persona (Magma / Juan / Sofi) ----
+function TarjetasPorPersona({items,arrFuente,mesNum,anio,mesesNombres,cuentasNombres,mail,onRefresh,saving,setSaving,setToast,findFila,togglePagado,cambiarCuenta,pagoParcial}){
+  const [openP,setOpenP]=useState({Magma:true,Juan:true,Sofi:true})
+  const isPagado=v=>String(v||'').toUpperCase().match(/SI|SÍ|TRUE|OK/)
+  const PERSONAS=['Magma','Juan','Sofi']
+  const COLOR={Magma:'#1543F8',Juan:'#1D9E75',Sofi:'#9635AB'}
+  const ICON={Magma:'🟡',Juan:'👨',Sofi:'👩'}
+
+  // Agrupar por persona
+  const porPersona={}
+  PERSONAS.forEach(p=>porPersona[p]=[])
+  items.forEach(t=>{
+    const p=t['Persona']||'Magma'
+    if(!porPersona[p])porPersona[p]=[]
+    porPersona[p].push(t)
+  })
+  // Otras personas no contempladas
+  Object.keys(porPersona).forEach(p=>{if(!PERSONAS.includes(p))PERSONAS.push(p)})
+
+  const sumARS=arr=>arr.reduce((s,t)=>s+parseMonto(t['Monto']),0)
+  const sumUSD=arr=>arr.reduce((s,t)=>s+parseMonto(t['Monto USD']),0)
+  const sumPagARS=arr=>arr.filter(t=>isPagado(t['Pagado'])).reduce((s,t)=>s+parseMonto(t['Monto']),0)
+
+  return <div style={{...S.card,marginBottom:10}}>
+    <div style={S.ch}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span>Tarjetas ({mesesNombres[mesNum-1]} {anio}) <span style={{color:'#555',fontWeight:400,fontSize:11,marginLeft:8}}>{items.length} items</span></span>
+        <span style={{display:'flex',gap:14,fontSize:11}}>
+          {PERSONAS.filter(p=>porPersona[p].length>0).map(p=>(
+            <span key={p} style={{color:COLOR[p]||'#888'}}>
+              {ICON[p]||'•'} <strong>{p}</strong>: {fmt(sumARS(porPersona[p]))}{sumUSD(porPersona[p])>0?' + US$'+sumUSD(porPersona[p]).toFixed(2):''}
+            </span>
+          ))}
+        </span>
+      </div>
+    </div>
+    {PERSONAS.filter(p=>porPersona[p].length>0).map(persona=>{
+      const arr=porPersona[persona]
+      const isOpen=openP[persona]!==false
+      return <div key={persona}>
+        <div onClick={()=>setOpenP(o=>({...o,[persona]:!isOpen}))} style={{padding:'8px 14px',background:'#0F0F0F',borderTop:'0.5px solid #2A2A2A',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:11,color:COLOR[persona]||'#888',fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase'}}>{ICON[persona]||'•'} {persona} · {arr.length} tarjetas</span>
+          <span style={{fontFamily:'monospace',fontSize:12,color:COLOR[persona]||'#888'}}>{fmt(sumARS(arr))}{sumUSD(arr)>0?' + US$'+sumUSD(arr).toFixed(2):''} <span style={{color:'#555',fontSize:10,marginLeft:6}}>· pagado {fmt(sumPagARS(arr))}</span> <span style={{marginLeft:8,fontSize:11,color:'#555'}}>{isOpen?'▲':'▼'}</span></span>
+        </div>
+        {isOpen&&arr.map((it,i)=>{
+          const pag=isPagado(it['Pagado'])
+          const fila=findFila(arrFuente,it)
+          const monto=parseMonto(it['Monto'])
+          const montoUSD=parseMonto(it['Monto USD'])
+          const yaPagado=parseMonto(it['Monto pagado'])
+          const pendiente=Math.max(0,monto-yaPagado)
+          const tieneParcial=yaPagado>0&&!pag
+          const cuenta=it['Cuenta pago']||''
+          const isSaving=saving===`TARJETAS-${fila}`||saving===`TARJETAS-${fila}-cta`||saving===`TARJETAS-${fila}-pp`
+          return <div key={i} style={{padding:'8px 14px',borderTop:'0.5px solid #1A1A1A',opacity:pag?0.6:1,fontSize:12}}>
+            <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto auto auto',gap:10,alignItems:'center'}}>
+              <input type='checkbox' checked={pag} disabled={isSaving} onChange={()=>togglePagado('TARJETAS',arrFuente,it,{cuentaPago:cuenta})} style={{accentColor:'#1D9E75'}}/>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it['Tarjeta']}{montoUSD>0?<span style={{fontSize:10,color:'#888',marginLeft:6}}>+ US${montoUSD.toFixed(2)}</span>:''}</div>
+                {it['Vencimiento']&&<div style={{fontSize:10,color:'#555'}}>vto {it['Vencimiento']}</div>}
+              </div>
+              <select value={cuenta} disabled={pag||isSaving} onChange={e=>cambiarCuenta('TARJETAS',arrFuente,it,e.target.value)} style={{padding:'4px 6px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,minWidth:110}}>
+                <option value=''>— cuenta —</option>
+                {cuentasNombres.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <span style={{fontFamily:'monospace',fontSize:13,minWidth:90,textAlign:'right'}}>{fmt(monto)}</span>
+              {!pag&&<button onClick={()=>pagoParcial('TARJETAS',arrFuente,it)} disabled={isSaving} style={{padding:'3px 8px',borderRadius:4,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:10,cursor:'pointer'}}>Parcial</button>}
+              <span style={{...S.badge,background:pag?'#1D9E7520':(tieneParcial?'#9635AB20':'#BA751720'),color:pag?'#1D9E75':(tieneParcial?'#9635AB':'#BA7517'),fontSize:10}}>{pag?'PAGADO':(tieneParcial?'PARCIAL':'PEND')}</span>
+              <span style={{fontSize:10,color:'#555',minWidth:40}}>{isSaving?'...':(pag?(it['Fecha pago']||''):'')}</span>
+            </div>
+            {tieneParcial&&<div style={{marginTop:4,marginLeft:30,padding:'4px 8px',background:'#9635AB10',borderRadius:4,fontSize:10,color:'#9635AB'}}>Pagado {fmt(yaPagado)} / {fmt(monto)} · falta {fmt(pendiente)}</div>}
+          </div>
+        })}
+      </div>
+    })}
   </div>
 }
 
