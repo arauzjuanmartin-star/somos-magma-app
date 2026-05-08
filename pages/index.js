@@ -858,7 +858,7 @@ function Proyectos({data,mail}){
 const CUENTAS_FC=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander']
 const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'},Efectivo:{label:'Efectivo',color:'#BA7517',bg:'#BA751715'}}
 function Facturacion({data,mail,onRefresh}){
-  const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false)
+  const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false),[busqueda,setBusqueda]=useState('')
   const [presuSel,setPresuSel]=useState(null),[montoTipo,setMontoTipo]=useState('total'),[montoCustom,setMontoCustom]=useState('')
   const [formData,setFormData]=useState({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
   const [saving,setSaving]=useState(false),[toast,setToast]=useState(''),[cobroData,setCobroData]=useState({})
@@ -873,7 +873,26 @@ function Facturacion({data,mail,onRefresh}){
   const calcVencF=()=>{const d=new Date();d.setDate(d.getDate()+parseInt(formData.plazo||30));return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()}
   const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+(f['Nro de Factura']||'')+' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+(f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
   const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';if(n.toLowerCase().includes('ef-')||n.toLowerCase().includes('efectivo'))return'Efectivo';return'SRL'}
-  const filtradas=fc.filter(f=>{if(filtro==='todas')return true;if(filtro==='pendiente')return!isCobrada(f)&&estF(f)!=='parcial';if(filtro==='parcial')return estF(f)==='parcial';if(filtro==='cobrada')return isCobrada(f);return getEntidad(f)===filtro}).sort((a,b)=>(isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b))
+  const parseFC=s=>{if(!s)return null;const p=String(s).split('/');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);return null}
+  const filtradas=fc.filter(f=>{
+    if(filtro==='pendiente'&&(isCobrada(f)||estF(f)==='parcial'))return false
+    if(filtro==='parcial'&&estF(f)!=='parcial')return false
+    if(filtro==='cobrada'&&!isCobrada(f))return false
+    if(['SRL','Sofia','Lulu'].includes(filtro)&&getEntidad(f)!==filtro)return false
+    if(busqueda){
+      const q=busqueda.toLowerCase()
+      const haystack=[f['N° Presupuesto'],f['Nro de Factura'],f['Cliente'],f['Agencia'],f['Proyecto'],f['Precio FINAL']].map(v=>String(v||'').toLowerCase()).join(' ')
+      if(!haystack.includes(q))return false
+    }
+    return true
+  }).sort((a,b)=>{
+    if(filtro==='cobrada'){
+      const da=parseFC(a['Fecha cobro'])||new Date(0)
+      const db=parseFC(b['Fecha cobro'])||new Date(0)
+      return db-da
+    }
+    return (isCobrada(a)?1:0)-(isCobrada(b)?1:0)||diffD(a)-diffD(b)
+  })
   const reclamar=fc.filter(f=>estF(f)==='reclamar')
   const vencidas=fc.filter(f=>estF(f)==='vencida')
   const pcTotal=fc.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
@@ -1024,13 +1043,18 @@ function Facturacion({data,mail,onRefresh}){
         </div>}
       </div>}
     </div>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:10,flexWrap:'wrap'}}>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
         {[['todas','Todas'],['pendiente','Pendientes'],['parcial','Parciales'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
           <button key={id} style={{...S.fb,...(filtro===id?S.fa:{})}} onClick={()=>setFiltro(id)}>{l}</button>
         ))}
       </div>
+      <div style={{display:'flex',gap:6,alignItems:'center',flex:'1 1 240px',maxWidth:380}}>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder='🔍 Buscar nro, cliente, proyecto, agencia, monto...' style={{flex:1,padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
+        {busqueda&&<button onClick={()=>setBusqueda('')} style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>×</button>}
+      </div>
     </div>
+    <div style={{fontSize:11,color:'#555',marginBottom:6}}>{filtradas.length} {filtradas.length===1?'factura':'facturas'}{filtro==='cobrada'?' (más recientes arriba)':''}{busqueda?' · filtrado por "'+busqueda+'"':''}</div>
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 420px)'}}>
       {filtradas.map((f,i)=>{
         const e=estF(f),bm=bmap[e]||bmap.pendiente,isOpen=abierto===f['N° Presupuesto'],d=diffD(f)

@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
   try {
     const data = await getAllData()
-    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60')
+    res.setHeader('Cache-Control', 'no-store, must-revalidate')
     res.status(200).json({ ok: true, data })
   } catch (err) {
     console.error(err)
