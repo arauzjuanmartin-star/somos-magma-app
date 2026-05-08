@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
-    // Si APROBADO → crear fila en PROYECTOS con el orden correcto del Sheet
+    // Si APROBADO → crear/completar fila en PROYECTOS con TODAS las columnas
     if (estado === 'APROBADO' && presuRow) {
       const nro         = presuRow[0]  || ''
       const fechaEvento = presuRow[1]  || ''
@@ -62,6 +62,17 @@ export default async function handler(req, res) {
       const cliente     = presuRow[5]  || ''
       const proyecto    = presuRow[6]  || ''
       const precio      = presuRow[8]  || ''
+      const fechaPresu  = presuRow[9]  || ''
+      // Financieros del presu
+      const subtotal    = presuRow[38] || ''  // AM
+      const fee         = presuRow[39] || ''  // AN
+      const impGan      = presuRow[40] || ''  // AO
+      const iibb        = presuRow[41] || ''  // AP
+      const plazo       = presuRow[42] || ''  // AQ
+      const interesPct  = presuRow[43] || ''  // AR
+      const interesAmt  = presuRow[44] || ''  // AS
+      const total       = presuRow[45] || ''  // AT
+      const ajuste      = presuRow[46] || ''  // AU
 
       const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
       let mesStr = ''
@@ -75,29 +86,77 @@ export default async function handler(req, res) {
         }
       }
 
+      // Construir fila completa de PROYECTOS (60 columnas A:BH)
+      // Layout: A Mes, B CargaStaff, C Nro, D FechaEvento, E Agencia, F Cliente, G Proyecto, H Total, I FeeFinal, J Diferencia, K FeeAgencia,
+      // L..AX (12 slots Pedido/Precio/Staff + Otros), AY FechaPresu, AZ PM, BA Subtotal, BB ImpGan, BC IIBB, BD Plazo, BE Int%, BF Int$, BG Total, BH Ajuste
+      const proyRow = new Array(60).fill('')
+      proyRow[0]  = mesStr
+      proyRow[1]  = false              // Carga Staff (todavía no)
+      proyRow[2]  = nro
+      proyRow[3]  = fechaEvento
+      proyRow[4]  = agencia
+      proyRow[5]  = cliente
+      proyRow[6]  = proyecto
+      proyRow[7]  = total || precio    // Total (con IVA si aplica) — usa AT del presu
+      proyRow[8]  = fee                // Fee Final
+      proyRow[9]  = ''                 // Diferencia (vs presu inicial)
+      proyRow[10] = fee                // Fee Agencia (mismo que Fee Final inicialmente)
+      // Pedidos: 12 slots de 3 columnas (Pedido / Precio / Staff)
+      for (let j = 0; j < 12; j++) {
+        proyRow[11 + j*3]     = presuRow[11 + j*2] || ''  // Pedido
+        proyRow[11 + j*3 + 1] = presuRow[12 + j*2] || ''  // Precio
+        proyRow[11 + j*3 + 2] = ''                         // Staff (se completa después)
+      }
+      // Otros (slot 13)
+      proyRow[47] = presuRow[35] || ''  // Otros
+      proyRow[48] = presuRow[36] || ''  // Precio
+      proyRow[49] = ''                  // Staff
+      proyRow[50] = fechaPresu
+      proyRow[51] = pmInterno
+      proyRow[52] = subtotal
+      proyRow[53] = impGan
+      proyRow[54] = iibb
+      proyRow[55] = plazo
+      proyRow[56] = interesPct
+      proyRow[57] = interesAmt
+      proyRow[58] = total
+      proyRow[59] = ajuste
+
+      // Buscar si ya existe fila para este presupuesto
       const rProy = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: 'PROYECTOS!C:C',
+        range: 'PROYECTOS!A:C',
       })
       const proyRows = rProy.data.values || []
-      const yaExiste = proyRows.some(r => String(r[0]) === String(nro))
+      let proyRowIdx = -1
+      for (let i = 1; i < proyRows.length; i++) {
+        if (String(proyRows[i][2]) === String(nro)) { proyRowIdx = i + 1; break }
+      }
 
-      if (!yaExiste) {
-        const proyRow = [
-          mesStr, '', nro, fechaEvento, agencia, cliente, proyecto, precio, '', '', '',
-        ]
-        for (let j = 0; j < 12; j++) {
-          proyRow.push(presuRow[11 + j*2] || '')  // Pedido
-          proyRow.push(presuRow[12 + j*2] || '')  // Precio
-          proyRow.push('')                         // Staff
-        }
-
+      if (proyRowIdx === -1) {
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
-          range: 'PROYECTOS!A:A',
+          range: 'PROYECTOS!A:BH',
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [proyRow] }
+        })
+      } else {
+        // Update fila existente — solo BB-BH y los financieros de I,K (Fee), preservar Carga Staff y Staff slots
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `PROYECTOS!BA${proyRowIdx}:BH${proyRowIdx}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[subtotal, impGan, iibb, plazo, interesPct, interesAmt, total, ajuste]] }
+        })
+        // También actualizar I (Fee Final) y K (Fee Agencia) por si cambiaron
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: SHEET_ID,
+          requestBody: { valueInputOption: 'USER_ENTERED', data: [
+            { range: `PROYECTOS!H${proyRowIdx}`, values: [[total]] },
+            { range: `PROYECTOS!I${proyRowIdx}`, values: [[fee]] },
+            { range: `PROYECTOS!K${proyRowIdx}`, values: [[fee]] },
+          ]},
         })
       }
     }

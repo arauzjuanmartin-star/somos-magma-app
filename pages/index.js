@@ -1871,15 +1871,41 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
 // ---- HISTORICO ----
 function Historico({data}){
   const [añoSel,setAñoSel]=useState('2025')
+  // Para 2026: derivamos del Sheet en vivo - PROYECTOS (con BB-BH llenas) + FACTURACION (cobrado) + Pagos_Staff
+  const facByPresu={};(data.facturacion||[]).forEach(f=>{facByPresu[String(f['N° Presupuesto'])]=f})
+  const pagosByPresu={};(data.pagosStaff||[]).forEach(p=>{const k=String(p['N° Presupuesto']);if(!pagosByPresu[k])pagosByPresu[k]=[];pagosByPresu[k].push(p)})
+  const proy2026=(data.proyectos||[]).filter(p=>{const fe=String(p['Fecha Evento']||'').split('/');return fe[2]==='2026'}).map(p=>{
+    const nro=String(p['N° presupuesto']||'')
+    const f=facByPresu[nro]
+    const pagos=pagosByPresu[nro]||[]
+    const subtotal=parseMonto(p['Subtotal'])
+    const fee=parseMonto(p['Fee Agencia'])||parseMonto(p['Fee Final'])
+    const impGan=parseMonto(p['Imp. Ganancias'])
+    const iibb=parseMonto(p['IIBB'])
+    const total=parseMonto(p['Total'])||parseMonto(p['Total '])
+    const ivaCalc=f?parseMonto(f['IVA']):0
+    const fechaEv=String(p['Fecha Evento']||'')
+    const mesNum=parseInt((fechaEv.split('/')[1])||'0')||0
+    const obj={
+      Año:'2026',Mes:mesNum,Fecha:fechaEv,Nro:nro,
+      Cliente:p['Cliente']||(f?f['Cliente']:''),Agencia:p['Agencia']||(f?f['Agencia']:''),
+      Proyecto:p['Proyecto']||(f?f['Proyecto']:''),
+      Presupuesto:total||subtotal,Total:total,IVA:ivaCalc,
+      Magma:fee,Impuestos:impGan+iibb,Viaticos:0,'Extra M':0,
+      Cobrado:f&&isCobrada(f)?'SÍ':'NO',
+      'Tipo FC':f?f['Tipo de Factura']:'','Nro FC':f?f['Nro de Factura']:'',
+    }
+    pagos.slice(0,6).forEach((pg,i)=>{
+      obj['Staff '+(i+1)]=pg['Freelancer']||''
+      obj['Pago '+(i+1)]=parseMonto(pg['Monto Pagado']||pg['Monto Adeudado'])
+    })
+    return obj
+  })
   const fuentes={
     '2023':data.historico2023||[],
     '2024':data.historico2024||[],
     '2025':data.historico2025||[],
-    '2026':[...(data.facturacion||[]).map(f=>({
-      Año:'2026',Mes:parseInt(String(f['Mes']||'').split(' ')[0])||0,Cliente:f['Cliente']||'',Agencia:f['Agencia']||'',Proyecto:f['Proyecto']||'',
-      Presupuesto:parseMonto(f['Precio SIN IVA']),Total:parseMonto(f['Precio FINAL']),IVA:parseMonto(f['IVA']),
-      Cobrado:isCobrada(f)?'SÍ':'NO',
-    }))],
+    '2026':proy2026,
   }
   const años=['2023','2024','2025','2026']
   const filas=fuentes[añoSel]||[]
