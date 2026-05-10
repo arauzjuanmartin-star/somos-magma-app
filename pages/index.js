@@ -266,10 +266,16 @@ function Dashboard({data,mail,onRefresh}){
   const pctFacturacion=facMesAnt?Math.round((ingresosMes-facMesAnt)/facMesAnt*100):0
 
   // === 4. POR COBRAR (separado IVA / sin IVA) ===
-  const porCobrar=fc.filter(f=>!isCobrada(f)).map(f=>{const venc=parseD(f['Vencimiento']);const dAtraso=venc?Math.floor((hoy-venc)/864e5):0;return {...f,dAtraso,monto:parseMonto(f['Precio FINAL']),neto:parseMonto(f['Precio SIN IVA']),iva:parseMonto(f['IVA'])}}).sort((a,b)=>b.dAtraso-a.dAtraso)
+  const esPagaAtrasado=f=>{const cli=String(f['Cliente']||'').toLowerCase();const ag=String(f['Agencia']||'').toLowerCase();return cli.includes('unilever')||ag.includes('oir')}
+  const porCobrar=fc.filter(f=>!isCobrada(f)).map(f=>{const venc=parseD(f['Vencimiento']);const dAtraso=venc?Math.floor((hoy-venc)/864e5):0;const fEv=parseD(f['Fecha Evento']);const diasDesdeEvento=fEv?Math.floor((hoy-fEv)/864e5):0;return {...f,dAtraso,diasDesdeEvento,pagaAtrasado:esPagaAtrasado(f),monto:parseMonto(f['Precio FINAL']),neto:parseMonto(f['Precio SIN IVA']),iva:parseMonto(f['IVA'])}}).sort((a,b)=>b.diasDesdeEvento-a.diasDesdeEvento)
   const totalPorCobrar=porCobrar.reduce((s,f)=>s+f.monto,0)
   const totalPorCobrarSinIVA=porCobrar.reduce((s,f)=>s+f.neto,0)
   const totalIVAporCobrar=porCobrar.reduce((s,f)=>s+f.iva,0)
+  // Atrasadas por antigüedad desde fecha de evento
+  const atrasadas90=porCobrar.filter(f=>f.diasDesdeEvento>90)
+  const atrasadas60=porCobrar.filter(f=>f.diasDesdeEvento>60&&f.diasDesdeEvento<=90)
+  const atrasadas30=porCobrar.filter(f=>f.diasDesdeEvento>30&&f.diasDesdeEvento<=60)
+  const totalAtrasadas=atrasadas90.reduce((s,f)=>s+f.monto,0)+atrasadas60.reduce((s,f)=>s+f.monto,0)+atrasadas30.reduce((s,f)=>s+f.monto,0)
 
   // === 4b. PIPELINE PRÓXIMOS 3 MESES (presus aprobados con fecha evento futura) ===
   const presusAprobados=pr.filter(isAprobado)
@@ -312,6 +318,7 @@ function Dashboard({data,mail,onRefresh}){
 
   // === 6. ALERTAS ===
   const alertas=[]
+  atrasadas90.filter(f=>!f.pagaAtrasado).forEach(f=>alertas.push({tipo:'cobro-critico',texto:`🚨 ${f['Cliente']} sin cobrar hace ${f.diasDesdeEvento}d — ${f['Proyecto']||'s/p'} ${fmt(f.monto)}`,color:'#E24B4A'}))
   porCobrar.filter(f=>f.dAtraso>0&&f.dAtraso<=30).forEach(f=>alertas.push({tipo:'factura-vencida',texto:`Factura ${f['Nro de Factura']||'s/n'} vencida hace ${f.dAtraso}d — ${f['Cliente']} ${fmt(f.monto)}`,color:'#E24B4A'}))
   porCobrar.filter(f=>f.dAtraso<0&&f.dAtraso>=-3).forEach(f=>alertas.push({tipo:'factura-por-vencer',texto:`Factura ${f['Nro de Factura']||'s/n'} vence en ${Math.abs(f.dAtraso)}d — ${f['Cliente']}`,color:'#BA7517'}))
   proyectos.filter(p=>{const fe=parseD(p['Fecha Evento']);if(!fe)return false;const diasAlRodaje=Math.floor((fe-hoy)/864e5);const sinStaff=!(p['Carga Staff']===true||p['Carga Staff']==='TRUE');return diasAlRodaje>=0&&diasAlRodaje<=7&&sinStaff}).forEach(p=>alertas.push({tipo:'proyecto-sin-staff',texto:`#${p['N° presupuesto']} "${p['Proyecto']||'—'}" sin staff — rodaje ${p['Fecha Evento']}`,color:'#BA7517'}))
@@ -441,6 +448,37 @@ function Dashboard({data,mail,onRefresh}){
         <div><div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Subsistencia mes</div><div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:subsistencia.color}}>{dif>=0?'+':''}{fmtM(dif)}</div><div style={{fontSize:10,color:'#555'}}>ganancia esperada − gastos fijos</div></div>
       </div>
     </div>
+
+    {/* 4b. COBROS ATRASADOS — vista por antigüedad */}
+    {(atrasadas90.length+atrasadas60.length+atrasadas30.length)>0 && <div style={{...S.card,marginBottom:12,padding:'14px 18px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontSize:11,color:'#E24B4A',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>🚨 Cobros atrasados</div>
+        <div style={{fontSize:11,color:'#888'}}>Total atrasado: <span style={{fontFamily:'monospace',color:'#E24B4A',fontWeight:600}}>{fmtM(totalAtrasadas)}</span></div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+        {[
+          {label:'+ 90 días',color:'#E24B4A',list:atrasadas90},
+          {label:'60-90 días',color:'#E27B17',list:atrasadas60},
+          {label:'30-60 días',color:'#BA7517',list:atrasadas30},
+        ].map((b,i)=>(<div key={i} style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',border:'0.5px solid #2A2A2A'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+            <span style={{fontSize:10,color:b.color,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{b.label}</span>
+            <span style={{fontSize:10,color:'#555'}}>{b.list.length} fact.</span>
+          </div>
+          <div style={{fontFamily:'monospace',fontSize:18,fontWeight:600,color:b.color,marginBottom:6}}>{fmtM(b.list.reduce((s,f)=>s+f.monto,0))}</div>
+          <div style={{maxHeight:140,overflowY:'auto',fontSize:11,display:'flex',flexDirection:'column',gap:3}}>
+            {b.list.length===0?<span style={{color:'#555',fontStyle:'italic'}}>—</span>:b.list.slice(0,8).map((f,j)=>(<div key={j} style={{display:'flex',justifyContent:'space-between',gap:6}}>
+              <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#ccc'}}>
+                {f['Cliente']||f['Agencia']||'—'}
+                {f.pagaAtrasado&&<span style={{color:'#888',fontSize:9,marginLeft:4}}>· paga atras.</span>}
+              </span>
+              <span style={{fontFamily:'monospace',color:'#888'}}>{fmtM(f.monto)}</span>
+            </div>))}
+            {b.list.length>8&&<span style={{color:'#555',fontSize:10,fontStyle:'italic'}}>+{b.list.length-8} más</span>}
+          </div>
+        </div>))}
+      </div>
+    </div>}
 
     {/* 5. KPIs PAGOS + ALERTAS */}
     <div style={S.k4}>
