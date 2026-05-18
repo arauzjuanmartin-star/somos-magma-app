@@ -822,8 +822,9 @@ function Presupuestos({data:initialData,mail,onRefresh}){
     const mpm=pm==='todos'||p['PM Interno']===pm
     const mq=!q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     const fp=p['Fecha Presupuesto']||''
-    const manio=anio==='todos'||fp.includes(anio)
-    const mmes=mes==='todos'||parseInt(fp.split('/')[1])===parseInt(mes)
+    const fe=p['Fecha Evento']||''
+    const manio=anio==='todos'||fe.includes(anio)||fp.includes(anio)
+    const mmes=mes==='todos'||parseInt((fe||fp).split('/')[1])===parseInt(mes)
     return mf&&mpm&&manio&&mmes&&mq
   }).reverse()
 
