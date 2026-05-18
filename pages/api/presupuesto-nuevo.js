@@ -9,6 +9,7 @@ const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com',
 // 35 Otros | 36 Precio (otros) | 37 Descuento | 38 Subtotal | 39 Fee Agencia
 // 40 Impuesto a las ganancias | 41 IIBB | 42 Plazo | 43 Interes %
 // 44 Interes $ | 45 Total | 46 Ajuste
+// 47 Tipo Fechas (dia/rango/multi) | 48 Fechas Adicionales (csv |) | 49 Fee Servicios (csv 1|0|1)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -21,7 +22,7 @@ export default async function handler(req, res) {
     const now = new Date()
     const fechaHoy = now.toLocaleDateString('es-AR')
 
-    const row = new Array(47).fill('')
+    const row = new Array(50).fill('')
     row[0] = p['Columna 1'] || ''
     row[1] = p['Fecha Evento'] || ''
     row[2] = p['PM Interno'] || ''
@@ -66,6 +67,9 @@ export default async function handler(req, res) {
     row[44] = intMto
     row[45] = total
     row[46] = ajuste
+    row[47] = p['Tipo Fechas'] || ''
+    row[48] = p['Fechas Adicionales'] || ''
+    row[49] = p['Fee Servicios'] || ''
     // Precio Final (col I) tambien asegurado
     row[8] = num(p['Precio Final']) || total
 

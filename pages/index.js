@@ -805,6 +805,8 @@ function Presupuestos({data:initialData,mail,onRefresh}){
   const [localData,setLocalData]=useState(initialData)
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState(String(new Date().getFullYear())), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
   const [repP,setRepP]=useState(null) // presupuesto a represupuestar (abre NuevoPresupuesto con initialData)
+  const [completarP,setCompletarP]=useState(null) // presu a completar datos faltantes
+  const faltas=p=>{const f=[];if(!p['PM Interno'])f.push('PM');if(!p['Cliente'])f.push('Cliente');if(!p['Proyecto'])f.push('Proyecto');if(!p['Contacto'])f.push('Contacto');if(!p['Fecha Evento'])f.push('Fecha Evento');return f}
 
   useEffect(()=>{setLocalData(initialData)},[initialData])
 
@@ -868,7 +870,10 @@ function Presupuestos({data:initialData,mail,onRefresh}){
             const key=String(p['Columna 1'])
             return <>
               <tr key={key} style={{background:isOpen?'#1E1E1E':i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setOpen(isOpen?null:p['Columna 1'])}>
-                <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['Columna 1']}</td>
+                <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>
+                  <span>#{p['Columna 1']}</span>
+                  {faltas(p).length>0&&<button title={'Faltan: '+faltas(p).join(', ')} onClick={e=>{e.stopPropagation();setCompletarP(p)}} style={{marginLeft:6,padding:'1px 5px',borderRadius:3,border:'0.5px solid #E24B4A',background:'#E24B4A15',color:'#E24B4A',fontSize:9,cursor:'pointer'}}>⚠ {faltas(p).length}</button>}
+                </td>
                 <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
                 <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
                 <td style={{...S.td,fontSize:12}}>{p['Agencia']||'—'}</td>
@@ -896,6 +901,93 @@ function Presupuestos({data:initialData,mail,onRefresh}){
       onClose={()=>{setRepP(null);if(onRefresh)setTimeout(onRefresh,500)}}
       onGuardado={()=>{handleEstadoUpdate(repP['Columna 1'],'REPRESUPUESTADO')}}
     />}
+    {completarP&&<CompletarPresupuestoModal
+      p={completarP}
+      data={localData}
+      mail={mail}
+      onClose={()=>setCompletarP(null)}
+      onSaved={(num,cambios)=>{setLocalData(prev=>({...prev,presupuestos:prev.presupuestos.map(x=>String(x['Columna 1'])===String(num)?{...x,...cambios}:x)}));setToast('Datos actualizados ✓');setCompletarP(null);if(onRefresh)setTimeout(onRefresh,800)}}
+    />}
+  </div>
+}
+
+function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
+  const [pm,setPm]=useState(p['PM Interno']||'')
+  const [agencia,setAgencia]=useState(p['Agencia']||'')
+  const [cliente,setCliente]=useState(p['Cliente']||'')
+  const [proyecto,setProyecto]=useState(p['Proyecto']||'')
+  const [contacto,setContacto]=useState(p['Contacto']||'')
+  const [fechaEv,setFechaEv]=useState(p['Fecha Evento']||'')
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const ags=[...new Set((data?.presupuestos||[]).map(x=>x['Agencia']).filter(Boolean))].sort()
+  const clis=[...new Set((data?.presupuestos||[]).map(x=>x['Cliente']).filter(Boolean))].sort()
+  const cts=[...new Set((data?.presupuestos||[]).map(x=>x['Contacto']).filter(Boolean))].sort()
+  const guardar=async()=>{
+    setSaving(true);setErr('')
+    const cambios={}
+    if(pm!==(p['PM Interno']||''))cambios['PM Interno']=pm
+    if(agencia!==(p['Agencia']||''))cambios['Agencia']=agencia
+    if(cliente!==(p['Cliente']||''))cambios['Cliente']=cliente
+    if(proyecto!==(p['Proyecto']||''))cambios['Proyecto']=proyecto
+    if(contacto!==(p['Contacto']||''))cambios['Contacto']=contacto
+    if(fechaEv!==(p['Fecha Evento']||''))cambios['Fecha Evento']=fechaEv
+    if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
+    try{
+      const r=await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['Columna 1'],cambios})})
+      const j=await r.json()
+      if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
+      onSaved(p['Columna 1'],cambios)
+    }catch(e){setErr(e.message);setSaving(false)}
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
+  const lbl={fontSize:11,color:'#555',display:'block',marginBottom:4}
+  const campoFaltante=(actual)=>!actual ? {border:'0.5px solid #E24B4A',background:'#E24B4A08'} : {}
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:560,maxHeight:'90vh',background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{p['Columna 1']}</span>
+        <span style={{fontSize:13,fontWeight:500}}>Completar datos</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20,overflowY:'auto'}}>
+        <div style={{fontSize:11,color:'#888',marginBottom:12}}>Campos en rojo están faltando. Los podés completar y guardar.</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
+            <select style={{...inp,...campoFaltante(p['PM Interno'])}} value={pm} onChange={e=>setPm(e.target.value)}>
+              <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
+            </select>
+          </label>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha evento (DD/MM/YYYY)</span>
+            <input style={{...inp,...campoFaltante(p['Fecha Evento'])}} value={fechaEv} onChange={e=>setFechaEv(e.target.value)} placeholder="ej: 15/3/2026"/>
+          </label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Agencia</span>
+            <input list="ed-ag" style={{...inp,...campoFaltante(p['Agencia'])}} value={agencia} onChange={e=>setAgencia(e.target.value)} placeholder="Sin agencia / Directo"/>
+            <datalist id="ed-ag">{ags.map(a=><option key={a} value={a}/>)}</datalist>
+          </label>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Cliente</span>
+            <input list="ed-cl" style={{...inp,...campoFaltante(p['Cliente'])}} value={cliente} onChange={e=>setCliente(e.target.value)} placeholder="Nombre del cliente"/>
+            <datalist id="ed-cl">{clis.map(a=><option key={a} value={a}/>)}</datalist>
+          </label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripción</span>
+            <input style={{...inp,...campoFaltante(p['Proyecto'])}} value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder="Ej: Evento anual"/>
+          </label>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Contacto</span>
+            <input list="ed-ct" style={{...inp,...campoFaltante(p['Contacto'])}} value={contacto} onChange={e=>setContacto(e.target.value)} placeholder="Nombre del contacto"/>
+            <datalist id="ed-ct">{cts.map(c=><option key={c} value={c}/>)}</datalist>
+          </label>
+        </div>
+        {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
+      </div>
+    </div>
   </div>
 }
 
@@ -2147,7 +2239,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
     const feeBase=peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
     const fee=tieneAg?feeBase:0,base=subtotal+fee
-    const gan=form.gan?fee*0.35:0,iibb=form.iibb?fee*0.094:0
+    const gan=form.gan?fee*0.35:0,iibb=form.iibb?fee*0.04:0
     const intMto=(base+gan+iibb)*((parseFloat(form.interes)||0)/100)
     const ajMto=(parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
     return {subtotal,fee,base,gan,iibb,intMto,ajMto,total:base+gan+iibb+intMto+ajMto}
@@ -2164,8 +2256,20 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     // Si agencia quedó vacía, normalizar a "Sin agencia / Directo"
     const agenciaFinal = form.agencia.trim() || 'Sin agencia / Directo'
     setSaving(true)
-    const fechaEventoOut = form.fe1 ? form.fe1.split('-').reverse().join('/') : (form.feIni?form.feIni.split('-').reverse().join('/'):'')
+    const toDMY = (iso) => iso ? iso.split('-').reverse().join('/') : ''
+    let fechaEventoOut = '', fechasAdicionales = '', tipoFechas = form.fechaMode
+    if (form.fechaMode === 'dia') {
+      fechaEventoOut = toDMY(form.fe1)
+    } else if (form.fechaMode === 'rango') {
+      fechaEventoOut = toDMY(form.feIni)
+      fechasAdicionales = toDMY(form.feFin)
+    } else if (form.fechaMode === 'multi') {
+      const fs = diasMulti.filter(Boolean).map(toDMY)
+      fechaEventoOut = fs[0] || ''
+      fechasAdicionales = fs.slice(1).join('|')
+    }
     const cantFechas = form.fechaMode==='multi' ? diasMulti.filter(Boolean).length : (form.fechaMode==='rango' && form.feIni && form.feFin ? Math.max(1,Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1) : 1)
+    const feeServicios = peds.filter(p=>p.svc).map(p=>p.feeAg?'1':'0').join('|')
     const row={
       'Columna 1':nextNum,
       'Estado':'EN ESPERA',
@@ -2187,6 +2291,9 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Interes $':T.intMto,
       'Total':T.total,
       'Ajuste':T.ajMto,
+      'Tipo Fechas':tipoFechas,
+      'Fechas Adicionales':fechasAdicionales,
+      'Fee Servicios':feeServicios,
     }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
@@ -2308,13 +2415,13 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             </label>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Interes %</span><input style={inp} type="number" value={form.interes} min="0" step="0.5" onChange={e=>setF('interes',e.target.value)}/></label>
           </div>
-          {[['gan','Imp. Ganancias (35% sobre fee)'],['iibb','IIBB (9.4% sobre fee)']].map(([k,label])=>(
+          {[['gan','Imp. Ganancias (35% sobre fee)'],['iibb','IIBB (4% sobre fee)']].map(([k,label])=>(
             <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',background:'#1A1A1A',borderRadius:6,marginBottom:5}}>
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer'}}>
                 <input type="checkbox" checked={form[k]} onChange={e=>setF(k,e.target.checked)} style={{width:14,height:14,accentColor:'#1543F8'}}/>
                 {label}
               </label>
-              <span style={{fontFamily:'monospace',fontSize:12,color:'#555'}}>{k==='gan'?fmt(T.fee*0.35):fmt(T.fee*0.094)}</span>
+              <span style={{fontFamily:'monospace',fontSize:12,color:'#555'}}>{k==='gan'?fmt(T.fee*0.35):fmt(T.fee*0.04)}</span>
             </div>
           ))}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}>
@@ -2331,7 +2438,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             tieneAg&&T.fee>0?['Fee agencia (x1)',fmt(T.fee),'#9635AB']:null,
             tieneAg&&T.fee>0?['Base imponible',fmt(T.base),'#555']:null,
             T.gan>0?['Ganancias 35%',fmt(T.gan),'#E24B4A']:null,
-            T.iibb>0?['IIBB 9.4%',fmt(T.iibb),'#E24B4A']:null,
+            T.iibb>0?['IIBB 4%',fmt(T.iibb),'#E24B4A']:null,
             T.intMto>0?['Interes '+form.interes+'%',fmt(T.intMto),'#BA7517']:null,
             Math.abs(T.ajMto)>0?[(parseInt(form.tajuste)>0?'Recargo':'Descuento'),(parseInt(form.tajuste)>0?'+':'-')+fmt(Math.abs(T.ajMto)),parseInt(form.tajuste)>0?'#1D9E75':'#E24B4A']:null,
           ].filter(Boolean).map(([label,val,color])=>(
