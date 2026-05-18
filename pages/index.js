@@ -803,7 +803,7 @@ function DetallePresupuesto({p}){
 
 function Presupuestos({data:initialData,mail,onRefresh}){
   const [localData,setLocalData]=useState(initialData)
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState(String(new Date().getFullYear())), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
   const [repP,setRepP]=useState(null) // presupuesto a represupuestar (abre NuevoPresupuesto con initialData)
 
   useEffect(()=>{setLocalData(initialData)},[initialData])
@@ -902,7 +902,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
 function Proyectos({data,mail}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
-  const [q,setQ]=useState(''),[anio,setAnio]=useState('todos'),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
+  const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
   const getPrecioLista=(nombre)=>{if(!nombre)return 0;const s=SVCS_LIST.find(x=>nombre===x.n);return s?s.p:0}
@@ -1689,7 +1689,7 @@ function Egresos({data,mail,onRefresh}){
     })}
   </div>)
 
-  const anios=['2025','2026','2027']
+  const anios=['2026','2027']
   return <div>
     {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,fontWeight:500,zIndex:999}}>{toast}</div>}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
