@@ -2123,11 +2123,24 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     tajuste:'1',
     ajuste:String(parseMonto(initialData['Ajuste'])||'0'),
     motivo:'',
-  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:false,iibb:false,tajuste:'1',ajuste:'0',motivo:''})
+  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:''})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [diasMulti,setDiasMulti]=useState([''])
+  const [erroresValidacion,setErroresValidacion]=useState([])
+  const validar = () => {
+    const errs = []
+    if (!form.pm) errs.push('Falta PM interno')
+    const tieneFecha = form.fechaMode==='dia' ? !!form.fe1 : form.fechaMode==='rango' ? (!!form.feIni && !!form.feFin) : diasMulti.filter(Boolean).length>0
+    if (!tieneFecha) errs.push('Falta fecha de evento')
+    if (!form.cliente.trim()) errs.push('Falta cliente')
+    if (!form.proyecto.trim()) errs.push('Falta proyecto / descripción')
+    if (!form.contacto.trim()) errs.push('Falta contacto')
+    if (!peds.some(p=>p.svc)) errs.push('Falta al menos un servicio')
+    if (isRepresupuestar && !form.motivo.trim()) errs.push('Falta motivo del represupuesto')
+    return errs
+  }
   const version=isRepresupuestar ? String(nextNum).match(/v\d+$/i)?.[0] || 'V2' : (form.repr?'V2':'')
   const tieneAg=form.agencia.trim()!==''
   const calcT=()=>{
@@ -2145,8 +2158,11 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const setFeeAg=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,feeAg:val}:p))
   const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
   async function guardar(){
-    if(!form.cliente.trim()||!peds.some(p=>p.svc))return
-    if(isRepresupuestar && !form.motivo.trim())return
+    const errs = validar()
+    if (errs.length>0) { setErroresValidacion(errs); return }
+    setErroresValidacion([])
+    // Si agencia quedó vacía, normalizar a "Sin agencia / Directo"
+    const agenciaFinal = form.agencia.trim() || 'Sin agencia / Directo'
     setSaving(true)
     const fechaEventoOut = form.fe1 ? form.fe1.split('-').reverse().join('/') : (form.feIni?form.feIni.split('-').reverse().join('/'):'')
     const cantFechas = form.fechaMode==='multi' ? diasMulti.filter(Boolean).length : (form.fechaMode==='rango' && form.feIni && form.feFin ? Math.max(1,Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1) : 1)
@@ -2154,7 +2170,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Columna 1':nextNum,
       'Estado':'EN ESPERA',
       'PM Interno':form.pm,
-      'Agencia':form.agencia,
+      'Agencia':agenciaFinal,
       'Cliente':form.cliente,
       'Proyecto':form.proyecto,
       'Contacto':form.contacto,
@@ -2339,6 +2355,10 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           </div>
           {form.repr&&<div style={{marginTop:10,fontSize:11,color:'#9635AB'}}>Represupuesto de #{form.repr} V2</div>}
           <div style={{flex:1}}/>
+          {erroresValidacion.length>0&&<div style={{marginTop:10,padding:10,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6}}>
+            <div style={{fontSize:11,color:'#E24B4A',fontWeight:600,marginBottom:6}}>Faltan datos obligatorios:</div>
+            {erroresValidacion.map((e,i)=><div key={i} style={{fontSize:11,color:'#E24B4A',lineHeight:1.5}}>• {e}</div>)}
+          </div>}
           {ok?<div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}><div style={{background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado</div><button style={{width:'100%',padding:10,borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+nextNum,'_blank')}>Generar PDF del presupuesto →</button><button style={{width:'100%',padding:8,borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cerrar</button></div>
             :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:isRepresupuestar?'#9635AB':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving||(isRepresupuestar&&!form.motivo?.trim())?0.6:1}} onClick={guardar} disabled={saving||(isRepresupuestar&&!form.motivo?.trim())}>
               {saving?'Guardando...':(isRepresupuestar?'Crear represupuesto':'Cargar presupuesto')}
