@@ -98,7 +98,14 @@ export default function App() {
       <div style={S.sb}>
         <div style={{padding:'20px 16px 16px',borderBottom:'1px solid #2A2A2A'}}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div></div>
         <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
-          {NAV.map(n=><button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)}><span style={{fontSize:12,width:16,textAlign:'center'}}>{n.icon}</span>{n.label}</button>)}
+          {NAV.map(n=>{
+            const badge = n.id==='proyectos' ? (data?.proyectos||[]).filter(p=>{const carga=p['Carga Staff'];if(carga===true||carga==='TRUE')return false;const staffs=[];for(let j=1;j<=20;j++){if(p['Staff '+j]||(j===1?p['Staff']:null))staffs.push(true)}return staffs.length===0}).length : null
+            return <button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)}>
+              <span style={{fontSize:12,width:16,textAlign:'center'}}>{n.icon}</span>
+              <span style={{flex:1}}>{n.label}</span>
+              {badge!=null&&badge>0&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:8,background:'#E24B4A30',color:'#E24B4A',fontWeight:600}}>{badge}</span>}
+            </button>
+          })}
         </nav>
         <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail} onDataChange={()=>load(mail)}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
       </div>
@@ -997,21 +1004,21 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
 function Proyectos({data,mail}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
-  const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
+  const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('pendiente')
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
   const getPrecioLista=(nombre)=>{if(!nombre)return 0;const s=SVCS_LIST.find(x=>nombre===x.n);return s?s.p:0}
   const anios=[...new Set(proyectos.map(p=>{const f=p['Fecha Evento']||'';const m=f.match(/(\d{4})/);return m?m[1]:null}).filter(Boolean))].sort().reverse()
   const pms=[...new Set(proyectos.map(p=>p['PM']||p['PM Interno']||'').filter(Boolean))].sort()
   const agencias=[...new Set(proyectos.map(p=>p['Agencia']||'').filter(Boolean))].sort()
+  const parseFechaEv=(s)=>{const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return 0;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1])).getTime()}
   const filtrados=proyectos.filter(p=>{
     const fecha=p['Fecha Evento']||''
     const mMatch=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
     const aMatch=anio==='todos'||fecha.includes(anio)
-    const pmVal=p['PM']||p['PM Interno']||''
     return (agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(estado==='todos'||(estado==='ok'&&(p['Carga Staff']===true||p['Carga Staff']==='TRUE'))||(estado==='pendiente'&&p['Carga Staff']!==true&&p['Carga Staff']!=='TRUE'))&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
-  })
-  const getBase=(proy)=>{const svcs=[];for(let j=1;j<=12;j++){const ped=proy['Pedido '+j]||proy[j===1?'Pedido':'']||'',qui=proy['Staff '+j]||proy[j===1?'Staff':'']||'',prc=parseMonto(proy['Precio '+j]||proy[j===1?'Precio':'']||0),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
+  }).sort((a,b)=>parseFechaEv(a['Fecha Evento'])-parseFechaEv(b['Fecha Evento']))
+  const getBase=(proy)=>{const svcs=[];for(let j=1;j<=20;j++){const ped=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||'',qui=proy['Staff '+j]||(j===1?proy['Staff']:'')||'',prc=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')||0),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
   const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
   const upd=(num,idx,field,val,base)=>setSels(prev=>{const cur=[...getSel(num,base)];cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val};if(field==='pedido'){const pL=getPrecioLista(val);if(pL>0)cur[idx].precio=pL};return {...prev,[num]:cur}})
   const addExtra=(num,base)=>setSels(prev=>({...prev,[num]:[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]}))
@@ -1037,15 +1044,20 @@ function Proyectos({data,mail}){
         const base=getBase(p),items=getSel(num,base),totalProy=parseMonto(p['Total '])||parseMonto(p['Total'])
         const {fl,mg,fee}=resumen(items,totalProy)
         const magmaSvcs=items.filter(s=>s.quien==='Somos Magma').map(s=>s.pedido).filter(Boolean)
-        return <div key={i} style={{...S.card,marginBottom:8}}>
-          <div style={{display:'grid',gridTemplateColumns:'80px 1fr 160px 70px 110px 90px 90px',alignItems:'center',cursor:'pointer',padding:'10px 0'}} onClick={()=>setOpen(isOpen?null:num)}>
+        const sinAsignar=items.filter(s=>!s.quien).length
+        const fechaEv=p['Fecha Evento']||''
+        const diasAlEvento=fechaEv?Math.floor((parseFechaEv(fechaEv)-Date.now())/864e5):null
+        const fechaColor=diasAlEvento==null?'#555':diasAlEvento<0?'#666':diasAlEvento<=3?'#E24B4A':diasAlEvento<=7?'#BA7517':'#1D9E75'
+        return <div key={i} style={{...S.card,marginBottom:8,borderLeft:!ok&&sinAsignar>0?'3px solid #E24B4A':'3px solid transparent'}}>
+          <div style={{display:'grid',gridTemplateColumns:'72px 100px 1fr 150px 70px 110px 110px 80px',alignItems:'center',cursor:'pointer',padding:'10px 0',gap:4}} onClick={()=>setOpen(isOpen?null:num)}>
             <span style={{padding:'0 12px',color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{num}</span>
-            <span style={{padding:'0 12px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}<span style={{fontSize:10,color:'#555',marginLeft:6}}>{p['Fecha Evento']||''}</span></span>
-            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
-            <span style={{padding:'0 12px',fontSize:12,color:'#555'}}>{p['PM']||p['PM Interno']||'—'}</span>
-            <span style={{padding:'0 12px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
-            <span style={{padding:'0 12px'}}><span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517'}}>{ok?'OK':'Pendiente'}</span></span>
-            <span style={{padding:'0 12px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button></span>
+            <span style={{padding:'0 8px',fontFamily:'monospace',fontSize:11,color:fechaColor,fontWeight:diasAlEvento!=null&&diasAlEvento<=7?600:400}}>{fechaEv||'—'}{diasAlEvento!=null&&diasAlEvento>=0&&diasAlEvento<=14&&<span style={{display:'block',fontSize:9,color:fechaColor}}>en {diasAlEvento}d</span>}</span>
+            <span style={{padding:'0 8px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}{!ok&&sinAsignar>0&&<span style={{fontSize:9,color:'#E24B4A',marginLeft:8,padding:'1px 6px',background:'#E24B4A15',borderRadius:3}}>falta {sinAsignar}</span>}</span>
+            <span style={{padding:'0 8px',fontSize:12,color:'#888'}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' / ')}</span>
+            <span style={{padding:'0 8px',fontSize:12,color:'#555'}}>{p['PM']||p['PM Interno']||'—'}</span>
+            <span style={{padding:'0 8px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
+            <span style={{padding:'0 8px'}}><span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517'}}>{ok?'OK':'Pendiente'}</span></span>
+            <span style={{padding:'0 8px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button></span>
           </div>
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px'}}>
             <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Asignar staff — precio precargado. Pods agregar servicios extra.</div>
@@ -1056,7 +1068,10 @@ function Proyectos({data,mail}){
               return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,alignItems:'center',marginBottom:6,...rowSt}}>
                 {s.esExtra?<select value={s.pedido} onChange={e=>upd(num,idx,'pedido',e.target.value,base)} style={{...inp,color:s.pedido?'#F0F0F0':'#555'}}><option value="">— Servicio extra —</option>{SVCS_LIST.map(sv=><option key={sv.n} value={sv.n}>{sv.n}</option>)}</select>
                 :<div style={{padding:'8px 10px',background:em?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>{s.pedido||'—'}{em&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}</div>}
-                <select value={s.quien} onChange={e=>upd(num,idx,'quien',e.target.value,base)} style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':'#333')}}><option value="">— Sin asignar —</option>{staffRRHH.map(st=><option key={st} value={st}>{st}</option>)}</select>
+                <div style={{position:'relative'}}>
+                  <input list={'rrhh-'+num+'-'+idx} value={s.quien||''} onChange={e=>upd(num,idx,'quien',e.target.value,base)} placeholder="Buscar freelancer..." style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':s.quien?'#333':'#BA751740'),background:em?'transparent':'#1E1E1E'}}/>
+                  <datalist id={'rrhh-'+num+'-'+idx}>{staffRRHH.map(st=><option key={st} value={st}/>)}</datalist>
+                </div>
                 <input type="number" value={s.precio||''} onChange={e=>upd(num,idx,'precio',e.target.value,base)} placeholder={s.precioRef?String(s.precioRef):'$'} style={{...inp,color:em?'#9635AB':'#F0F0F0',fontFamily:'monospace'}}/>
                 <button onClick={()=>s.esExtra&&delExtra(num,idx,base)} style={{width:24,height:24,border:'none',background:'transparent',color:s.esExtra?'#E24B4A':'transparent',cursor:s.esExtra?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>{s.esExtra?'×':''}</button>
               </div>

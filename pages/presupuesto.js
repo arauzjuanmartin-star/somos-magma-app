@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 
-const fmt$ = n => {
-  const num = parseFloat(String(n||0).replace(/[^0-9.-]/g,'')) || 0
-  return num.toLocaleString('es-AR')
+// Parsea formatos AR ($1.234,56) y US ($1,234.56) de forma robusta
+const parseMonto = v => {
+  const s = String(v||'').replace(/[\s$]/g,'')
+  if (s.includes(',') && s.includes('.')) {
+    // si la coma viene después del punto → AR (1.234,56); si no → US (1,234.56)
+    return s.lastIndexOf(',') > s.lastIndexOf('.')
+      ? Number(s.replace(/\./g,'').replace(',','.')) || 0
+      : Number(s.replace(/,/g,'')) || 0
+  }
+  if (s.includes(',')) return Number(s.replace(',','.')) || 0
+  return Number(s) || 0
 }
+const fmt$ = n => parseMonto(n).toLocaleString('es-AR')
 
 const addDays = (dateStr, days) => {
   const d = new Date(dateStr)
@@ -29,6 +38,16 @@ const fromSheet = s => {
 }
 
 const PEDIDO_KEYS = ['Pedido 1','Pedido 2','Pedido3 ','Pedido 4','Pedido 5','Pedido 6','Pedido 7','Pedido 8','Pedido 9','Pedido 10','Pedido 11','Pedido 12']
+
+// Limpia emojis y variation selectors. Mantiene letras latinas, números, puntuación común.
+const cleanSvc = s => String(s||'')
+  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')   // emojis BMP + Supplemental Symbols
+  .replace(/[☀-➿]/g,'')          // miscellaneous symbols
+  .replace(/[︀-️]/g,'')          // variation selectors (los que rompen ✂️)
+  .replace(/[​-‏‪-‮]/g,'') // zero-width, bidi marks
+  .replace(/[ -⁯]/g,'')          // general punctuation rara
+  .replace(/^[\s!'"`þÞ]+/, '')             // bytes basura al inicio
+  .trim()
 
 export default function Presupuesto() {
   const hoy = new Date().toISOString().slice(0,10)
@@ -59,7 +78,7 @@ export default function Presupuesto() {
       .then(d => {
         const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
         if (!p) return
-        const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean)
+        const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean).map(cleanSvc)
         const fechaHoy = new Date().toISOString().slice(0,10)
         setForm(prev => ({
           ...prev,
@@ -68,7 +87,7 @@ export default function Presupuesto() {
           agencia: p['Agencia']||'',
           proyecto: p['Proyecto']||'',
           fechaEvento: p['Fecha Evento']||'',
-          precioTotal: String(p['Precio Final']||'').replace(/[^0-9]/g,''),
+          precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
           servicios: svcs.length > 0 ? svcs : [''],
           fechaEmision: fechaHoy,
         }))
@@ -99,45 +118,50 @@ export default function Presupuesto() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
-      const W=210, M=18
+      const W=210, H=297, M=20
       let y=0
 
-      doc.setFillColor(9,9,9); doc.rect(0,0,W,297,'F')
+      // FONDO NEGRO COMPLETO
+      doc.setFillColor(9,9,9); doc.rect(0,0,W,H,'F')
 
-      // HEADER
-      y=22
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(140,140,140)
-      doc.text('somos', M, y-5)
-      doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(206,38,55)
+      // ====== HEADER ======
+      y=28
+      // Logo "somos MAGMA //" (estilo tipográfico del manual)
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140)
+      doc.text('somos', M, y-7)
+      doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.setTextColor(206,38,55)
       doc.text('MAGMA', M, y)
-      doc.setFontSize(16); doc.setTextColor(21,67,248)
-      doc.text('//', M+37, y)
+      doc.setFontSize(18); doc.setTextColor(21,67,248)
+      doc.text('//', M+44, y)
 
+      // Datos derecha
       const rX = W-M
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(130,130,130)
-      doc.text('Somos Magma', rX, y-8, {align:'right'})
-      doc.text('Buenos Aires', rX, y-3, {align:'right'})
-      doc.text(toDisplay(form.fechaEmision), rX, y+2, {align:'right'})
-      doc.setTextColor(206,38,55); doc.setFont('helvetica','bold')
-      doc.text('Presu. N°'+(form.nro||'___'), rX, y+7, {align:'right'})
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(150,150,150)
+      doc.text('Somos Magma', rX, y-10, {align:'right'})
+      doc.text('Buenos Aires', rX, y-5, {align:'right'})
+      doc.text(toDisplay(form.fechaEmision), rX, y, {align:'right'})
+      doc.setTextColor(206,38,55); doc.setFont('helvetica','bold'); doc.setFontSize(9)
+      doc.text('Presu. N° '+(form.nro||'___'), rX, y+5, {align:'right'})
 
-      // Línea degradada
+      // Línea degradada (mas gruesa)
       y+=14
-      for(let i=0;i<=100;i++){
-        const r=Math.round(21+(206-21)*(i/100)), g=Math.round(67+(38-67)*(i/100)), b=Math.round(248+(55-248)*(i/100))
-        doc.setDrawColor(r,g,b); doc.setLineWidth(0.4)
-        doc.line(M+(W-M*2)*(i/100),y,M+(W-M*2)*((i+1)/100),y)
+      const lineW = W-M*2
+      for(let i=0;i<=120;i++){
+        const t = i/120
+        const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
+        doc.setDrawColor(r,g,b); doc.setLineWidth(0.5)
+        doc.line(M+lineW*t, y, M+lineW*((i+1)/120), y)
       }
 
-      // TÍTULO
-      y+=12
-      doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(255,255,255)
+      // ====== TÍTULO ======
+      y+=15
+      doc.setFont('helvetica','bold'); doc.setFontSize(32); doc.setTextColor(255,255,255)
       doc.text('Presupuesto', M, y)
-      y+=9; doc.setFontSize(14); doc.setTextColor(206,38,55)
+      y+=10; doc.setFontSize(15); doc.setTextColor(206,38,55); doc.setFont('helvetica','normal')
       doc.text('Cobertura Audiovisual', M, y)
 
-      // CLIENTE
-      y+=14
+      // ====== DATOS DEL CLIENTE (con divisoria sutil) ======
+      y+=16
       const filas = [
         ['Cliente', form.cliente],
         form.agencia ? ['Agencia', form.agencia] : null,
@@ -145,78 +169,84 @@ export default function Presupuesto() {
         form.proyecto ? ['Proyecto', form.proyecto] : null,
       ].filter(Boolean)
       for(const [k,v] of filas){
-        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(21,67,248)
+        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(21,67,248)
         doc.text(k, M, y)
-        doc.setFont('helvetica','normal'); doc.setTextColor(220,220,220)
-        doc.text(String(v), M+26, y)
-        y+=6
+        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(230,230,230)
+        doc.text(String(v), M+30, y)
+        y+=7
       }
 
-      // Divisoria
-      y+=6; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y)
+      // Divisoria sutil
+      y+=4; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y)
 
-      // SERVICIOS
-      y+=10
-      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
-      doc.text('SERVICIOS', M, y); y+=6
+      // ====== SERVICIOS ======
+      y+=12
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(206,38,55)
+      doc.text('SERVICIOS', M, y); y+=8
+
       // Agrupar servicios repetidos con cantidad
-      const rawSvcs = form.servicios.filter(Boolean)
+      const svcsLimpios = form.servicios.map(cleanSvc).filter(Boolean)
       const svcsMap = {}
-      for(const s of rawSvcs){
-        const k = s.replace(/[\u{1F300}-\u{1FFFF}]/gu,'').replace(/[\u2600-\u27BF]/g,'').replace(/[\u2700-\u27BF]/g,'').trim()
-        if(k) svcsMap[k] = (svcsMap[k]||0)+1
+      const ordenInsercion = []
+      for(const s of svcsLimpios){
+        if (!svcsMap[s]) { svcsMap[s] = 0; ordenInsercion.push(s) }
+        svcsMap[s]++
       }
-      const svcsAgrupados = Object.entries(svcsMap).map(([k,n])=>n>1?n+'x '+k:k)
-      for(const s of svcsAgrupados){
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(200,200,200)
-        const lines = doc.splitTextToSize('→  '+s, W-M*2)
-        doc.text(lines, M+2, y)
-        y += lines.length * 5.5
+      for(const s of ordenInsercion){
+        const cant = svcsMap[s]
+        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(220,220,220)
+        const label = cant > 1 ? `${cant}x ${s}` : s
+        // Bullet circular limpio
+        doc.setFillColor(206,38,55); doc.circle(M+2, y-1.3, 0.9, 'F')
+        const lines = doc.splitTextToSize(label, W-M*2-10)
+        doc.text(lines, M+7, y)
+        y += lines.length * 5.8
       }
 
-      // OBSERVACIONES
+      // ====== OBSERVACIONES ======
       if(form.observaciones){
-        y+=4
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(150,150,150)
-        doc.text('OBSERVACIONES', M, y); y+=5
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(160,160,160)
+        y+=6
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(150,150,150)
+        doc.text('OBSERVACIONES', M, y); y+=6
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(180,180,180)
         const obs = doc.splitTextToSize(form.observaciones, W-M*2)
-        doc.text(obs, M, y); y+=obs.length*5
+        doc.text(obs, M, y); y+=obs.length*5.2
       }
 
-      // PRECIO
-      y+=8; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y); y+=10
+      // ====== PRECIO ======
+      y+=10; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y); y+=12
 
-      if(form.pagoAlt && form.pagoAltMonto){
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(150,150,150)
+      if(form.pagoAlt && parseFloat(form.pagoAltMonto) > 0){
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(155,155,155)
         doc.text('Pago a '+form.pagoAltDias+' días', M, y)
-        doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(50,50,50)
-        doc.line(M+32, y-0.8, W-M-34, y-0.8)
+        doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(60,60,60)
+        doc.line(M+34, y-0.8, W-M-44, y-0.8)
         doc.setLineDashPattern([],0)
-        doc.setFont('helvetica','bold'); doc.setTextColor(180,180,180)
-        doc.text('$'+fmt$(form.pagoAltMonto)+' + IVA', W-M, y, {align:'right'}); y+=9
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(190,190,190)
+        doc.text('$'+fmt$(form.pagoAltMonto)+' + IVA', W-M, y, {align:'right'}); y+=10
       }
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(255,255,255)
+      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255)
       doc.text('Valor total', M, y)
-      doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(60,60,60)
-      doc.line(M+27, y-0.8, W-M-44, y-0.8)
+      doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(70,70,70)
+      doc.line(M+28, y-1, W-M-50, y-1)
       doc.setLineDashPattern([],0)
-      doc.setFontSize(14); doc.setTextColor(206,38,55)
+      doc.setFontSize(16); doc.setTextColor(206,38,55)
       doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M, y, {align:'right'})
 
-      // Línea degradada
+      // Línea degradada inferior
       y+=14
-      for(let i=0;i<=100;i++){
-        const r=Math.round(21+(206-21)*(i/100)), g=Math.round(67+(38-67)*(i/100)), b=Math.round(248+(55-248)*(i/100))
-        doc.setDrawColor(r,g,b); doc.setLineWidth(0.4)
-        doc.line(M+(W-M*2)*(i/100),y,M+(W-M*2)*((i+1)/100),y)
+      for(let i=0;i<=120;i++){
+        const t = i/120
+        const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
+        doc.setDrawColor(r,g,b); doc.setLineWidth(0.5)
+        doc.line(M+lineW*t, y, M+lineW*((i+1)/120), y)
       }
 
-      // T&C
-      y+=10
-      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(100,100,100)
-      doc.text('TÉRMINOS Y CONDICIONES', M, y); y+=7
+      // ====== T&C ======
+      y+=12
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(105,105,105)
+      doc.text('TÉRMINOS Y CONDICIONES', M, y); y+=8
 
       const tcTitulos = ['1. Entrega de material','2. Revisiones','3. Pago','4. Validez','5. Derechos de uso']
       const tc = tcTitulos.map((t,i) => {
@@ -226,26 +256,26 @@ export default function Presupuesto() {
       })
       doc.setFontSize(7.5)
       for(const [titulo, texto] of tc){
-        doc.setFont('helvetica','bold'); doc.setTextColor(155,155,155)
+        doc.setFont('helvetica','bold'); doc.setTextColor(160,160,160)
         doc.text(titulo+': ', M, y)
         const tw = doc.getTextWidth(titulo+': ')
-        doc.setFont('helvetica','normal'); doc.setTextColor(105,105,105)
+        doc.setFont('helvetica','normal'); doc.setTextColor(110,110,110)
         const ls = doc.splitTextToSize(texto, W-M*2-tw)
         if(ls[0]) doc.text(ls[0], M+tw, y)
         for(let i=1;i<ls.length;i++){ y+=4.2; doc.text(ls[i], M, y) }
-        y+=6.5
+        y+=7
       }
 
-      // FOOTER
-      y=287
-      doc.setFontSize(7)
-      doc.setFont('helvetica','bold'); doc.setTextColor(55,55,55); doc.text('somos ', M, y)
+      // ====== FOOTER ======
+      const fY = 287
+      doc.setFontSize(7.5)
+      doc.setFont('helvetica','normal'); doc.setTextColor(60,60,60); doc.text('somos ', M, fY)
       const sw=doc.getTextWidth('somos ')
-      doc.setTextColor(206,38,55); doc.text('MAGMA', M+sw, y)
+      doc.setFont('helvetica','bold'); doc.setTextColor(206,38,55); doc.text('MAGMA', M+sw, fY)
       const mw=doc.getTextWidth('MAGMA')
-      doc.setTextColor(21,67,248); doc.text(' //', M+sw+mw, y)
-      doc.setTextColor(45,45,45); doc.text('  Buenos Aires', M+sw+mw+4, y)
-      doc.setTextColor(21,67,248); doc.text('somosmagma.com', W-M, y, {align:'right'})
+      doc.setTextColor(21,67,248); doc.text(' //', M+sw+mw, fY)
+      doc.setFont('helvetica','normal'); doc.setTextColor(50,50,50); doc.text('  Buenos Aires', M+sw+mw+5, fY)
+      doc.setTextColor(21,67,248); doc.text('somosmagma.com', W-M, fY, {align:'right'})
 
       doc.save(`presu-${form.nro||'borrador'}-${(form.cliente||'cliente').toLowerCase().replace(/\s+/g,'-')}.pdf`)
     } catch(e){ alert('Error: '+e.message) }
@@ -302,7 +332,8 @@ export default function Presupuesto() {
 
           {/* Servicios */}
           <div style={S.card}>
-            <div style={{...S.sec,color:'#9635AB'}}>Servicios (sin precio)</div>
+            <div style={{...S.sec,color:'#9635AB'}}>Servicios</div>
+            <div style={{fontSize:11,color:'#555',marginBottom:10}}>Si repetís el mismo, aparece agrupado con cantidad. Los emojis se limpian automáticamente.</div>
             <div style={{display:'grid',gap:8}}>
               {form.servicios.map((s,i)=>(
                 <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 28px',gap:6,alignItems:'center'}}>
@@ -317,7 +348,7 @@ export default function Presupuesto() {
           {/* Observaciones */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#555'}}>Observaciones</div>
-            <textarea style={{...S.inp,minHeight:70,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Notas para el cliente (opcional)"/>
+            <textarea style={{...S.inp,minHeight:70,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Cobertura en Kinder Bueno Boost, Día de la Madre, Nutella Combina"/>
           </div>
 
           {/* Precio */}
