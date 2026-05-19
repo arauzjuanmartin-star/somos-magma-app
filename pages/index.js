@@ -2378,8 +2378,6 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
                 const v=e.target.value;setF('agencia',v)
                 const match=agenciasData.find(a=>String(a['Nombre']||'').toLowerCase()===v.toLowerCase().trim())
                 setHintAg(!!v.trim()&&!match&&v.toLowerCase().trim()!=='sin agencia / directo')
-                // Auto-asignar PM default si la agencia matchea y el PM aún no está cargado
-                if (match && !form.pm && match['PM default']) setF('pm', match['PM default'])
               }} placeholder="Sin agencia / Directo"/>
               <datalist id="np-ag">{agenciasData.map(a=><option key={a['Nombre']} value={a['Nombre']}/>)}</datalist>
               {hintAg&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}>
