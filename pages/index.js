@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'historico',label:'Histórico',icon:'⏱'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'agencias',label:'Agencias',icon:'◉'},{id:'clientes',label:'Clientes',icon:'◯'},{id:'historico',label:'Histórico',icon:'⏱'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -128,6 +128,8 @@ function Mod({id,data,mail,onRefresh}){
     case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
     case 'egresos': return <Egresos data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'agencias': return <Agencias data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'clientes': return <Clientes data={data} mail={mail}/>
     case 'historico': return <Historico data={data}/>
     default: return <div style={S.nd}>En construcción</div>
   }
@@ -2763,3 +2765,252 @@ const S={
 }
 
 function GS(){return <style>{"@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;700;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}body{background:#090909;color:#F0F0F0;font-family:'Archivo',sans-serif;font-size:14px;overflow:hidden}@keyframes spin{to{transform:rotate(360deg)}}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}input[type=number]::-webkit-inner-spin-button{opacity:0}"}</style>}
+
+// ---- AGENCIAS ----
+function Agencias({data,mail,onRefresh}){
+  const agencias=data?.agencias||[]
+  const presus=data?.presupuestos||[]
+  const proy=data?.proyectos||[]
+  const fact=data?.facturacion||[]
+  const contactos=data?.contactos||[]
+  const [q,setQ]=useState('')
+  const [sel,setSel]=useState(null)
+  const [editando,setEditando]=useState(false)
+
+  const norm=v=>String(v||'').toLowerCase()
+  const metrics=ag=>{
+    const nom=norm(ag['Nombre'])
+    const ps=presus.filter(p=>norm(p['Agencia'])===nom)
+    const pys=proy.filter(p=>norm(p['Agencia'])===nom)
+    const fs=fact.filter(f=>norm(f['Agencia'])===nom)
+    const cobrado=fs.filter(f=>String(f['Cobrado']||'').toUpperCase()==='TRUE').reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+    const aprobados=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='APROBADO').length
+    return {presus:ps.length,proy:pys.length,fact:fs.length,cobrado,aprobados}
+  }
+
+  const filtradas=agencias.filter(a=>!q||norm(a['Nombre']).includes(norm(q))||norm(a['CUIT']).includes(norm(q)))
+  .map(a=>({...a,_m:metrics(a)}))
+  .sort((a,b)=>b._m.presus-a._m.presus)
+
+  if(sel){
+    const m=metrics(sel)
+    const psList=presus.filter(p=>norm(p['Agencia'])===norm(sel['Nombre'])).sort((a,b)=>{const fa=String(a['Fecha Presupuesto']||a['Fecha Evento']||'').split('/').reverse().join('-');const fb=String(b['Fecha Presupuesto']||b['Fecha Evento']||'').split('/').reverse().join('-');return fb.localeCompare(fa)})
+    const ctsList=contactos.filter(c=>norm(c['Agencia'])===norm(sel['Nombre']))
+    return <div>
+      <button onClick={()=>setSel(null)} style={{padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer',marginBottom:14}}>← Volver a listado</button>
+      <FichaAgencia ag={sel} m={m} presus={psList} contactos={ctsList} mail={mail} onSaved={(updated)=>{Object.assign(sel,updated);setEditando(false);if(onRefresh)setTimeout(onRefresh,800)}} editando={editando} setEditando={setEditando}/>
+    </div>
+  }
+
+  return <div>
+    <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center'}}>
+      <input style={{...S.inp,flex:1,marginBottom:0}} placeholder='Buscar por nombre o CUIT...' value={q} onChange={e=>setQ(e.target.value)}/>
+      <span style={{fontSize:11,color:'#555'}}>{filtradas.length} agencias</span>
+    </div>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 200px)'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr style={{background:'#1A1A1A',position:'sticky',top:0}}>
+          {['Nombre','CUIT','Cond. IVA','Presus','Aprobados','Facturas','Cobrado','Datos'].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {filtradas.map((a,i)=>{
+            const datosOK=!!a['CUIT']&&!!a['Condicion IVA']
+            return <tr key={a['Nombre']} style={{background:i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setSel(a)}>
+              <td style={{...S.td,fontWeight:500}}>{a['Nombre']}</td>
+              <td style={{...S.td,fontSize:11,fontFamily:'monospace',color:a['CUIT']?'#ccc':'#555'}}>{a['CUIT']||'(falta)'}</td>
+              <td style={{...S.td,fontSize:11,color:a['Condicion IVA']?'#ccc':'#555'}}>{a['Condicion IVA']||'(falta)'}</td>
+              <td style={{...S.td,fontSize:12}}>{a._m.presus}</td>
+              <td style={{...S.td,fontSize:12,color:'#1D9E75'}}>{a._m.aprobados}</td>
+              <td style={{...S.td,fontSize:12}}>{a._m.fact}</td>
+              <td style={{...S.td,fontFamily:'monospace',fontSize:11,color:'#1D9E75'}}>{a._m.cobrado>0?fmtM(a._m.cobrado):'—'}</td>
+              <td style={{...S.td}}>{!datosOK?<span style={{padding:'2px 6px',borderRadius:3,border:'0.5px solid #E24B4A',background:'#E24B4A15',color:'#E24B4A',fontSize:9}}>⚠ Completar</span>:<span style={{color:'#1D9E75',fontSize:10}}>✓</span>}</td>
+            </tr>
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
+
+function FichaAgencia({ag,m,presus,contactos,mail,onSaved,editando,setEditando}){
+  const [form,setForm]=useState({
+    cuit:ag['CUIT']||'',
+    condIVA:ag['Condicion IVA']||'Responsable Inscripto',
+    mailFact:ag['Mail facturacion']||'',
+    telefono:ag['Telefono']||'',
+    direccion:ag['Direccion fiscal']||'',
+    notas:ag['Notas']||'',
+  })
+  const [saving,setSaving]=useState(false)
+  const guardar=async()=>{
+    setSaving(true)
+    try{
+      const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:ag['Nombre'],cuit:form.cuit,condIVA:form.condIVA,mailFact:form.mailFact,telefono:form.telefono,direccion:form.direccion,notas:form.notas})})
+      const j=await r.json()
+      if(j.ok)onSaved({'CUIT':form.cuit,'Condicion IVA':form.condIVA,'Mail facturacion':form.mailFact,'Telefono':form.telefono,'Direccion fiscal':form.direccion,'Notas':form.notas})
+    }catch(e){}
+    setSaving(false)
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%'}
+  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:4,textTransform:'uppercase',letterSpacing:'.06em'}
+  return <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:14}}>
+    <div>
+      <div style={{...S.card,padding:16,marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:18,fontWeight:600}}>{ag['Nombre']}</div>
+          {!editando?<button onClick={()=>setEditando(true)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>Editar</button>:null}
+        </div>
+        {editando?<div>
+          <label><span style={lbl}>CUIT</span><input style={inp} value={form.cuit} onChange={e=>setForm(p=>({...p,cuit:e.target.value}))}/></label>
+          <div style={{marginTop:8}}/>
+          <label><span style={lbl}>Condición IVA</span><select style={inp} value={form.condIVA} onChange={e=>setForm(p=>({...p,condIVA:e.target.value}))}><option>Responsable Inscripto</option><option>Monotributo</option><option>Consumidor Final</option><option>Exento</option></select></label>
+          <div style={{marginTop:8}}/>
+          <label><span style={lbl}>Mail facturación</span><input style={inp} value={form.mailFact} onChange={e=>setForm(p=>({...p,mailFact:e.target.value}))}/></label>
+          <div style={{marginTop:8}}/>
+          <label><span style={lbl}>Teléfono</span><input style={inp} value={form.telefono} onChange={e=>setForm(p=>({...p,telefono:e.target.value}))}/></label>
+          <div style={{marginTop:8}}/>
+          <label><span style={lbl}>Dirección fiscal</span><input style={inp} value={form.direccion} onChange={e=>setForm(p=>({...p,direccion:e.target.value}))}/></label>
+          <div style={{marginTop:8}}/>
+          <label><span style={lbl}>Notas</span><textarea style={{...inp,minHeight:50}} value={form.notas} onChange={e=>setForm(p=>({...p,notas:e.target.value}))}/></label>
+          <div style={{display:'flex',gap:8,marginTop:12}}>
+            <button onClick={()=>setEditando(false)} style={{flex:1,padding:8,borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+            <button onClick={guardar} disabled={saving} style={{flex:1,padding:8,borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'...':'Guardar'}</button>
+          </div>
+        </div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {[['CUIT',ag['CUIT']],['Condición IVA',ag['Condicion IVA']],['Mail facturación',ag['Mail facturacion']],['Teléfono',ag['Telefono']],['Dirección fiscal',ag['Direccion fiscal']],['Notas',ag['Notas']]].map(([k,v])=>(
+            <div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:12,borderBottom:'0.5px solid #1E1E1E',paddingBottom:6}}>
+              <span style={{color:'#555'}}>{k}</span>
+              <span style={{color:v?'#F0F0F0':'#555',fontFamily:k==='CUIT'?'monospace':'inherit'}}>{v||'(falta)'}</span>
+            </div>
+          ))}
+        </div>}
+      </div>
+      <div style={{...S.card,padding:16}}>
+        <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Métricas</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:12}}>
+          {[['Total presupuestos',m.presus,'#F0F0F0'],['Aprobados',m.aprobados,'#1D9E75'],['Proyectos',m.proy,'#1543F8'],['Facturas emitidas',m.fact,'#BA7517'],['Total cobrado',fmtM(m.cobrado),'#1D9E75']].map(([k,v,c],i)=>(
+            <div key={i} style={{background:'#1E1E1E',borderRadius:6,padding:'8px 10px'}}>
+              <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>{k}</div>
+              <div style={{fontSize:16,fontWeight:600,color:c,fontFamily:'monospace',marginTop:3}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style={{...S.card,padding:14,marginBottom:12,maxHeight:300,overflowY:'auto'}}>
+        <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Histórico de presupuestos ({presus.length})</div>
+        {presus.length===0?<div style={{fontSize:12,color:'#555',padding:8}}>Sin presupuestos</div>:<table style={{width:'100%',fontSize:11}}>
+          <tbody>{presus.slice(0,40).map(p=><tr key={p['Columna 1']} style={{borderBottom:'0.5px solid #1E1E1E'}}>
+            <td style={{padding:'5px 6px',fontFamily:'monospace',color:'#1543F8'}}>#{p['Columna 1']}</td>
+            <td style={{padding:'5px 6px'}}>{p['Cliente']||'—'}</td>
+            <td style={{padding:'5px 6px',color:'#888',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
+            <td style={{padding:'5px 6px',color:'#555',fontSize:10}}>{p['Fecha Evento']||p['Fecha Presupuesto']||'—'}</td>
+            <td style={{padding:'5px 6px',fontFamily:'monospace'}}>{fmtM(parseMonto(p['Precio Final']))}</td>
+            <td style={{padding:'5px 6px',fontSize:9}}>{p['Estado']==='APROBADO'?<span style={{color:'#1D9E75'}}>✓</span>:p['Estado']==='DESAPROBADO'?<span style={{color:'#E24B4A'}}>✗</span>:p['Estado']==='EN ESPERA'?<span style={{color:'#BA7517'}}>⏳</span>:<span style={{color:'#888'}}>·</span>}</td>
+          </tr>)}</tbody>
+        </table>}
+      </div>
+      <div style={{...S.card,padding:14}}>
+        <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Contactos ({contactos.length})</div>
+        {contactos.length===0?<div style={{fontSize:12,color:'#555',padding:8}}>Sin contactos asociados</div>:contactos.slice(0,10).map((c,i)=><div key={i} style={{padding:'6px 0',borderBottom:'0.5px solid #1E1E1E',fontSize:11}}>
+          <div style={{fontWeight:500}}>{c['Nombre']}</div>
+          <div style={{color:'#888',fontSize:10}}>{c['Cargo']||'—'} · {c['Mail']||'—'} · {c['Teléfono']||c['Telefono']||'—'}</div>
+        </div>)}
+      </div>
+    </div>
+  </div>
+}
+
+// ---- CLIENTES ----
+function Clientes({data,mail}){
+  const clientes=data?.clientes||[]
+  const presus=data?.presupuestos||[]
+  const fact=data?.facturacion||[]
+  const [q,setQ]=useState('')
+  const [sel,setSel]=useState(null)
+
+  const norm=v=>String(v||'').toLowerCase()
+  const metrics=cli=>{
+    const nom=norm(cli['Nombre'])
+    const ps=presus.filter(p=>norm(p['Cliente'])===nom)
+    const fs=fact.filter(f=>norm(f['Cliente'])===nom)
+    const cobrado=fs.filter(f=>String(f['Cobrado']||'').toUpperCase()==='TRUE').reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+    return {presus:ps.length,fact:fs.length,cobrado}
+  }
+  const filtrados=clientes.filter(c=>!q||norm(c['Nombre']).includes(norm(q))).map(c=>({...c,_m:metrics(c)})).sort((a,b)=>parseInt(b['Cant. presus historicos']||0)-parseInt(a['Cant. presus historicos']||0))
+
+  if(sel){
+    const m=metrics(sel)
+    const psList=presus.filter(p=>norm(p['Cliente'])===norm(sel['Nombre']))
+    const fsList=fact.filter(f=>norm(f['Cliente'])===norm(sel['Nombre']))
+    return <div>
+      <button onClick={()=>setSel(null)} style={{padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:12,cursor:'pointer',marginBottom:14}}>← Volver a listado</button>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:14}}>
+        <div>
+          <div style={{...S.card,padding:16,marginBottom:12}}>
+            <div style={{fontSize:18,fontWeight:600,marginBottom:14}}>{sel['Nombre']}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8,fontSize:12}}>
+              {[['Agencia habitual',sel['Agencia habitual']],['Industria',sel['Industria']],['Primera vez',sel['Primera vez']],['Última vez',sel['Ultima vez']],['Cant. histórica',sel['Cant. presus historicos']],['Notas',sel['Notas']]].map(([k,v])=>(
+                <div key={k} style={{display:'flex',justifyContent:'space-between',borderBottom:'0.5px solid #1E1E1E',paddingBottom:6}}>
+                  <span style={{color:'#555'}}>{k}</span>
+                  <span style={{color:v?'#F0F0F0':'#555'}}>{v||'—'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{...S.card,padding:16}}>
+            <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Métricas actuales</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[['Presupuestos vivos',m.presus,'#F0F0F0'],['Facturas',m.fact,'#BA7517'],['Cobrado',fmtM(m.cobrado),'#1D9E75']].map(([k,v,c],i)=>(
+                <div key={i} style={{background:'#1E1E1E',borderRadius:6,padding:'8px 10px'}}>
+                  <div style={{fontSize:9,color:'#555',textTransform:'uppercase'}}>{k}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:c,fontFamily:'monospace',marginTop:3}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style={{...S.card,padding:14,marginBottom:12,maxHeight:300,overflowY:'auto'}}>
+            <div style={{fontSize:11,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Presupuestos ({psList.length})</div>
+            {psList.length===0?<div style={{fontSize:12,color:'#555',padding:8}}>Sin presupuestos</div>:<table style={{width:'100%',fontSize:11}}>
+              <tbody>{psList.slice(0,40).map(p=><tr key={p['Columna 1']} style={{borderBottom:'0.5px solid #1E1E1E'}}>
+                <td style={{padding:'5px 6px',fontFamily:'monospace',color:'#1543F8'}}>#{p['Columna 1']}</td>
+                <td style={{padding:'5px 6px'}}>{p['Agencia']||'—'}</td>
+                <td style={{padding:'5px 6px',color:'#888',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
+                <td style={{padding:'5px 6px',color:'#555',fontSize:10}}>{p['Fecha Evento']||'—'}</td>
+                <td style={{padding:'5px 6px',fontFamily:'monospace'}}>{fmtM(parseMonto(p['Precio Final']))}</td>
+              </tr>)}</tbody>
+            </table>}
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  return <div>
+    <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center'}}>
+      <input style={{...S.inp,flex:1,marginBottom:0}} placeholder='Buscar cliente...' value={q} onChange={e=>setQ(e.target.value)}/>
+      <span style={{fontSize:11,color:'#555'}}>{filtrados.length} clientes</span>
+    </div>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 200px)'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr style={{background:'#1A1A1A',position:'sticky',top:0}}>
+          {['Nombre','Agencia habitual','Histórico','Presus activos','Facturas','Cobrado','Última vez'].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {filtrados.map((c,i)=><tr key={c['Nombre']} style={{background:i%2===0?'#161616':'#1A1A1A',cursor:'pointer'}} onClick={()=>setSel(c)}>
+            <td style={{...S.td,fontWeight:500}}>{c['Nombre']}</td>
+            <td style={{...S.td,fontSize:11,color:'#888'}}>{c['Agencia habitual']||'—'}</td>
+            <td style={{...S.td,fontSize:12}}>{c['Cant. presus historicos']||'0'}</td>
+            <td style={{...S.td,fontSize:12,color:'#1D9E75'}}>{c._m.presus}</td>
+            <td style={{...S.td,fontSize:12}}>{c._m.fact}</td>
+            <td style={{...S.td,fontFamily:'monospace',fontSize:11,color:'#1D9E75'}}>{c._m.cobrado>0?fmtM(c._m.cobrado):'—'}</td>
+            <td style={{...S.td,fontSize:11,color:'#555'}}>{c['Ultima vez']||'—'}</td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
