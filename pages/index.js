@@ -2219,7 +2219,10 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
+  const [agData,setAgData]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
   const [diasMulti,setDiasMulti]=useState([''])
+  const agenciasData = data?.agencias || []
+  const agenciaSeleccionada = agenciasData.find(a => String(a['Nombre']||'').toLowerCase() === form.agencia.toLowerCase().trim())
   const [erroresValidacion,setErroresValidacion]=useState([])
   const validar = () => {
     const errs = []
@@ -2302,7 +2305,11 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
         await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
       }
     }catch(e){}
-    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:form.agencia,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:agenciaFinal,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    // Persistir agencia nueva (con datos fiscales)
+    if(hintAg&&agenciaFinal&&agenciaFinal.toLowerCase()!=='sin agencia / directo'){
+      try{await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({nombre:agenciaFinal,cuit:agData.cuit,condIVA:agData.condIVA,mailFact:agData.mailFact,telefono:agData.telefono,pmDefault:form.pm})})}catch(e){}
+    }
     setOk(true);onGuardado(row);setSaving(false)
   }
   const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
@@ -2366,16 +2373,38 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={lbl}>Agencia</span>
-              <input style={inp} list="np-ag" value={form.agencia} onChange={e=>{setF('agencia',e.target.value);setHintAg(!!e.target.value&&!AGENCIAS_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Sin agencia / Directo"/>
-              <datalist id="np-ag">{AGENCIAS_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintAg&&<span style={{fontSize:10,color:'#1D9E75'}}>Agencia nueva</span>}
+              <span style={lbl}>Agencia (quien paga)</span>
+              <input style={inp} list="np-ag" value={form.agencia} onChange={e=>{
+                const v=e.target.value;setF('agencia',v)
+                const match=agenciasData.find(a=>String(a['Nombre']||'').toLowerCase()===v.toLowerCase().trim())
+                setHintAg(!!v.trim()&&!match&&v.toLowerCase().trim()!=='sin agencia / directo')
+                // Auto-asignar PM default si la agencia matchea y el PM aún no está cargado
+                if (match && !form.pm && match['PM default']) setF('pm', match['PM default'])
+              }} placeholder="Sin agencia / Directo"/>
+              <datalist id="np-ag">{agenciasData.map(a=><option key={a['Nombre']} value={a['Nombre']}/>)}</datalist>
+              {hintAg&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}>
+                <div style={{fontSize:10,color:'#1D9E75',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>Agencia nueva — datos de facturación</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                  <input style={{...inp,fontSize:11}} placeholder='CUIT (sin guiones)' value={agData.cuit} onChange={e=>setAgData(p=>({...p,cuit:e.target.value}))}/>
+                  <select style={{...inp,fontSize:11}} value={agData.condIVA} onChange={e=>setAgData(p=>({...p,condIVA:e.target.value}))}>
+                    <option value="Responsable Inscripto">Responsable Inscripto</option>
+                    <option value="Monotributo">Monotributo</option>
+                    <option value="Consumidor Final">Consumidor Final</option>
+                    <option value="Exento">Exento</option>
+                  </select>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <input style={{...inp,fontSize:11}} placeholder='Mail facturación' value={agData.mailFact} onChange={e=>setAgData(p=>({...p,mailFact:e.target.value}))}/>
+                  <input style={{...inp,fontSize:11}} placeholder='Teléfono' value={agData.telefono} onChange={e=>setAgData(p=>({...p,telefono:e.target.value}))}/>
+                </div>
+              </div>}
+              {agenciaSeleccionada&&!hintAg&&!agenciaSeleccionada['CUIT']&&<div style={{marginTop:4,padding:'4px 8px',background:'#BA751510',borderRadius:4,fontSize:10,color:'#BA7517'}}>Agencia conocida pero sin CUIT cargado en ficha</div>}
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={lbl}>Cliente / Marca</span>
-              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente"/>
+              <span style={lbl}>Cliente / Marca (para quién es)</span>
+              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente o marca"/>
               <datalist id="np-cl">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
-              {hintCl&&<span style={{fontSize:10,color:'#1D9E75'}}>Cliente nuevo</span>}
+              {hintCl&&<span style={{fontSize:10,color:'#888'}}>Marca/cliente nuevo (queda solo en este presu)</span>}
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
