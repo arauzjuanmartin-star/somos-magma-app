@@ -2233,7 +2233,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     ajuste:String(parseMonto(initialData['Ajuste'])||'0'),
     motivo:'',
   } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:''})
-  const [saving,setSaving]=useState(false),[ok,setOk]=useState(false)
+  const [saving,setSaving]=useState(false),[ok,setOk]=useState(false),[numAsignado,setNumAsignado]=useState(null)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [agData,setAgData]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
@@ -2317,7 +2317,10 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
-      await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})
+      const r = await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})
+      const j = await r.json().catch(()=>({}))
+      if (!j.ok) { setErroresValidacion(j.detalles||[j.error||'Error al guardar']); setSaving(false); return }
+      if (j.numero) { setNumAsignado(j.numero); row['Columna 1'] = j.numero }
       if (isRepresupuestar) {
         await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
       }
@@ -2337,10 +2340,10 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       <div style={{background:'#0F1A0F',border:'1px solid #1D9E75',borderRadius:16,padding:'32px 40px',maxWidth:480,width:'100%',textAlign:'center'}}>
         <div style={{fontSize:48,marginBottom:12}}>✓</div>
         <div style={{fontSize:20,fontWeight:600,color:'#1D9E75',marginBottom:6}}>{isRepresupuestar?'Represupuesto creado':'Presupuesto cargado'}</div>
-        <div style={{fontSize:14,color:'#888',marginBottom:8}}>N° <span style={{fontFamily:'monospace',color:'#F0F0F0'}}>#{nextNum}</span></div>
+        <div style={{fontSize:14,color:'#888',marginBottom:8}}>N° <span style={{fontFamily:'monospace',color:'#F0F0F0'}}>#{numAsignado||nextNum}</span></div>
         <div style={{fontSize:12,color:'#555',marginBottom:24}}>Ya está guardado en PRESUPUESTOS{isRepresupuestar?' y el original quedó marcado como REPRESUPUESTADO':''}.</div>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          <button style={{width:'100%',padding:'12px 20px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+encodeURIComponent(nextNum),'_blank')}>📄 Generar PDF del presupuesto</button>
+          <button style={{width:'100%',padding:'12px 20px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+encodeURIComponent(numAsignado||nextNum),'_blank')}>📄 Generar PDF del presupuesto</button>
           <button style={{width:'100%',padding:'10px 20px',borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:13,cursor:'pointer'}} onClick={onClose}>Cerrar y volver al listado</button>
         </div>
       </div>
@@ -2510,7 +2513,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             <div style={{fontSize:11,color:'#E24B4A',fontWeight:600,marginBottom:6}}>Faltan datos obligatorios:</div>
             {erroresValidacion.map((e,i)=><div key={i} style={{fontSize:11,color:'#E24B4A',lineHeight:1.5}}>• {e}</div>)}
           </div>}
-          {ok?<div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}><div style={{background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{nextNum} cargado</div><button style={{width:'100%',padding:10,borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+nextNum,'_blank')}>Generar PDF del presupuesto →</button><button style={{width:'100%',padding:8,borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cerrar</button></div>
+          {ok?<div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}><div style={{background:'#1D9E7520',border:'0.5px solid #1D9E75',borderRadius:6,padding:10,fontSize:12,color:'#1D9E75',textAlign:'center'}}>Presupuesto #{numAsignado||nextNum} cargado</div><button style={{width:'100%',padding:10,borderRadius:8,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}} onClick={()=>window.open('/presupuesto?nro='+(numAsignado||nextNum),'_blank')}>Generar PDF del presupuesto →</button><button style={{width:'100%',padding:8,borderRadius:8,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',fontSize:12,cursor:'pointer'}} onClick={onClose}>Cerrar</button></div>
             :<button style={{marginTop:14,width:'100%',padding:10,borderRadius:8,border:'none',background:isRepresupuestar?'#9635AB':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',opacity:saving||(isRepresupuestar&&!form.motivo?.trim())?0.6:1}} onClick={guardar} disabled={saving||(isRepresupuestar&&!form.motivo?.trim())}>
               {saving?'Guardando...':(isRepresupuestar?'Crear represupuesto':'Cargar presupuesto')}
             </button>
