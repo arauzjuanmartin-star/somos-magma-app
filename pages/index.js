@@ -1116,6 +1116,7 @@ function Facturacion({data,mail,onRefresh}){
   const [pdfFile,setPdfFile]=useState(null),[cuitAuto,setCuitAuto]=useState('')
   const fc=data.facturacion||[]
   const presus=(data.presupuestos||[]).filter(p=>isAprobado(p))
+  const proyectos=data.proyectos||[]
   const parseD=s=>{if(!s)return null;const pts=String(s).split('/');if(pts.length===3){return new Date(pts[2],pts[1]-1,pts[0])}return null}
   const diffD=f=>{const v=parseD(f['Vencimiento']);if(!v)return 0;return Math.floor((v-new Date())/864e5)}
   const estF=f=>{if(isCobrada(f))return'cobrada';const yaCob=parseMonto(f['Monto cobrado']);if(yaCob>0)return'parcial';const d=diffD(f);if(d<-30)return'reclamar';if(d<0)return'vencida';if(d<7)return'por-vencer';return'pendiente'}
@@ -1124,10 +1125,26 @@ function Facturacion({data,mail,onRefresh}){
   const textoReclamo=f=>'Estimados, les escribimos para recordarles que la factura '+(f['Nro de Factura']||'')+' por '+fmt(parseMonto(f['Precio FINAL']))+' emitida el '+(f['Fecha emision']||'')+' se encuentra vencida hace '+Math.abs(diffD(f))+' dias. Quedamos a la espera del pago. Muchas gracias.'
   const getEntidad=f=>{const n=f['Nro de Factura']||'';if(n.toLowerCase().includes('sofia'))return'Sofia';if(n.toLowerCase().includes('lulu'))return'Lulu';if(n.toLowerCase().includes('ef-')||n.toLowerCase().includes('efectivo'))return'Efectivo';return'SRL'}
   const parseFC=s=>{if(!s)return null;const p=String(s).split('/');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);return null}
+  // KPIs para Flor — vista clara del estado de cobros
+  const kpis = (() => {
+    const totalF = fc.length
+    const cobradas = fc.filter(f => isCobrada(f))
+    const sinCobrar = fc.filter(f => !isCobrada(f))
+    const parsedDiff = f => { const fE=parseD(f['Fecha Evento']); return fE ? Math.floor((Date.now()-fE)/864e5) : 0 }
+    const atrasadas = sinCobrar.filter(f => parsedDiff(f) > 30)
+    const montoSinCobrar = sinCobrar.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+    const montoAtrasado = atrasadas.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+    // Proyectos sin factura: cruzar PROYECTOS con FACTURACION por N° presupuesto
+    const facNums = new Set(fc.map(f => String(f['N° Presupuesto']||'').trim()).filter(Boolean))
+    const sinFacturar = proyectos.filter(p => p['N° presupuesto'] && !facNums.has(String(p['N° presupuesto']).trim()))
+    return { totalF, cobradas:cobradas.length, sinCobrar:sinCobrar.length, atrasadas:atrasadas.length, montoSinCobrar, montoAtrasado, sinFacturar }
+  })()
+
   const filtradas=fc.filter(f=>{
     if(filtro==='pendiente'&&(isCobrada(f)||estF(f)==='parcial'))return false
     if(filtro==='parcial'&&estF(f)!=='parcial')return false
     if(filtro==='cobrada'&&!isCobrada(f))return false
+    if(filtro==='atrasadas'){const fE=parseD(f['Fecha Evento']);const d=fE?Math.floor((Date.now()-fE)/864e5):0;if(isCobrada(f)||d<=30)return false}
     if(['SRL','Sofia','Lulu'].includes(filtro)&&getEntidad(f)!==filtro)return false
     if(busqueda){
       const q=busqueda.toLowerCase()
@@ -1293,9 +1310,66 @@ function Facturacion({data,mail,onRefresh}){
         </div>}
       </div>}
     </div>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:10,flexWrap:'wrap'}}>
+    {/* KPIs para Flor */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:14}}>
+      <div style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #1543F8'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Total facturas</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#F0F0F0',marginTop:3}}>{kpis.totalF}</div>
+      </div>
+      <div onClick={()=>setFiltro('pendiente')} style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #BA7517',cursor:'pointer'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Por cobrar</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#BA7517',marginTop:3}}>{kpis.sinCobrar}</div>
+        <div style={{fontSize:10,color:'#888',fontFamily:'monospace',marginTop:1}}>{fmtM(kpis.montoSinCobrar)}</div>
+      </div>
+      <div onClick={()=>setFiltro('atrasadas')} style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #E24B4A',cursor:'pointer'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Atrasadas +30d</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#E24B4A',marginTop:3}}>{kpis.atrasadas}</div>
+        <div style={{fontSize:10,color:'#888',fontFamily:'monospace',marginTop:1}}>{fmtM(kpis.montoAtrasado)}</div>
+      </div>
+      <div onClick={()=>setFiltro('cobrada')} style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #1D9E75',cursor:'pointer'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Cobradas</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#1D9E75',marginTop:3}}>{kpis.cobradas}</div>
+      </div>
+      <div onClick={()=>setFiltro('sin-facturar')} style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #9635AB',cursor:'pointer'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Sin facturar</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#9635AB',marginTop:3}}>{kpis.sinFacturar.length}</div>
+        <div style={{fontSize:10,color:'#888',marginTop:1}}>proyectos</div>
+      </div>
+    </div>
+
+    {filtro==='sin-facturar'?<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontSize:13,fontWeight:500}}>Proyectos sin factura emitida</div>
+        <button onClick={()=>setFiltro('todas')} style={{padding:'5px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>← volver al listado</button>
+      </div>
+      <div style={{fontSize:11,color:'#555',marginBottom:8}}>Estos proyectos están en PROYECTOS pero no tienen entrada en FACTURACION. {kpis.sinFacturar.length} pendientes.</div>
+      <div style={{overflowY:'auto',maxHeight:'calc(100vh - 380px)'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'#1A1A1A'}}>
+            {['N°','Evento','Agencia','Cliente','Proyecto','Total','PM',''].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {kpis.sinFacturar.sort((a,b)=>{const pa=String(a['Fecha Evento']||'').split('/').reverse().join('-');const pb=String(b['Fecha Evento']||'').split('/').reverse().join('-');return pa.localeCompare(pb)}).map((p,i)=>{
+              const fE=parseD(p['Fecha Evento']);const dias=fE?Math.floor((Date.now()-fE)/864e5):null
+              const color=dias==null?'#555':dias<0?'#888':dias>30?'#E24B4A':dias>14?'#BA7517':'#1D9E75'
+              return <tr key={i} style={{background:i%2===0?'#161616':'#1A1A1A'}}>
+                <td style={{...S.td,color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{p['N° presupuesto']}</td>
+                <td style={{...S.td,fontSize:11,color}}>{p['Fecha Evento']||'—'}{dias!=null&&dias>0&&<span style={{fontSize:9,marginLeft:6,color}}>{dias}d</span>}</td>
+                <td style={{...S.td,fontSize:12,color:'#888'}}>{p['Agencia']||'—'}</td>
+                <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'—'}</td>
+                <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
+                <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</td>
+                <td style={{...S.td,fontSize:11,color:'#888'}}>{p['PM']||p['PM Interno']||'—'}</td>
+                <td style={{...S.td}}><button onClick={()=>{const presu=presus.find(x=>String(x['Columna 1'])===String(p['N° presupuesto']));if(presu){setPresuSel({...presu,pendiente:parseMonto(presu['Precio Final'])});setNuevaOpen(true)}else alert('Buscá el presu manual en Pendientes')}} style={{padding:'4px 10px',borderRadius:4,border:'none',background:'#1543F8',color:'#fff',fontSize:11,cursor:'pointer'}}>+ Facturar</button></td>
+              </tr>
+            })}
+          </tbody>
+        </table>
+        {kpis.sinFacturar.length===0&&<div style={{padding:'20px',textAlign:'center',color:'#1D9E75',fontSize:13}}>✓ No hay proyectos pendientes de facturar</div>}
+      </div>
+    </div>:<><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:10,flexWrap:'wrap'}}>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-        {[['todas','Todas'],['pendiente','Pendientes'],['parcial','Parciales'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
+        {[['todas','Todas'],['pendiente','Pendientes'],['parcial','Parciales'],['atrasadas','Atrasadas'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
           <button key={id} style={{...S.fb,...(filtro===id?S.fa:{})}} onClick={()=>setFiltro(id)}>{l}</button>
         ))}
       </div>
@@ -1407,7 +1481,7 @@ function Facturacion({data,mail,onRefresh}){
         </div>
       })}
       {filtradas.length===0&&<div style={S.nd}>Sin facturas</div>}
-    </div>
+    </div></>}
   </div>
 }
 // ---- PAGOS STAFF ----
