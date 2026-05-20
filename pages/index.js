@@ -2239,6 +2239,19 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const [agData,setAgData]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
   const [diasMulti,setDiasMulti]=useState([''])
   const agenciasData = data?.agencias || []
+  const listadoData = data?.listado || {}
+  // Combinar fuentes: AGENCIAS (con ficha fiscal) + listado.agencias (histórico) + presupuestos previos
+  const agenciasAutocomplete = [...new Set([
+    ...agenciasData.map(a => a['Nombre']),
+    ...(listadoData.agencias||[]),
+    ...((data?.presupuestos||[]).map(p => p['Agencia']))
+  ].map(v => String(v||'').trim()).filter(Boolean))].sort()
+  // Clientes/Marcas: listado (180 históricos) + CLIENTES sheet + presupuestos previos
+  const clientesAutocomplete = [...new Set([
+    ...(listadoData.clientes||[]),
+    ...((data?.clientes||[]).map(c => c['Nombre'])),
+    ...((data?.presupuestos||[]).map(p => p['Cliente']))
+  ].map(v => String(v||'').trim()).filter(Boolean))].sort()
   const agenciaSeleccionada = agenciasData.find(a => String(a['Nombre']||'').toLowerCase() === form.agencia.toLowerCase().trim())
   const [erroresValidacion,setErroresValidacion]=useState([])
   const validar = () => {
@@ -2399,7 +2412,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
                 const match=agenciasData.find(a=>String(a['Nombre']||'').toLowerCase()===v.toLowerCase().trim())
                 setHintAg(!!v.trim()&&!match&&v.toLowerCase().trim()!=='sin agencia / directo')
               }} placeholder="Sin agencia / Directo"/>
-              <datalist id="np-ag">{agenciasData.map(a=><option key={a['Nombre']} value={a['Nombre']}/>)}</datalist>
+              <datalist id="np-ag">{agenciasAutocomplete.map(a=><option key={a} value={a}/>)}</datalist>
               {hintAg&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}>
                 <div style={{fontSize:10,color:'#1D9E75',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>Agencia nueva — datos de facturación</div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
@@ -2420,8 +2433,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <span style={lbl}>Cliente / Marca (para quién es)</span>
-              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!CLIENTES_LIST.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente o marca"/>
-              <datalist id="np-cl">{CLIENTES_LIST.map(a=><option key={a} value={a}/>)}</datalist>
+              <input style={inp} list="np-cl" value={form.cliente} onChange={e=>{setF('cliente',e.target.value);setHintCl(!!e.target.value&&!clientesAutocomplete.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del cliente o marca"/>
+              <datalist id="np-cl">{clientesAutocomplete.map(a=><option key={a} value={a}/>)}</datalist>
               {hintCl&&<span style={{fontSize:10,color:'#888'}}>Marca/cliente nuevo (queda solo en este presu)</span>}
             </div>
           </div>

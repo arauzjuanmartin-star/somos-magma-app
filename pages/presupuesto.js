@@ -5,7 +5,6 @@ import Head from 'next/head'
 const parseMonto = v => {
   const s = String(v||'').replace(/[\s$]/g,'')
   if (s.includes(',') && s.includes('.')) {
-    // si la coma viene después del punto → AR (1.234,56); si no → US (1,234.56)
     return s.lastIndexOf(',') > s.lastIndexOf('.')
       ? Number(s.replace(/\./g,'').replace(',','.')) || 0
       : Number(s.replace(/,/g,'')) || 0
@@ -40,14 +39,63 @@ const fromSheet = s => {
 const PEDIDO_KEYS = ['Pedido 1','Pedido 2','Pedido3 ','Pedido 4','Pedido 5','Pedido 6','Pedido 7','Pedido 8','Pedido 9','Pedido 10','Pedido 11','Pedido 12']
 
 // Limpia emojis y variation selectors. Mantiene letras latinas, números, puntuación común.
-const cleanSvc = s => String(s||'')
-  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')   // emojis BMP + Supplemental Symbols
-  .replace(/[☀-➿]/g,'')          // miscellaneous symbols
-  .replace(/[︀-️]/g,'')          // variation selectors (los que rompen ✂️)
-  .replace(/[​-‏‪-‮]/g,'') // zero-width, bidi marks
-  .replace(/[ -⁯]/g,'')          // general punctuation rara
-  .replace(/^[\s!'"`þÞ]+/, '')             // bytes basura al inicio
+const stripSvc = s => String(s||'')
+  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')
+  .replace(/[☀-➿]/g,'')
+  .replace(/[︀-️]/g,'')
+  .replace(/[​-‏‪-‮]/g,'')
+  .replace(/[ -⁯]/g,'')
+  .replace(/^[\s!'"`þÞ]+/, '')
   .trim()
+
+// Mapeo de códigos cortos del sheet a descripciones amigables para el cliente del PDF.
+// El usuario puede editar libremente después en el formulario.
+const SVC_LABELS = {
+  'Foto ½':       '1 Fotógrafo (media jornada)',
+  'Foto 1/2':     '1 Fotógrafo (media jornada)',
+  'Foto 1':       '1 Fotógrafo (jornada completa)',
+  'Video ½':      '1 Videografo (media jornada)',
+  'Video 1/2':    '1 Videografo (media jornada)',
+  'Video 1':      '1 Videografo (jornada completa)',
+  'Film ½':       '1 Filmmaker (media jornada)',
+  'Film 1/2':     '1 Filmmaker (media jornada)',
+  'Film 1':       '1 Filmmaker (jornada completa)',
+  'Film 12hs':    '1 Filmmaker (jornada extendida 12 hs)',
+  'Drone':        'Drone',
+  'FPV':          'Dron FPV',
+  'Motion':       'Animación motion graphics',
+  'Sonido':       'Sonido',
+  'DirFoto':      'Director de Fotografía',
+  'Edit 60s':     'Edición 1 video resumen horizontal con adaptación vertical',
+  'Edit 60s+':    'Edición video resumen extendido (más de 60s)',
+  'Edit 15-30s':  'Edición video corto (15 a 30 segundos)',
+  'Vivo 1':       '1 Streaming en vivo (jornada completa)',
+  'Vivo ½':       'Streaming en vivo (media jornada)',
+  'Vivo 1/2':     'Streaming en vivo (media jornada)',
+  'Go Pro':       'Cámara GoPro',
+  'Asist 1':      '1 Asistente (jornada completa)',
+  'Asist ½':      '1 Asistente (media jornada)',
+  'Asist 1/2':    '1 Asistente (media jornada)',
+  'MakeUp':       'Maquilladora',
+  'Model':        'Modelo',
+  'Produ':        'Productor',
+  'Catering':     'Catering',
+  'Viaticos':     'Viáticos',
+  'Crudos':       'Entrega de material crudo',
+  'Fotos':        'Fotografías',
+  'Rental':       'Rental de equipos',
+}
+const prettifySvc = s => {
+  if (!s) return ''
+  const limpio = stripSvc(s)
+  const limpioNorm = limpio.replace(/\s+/g,' ').replace(/½/g,'1/2').toLowerCase()
+  for (const [key, label] of Object.entries(SVC_LABELS)) {
+    const keyNorm = key.replace(/\s+/g,' ').replace(/½/g,'1/2').toLowerCase()
+    if (limpioNorm === keyNorm) return label
+  }
+  return limpio
+}
+const cleanSvc = prettifySvc
 
 export default function Presupuesto() {
   const hoy = new Date().toISOString().slice(0,10)
@@ -78,15 +126,24 @@ export default function Presupuesto() {
       .then(d => {
         const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
         if (!p) return
-        const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean).map(cleanSvc)
+        const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean).map(prettifySvc)
         const fechaHoy = new Date().toISOString().slice(0,10)
+        // Fecha evento: usar Fecha Adicionales si hay rango/multiples
+        const fechaEv = (() => {
+          const tipo = String(p['Tipo Fechas']||'').trim()
+          const fe = String(p['Fecha Evento']||'').trim()
+          const adicionales = String(p['Fechas Adicionales']||'').trim()
+          if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
+          if (tipo === 'multi' && adicionales) return [fe, ...adicionales.split('|').filter(Boolean)].join(', ')
+          return fe
+        })()
         setForm(prev => ({
           ...prev,
           nro: String(p['Columna 1']||''),
           cliente: p['Cliente']||'',
           agencia: p['Agencia']||'',
           proyecto: p['Proyecto']||'',
-          fechaEvento: p['Fecha Evento']||'',
+          fechaEvento: fechaEv,
           precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
           servicios: svcs.length > 0 ? svcs : [''],
           fechaEmision: fechaHoy,
@@ -121,12 +178,10 @@ export default function Presupuesto() {
       const W=210, H=297, M=20
       let y=0
 
-      // FONDO NEGRO COMPLETO
       doc.setFillColor(9,9,9); doc.rect(0,0,W,H,'F')
 
       // ====== HEADER ======
       y=28
-      // Logo "somos MAGMA //" (estilo tipográfico del manual)
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140)
       doc.text('somos', M, y-7)
       doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.setTextColor(206,38,55)
@@ -134,7 +189,6 @@ export default function Presupuesto() {
       doc.setFontSize(18); doc.setTextColor(21,67,248)
       doc.text('//', M+44, y)
 
-      // Datos derecha
       const rX = W-M
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(150,150,150)
       doc.text('Somos Magma', rX, y-10, {align:'right'})
@@ -143,7 +197,6 @@ export default function Presupuesto() {
       doc.setTextColor(206,38,55); doc.setFont('helvetica','bold'); doc.setFontSize(9)
       doc.text('Presu. N° '+(form.nro||'___'), rX, y+5, {align:'right'})
 
-      // Línea degradada (mas gruesa)
       y+=14
       const lineW = W-M*2
       for(let i=0;i<=120;i++){
@@ -160,7 +213,7 @@ export default function Presupuesto() {
       y+=10; doc.setFontSize(15); doc.setTextColor(206,38,55); doc.setFont('helvetica','normal')
       doc.text('Cobertura Audiovisual', M, y)
 
-      // ====== DATOS DEL CLIENTE (con divisoria sutil) ======
+      // ====== DATOS DEL CLIENTE ======
       y+=16
       const filas = [
         ['Cliente', form.cliente],
@@ -176,7 +229,6 @@ export default function Presupuesto() {
         y+=7
       }
 
-      // Divisoria sutil
       y+=4; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y)
 
       // ====== SERVICIOS ======
@@ -184,8 +236,7 @@ export default function Presupuesto() {
       doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(206,38,55)
       doc.text('SERVICIOS', M, y); y+=8
 
-      // Agrupar servicios repetidos con cantidad
-      const svcsLimpios = form.servicios.map(cleanSvc).filter(Boolean)
+      const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
       const svcsMap = {}
       const ordenInsercion = []
       for(const s of svcsLimpios){
@@ -196,14 +247,12 @@ export default function Presupuesto() {
         const cant = svcsMap[s]
         doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(220,220,220)
         const label = cant > 1 ? `${cant}x ${s}` : s
-        // Bullet circular limpio
         doc.setFillColor(206,38,55); doc.circle(M+2, y-1.3, 0.9, 'F')
         const lines = doc.splitTextToSize(label, W-M*2-10)
         doc.text(lines, M+7, y)
         y += lines.length * 5.8
       }
 
-      // ====== OBSERVACIONES ======
       if(form.observaciones){
         y+=6
         doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(150,150,150)
@@ -213,7 +262,6 @@ export default function Presupuesto() {
         doc.text(obs, M, y); y+=obs.length*5.2
       }
 
-      // ====== PRECIO ======
       y+=10; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y); y+=12
 
       if(form.pagoAlt && parseFloat(form.pagoAltMonto) > 0){
@@ -234,7 +282,6 @@ export default function Presupuesto() {
       doc.setFontSize(16); doc.setTextColor(206,38,55)
       doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M, y, {align:'right'})
 
-      // Línea degradada inferior
       y+=14
       for(let i=0;i<=120;i++){
         const t = i/120
@@ -243,7 +290,6 @@ export default function Presupuesto() {
         doc.line(M+lineW*t, y, M+lineW*((i+1)/120), y)
       }
 
-      // ====== T&C ======
       y+=12
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(105,105,105)
       doc.text('TÉRMINOS Y CONDICIONES', M, y); y+=8
@@ -266,7 +312,6 @@ export default function Presupuesto() {
         y+=7
       }
 
-      // ====== FOOTER ======
       const fY = 287
       doc.setFontSize(7.5)
       doc.setFont('helvetica','normal'); doc.setTextColor(60,60,60); doc.text('somos ', M, fY)
@@ -301,11 +346,10 @@ export default function Presupuesto() {
 
       <div style={{maxWidth:700,margin:'0 auto',padding:'32px 20px 60px'}}>
         <h1 style={{fontSize:24,fontWeight:900,margin:'0 0 4px',letterSpacing:-0.5}}>Generar <span style={{color:'#CE2637'}}>PDF</span></h1>
-        <p style={{color:'#555',fontSize:13,margin:'0 0 28px'}}>Revisá los datos, ajustá lo que necesites y generá el PDF listo para mandar.</p>
+        <p style={{color:'#555',fontSize:13,margin:'0 0 28px'}}>Los datos se cargan automáticamente del presu. Editá lo que necesites y generá el PDF.</p>
 
         <div style={{display:'grid',gap:14}}>
 
-          {/* Admin */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#CE2637'}}>Datos del presupuesto</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -317,7 +361,6 @@ export default function Presupuesto() {
             </div>
           </div>
 
-          {/* Cliente */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#1543F8'}}>Cliente</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
@@ -325,15 +368,14 @@ export default function Presupuesto() {
               <label><span style={S.lbl}>Agencia</span><input style={S.inp} value={form.agencia} onChange={e=>setF('agencia',e.target.value)} placeholder="opcional"/></label>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <label><span style={S.lbl}>Fecha del evento</span><input style={S.inp} value={form.fechaEvento} onChange={e=>setF('fechaEvento',e.target.value)} placeholder="ej: 15/10/2025"/></label>
-              <label><span style={S.lbl}>Proyecto</span><input style={S.inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="ej: Gente que Vende"/></label>
+              <label><span style={S.lbl}>Fecha del evento</span><input style={S.inp} value={form.fechaEvento} onChange={e=>setF('fechaEvento',e.target.value)} placeholder="ej: 15/10/2025 o 10/10/2026 al 12/10/2026"/></label>
+              <label><span style={S.lbl}>Proyecto</span><input style={S.inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="ej: Convencion Ferrero"/></label>
             </div>
           </div>
 
-          {/* Servicios */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#9635AB'}}>Servicios</div>
-            <div style={{fontSize:11,color:'#555',marginBottom:10}}>Si repetís el mismo, aparece agrupado con cantidad. Los emojis se limpian automáticamente.</div>
+            <div style={{fontSize:11,color:'#555',marginBottom:10}}>Pre-cargados desde el presu con descripción amigable. Editá libremente. Si repetís, aparece agrupado con cantidad.</div>
             <div style={{display:'grid',gap:8}}>
               {form.servicios.map((s,i)=>(
                 <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 28px',gap:6,alignItems:'center'}}>
@@ -345,13 +387,11 @@ export default function Presupuesto() {
             </div>
           </div>
 
-          {/* Observaciones */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#555'}}>Observaciones</div>
-            <textarea style={{...S.inp,minHeight:70,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Cobertura en Kinder Bueno Boost, Día de la Madre, Nutella Combina"/>
+            <textarea style={{...S.inp,minHeight:70,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Evento de 3 días Hotel AMBA · 1 día 9am a 18hs 21hs a 24hs · 2 día..."/>
           </div>
 
-          {/* Precio */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#CE2637'}}>Precio</div>
             <label>
@@ -392,7 +432,6 @@ export default function Presupuesto() {
             </div>
           </div>
 
-          {/* T&C editables */}
           <div style={S.card}>
             <div style={{...S.sec,color:'#555'}}>Términos y condiciones</div>
             <div style={{fontSize:11,color:'#555',marginBottom:12}}>Podés editar cada cláusula antes de generar el PDF.</div>
@@ -414,7 +453,6 @@ export default function Presupuesto() {
             ))}
           </div>
 
-          {/* Botón generar */}
           <button onClick={generarPDF} disabled={generando||!form.cliente||!form.precioTotal}
             style={{padding:'15px',borderRadius:10,border:'none',
               background:(!form.cliente||!form.precioTotal)?'#1A1A1A':generando?'#333':'linear-gradient(135deg,#1543F8,#CE2637)',
