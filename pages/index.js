@@ -173,16 +173,21 @@ function NuevaReservaForm({cuenta,mail,onDone,onCancel}){
 }
 
 function CuentaCard({c,reservas,mail,onSaved}){
-  const [editing,setEditing]=useState(false),[val,setVal]=useState(String(parseMonto(c['Saldo actual']))),[nota,setNota]=useState(c['Notas']||''),[saving,setSaving]=useState(false)
+  const [editing,setEditing]=useState(false)
+  const [val,setVal]=useState(String(parseMonto(c['Saldo actual'])))
+  const [valUsd,setValUsd]=useState(String(parseMonto(c['Saldo USD']||0)))
+  const [nota,setNota]=useState(c['Notas']||''),[saving,setSaving]=useState(false)
   const [expanded,setExpanded]=useState(false),[creatingReserva,setCreatingReserva]=useState(false)
   const s=parseMonto(c['Saldo actual'])
+  const sUsd=parseMonto(c['Saldo USD']||0)
+  const muestraUsd = sUsd > 0 || c['Tipo']==='Efectivo' || c['Nombre']==='Efectivo'
   const reservasActivas=(reservas||[]).filter(r=>String(r['Activa']||'').toUpperCase()==='SÍ'||String(r['Activa']||'').toUpperCase()==='SI'||r['Activa']===true)
   const totalReservado=reservasActivas.reduce((acc,r)=>acc+parseMonto(r['Monto']),0)
   const disponible=s-totalReservado
   const guardar=async()=>{
     setSaving(true)
     try{
-      const r=await fetch('/api/cuenta-saldo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:c['Nombre'],saldo:parseFloat(val)||0,notas:nota})})
+      const r=await fetch('/api/cuenta-saldo-update',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:c['Nombre'],saldoArs:parseFloat(val)||0,saldoUsd:parseFloat(valUsd)||0,notas:nota})})
       const j=await r.json()
       if(j.ok){setEditing(false);if(onSaved)onSaved()}
       else alert('Error: '+j.error)
@@ -204,14 +209,20 @@ function CuentaCard({c,reservas,mail,onSaved}){
       {reservasActivas.length>0&&<span style={{fontSize:9,color:'#BA7517',marginLeft:4}} title={`${reservasActivas.length} reservas activas`}>●{reservasActivas.length}</span>}
     </div>
     {editing?<div>
+      <div style={{fontSize:9,color:'#888',marginBottom:2}}>Saldo ARS</div>
       <input type='number' value={val} onChange={e=>setVal(e.target.value)} autoFocus style={{width:'100%',padding:'4px 6px',borderRadius:4,border:'0.5px solid #1D9E75',background:'#000',color:'#1D9E75',fontFamily:'monospace',fontSize:14,outline:'none',marginBottom:4}}/>
+      {muestraUsd&&<>
+        <div style={{fontSize:9,color:'#888',marginBottom:2}}>Saldo USD</div>
+        <input type='number' value={valUsd} onChange={e=>setValUsd(e.target.value)} style={{width:'100%',padding:'4px 6px',borderRadius:4,border:'0.5px solid #1543F8',background:'#000',color:'#1543F8',fontFamily:'monospace',fontSize:13,outline:'none',marginBottom:4}}/>
+      </>}
       <input value={nota} onChange={e=>setNota(e.target.value)} placeholder='Nota (opcional)' style={{width:'100%',padding:'3px 6px',borderRadius:4,border:'0.5px solid #333',background:'#000',color:'#aaa',fontSize:10,outline:'none',marginBottom:4}}/>
       <div style={{display:'flex',gap:4}}>
         <button onClick={guardar} disabled={saving} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'none',background:'#1D9E75',color:'#fff',cursor:'pointer'}}>{saving?'...':'✓'}</button>
-        <button onClick={()=>{setEditing(false);setVal(String(s));setNota(c['Notas']||'')}} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>✕</button>
+        <button onClick={()=>{setEditing(false);setVal(String(s));setValUsd(String(sUsd));setNota(c['Notas']||'')}} style={{flex:1,fontSize:10,padding:'3px 6px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',cursor:'pointer'}}>✕</button>
       </div>
     </div>:<>
-      <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:s>0?'#1D9E75':'#555',cursor:'pointer'}} onClick={()=>setEditing(true)} title='Click para editar saldo bruto'>{fmtM(s)}</div>
+      <div style={{fontFamily:'monospace',fontSize:16,fontWeight:500,color:s>0?'#1D9E75':'#555',cursor:'pointer'}} onClick={()=>setEditing(true)} title='Click para editar saldo'>{fmtM(s)}</div>
+      {muestraUsd&&<div style={{fontFamily:'monospace',fontSize:12,color:sUsd>0?'#1543F8':'#444',marginTop:1,cursor:'pointer'}} onClick={()=>setEditing(true)}>USD {sUsd.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>}
       {totalReservado>0&&<>
         <div style={{fontSize:9,color:'#BA7517',marginTop:2}}>-{fmt(totalReservado)} reservado</div>
         <div style={{fontSize:11,fontFamily:'monospace',color:disponible>=0?'#1D9E75':'#E24B4A',fontWeight:500,marginTop:1}}>= {fmtM(disponible)} disp.</div>
@@ -251,6 +262,7 @@ function Dashboard({data,mail,onRefresh}){
   // === 1. SALDOS POR CUENTA + RESERVAS ===
   const cuentasActivas=cuentas.filter(c=>String(c['Activa']||'').toUpperCase()==='SÍ'||String(c['Activa']||'').toUpperCase()==='SI'||c['Activa']===true||c['Activa']==='TRUE')
   const totalCaja=cuentasActivas.reduce((s,c)=>s+parseMonto(c['Saldo actual']),0)
+  const totalCajaUsd=cuentasActivas.reduce((s,c)=>s+parseMonto(c['Saldo USD']||0),0)
   const reservasActivasTodas=(reservas||[]).filter(r=>String(r['Activa']||'').toUpperCase()==='SÍ'||String(r['Activa']||'').toUpperCase()==='SI'||r['Activa']===true)
   const totalReservadoGlobal=reservasActivasTodas.reduce((s,r)=>s+parseMonto(r['Monto']),0)
   const totalDisponible=totalCaja-totalReservadoGlobal
@@ -355,6 +367,7 @@ function Dashboard({data,mail,onRefresh}){
         <div>
           <div style={{fontSize:11,color:'#1D9E7599',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Caja bruta</div>
           <div style={{fontSize:28,fontWeight:600,fontFamily:'monospace',color:'#1D9E75'}}>{fmt(totalCaja)}</div>
+          {totalCajaUsd>0&&<div style={{fontSize:13,fontFamily:'monospace',color:'#1543F8',marginTop:2}}>+ USD {totalCajaUsd.toLocaleString('en-US',{maximumFractionDigits:0})}</div>}
         </div>
         <div>
           <div style={{fontSize:11,color:'#BA751799',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>Reservado</div>
