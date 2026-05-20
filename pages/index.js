@@ -2319,7 +2319,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Fee Agencia':T.fee,
       'Impuesto a las ganancias':T.gan,
       'IIBB':T.iibb,
-      'Plazo':form.plazo?String(form.plazo)+(form.plazo==='0'?'':' días'):'Contado',
+      'Plazo':!form.plazo||form.plazo==='0'?'Contado':String(form.plazo)+' días',
       'Interes %':form.interes?form.interes+'%':'',
       'Interes $':T.intMto,
       'Total':T.total,
