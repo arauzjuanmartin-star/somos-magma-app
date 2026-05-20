@@ -249,6 +249,18 @@ function CuentaCard({c,reservas,mail,onSaved}){
 
 function Dashboard({data,mail,onRefresh}){
   const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[], reservas=data.reservas||[]
+  const [calHuerfanos,setCalHuerfanos]=useState(null)
+  const [calLoading,setCalLoading]=useState(false)
+  const [ignorados,setIgnorados]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem('cal_ignorar')||'[]'))}catch(e){return new Set()}})
+  useEffect(()=>{
+    setCalLoading(true)
+    fetch('/api/calendar-huerfanos',{headers:{'x-user-email':mail}})
+      .then(r=>r.json()).then(j=>setCalHuerfanos(j)).catch(()=>{}).finally(()=>setCalLoading(false))
+  },[mail])
+  const ignorarEvento=(id)=>{const n=new Set(ignorados);n.add(id);setIgnorados(n);localStorage.setItem('cal_ignorar',JSON.stringify([...n]))}
+  const designorar=(id)=>{const n=new Set(ignorados);n.delete(id);setIgnorados(n);localStorage.setItem('cal_ignorar',JSON.stringify([...n]))}
+  // Filtros heurísticos para distinguir ruido vs trabajos reales
+  const esRuido=(e)=>{const t=String(e.titulo||'').toLowerCase();return /cumple|vence|pago cuota|vacac|feriado|reunion interna|reunión interna|interno/.test(t)}
 
   const hoy=new Date(), mesActual=hoy.getMonth()+1, anioActual=hoy.getFullYear()
   const mesAnterior=mesActual===1?12:mesActual-1, anioAnterior=mesActual===1?anioActual-1:anioActual
@@ -501,6 +513,37 @@ function Dashboard({data,mail,onRefresh}){
         </div>))}
       </div>
     </div>}
+
+    {/* 4c. CALENDAR — eventos sin proyecto en sistema */}
+    {calHuerfanos&&(()=>{const visibles=(calHuerfanos.huerfanos||[]).filter(e=>!ignorados.has(e.id)&&!esRuido(e));if(visibles.length===0)return null;return <div style={{...S.card,marginBottom:12,padding:'14px 18px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontSize:11,color:'#9635AB',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>📅 Eventos en Calendar sin presupuesto / proyecto</div>
+        <div style={{fontSize:11,color:'#888'}}>
+          {calLoading?'Cargando...':<>
+            <span style={{color:'#9635AB'}}>{visibles.length} sin sistema</span>
+            <span style={{color:'#555'}}> · {calHuerfanos.conProyecto||0} con proyecto · {calHuerfanos.conPresuAprobado||0} con presu aprobado</span>
+          </>}
+        </div>
+      </div>
+      <div style={{fontSize:10,color:'#555',marginBottom:8}}>El equipo carga eventos al Calendar — éstos no están todavía en Presupuestos ni Proyectos. Si es un trabajo real, hay que presupuestarlo. Si es ruido (cumples, vencimientos, etc.), tocá "ignorar".</div>
+      <div style={{maxHeight:280,overflowY:'auto',display:'flex',flexDirection:'column',gap:4}}>
+        {visibles.slice(0,20).map((e,i)=>{
+          const f=String(e.inicio||'').slice(0,10)
+          return <div key={e.id||i} style={{display:'grid',gridTemplateColumns:'90px 1fr auto',gap:10,alignItems:'center',padding:'6px 10px',background:'#1E1E1E',borderRadius:6,borderLeft:'2px solid #9635AB'}}>
+            <span style={{fontSize:10,fontFamily:'monospace',color:'#888'}}>{f}</span>
+            <div>
+              <div style={{fontSize:12,color:'#F0F0F0'}}>{e.titulo}</div>
+              {e.lugar&&<div style={{fontSize:10,color:'#555',marginTop:1}}>📍 {e.lugar}</div>}
+            </div>
+            <button onClick={()=>ignorarEvento(e.id)} title='Marcar como no relevante (queda guardado localmente)' style={{padding:'3px 8px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:10,cursor:'pointer'}}>ignorar</button>
+          </div>
+        })}
+        {visibles.length>20&&<div style={{fontSize:10,color:'#555',padding:6,textAlign:'center'}}>+ {visibles.length-20} más</div>}
+      </div>
+      {ignorados.size>0&&<div style={{fontSize:10,color:'#555',marginTop:6,paddingTop:6,borderTop:'0.5px solid #2A2A2A',textAlign:'right'}}>
+        {ignorados.size} eventos ignorados · <button onClick={()=>{setIgnorados(new Set());localStorage.removeItem('cal_ignorar')}} style={{background:'transparent',border:'none',color:'#1543F8',fontSize:10,cursor:'pointer',padding:0}}>restaurar todos</button>
+      </div>}
+    </div>})()}
 
     {/* 5. KPIs PAGOS + ALERTAS */}
     <div style={S.k4}>
