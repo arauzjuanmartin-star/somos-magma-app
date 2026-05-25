@@ -1060,8 +1060,10 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
 function Proyectos({data,mail,onRefresh}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
-  const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('pendiente')
+  const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
   const [freelancerNuevo,setFreelancerNuevo]=useState(null) // {nombre, ctx:{num,idx}}
+  const [editarP,setEditarP]=useState(null) // proyecto a editar (fecha, datos básicos)
+  const [borrarP,setBorrarP]=useState(null) // proyecto a confirmar borrado
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const rrhhRoster=(data.rrhh||[]).map(r=>String(r['Nombre Apellido']||'').trim()).filter(Boolean)
   const rrhhSet=new Set(rrhhRoster.map(n=>n.toLowerCase()))
@@ -1138,7 +1140,11 @@ function Proyectos({data,mail,onRefresh}){
             <span style={{padding:'0 8px',fontSize:12,color:'#555'}}>{p['PM']||p['PM Interno']||'—'}</span>
             <span style={{padding:'0 8px',fontFamily:'monospace',fontSize:12}}>{fmt(totalProy)}</span>
             <span style={{padding:'0 8px'}}><span style={{...S.badge,background:ok?'#1D9E7520':'#BA751720',color:ok?'#1D9E75':'#BA7517'}}>{ok?'OK':'Pendiente'}</span></span>
-            <span style={{padding:'0 8px'}}><button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button></span>
+            <span style={{padding:'0 8px',display:'flex',gap:4}}>
+              <button title="Editar fecha / datos" onClick={e=>{e.stopPropagation();setEditarP(p)}} style={{padding:'4px 7px',borderRadius:4,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:10,cursor:'pointer'}}>✎</button>
+              <button title="Eliminar proyecto" onClick={e=>{e.stopPropagation();setBorrarP(p)}} style={{padding:'4px 7px',borderRadius:4,border:'0.5px solid #E24B4A40',background:'transparent',color:'#E24B4A',fontSize:10,cursor:'pointer'}}>🗑</button>
+              <button style={S.fb} onClick={e=>{e.stopPropagation();setOpen(isOpen?null:num)}}>{ok?'Ver':'Cargar'}</button>
+            </span>
           </div>
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A',padding:'16px'}}>
             <div style={{fontSize:11,color:'#555',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Asignar staff — precio precargado. Pods agregar servicios extra.</div>
@@ -1181,6 +1187,108 @@ function Proyectos({data,mail,onRefresh}){
       })}
     </div>
     {freelancerNuevo&&<FreelancerNuevoModal nombre={freelancerNuevo.nombre} mail={mail} onClose={()=>setFreelancerNuevo(null)} onSaved={()=>{setFreelancerNuevo(null);setToast2('Freelancer agregado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
+    {editarP&&<EditarProyectoModal p={editarP} mail={mail} onClose={()=>setEditarP(null)} onSaved={()=>{setEditarP(null);setToast2('Proyecto actualizado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
+    {borrarP&&<BorrarProyectoModal p={borrarP} mail={mail} onClose={()=>setBorrarP(null)} onBorrado={()=>{setBorrarP(null);setToast2('Proyecto eliminado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
+  </div>
+}
+
+function EditarProyectoModal({p,mail,onClose,onSaved}){
+  const [form,setForm]=useState({
+    fechaEvento: p['Fecha Evento']||'',
+    cliente: p['Cliente']||'',
+    proyecto: p['Proyecto']||'',
+    agencia: p['Agencia']||'',
+    pm: p['PM']||p['PM Interno']||'',
+  })
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}))
+  const guardar=async()=>{
+    setSaving(true);setErr('')
+    const cambios={}
+    if(form.fechaEvento!==(p['Fecha Evento']||''))cambios['Fecha Evento']=form.fechaEvento
+    if(form.cliente!==(p['Cliente']||''))cambios['Cliente']=form.cliente
+    if(form.proyecto!==(p['Proyecto']||''))cambios['Proyecto']=form.proyecto
+    if(form.agencia!==(p['Agencia']||''))cambios['Agencia']=form.agencia
+    if(form.pm!==(p['PM']||p['PM Interno']||''))cambios['PM Interno']=form.pm
+    if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
+    try{
+      const r=await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],cambios,propagarPresupuesto:true})})
+      const j=await r.json()
+      if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
+      onSaved()
+    }catch(e){setErr(e.message);setSaving(false)}
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:520,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{p['N° presupuesto']}</span>
+        <span style={{fontSize:13,fontWeight:500}}>Editar proyecto</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20}}>
+        <div style={{fontSize:11,color:'#888',marginBottom:14}}>Los cambios se propagan al presupuesto original también.</div>
+        <label style={{display:'block',marginBottom:10}}><span style={lbl}>Fecha de evento (DD/MM/YYYY)</span><input style={inp} value={form.fechaEvento} onChange={e=>set('fechaEvento',e.target.value)} placeholder="15/3/2026"/></label>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>Agencia</span><input style={inp} value={form.agencia} onChange={e=>set('agencia',e.target.value)}/></label>
+          <label><span style={lbl}>Cliente</span><input style={inp} value={form.cliente} onChange={e=>set('cliente',e.target.value)}/></label>
+        </div>
+        <label style={{display:'block',marginBottom:10}}><span style={lbl}>Proyecto / descripción</span><input style={inp} value={form.proyecto} onChange={e=>set('proyecto',e.target.value)}/></label>
+        <label style={{display:'block',marginBottom:10}}><span style={lbl}>PM interno</span>
+          <select style={inp} value={form.pm} onChange={e=>set('pm',e.target.value)}>
+            <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option><option>Tomi</option>
+          </select>
+        </label>
+        {err&&<div style={{marginTop:8,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
+      </div>
+    </div>
+  </div>
+}
+
+function BorrarProyectoModal({p,mail,onClose,onBorrado}){
+  const [tambien,setTambien]=useState(false)
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const borrar=async()=>{
+    setSaving(true);setErr('')
+    try{
+      const r=await fetch('/api/proyecto-eliminar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],tambienPresupuesto:tambien})})
+      const j=await r.json()
+      if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
+      onBorrado()
+    }catch(e){setErr(e.message);setSaving(false)}
+  }
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:480,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #E24B4A40',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{color:'#E24B4A',fontSize:14}}>🗑 Eliminar proyecto</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20}}>
+        <div style={{fontSize:13,marginBottom:14}}>¿Borrar el proyecto <strong style={{color:'#1543F8'}}>#{p['N° presupuesto']}</strong>?</div>
+        <div style={{padding:'10px 12px',background:'#1E1E1E',borderRadius:6,fontSize:12,color:'#888',marginBottom:14}}>
+          <div>{p['Cliente']||p['Agencia']||'—'}</div>
+          <div style={{color:'#666',marginTop:2}}>{p['Proyecto']||'(sin proyecto)'}</div>
+          <div style={{color:'#666',marginTop:2}}>Evento: {p['Fecha Evento']||'—'}</div>
+        </div>
+        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'#1A1A1A',borderRadius:6,fontSize:11,color:'#888'}}>
+          <input type="checkbox" checked={tambien} onChange={e=>setTambien(e.target.checked)} style={{accentColor:'#E24B4A'}}/>
+          También marcar el presupuesto #{p['N° presupuesto']} como DESAPROBADO
+        </label>
+        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El proyecto se elimina de PROYECTOS. Si lo marcás como desaprobado, también se actualiza el estado en PRESUPUESTOS. Las facturas asociadas no se tocan.</div>
+        {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={borrar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#E24B4A',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Eliminando...':'Sí, eliminar'}</button>
+      </div>
+    </div>
   </div>
 }
 
