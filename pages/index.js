@@ -313,6 +313,26 @@ function Dashboard({data,mail,onRefresh}){
   // === 4b. PIPELINE PRÓXIMOS 3 MESES (presus aprobados con fecha evento futura) ===
   const presusAprobados=pr.filter(isAprobado)
   const fcByPresu={}; fc.forEach(f=>{fcByPresu[String(f['N° Presupuesto'])]=f})
+  // Map de proyecto por N° presupuesto (para acceder a Staff/SM y Diferencia)
+  const proyByNro={}; proyectos.forEach(prj=>{proyByNro[String(prj['N° presupuesto'])]=prj})
+  // Calcula ganancia REAL de un presupuesto cruzando con su proyecto si existe:
+  // Ganancia = Fee Agencia + sum(Precios donde Staff='Somos Magma') + Diferencia
+  const calcGanReal = (presu) => {
+    const proy = proyByNro[String(presu['Columna 1']||presu['N° presupuesto'])]
+    const fee = parseMonto((proy?proy['Fee Agencia']:presu['Fee Agencia'])||0)
+    if (!proy) return { fee, somosMagma: 0, diferencia: 0, neta: fee, impuestos: parseMonto(presu['Impuesto a las ganancias'])+parseMonto(presu['IIBB']) }
+    let somosMagma = 0
+    for (let j=1; j<=20; j++) {
+      const staff = String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
+      if (staff === 'Somos Magma') {
+        const precio = parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:''))
+        if (precio > 0) somosMagma += precio
+      }
+    }
+    const diferencia = parseMonto(proy['Diferencia'])
+    const impuestos = parseMonto(proy['Imp. Ganancias']||presu['Impuesto a las ganancias'])+parseMonto(proy['IIBB']||presu['IIBB'])
+    return { fee, somosMagma, diferencia, neta: fee+somosMagma+diferencia, impuestos }
+  }
   const proxMeses=[]
   for(let i=0;i<3;i++){const m=((mesActual-1+i)%12)+1;const a=anioActual+Math.floor((mesActual-1+i)/12);proxMeses.push({m,a})}
   const pipeline=proxMeses.map(({m,a})=>{
@@ -321,10 +341,19 @@ function Dashboard({data,mail,onRefresh}){
     const psEnEspera=psAll.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA')
     const psDesaprobados=psAll.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO')
     const facEsperada=ps.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
-    const ganancia=ps.reduce((s,p)=>s+parseMonto(p['Fee Agencia']),0)
+    const gananciaDetalle = ps.reduce((acc,p)=>{
+      const g = calcGanReal(p)
+      acc.fee += g.fee; acc.sm += g.somosMagma; acc.dif += g.diferencia; acc.neta += g.neta; acc.imp += g.impuestos
+      return acc
+    }, {fee:0, sm:0, dif:0, neta:0, imp:0})
+    const ganancia = gananciaDetalle.neta
+    const impuestos = gananciaDetalle.imp
+    const gananciaFee = gananciaDetalle.fee
+    const gananciaSM = gananciaDetalle.sm
+    const gananciaDif = gananciaDetalle.dif
     const enEspera=psEnEspera.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
     const yaFacturado=ps.filter(p=>fcByPresu[String(p['Columna 1'])]).length
-    return {m,a,cant:ps.length,facEsperada,ganancia,yaFacturado,enEspera,cantEspera:psEnEspera.length,cantTotal:psAll.length,cantDesa:psDesaprobados.length}
+    return {m,a,cant:ps.length,facEsperada,ganancia,gananciaFee,gananciaSM,gananciaDif,impuestos,yaFacturado,enEspera,cantEspera:psEnEspera.length,cantTotal:psAll.length,cantDesa:psDesaprobados.length}
   })
 
   // === 4c. TASA CONVERSIÓN + TICKET PROMEDIO (último mes con datos) ===
@@ -448,7 +477,7 @@ function Dashboard({data,mail,onRefresh}){
         <div>
           <div style={{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Pipeline próximos 3 meses (presus aprobados con fecha evento)</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-            {pipeline.map(({m,a,cant,facEsperada,ganancia,yaFacturado,enEspera,cantEspera,cantTotal,cantDesa},i)=>(
+            {pipeline.map(({m,a,cant,facEsperada,ganancia,gananciaFee,gananciaSM,gananciaDif,impuestos,yaFacturado,enEspera,cantEspera,cantTotal,cantDesa},i)=>(
               <div key={i} style={{background:'#1E1E1E',borderRadius:8,padding:'10px 12px',border:'0.5px solid '+(i===0?'#1543F840':'#2A2A2A')}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
                   <span style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.06em'}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {a}{i===0?' (actual)':''}</span>
@@ -457,9 +486,17 @@ function Dashboard({data,mail,onRefresh}){
                 <div style={{fontFamily:'monospace',fontSize:15,fontWeight:600,color:'#1543F8'}}>{fmtM(facEsperada)}</div>
                 <div style={{fontSize:10,color:'#555'}}>facturación aprobada</div>
                 <div style={{borderTop:'0.5px solid #2A2A2A',marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontSize:11}}>
-                  <span style={{color:'#888'}}>Ganancia</span>
-                  <span style={{fontFamily:'monospace',color:'#1D9E75',fontWeight:500}}>{fmtM(ganancia)}</span>
+                  <span style={{color:'#888'}}>Ganancia neta</span>
+                  <span style={{fontFamily:'monospace',color:'#1D9E75',fontWeight:500}} title={`Fee ${fmtM(gananciaFee)} + Somos Magma ${fmtM(gananciaSM)} + Dif ${fmtM(gananciaDif)}`}>{fmtM(ganancia)}</span>
                 </div>
+                {gananciaSM>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginTop:2}}>
+                  <span style={{color:'#9635AB'}}>↳ Somos Magma</span>
+                  <span style={{fontFamily:'monospace',color:'#9635AB'}}>{fmtM(gananciaSM)}</span>
+                </div>}
+                {impuestos>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginTop:2}}>
+                  <span style={{color:'#888'}}>Impuestos (al fisco)</span>
+                  <span style={{fontFamily:'monospace',color:'#E24B4A'}}>{fmtM(impuestos)}</span>
+                </div>}
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginTop:4}}>
                   <span style={{color:'#888'}}>En espera</span>
                   <span style={{fontFamily:'monospace',color:'#BA7517'}}>{fmtM(enEspera)}</span>
@@ -1065,8 +1102,8 @@ function Proyectos({data,mail,onRefresh}){
   const [editarP,setEditarP]=useState(null) // proyecto a editar (fecha, datos básicos)
   const [borrarP,setBorrarP]=useState(null) // proyecto a confirmar borrado
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
-  const rrhhRoster=(data.rrhh||[]).map(r=>String(r['Nombre Apellido']||'').trim()).filter(Boolean)
-  const rrhhSet=new Set(rrhhRoster.map(n=>n.toLowerCase()))
+  const rrhhRoster=(data.rrhh||[]).map(r=>String(r['Nombre Apellido']||'').trim()).filter(n=>n&&n.toLowerCase()!=='somos magma')
+  const rrhhSet=new Set([...rrhhRoster, 'Somos Magma'].map(n=>n.toLowerCase()))
   const staffRRHH=['Somos Magma',...rrhhRoster.sort()]
   // Cruce de dobles jornadas: por cada (Staff, FechaEvento), listar proyectos
   const dobleJornadaMap=(()=>{
@@ -2886,12 +2923,26 @@ function Historico({data}){
     const ivaCalc=f?parseMonto(f['IVA']):0
     const fechaEv=String(p['Fecha Evento']||'')
     const mesNum=parseInt((fechaEv.split('/')[1])||'0')||0
+    // Calcular servicios "Somos Magma" + Diferencia
+    let somosMagma = 0
+    for (let j=1; j<=20; j++) {
+      const staff = String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim()
+      if (staff === 'Somos Magma') {
+        const precio = parseMonto(p['Precio '+j]||(j===1?p['Precio']:''))
+        if (precio > 0) somosMagma += precio
+      }
+    }
+    const diferencia = parseMonto(p['Diferencia'])
     return {
       Año:'2026',Mes:mesNum,Fecha:fechaEv,Nro:nro,
       Cliente:p['Cliente']||(f?f['Cliente']:''),Agencia:p['Agencia']||(f?f['Agencia']:''),
       Proyecto:p['Proyecto']||(f?f['Proyecto']:''),
       Presupuesto:total||subtotal,Total:total,IVA:ivaCalc,
-      Magma:fee,Impuestos:impGan+iibb,Viaticos:0,'Extra M':0,
+      // Magma = Fee + SM + Diferencia (ganancia neta)
+      Magma:fee+somosMagma+diferencia,
+      'Fee':fee,'Somos Magma':somosMagma,'Diferencia':diferencia,
+      Impuestos:impGan+iibb,
+      Viaticos:0,'Extra M':0,
       Cobrado:f&&isCobrada(f)?'SÍ':'NO',
       'Tipo FC':f?f['Tipo de Factura']:'','Nro FC':f?f['Nro de Factura']:'',
     }
@@ -2926,12 +2977,19 @@ function Historico({data}){
   const PAGOS_KEYS=['Pago 1','Pago 2','Pago 3','Pago 4','Pago 5','Pago 6']
   const totalPresupuestado=filas.reduce((s,r)=>s+parseMonto(r['Presupuesto']),0)
   const totalFacturado=filas.reduce((s,r)=>s+parseMonto(r['Total']),0)
-  // Ganancia Magma 2024/2025 = Viáticos + Magma + Impuestos + Extra M (según modelo de Juan)
+  // Ganancia Magma:
+  // - 2026: col Magma ya viene como NETA (Fee + SM + Diferencia). Impuestos NO se suman.
+  // - 2024/2025: modelo legacy de Juan = Viáticos + Magma + Impuestos + Extra M
   const totalViaticos=filas.reduce((s,r)=>s+parseMonto(r['Viaticos']),0)
   const totalMagmaCol=filas.reduce((s,r)=>s+parseMonto(r['Magma']),0)
   const totalImpuestos=filas.reduce((s,r)=>s+parseMonto(r['Impuestos']),0)
   const totalExtraM=filas.reduce((s,r)=>s+parseMonto(r['Extra M']),0)
-  const gananciaMagma=totalViaticos+totalMagmaCol+totalImpuestos+totalExtraM
+  const totalSomosMagma2026=añoSel==='2026'?filas.reduce((s,r)=>s+parseMonto(r['Somos Magma']),0):0
+  const totalDiferencia2026=añoSel==='2026'?filas.reduce((s,r)=>s+parseMonto(r['Diferencia']),0):0
+  const totalFee2026=añoSel==='2026'?filas.reduce((s,r)=>s+parseMonto(r['Fee']),0):0
+  const gananciaMagma = añoSel==='2026'
+    ? totalMagmaCol           // ya viene neta (Fee + SM + Diferencia)
+    : totalViaticos+totalMagmaCol+totalImpuestos+totalExtraM  // legacy
   const totalStaffFromFilas=filas.reduce((s,r)=>s+PAGOS_KEYS.reduce((a,k)=>a+parseMonto(r[k]),0),0)
   const totalStaff=añoSel==='2026'?totalStaff2026:totalStaffFromFilas
   const totalIVA=filas.reduce((s,r)=>s+parseMonto(r['IVA']),0)
@@ -3012,7 +3070,10 @@ function Historico({data}){
     <div style={S.k4}>
       <K lbl='Proyectos' val={cantidad} sub={'año '+añoSel} c='#1543F8'/>
       <K lbl='Facturación' val={fmtM(totalPresupuestado)} sub={fmt(totalPresupuestado)+' sin IVA'} c='#1D9E75'/>
-      <K lbl='Ganancia Magma' val={fmtM(gananciaMagma)} sub={margenPct+'% margen · V '+fmtM(totalViaticos)+' · M '+fmtM(totalMagmaCol)+' · X '+fmtM(totalExtraM)} c='#1D9E75'/>
+      <K lbl='Ganancia neta Magma' val={fmtM(gananciaMagma)} sub={añoSel==='2026'
+        ? margenPct+'% margen · Fee '+fmtM(totalFee2026)+' · SM '+fmtM(totalSomosMagma2026)+' · Dif '+fmtM(totalDiferencia2026)
+        : margenPct+'% margen · V '+fmtM(totalViaticos)+' · M '+fmtM(totalMagmaCol)+' · X '+fmtM(totalExtraM)} c='#1D9E75'/>
+      {añoSel==='2026'&&<K lbl='Impuestos al fisco' val={fmtM(totalImpuestos)} sub='35% Gan + 4% IIBB s/Fee (cliente paga, empresa paga)' c='#E24B4A'/>}
       <K lbl='A Staff' val={'-'+fmtM(totalStaff)} sub={Object.keys(staffMap).length+' personas'} c='#BA7517'/>
     </div>
 
