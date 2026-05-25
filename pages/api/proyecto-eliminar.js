@@ -7,8 +7,14 @@ export default async function handler(req, res) {
   const mail = req.headers['x-user-email'] || ''
   if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
 
-  const { num, tambienPresupuesto } = req.body
+  const { num, tambienPresupuesto, accionPresupuesto } = req.body
   if (!num) return res.status(400).json({ error: 'Falta num' })
+
+  // Compat: si vino `tambienPresupuesto:true` (legacy) → equivale a DESAPROBADO
+  let nuevoEstado = null
+  if (accionPresupuesto === 'desaprobado') nuevoEstado = 'DESAPROBADO'
+  else if (accionPresupuesto === 'represupuestado') nuevoEstado = 'REPRESUPUESTADO'
+  else if (tambienPresupuesto) nuevoEstado = 'DESAPROBADO'
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
@@ -32,9 +38,9 @@ export default async function handler(req, res) {
       }] }
     })
 
-    // 2. Opcionalmente cambiar estado en PRESUPUESTOS a DESAPROBADO
+    // 2. Opcionalmente cambiar estado en PRESUPUESTOS (DESAPROBADO o REPRESUPUESTADO)
     let presuActualizado = false
-    if (tambienPresupuesto) {
+    if (nuevoEstado) {
       const rPres = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:D' })
       const presRows = rPres.data.values || []
       for (let i = 1; i < presRows.length; i++) {
@@ -43,7 +49,7 @@ export default async function handler(req, res) {
             spreadsheetId: SHEET_ID,
             range: `PRESUPUESTOS!D${i+1}`,
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['DESAPROBADO']] }
+            requestBody: { values: [[nuevoEstado]] }
           })
           presuActualizado = true
           break
@@ -56,7 +62,7 @@ export default async function handler(req, res) {
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'proyecto-eliminar', 'PROYECTOS', String(num), `fila ${proyRowIdx} eliminada${presuActualizado?' + presu→DESAPROBADO':''}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'proyecto-eliminar', 'PROYECTOS', String(num), `fila ${proyRowIdx} eliminada${nuevoEstado?' + presu→'+nuevoEstado:''}`]] },
       })
     } catch (e) {}
 

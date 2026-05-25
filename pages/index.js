@@ -1169,7 +1169,7 @@ function Proyectos({data,mail,onRefresh}){
         const diasAlEvento=fechaEv?Math.floor((parseFechaEv(fechaEv)-Date.now())/864e5):null
         const fechaColor=diasAlEvento==null?'#555':diasAlEvento<0?'#666':diasAlEvento<=3?'#E24B4A':diasAlEvento<=7?'#BA7517':'#1D9E75'
         return <div key={i} style={{...S.card,marginBottom:8,borderLeft:!ok&&sinAsignar>0?'3px solid #E24B4A':'3px solid transparent'}}>
-          <div style={{display:'grid',gridTemplateColumns:'72px 100px 1fr 150px 70px 110px 110px 80px',alignItems:'center',cursor:'pointer',padding:'10px 0',gap:4}} onClick={()=>setOpen(isOpen?null:num)}>
+          <div style={{display:'grid',gridTemplateColumns:'72px 95px 1fr 130px 60px 100px 100px 130px',alignItems:'center',cursor:'pointer',padding:'10px 0',gap:4}} onClick={()=>setOpen(isOpen?null:num)}>
             <span style={{padding:'0 12px',color:'#1543F8',fontFamily:'monospace',fontSize:11}}>#{num}</span>
             <span style={{padding:'0 8px',fontFamily:'monospace',fontSize:11,color:fechaColor,fontWeight:diasAlEvento!=null&&diasAlEvento<=7?600:400}}>{fechaEv||'—'}{diasAlEvento!=null&&diasAlEvento>=0&&diasAlEvento<=14&&<span style={{display:'block',fontSize:9,color:fechaColor}}>en {diasAlEvento}d</span>}</span>
             <span style={{padding:'0 8px',fontWeight:500,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}{!ok&&sinAsignar>0&&<span style={{fontSize:9,color:'#E24B4A',marginLeft:8,padding:'1px 6px',background:'#E24B4A15',borderRadius:3}}>falta {sinAsignar}</span>}</span>
@@ -1289,19 +1289,28 @@ function EditarProyectoModal({p,mail,onClose,onSaved}){
 }
 
 function BorrarProyectoModal({p,mail,onClose,onBorrado}){
-  const [tambien,setTambien]=useState(false)
+  const [accionPresu,setAccionPresu]=useState('mantener') // 'mantener' | 'desaprobado' | 'represupuestado'
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
   const borrar=async()=>{
     setSaving(true);setErr('')
     try{
-      const r=await fetch('/api/proyecto-eliminar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],tambienPresupuesto:tambien})})
+      const r=await fetch('/api/proyecto-eliminar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],accionPresupuesto:accionPresu})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onBorrado()
     }catch(e){setErr(e.message);setSaving(false)}
   }
+  const opcion = (val, label, color, desc) => (
+    <label style={{display:'flex',gap:10,cursor:'pointer',padding:'10px 12px',background:accionPresu===val?'#1A1A1A':'transparent',borderRadius:6,fontSize:12,color:accionPresu===val?'#F0F0F0':'#888',border:'0.5px solid '+(accionPresu===val?color:'#2A2A2A'),marginBottom:6}}>
+      <input type="radio" name="accionPresu" checked={accionPresu===val} onChange={()=>setAccionPresu(val)} style={{accentColor:color,marginTop:2}}/>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:accionPresu===val?500:400}}>{label}</div>
+        <div style={{fontSize:10,color:'#555',marginTop:2,lineHeight:1.4}}>{desc}</div>
+      </div>
+    </label>
+  )
   return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div style={{width:480,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #E24B4A40',overflow:'hidden'}}>
+    <div style={{width:520,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #E24B4A40',overflow:'hidden'}}>
       <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
         <span style={{color:'#E24B4A',fontSize:14}}>🗑 Eliminar proyecto</span>
         <div style={{flex:1}}/>
@@ -1309,16 +1318,15 @@ function BorrarProyectoModal({p,mail,onClose,onBorrado}){
       </div>
       <div style={{padding:20}}>
         <div style={{fontSize:13,marginBottom:14}}>¿Borrar el proyecto <strong style={{color:'#1543F8'}}>#{p['N° presupuesto']}</strong>?</div>
-        <div style={{padding:'10px 12px',background:'#1E1E1E',borderRadius:6,fontSize:12,color:'#888',marginBottom:14}}>
+        <div style={{padding:'10px 12px',background:'#1E1E1E',borderRadius:6,fontSize:12,color:'#888',marginBottom:16}}>
           <div>{p['Cliente']||p['Agencia']||'—'}</div>
           <div style={{color:'#666',marginTop:2}}>{p['Proyecto']||'(sin proyecto)'}</div>
           <div style={{color:'#666',marginTop:2}}>Evento: {p['Fecha Evento']||'—'}</div>
         </div>
-        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'#1A1A1A',borderRadius:6,fontSize:11,color:'#888'}}>
-          <input type="checkbox" checked={tambien} onChange={e=>setTambien(e.target.checked)} style={{accentColor:'#E24B4A'}}/>
-          También marcar el presupuesto #{p['N° presupuesto']} como DESAPROBADO
-        </label>
-        <div style={{fontSize:10,color:'#555',marginTop:8,lineHeight:1.5}}>El proyecto se elimina de PROYECTOS. Si lo marcás como desaprobado, también se actualiza el estado en PRESUPUESTOS. Las facturas asociadas no se tocan.</div>
+        <div style={{fontSize:10,color:'#9635AB',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>¿Qué pasa con el presupuesto #{p['N° presupuesto']}?</div>
+        {opcion('mantener','Dejar como está','#888','Solo se borra de PROYECTOS. El presupuesto queda en su estado actual (APROBADO).')}
+        {opcion('desaprobado','Marcar como DESAPROBADO','#E24B4A','El cliente canceló o decidió no avanzar. Queda en histórico como rechazado.')}
+        {opcion('represupuestado','Marcar como REPRESUPUESTADO','#9635AB','Hay una versión más reciente. Queda en histórico como reemplazado por otra versión.')}
         {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
       </div>
       <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
