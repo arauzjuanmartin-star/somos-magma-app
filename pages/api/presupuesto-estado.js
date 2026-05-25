@@ -31,6 +31,41 @@ export default async function handler(req, res) {
       requestBody: { values: [[estado]] }
     })
 
+    // Si REPRESUPUESTADO o DESAPROBADO → eliminar la fila correspondiente en PROYECTOS si existe
+    // (porque ya no es un proyecto activo, queda solo en PRESUPUESTOS con su estado)
+    if ((estado === 'REPRESUPUESTADO' || estado === 'DESAPROBADO') && presuRow) {
+      try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
+        const proySheet = meta.data.sheets.find(s => s.properties.title === 'PROYECTOS')
+        if (proySheet) {
+          const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:C' })
+          const proyRows = rProy.data.values || []
+          let proyRowIdx = -1
+          for (let i = 1; i < proyRows.length; i++) {
+            if (String(proyRows[i][2]) === String(num)) { proyRowIdx = i + 1; break }
+          }
+          if (proyRowIdx > 0) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId: SHEET_ID,
+              requestBody: { requests: [{
+                deleteDimension: {
+                  range: { sheetId: proySheet.properties.sheetId, dimension: 'ROWS', startIndex: proyRowIdx-1, endIndex: proyRowIdx }
+                }
+              }] }
+            })
+            try {
+              await sheets.spreadsheets.values.append({
+                spreadsheetId: SHEET_ID,
+                range: 'LOG!A:F',
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-estado-proy-borrado', 'PROYECTOS', String(num), `Eliminado por estado=${estado}`]] },
+              })
+            } catch (e) {}
+          }
+        }
+      } catch (e) { console.error('Error eliminando proyecto al represupuestar:', e) }
+    }
+
     // El motivo NO se escribe en una columna de PRESUPUESTOS (antes iba a AU y pisaba Ajuste).
     // Va solo al LOG para auditoría.
     if (motivo) {

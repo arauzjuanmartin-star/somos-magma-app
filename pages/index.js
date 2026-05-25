@@ -131,7 +131,7 @@ function Mod({id,data,mail,onRefresh}){
   switch(id){
     case 'dashboard': return <Dashboard data={data} mail={mail} onRefresh={onRefresh}/>
     case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
-    case 'proyectos': return <Proyectos data={data} mail={mail}/>
+    case 'proyectos': return <Proyectos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
     case 'egresos': return <Egresos data={data} mail={mail} onRefresh={onRefresh}/>
@@ -1057,12 +1057,37 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
 }
 
 // ---- PROYECTOS ----
-function Proyectos({data,mail}){
+function Proyectos({data,mail,onRefresh}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
   const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('pendiente')
+  const [freelancerNuevo,setFreelancerNuevo]=useState(null) // {nombre, ctx:{num,idx}}
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
-  const staffRRHH=['Somos Magma',...(data.rrhh||[]).map(r=>r['Nombre Apellido']).filter(Boolean).sort()]
+  const rrhhRoster=(data.rrhh||[]).map(r=>String(r['Nombre Apellido']||'').trim()).filter(Boolean)
+  const rrhhSet=new Set(rrhhRoster.map(n=>n.toLowerCase()))
+  const staffRRHH=['Somos Magma',...rrhhRoster.sort()]
+  // Cruce de dobles jornadas: por cada (Staff, FechaEvento), listar proyectos
+  const dobleJornadaMap=(()=>{
+    const m={}
+    proyectos.forEach(p => {
+      const fE=p['Fecha Evento']||''
+      if (!fE) return
+      for (let j=1; j<=20; j++) {
+        const st = String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim()
+        if (!st || st==='Somos Magma') continue
+        const key = st+'__'+fE
+        if (!m[key]) m[key] = []
+        m[key].push({nro: p['N° presupuesto'], cliente: p['Cliente']||'', proyecto: p['Proyecto']||''})
+      }
+    })
+    return m
+  })()
+  const dobleJornadaWarning=(nombre, fechaEv, nroActual) => {
+    if (!nombre || nombre==='Somos Magma' || !fechaEv) return null
+    const key = nombre+'__'+fechaEv
+    const otros = (dobleJornadaMap[key]||[]).filter(o => String(o.nro)!==String(nroActual))
+    return otros.length ? otros : null
+  }
   const getPrecioLista=(nombre)=>{if(!nombre)return 0;const s=SVCS_LIST.find(x=>nombre===x.n);return s?s.p:0}
   const anios=[...new Set(proyectos.map(p=>{const f=p['Fecha Evento']||'';const m=f.match(/(\d{4})/);return m?m[1]:null}).filter(Boolean))].sort().reverse()
   const pms=[...new Set(proyectos.map(p=>p['PM']||p['PM Interno']||'').filter(Boolean))].sort()
@@ -1121,15 +1146,26 @@ function Proyectos({data,mail}){
             {items.map((s,idx)=>{
               const em=s.quien==='Somos Magma'
               const rowSt=em?{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:'4px 0'}:{}
-              return <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,alignItems:'center',marginBottom:6,...rowSt}}>
+              const esNuevoFreelancer = s.quien && !em && !rrhhSet.has(String(s.quien).toLowerCase())
+              const dobles = dobleJornadaWarning(s.quien, p['Fecha Evento'], num)
+              return <div key={idx} style={{marginBottom:dobles||esNuevoFreelancer?10:6}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1.2fr 110px 28px',gap:8,alignItems:'center',...rowSt}}>
                 {s.esExtra?<select value={s.pedido} onChange={e=>upd(num,idx,'pedido',e.target.value,base)} style={{...inp,color:s.pedido?'#F0F0F0':'#555'}}><option value="">— Servicio extra —</option>{SVCS_LIST.map(sv=><option key={sv.n} value={sv.n}>{sv.n}</option>)}</select>
                 :<div style={{padding:'8px 10px',background:em?'transparent':'#1E1E1E',borderRadius:6,fontSize:13,display:'flex',alignItems:'center',gap:6}}>{s.pedido||'—'}{em&&<span style={{fontSize:10,color:'#9635AB',padding:'2px 6px',background:'#9635AB15',borderRadius:3,fontWeight:500}}>Magma</span>}</div>}
                 <div style={{position:'relative'}}>
-                  <input list={'rrhh-'+num+'-'+idx} value={s.quien||''} onChange={e=>upd(num,idx,'quien',e.target.value,base)} placeholder="Buscar freelancer..." style={{...inp,color:em?'#9635AB':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':s.quien?'#333':'#BA751740'),background:em?'transparent':'#1E1E1E'}}/>
+                  <input list={'rrhh-'+num+'-'+idx} value={s.quien||''} onChange={e=>upd(num,idx,'quien',e.target.value,base)} placeholder="Buscar freelancer..." style={{...inp,color:em?'#9635AB':esNuevoFreelancer?'#1D9E75':'#F0F0F0',border:'0.5px solid '+(em?'#9635AB40':esNuevoFreelancer?'#1D9E7560':dobles?'#E24B4A60':s.quien?'#333':'#BA751740'),background:em?'transparent':'#1E1E1E'}}/>
                   <datalist id={'rrhh-'+num+'-'+idx}>{staffRRHH.map(st=><option key={st} value={st}/>)}</datalist>
                 </div>
                 <input type="number" value={s.precio||''} onChange={e=>upd(num,idx,'precio',e.target.value,base)} placeholder={s.precioRef?String(s.precioRef):'$'} style={{...inp,color:em?'#9635AB':'#F0F0F0',fontFamily:'monospace'}}/>
                 <button onClick={()=>s.esExtra&&delExtra(num,idx,base)} style={{width:24,height:24,border:'none',background:'transparent',color:s.esExtra?'#E24B4A':'transparent',cursor:s.esExtra?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>{s.esExtra?'×':''}</button>
+                </div>
+                {esNuevoFreelancer&&<div style={{marginTop:4,padding:'5px 10px',background:'#1D9E7510',borderRadius:4,fontSize:10,color:'#1D9E75',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                  <span>✨ Freelancer nuevo: <strong>{s.quien}</strong> — completá sus datos para poder pagarle</span>
+                  <button onClick={()=>setFreelancerNuevo({nombre:s.quien,num,idx})} style={{padding:'2px 8px',borderRadius:3,border:'none',background:'#1D9E75',color:'#fff',fontSize:10,cursor:'pointer'}}>+ Completar</button>
+                </div>}
+                {dobles&&!esNuevoFreelancer&&<div style={{marginTop:4,padding:'5px 10px',background:'#E24B4A10',borderRadius:4,fontSize:10,color:'#E24B4A'}}>
+                  ⚠ <strong>Doble jornada</strong> — {s.quien} ya tiene asignado el {p['Fecha Evento']}: {dobles.map(d=>`#${d.nro} ${d.cliente||d.proyecto}`).join(', ')}. Ojo con precio especial.
+                </div>}
               </div>
             })}
             <button onClick={()=>addExtra(num,base)} style={{width:'100%',padding:'6px',borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4,marginBottom:12}}>+ Agregar servicio extra</button>
@@ -1143,6 +1179,64 @@ function Proyectos({data,mail}){
           </div>}
         </div>
       })}
+    </div>
+    {freelancerNuevo&&<FreelancerNuevoModal nombre={freelancerNuevo.nombre} mail={mail} onClose={()=>setFreelancerNuevo(null)} onSaved={()=>{setFreelancerNuevo(null);setToast2('Freelancer agregado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
+  </div>
+}
+
+function FreelancerNuevoModal({nombre,mail,onClose,onSaved}){
+  const [f,setF]=useState({nombre,rubro:'',celular:'',mailFreelancer:'',dni:'',cuit:'',banco:'',alias:'',cbu:'',fechaNac:'',nacionalidad:'Argentino'})
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const set=(k,v)=>setF(p=>({...p,[k]:v}))
+  const guardar=async()=>{
+    if(!f.nombre.trim()){setErr('Nombre requerido');return}
+    setSaving(true);setErr('')
+    try{
+      const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(f)})
+      const j=await r.json()
+      if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
+      onSaved()
+    }catch(e){setErr(e.message);setSaving(false)}
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:560,maxHeight:'92vh',background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{background:'#1D9E7520',color:'#1D9E75',borderRadius:4,padding:'3px 10px',fontSize:11,fontWeight:600}}>✨ Freelancer nuevo</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20,overflowY:'auto'}}>
+        <div style={{fontSize:11,color:'#888',marginBottom:14}}>Estos datos quedan en la solapa RRHH del sheet para poder pagarle correctamente. Lo único obligatorio es el nombre — el resto lo podés completar después.</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>Nombre y apellido *</span><input style={{...inp,border:'0.5px solid '+(f.nombre.trim()?'#333':'#E24B4A60')}} value={f.nombre} onChange={e=>set('nombre',e.target.value)}/></label>
+          <label><span style={lbl}>Rubro</span><input style={inp} value={f.rubro} onChange={e=>set('rubro',e.target.value)} placeholder="ej: Filmmaker, Fotógrafo, Editor, Drone..."/></label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>Celular</span><input style={inp} value={f.celular} onChange={e=>set('celular',e.target.value)} placeholder="ej: 11 5990-6456"/></label>
+          <label><span style={lbl}>Mail</span><input style={inp} type="email" value={f.mailFreelancer} onChange={e=>set('mailFreelancer',e.target.value)}/></label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>DNI</span><input style={inp} value={f.dni} onChange={e=>set('dni',e.target.value)}/></label>
+          <label><span style={lbl}>CUIT/CUIL</span><input style={inp} value={f.cuit} onChange={e=>set('cuit',e.target.value)}/></label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>Fecha nac</span><input style={inp} value={f.fechaNac} onChange={e=>set('fechaNac',e.target.value)} placeholder="DD/MM/YYYY"/></label>
+          <label><span style={lbl}>Nacionalidad</span><input style={inp} value={f.nacionalidad} onChange={e=>set('nacionalidad',e.target.value)}/></label>
+          <label><span style={lbl}>Banco</span><input style={inp} value={f.banco} onChange={e=>set('banco',e.target.value)} placeholder="ej: Galicia"/></label>
+        </div>
+        <div style={{fontSize:10,color:'#9635AB',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6,marginTop:8}}>Datos bancarios para pagar</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:10}}>
+          <label><span style={lbl}>Alias</span><input style={inp} value={f.alias} onChange={e=>set('alias',e.target.value)} placeholder="MAR.LUCA.GATO"/></label>
+          <label><span style={lbl}>CBU</span><input style={inp} value={f.cbu} onChange={e=>set('cbu',e.target.value)} placeholder="22 dígitos"/></label>
+        </div>
+        {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving||!f.nombre.trim()} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving||!f.nombre.trim()?0.5:1}}>{saving?'Guardando...':'Guardar freelancer'}</button>
+      </div>
     </div>
   </div>
 }
