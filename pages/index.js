@@ -1405,6 +1405,7 @@ function Facturacion({data,mail,onRefresh}){
   const [pQuery,setPQuery]=useState('')
   const [pdfFile,setPdfFile]=useState(null),[cuitAuto,setCuitAuto]=useState('')
   const [editarF,setEditarF]=useState(null) // factura a editar
+  const [enviarF,setEnviarF]=useState(null) // factura a mandar por mail
   const fc=data.facturacion||[]
   const presus=(data.presupuestos||[]).filter(p=>isAprobado(p))
   const proyectos=data.proyectos||[]
@@ -1735,7 +1736,7 @@ function Facturacion({data,mail,onRefresh}){
         const ent=getEntidad(f),entCfg=ENT_FC[ent]||ENT_FC.SRL
         const bord=e==='reclamar'?'3px solid #E24B4A':e==='cobrada'?'3px solid #1D9E75':e==='vencida'?'3px solid #BA7517':'3px solid #2A2A2A'
         return <div key={i} style={{background:'#161616',border:'0.5px solid #2A2A2A',borderLeft:bord,borderRadius:10,marginBottom:8,overflow:'hidden'}}>
-          <div style={{display:'grid',gridTemplateColumns:'auto auto 1fr auto auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
+          <div style={{display:'grid',gridTemplateColumns:'auto auto 1fr auto auto auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
             <span style={{fontFamily:'monospace',fontSize:11,color:'#1543F8',whiteSpace:'nowrap'}}>{f['Nro de Factura']||'s/n'}</span>
             <span style={{fontSize:10,padding:'2px 6px',borderRadius:3,whiteSpace:'nowrap',fontWeight:500,background:entCfg.bg,color:entCfg.color}}>{entCfg.label}</span>
             <div style={{minWidth:0}}>
@@ -1746,6 +1747,7 @@ function Facturacion({data,mail,onRefresh}){
               <div style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8'}}>{fmt(neto)}</div>
               <div style={{fontFamily:'monospace',fontSize:10,color:'#555'}}>{iva>0?'+IVA '+fmt(iva):'Sin IVA'}</div>
             </div>
+            <button onClick={e=>{e.stopPropagation();setEnviarF(f)}} title="Enviar factura por mail al cliente" style={{padding:'4px 8px',borderRadius:4,border:'0.5px solid #1543F840',background:'#1543F810',color:'#1543F8',fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}}>✉ Enviar</button>
             {f['Factura']&&String(f['Factura']).startsWith('http')
               ? <a href={f['Factura']} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} title="Ver PDF en Drive" style={{padding:'4px 8px',borderRadius:4,border:'0.5px solid #1D9E7540',background:'#1D9E7510',color:'#1D9E75',fontSize:10,textDecoration:'none',whiteSpace:'nowrap'}}>📄 PDF</a>
               : <label onClick={e=>e.stopPropagation()} title="Subir PDF de la factura" style={{padding:'4px 8px',borderRadius:4,border:'0.5px dashed #BA751740',background:'transparent',color:'#BA7517',fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}}>📎 PDF
@@ -1806,6 +1808,7 @@ function Facturacion({data,mail,onRefresh}){
               </div>
               {cobrosTabla}
               <div style={{padding:'10px 16px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button onClick={()=>setEnviarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #1543F840',background:'#1543F810',color:'#1543F8',fontSize:11,cursor:'pointer'}}>✉ Enviar por mail</button>
                 <button onClick={()=>setEditarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎ Editar datos</button>
                 <button onClick={async()=>{
                   const motivo=prompt('Motivo de anulación:');if(motivo===null)return
@@ -1862,6 +1865,85 @@ function Facturacion({data,mail,onRefresh}){
       {filtradas.length===0&&<div style={S.nd}>Sin facturas</div>}
     </div></>}
     {editarF&&<EditarFacturaModal f={editarF} mail={mail} onClose={()=>setEditarF(null)} onSaved={()=>{setEditarF(null);setToast('Factura actualizada ✓');setTimeout(()=>setToast(''),2500);if(typeof onRefresh==='function')setTimeout(onRefresh,500)}}/>}
+    {enviarF&&<EnviarFacturaModal f={enviarF} mail={mail} onClose={()=>setEnviarF(null)}/>}
+  </div>
+}
+
+function EnviarFacturaModal({f,mail,onClose}){
+  const [loading,setLoading]=useState(true)
+  const [prep,setPrep]=useState(null),[err,setErr]=useState('')
+  const [to,setTo]=useState(''),[cc,setCc]=useState('')
+  const [asunto,setAsunto]=useState(''),[cuerpo,setCuerpo]=useState('')
+  useEffect(()=>{
+    fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto']})})
+      .then(r=>r.json()).then(j=>{
+        if(!j.ok){setErr(j.error||'Error');setLoading(false);return}
+        setPrep(j)
+        setAsunto(j.asunto||'')
+        setCuerpo(j.cuerpo||'')
+        if(j.destinatarios?.[0]?.mail)setTo(j.destinatarios[0].mail)
+        setLoading(false)
+      }).catch(e=>{setErr(e.message);setLoading(false)})
+  },[])
+  const abrirGmail=()=>{
+    const url='https://mail.google.com/mail/?view=cm&fs=1'
+      +'&to='+encodeURIComponent(to)
+      +(cc?'&cc='+encodeURIComponent(cc):'')
+      +'&su='+encodeURIComponent(asunto)
+      +'&body='+encodeURIComponent(cuerpo)
+    window.open(url,'_blank')
+  }
+  const copiarCuerpo=()=>{
+    navigator.clipboard?.writeText(cuerpo).then(()=>alert('✓ Texto copiado al portapapeles')).catch(()=>alert('No pude copiar — seleccionalo manualmente'))
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:680,maxHeight:'92vh',background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{f['N° Presupuesto']}</span>
+        <span style={{fontSize:13,fontWeight:500}}>✉ Enviar factura por mail</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20,overflowY:'auto'}}>
+        {loading&&<div style={{color:'#888',fontSize:12,textAlign:'center',padding:20}}>Preparando datos...</div>}
+        {err&&<div style={{padding:10,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+        {prep&&<>
+          <div style={{fontSize:11,color:'#888',marginBottom:14,padding:'8px 10px',background:'#1A1A1A',borderRadius:6,lineHeight:1.5}}>
+            El mail se abre en Gmail desde tu cuenta <strong>{mail}</strong>. Revisalo, adjuntá el PDF si querés, y mandalo.
+            {prep.factura.linkPDF&&<div style={{marginTop:4,color:'#1D9E75'}}>📎 El link al PDF en Drive ya está incluido en el cuerpo del mail.</div>}
+            {!prep.factura.linkPDF&&<div style={{marginTop:4,color:'#BA7517'}}>⚠ Esta factura no tiene PDF subido. Subilo primero con el botón 📎 PDF en la lista.</div>}
+          </div>
+          {prep.destinatarios.length>0&&<div style={{marginBottom:12}}>
+            <div style={lbl}>Destinatarios sugeridos (click para usar)</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {prep.destinatarios.map((d,i)=>(
+                <button key={i} onClick={()=>setTo(d.mail)} title={d.match} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #2A2A2A',background:to===d.mail?'#1543F820':'transparent',color:to===d.mail?'#1543F8':'#888',fontSize:10,cursor:'pointer'}}>
+                  {d.nombre} <span style={{color:'#555'}}>·</span> {d.mail}
+                </button>
+              ))}
+            </div>
+          </div>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <label><span style={lbl}>Para *</span><input style={inp} type="email" value={to} onChange={e=>setTo(e.target.value)} placeholder="contacto@cliente.com"/></label>
+            <label><span style={lbl}>CC (opcional)</span><input style={inp} value={cc} onChange={e=>setCc(e.target.value)} placeholder="cc@ejemplo.com"/></label>
+          </div>
+          <label style={{display:'block',marginBottom:10}}><span style={lbl}>Asunto</span><input style={inp} value={asunto} onChange={e=>setAsunto(e.target.value)}/></label>
+          <label style={{display:'block'}}><span style={lbl}>Cuerpo del mail</span>
+            <textarea style={{...inp,minHeight:280,resize:'vertical',fontFamily:'inherit',lineHeight:1.5}} value={cuerpo} onChange={e=>setCuerpo(e.target.value)}/>
+          </label>
+          {prep.datosTransfer&&!prep.datosTransfer.cbu&&<div style={{marginTop:8,padding:8,background:'#BA751710',borderRadius:6,fontSize:11,color:'#BA7517'}}>
+            ⚠ La cuenta <strong>{prep.datosTransfer.nombre}</strong> no tiene Alias ni CBU cargado en la solapa CUENTAS del Master Magma. Completá esos datos para que aparezcan automáticamente.
+          </div>}
+        </>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end',flexWrap:'wrap'}}>
+        <button onClick={copiarCuerpo} disabled={!cuerpo} style={{padding:'8px 14px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Copiar texto</button>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={abrirGmail} disabled={!to||!asunto} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'linear-gradient(135deg,#1543F8,#CE2637)',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:(!to||!asunto)?0.5:1}}>📨 Abrir en Gmail</button>
+      </div>
+    </div>
   </div>
 }
 
