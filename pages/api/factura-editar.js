@@ -1,0 +1,56 @@
+import { getSheets } from '../../lib/sheets'
+
+const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).end()
+  const mail = req.headers['x-user-email'] || ''
+  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+
+  const { presupuestoNum, cambios } = req.body
+  if (!presupuestoNum || !cambios) return res.status(400).json({ error: 'Falta presupuestoNum o cambios' })
+
+  try {
+    const { sheets, SHEET_ID } = await getSheets()
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
+    const headers = r.data.values[0]
+    const rows = r.data.values
+    const idxPresu = headers.indexOf('N° Presupuesto')
+    if (idxPresu === -1) return res.status(500).json({ error: 'Falta col N° Presupuesto' })
+
+    let filaTarget = -1
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][idxPresu]||'').trim() === String(presupuestoNum).trim()) { filaTarget = i + 1; break }
+    }
+    if (filaTarget === -1) return res.status(404).json({ error: 'Factura no encontrada' })
+
+    const updates = []
+    Object.entries(cambios).forEach(([campo, valor]) => {
+      const idx = headers.indexOf(campo)
+      if (idx === -1) return
+      updates.push({ range: `FACTURACION!${colLetra(idx)}${filaTarget}`, values: [[valor]] })
+    })
+
+    if (updates.length === 0) return res.json({ ok: true, msg: 'Nada para actualizar' })
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+    })
+
+    try {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'LOG!A:F',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[new Date().toISOString(), mail, 'factura-editar', 'FACTURACION', String(presupuestoNum), `campos=${Object.keys(cambios).join(',')}`]] },
+      })
+    } catch (e) {}
+
+    res.json({ ok: true, fila: filaTarget, campos: updates.length })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: e.message })
+  }
+}

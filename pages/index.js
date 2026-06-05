@@ -1404,6 +1404,7 @@ function Facturacion({data,mail,onRefresh}){
   const [saving,setSaving]=useState(false),[toast,setToast]=useState(''),[cobroData,setCobroData]=useState({})
   const [pQuery,setPQuery]=useState('')
   const [pdfFile,setPdfFile]=useState(null),[cuitAuto,setCuitAuto]=useState('')
+  const [editarF,setEditarF]=useState(null) // factura a editar
   const fc=data.facturacion||[]
   const presus=(data.presupuestos||[]).filter(p=>isAprobado(p))
   const proyectos=data.proyectos||[]
@@ -1460,7 +1461,23 @@ function Facturacion({data,mail,onRefresh}){
   const calcCuentas=()=>{const res={};CUENTAS_FC.forEach(c=>{res[c]={saldo:0,pend:0}});fc.forEach(f=>{const cobro=cobroData[f['N° Presupuesto']]||{};const cuenta=cobro.cuenta||'SRL-BBVA';const total=parseMonto(f['Precio FINAL']);const ll=total-(cobro.retG||0)-(cobro.retI||0)-(cobro.retIV||0)-(cobro.com||0);if(isCobrada(f)){if(res[cuenta])res[cuenta].saldo+=ll}else{if(res[cuenta])res[cuenta].pend+=total}});return res}
   const cuentasSaldos=calcCuentas()
   const contactos=data.contactos||[]
-  const getCuit=p=>{const ag=p['Agencia']||'';const cl=p['Cliente']||'';const ct=contactos.find(c=>c['Agencia']===ag||c['Agencia']===cl||c['Cliente']===cl);return ct?ct['CUIT']||ct['Cuit']||ct['cuit']||'':''}
+  const agenciasData=data.agencias||[]
+  const getCuit=p=>{
+    const ag=String(p['Agencia']||'').trim()
+    const cl=String(p['Cliente']||'').trim()
+    // 1° intentar AGENCIAS (la ficha fiscal nueva)
+    const agMatch=agenciasData.find(a=>String(a['Nombre']||'').toLowerCase()===ag.toLowerCase())
+    if(agMatch&&agMatch['CUIT'])return String(agMatch['CUIT'])
+    // 2° intentar Contactos/agencias (legacy)
+    const ct=contactos.find(c=>c['Agencia']===ag||c['Agencia']===cl||c['Cliente']===cl)
+    if(ct&&(ct['CUIT']||ct['Cuit']||ct['cuit']))return ct['CUIT']||ct['Cuit']||ct['cuit']||''
+    // 3° si "Sin agencia / Directo", buscar por cliente
+    if(!ag||/sin agencia|directo/i.test(ag)){
+      const clMatch=agenciasData.find(a=>String(a['Nombre']||'').toLowerCase()===cl.toLowerCase())
+      if(clMatch&&clMatch['CUIT'])return String(clMatch['CUIT'])
+    }
+    return ''
+  }
   const presusConPendiente=presus.map(p=>{const facturado=fc.filter(f=>String(f['N° Presupuesto'])===String(p['Columna 1'])).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0);const neto=parseMonto(p['Precio Final']);return{...p,facturado,neto,pendiente:neto-facturado,completo:facturado>=neto}}).filter(p=>!p.completo&&p.neto>0)
   const presusFiltrados=presusConPendiente.filter(p=>!pQuery||[String(p['Columna 1']),p['Proyecto']||'',p['Cliente']||'',p['Agencia']||''].some(v=>v.toLowerCase().includes(pQuery.toLowerCase())))
   const calcNeto=()=>{if(!presuSel)return 0;return montoTipo==='total'?presuSel.pendiente:parseFloat(montoCustom)||0}
@@ -1470,7 +1487,15 @@ function Facturacion({data,mail,onRefresh}){
     if(!presuSel||!calcNeto())return
     setSaving(true)
     try{
-      await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()})})
+      const bodyFact={presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()}
+      let rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(bodyFact)})
+      if(rf.status===409){
+        const jd=await rf.json()
+        if(confirm(jd.mensaje+'\n\n¿Crear de todos modos? (Cancelar para corregir el N°)')){
+          rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({...bodyFact,forzar:true})})
+        }else{setSaving(false);return}
+      }
+      if(!rf.ok&&rf.status!==409){const e=await rf.json().catch(()=>({}));throw new Error(e.error||'Error guardando factura')}
       setToast('Factura guardada!')
       if(pdfFile){
         try{
@@ -1780,6 +1805,16 @@ function Facturacion({data,mail,onRefresh}){
                 </div>
               </div>
               {cobrosTabla}
+              <div style={{padding:'10px 16px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button onClick={()=>setEditarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎ Editar datos</button>
+                <button onClick={async()=>{
+                  const motivo=prompt('Motivo de anulación:');if(motivo===null)return
+                  const r=await fetch('/api/factura-anular',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],motivo})})
+                  const j=await r.json()
+                  if(j.ok){setToast('Factura anulada ✓');setTimeout(()=>setToast(''),2500);if(typeof onRefresh==='function')setTimeout(onRefresh,500)}
+                  else{alert('Error: '+(j.error||'?'))}
+                }} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #E24B4A40',background:'transparent',color:'#E24B4A',fontSize:11,cursor:'pointer'}}>⊘ Anular factura</button>
+              </div>
             </div>;
             const eCobr=estF(f)
             const sinCuenta=!cobro.cuenta
@@ -1826,8 +1861,78 @@ function Facturacion({data,mail,onRefresh}){
       })}
       {filtradas.length===0&&<div style={S.nd}>Sin facturas</div>}
     </div></>}
+    {editarF&&<EditarFacturaModal f={editarF} mail={mail} onClose={()=>setEditarF(null)} onSaved={()=>{setEditarF(null);setToast('Factura actualizada ✓');setTimeout(()=>setToast(''),2500);if(typeof onRefresh==='function')setTimeout(onRefresh,500)}}/>}
   </div>
 }
+
+function EditarFacturaModal({f,mail,onClose,onSaved}){
+  const [form,setForm]=useState({
+    nroFactura: f['Nro de Factura']||'',
+    fechaEmision: f['Fecha emision']||'',
+    fechaVenc: f['Vencimiento']||'',
+    tipoFactura: f['Tipo de Factura']||'',
+    plazo: String(f['Plazo']||''),
+    cuit: f['CUIT']||'',
+    cuenta: f['Cuenta destino']||'',
+    notas: f['COMENTARIOS']||'',
+  })
+  const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}))
+  const guardar=async()=>{
+    setSaving(true);setErr('')
+    const cambios={}
+    if(form.nroFactura!==(f['Nro de Factura']||''))cambios['Nro de Factura']=form.nroFactura
+    if(form.fechaEmision!==(f['Fecha emision']||''))cambios['Fecha emision']=form.fechaEmision
+    if(form.fechaVenc!==(f['Vencimiento']||''))cambios['Vencimiento']=form.fechaVenc
+    if(form.tipoFactura!==(f['Tipo de Factura']||''))cambios['Tipo de Factura']=form.tipoFactura
+    if(form.plazo!==String(f['Plazo']||''))cambios['Plazo']=form.plazo
+    if(form.cuit!==(f['CUIT']||''))cambios['CUIT']=form.cuit
+    if(form.cuenta!==(f['Cuenta destino']||''))cambios['Cuenta destino']=form.cuenta
+    if(form.notas!==(f['COMENTARIOS']||''))cambios['COMENTARIOS']=form.notas
+    if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
+    try{
+      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],cambios})})
+      const j=await r.json()
+      if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
+      onSaved()
+    }catch(e){setErr(e.message);setSaving(false)}
+  }
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:560,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>Pres #{f['N° Presupuesto']}</span>
+        <span style={{fontSize:13,fontWeight:500}}>Editar factura</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:20}}>
+        <div style={{fontSize:11,color:'#888',marginBottom:14}}>Para corregir errores. Los montos (neto/IVA/total) y datos del cobro NO se editan acá. Para anular usá el botón "⊘ Anular".</div>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>N° de Factura</span><input style={inp} value={form.nroFactura} onChange={e=>set('nroFactura',e.target.value)}/></label>
+          <label><span style={lbl}>Tipo</span><select style={{...inp,cursor:'pointer'}} value={form.tipoFactura} onChange={e=>set('tipoFactura',e.target.value)}><option value="">—</option><option value="Factura A">Factura A</option><option value="Factura B">Factura B</option><option value="Factura C">Factura C</option><option value="Factura E">Factura E</option></select></label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>Fecha emisión</span><input style={inp} value={form.fechaEmision} onChange={e=>set('fechaEmision',e.target.value)} placeholder="DD/MM/YYYY"/></label>
+          <label><span style={lbl}>Vencimiento</span><input style={inp} value={form.fechaVenc} onChange={e=>set('fechaVenc',e.target.value)} placeholder="DD/MM/YYYY"/></label>
+          <label><span style={lbl}>Plazo</span><input style={inp} value={form.plazo} onChange={e=>set('plazo',e.target.value)} placeholder="30"/></label>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>CUIT cliente</span><input style={inp} value={form.cuit} onChange={e=>set('cuit',e.target.value)}/></label>
+          <label><span style={lbl}>Cuenta destino</span><input style={inp} value={form.cuenta} onChange={e=>set('cuenta',e.target.value)}/></label>
+        </div>
+        <label style={{display:'block'}}><span style={lbl}>Notas / Comentarios</span><textarea style={{...inp,minHeight:60,resize:'vertical'}} value={form.notas} onChange={e=>set('notas',e.target.value)}/></label>
+        {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
+      </div>
+    </div>
+  </div>
+}
+
 // ---- PAGOS STAFF ----
 function PagosStaff({data,mail,onRefresh}){
   const CUENTAS=['SRL — BBVA','Sofia — Galicia','Sofia — Santander','Lucia — Santander','Efectivo']
