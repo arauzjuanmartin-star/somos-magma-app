@@ -1,4 +1,4 @@
-import { getSheets } from '../../lib/sheets'
+import { getSheets, withSheetsRetry } from '../../lib/sheets'
 
 const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
@@ -22,10 +22,10 @@ export default async function handler(req, res) {
   try {
     const { sheets, SHEET_ID } = await getSheets()
 
-    // PARALELO: leer FACTURACION + CUENTAS al mismo tiempo
+    // PARALELO: leer FACTURACION + CUENTAS al mismo tiempo (con retry)
     const [factR, cuentasR] = await Promise.all([
-      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A1:AG500' }),
-      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:H' }),
+      withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A1:AG500' })),
+      withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:H' })),
     ])
 
     const rows = factR.data.values || []
@@ -104,11 +104,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // UN SOLO batchUpdate con todo (FACTURACION + CUENTAS)
-    const batchPromise = sheets.spreadsheets.values.batchUpdate({
+    // UN SOLO batchUpdate con todo (FACTURACION + CUENTAS) — con retry
+    const batchPromise = withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SHEET_ID,
       requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
-    })
+    }))
 
     // En paralelo: appends a RESERVAS, COBROS, LOG (independientes, no esperan al batchUpdate)
     const appendsPromises = []
@@ -164,6 +164,10 @@ export default async function handler(req, res) {
     })
   } catch(e) {
     console.error('Error cobro:', e)
+    const status = e.code || e.response?.status
+    if (status === 429) {
+      return res.status(429).json({ error: 'Google está limitando los pedidos. Esperá 30 segundos y volvé a marcar el cobro. NO se grabó.' })
+    }
     res.status(500).json({ error: e.message })
   }
 }

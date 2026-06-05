@@ -1,4 +1,4 @@
-import { getSheets } from '../../lib/sheets'
+import { getSheets, withSheetsRetry } from '../../lib/sheets'
 
 const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
@@ -20,7 +20,7 @@ const esperarLock = async () => {
 }
 
 const calcularSiguienteNumero = async (sheets, SHEET_ID) => {
-  const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:A' })
+  const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:A' }))
   const nums = (r.data.values || []).slice(1)
     .map(row => {
       const s = String(row[0]||'').trim()
@@ -115,13 +115,13 @@ export default async function handler(req, res) {
       row[49] = p['Fee Servicios'] || ''
       row[8] = num(p['Precio Final']) || total
 
-      await sheets.spreadsheets.values.append({
+      await withSheetsRetry(() => sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'PRESUPUESTOS!A:A',
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: [row] },
-      })
+      }))
     } finally {
       asignandoNumero = false
     }
@@ -139,6 +139,8 @@ export default async function handler(req, res) {
   } catch (e) {
     asignandoNumero = false
     console.error(e)
+    const status = e.code || e.response?.status
+    if (status === 429) return res.status(429).json({ error: 'Google está limitando los pedidos. Esperá 30 segundos. El presu NO se grabó.' })
     res.status(500).json({ error: e.message })
   }
 }

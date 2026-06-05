@@ -1,22 +1,6 @@
-import { getSheets } from '../../lib/sheets'
+import { getSheets, withSheetsRetry as withRetry } from '../../lib/sheets'
 
 const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
-
-// Retry helper para errores 429 (rate limit) y 503 (servicio sobrecargado)
-async function withRetry(fn, intentos = 3) {
-  for (let i = 0; i < intentos; i++) {
-    try { return await fn() }
-    catch (e) {
-      const status = e.code || e.response?.status
-      if ((status === 429 || status === 503) && i < intentos - 1) {
-        const espera = (i + 1) * 1000 + Math.random() * 500
-        await new Promise(r => setTimeout(r, espera))
-        continue
-      }
-      throw e
-    }
-  }
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
