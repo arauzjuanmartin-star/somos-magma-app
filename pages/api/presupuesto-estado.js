@@ -31,9 +31,10 @@ export default async function handler(req, res) {
       requestBody: { values: [[estado]] }
     })
 
-    // Si REPRESUPUESTADO o DESAPROBADO → eliminar la fila correspondiente en PROYECTOS si existe
-    // (porque ya no es un proyecto activo, queda solo en PRESUPUESTOS con su estado)
-    if ((estado === 'REPRESUPUESTADO' || estado === 'DESAPROBADO') && presuRow) {
+    // Si el estado NO es APROBADO → eliminar la fila correspondiente en PROYECTOS si existe.
+    // Solo APROBADO debe estar en PROYECTOS. Cualquier otro estado (EN ESPERA,
+    // REPRESUPUESTADO, DESAPROBADO, etc) significa que ya NO es un trabajo activo.
+    if (estado !== 'APROBADO' && presuRow) {
       try {
         const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
         const proySheet = meta.data.sheets.find(s => s.properties.title === 'PROYECTOS')
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
                 spreadsheetId: SHEET_ID,
                 range: 'LOG!A:F',
                 valueInputOption: 'USER_ENTERED',
-                requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-estado-proy-borrado', 'PROYECTOS', String(num), `Eliminado por estado=${estado}`]] },
+                requestBody: { values: [[new Date().toISOString(), mail, 'proy-borrado-por-cambio-estado', 'PROYECTOS', String(num), `Eliminado por cambio a estado=${estado}`]] },
               })
             } catch (e) {}
           }

@@ -1924,6 +1924,20 @@ function EditarFacturaModal({f,mail,onClose,onSaved}){
         </div>
         <label style={{display:'block'}}><span style={lbl}>Notas / Comentarios</span><textarea style={{...inp,minHeight:60,resize:'vertical'}} value={form.notas} onChange={e=>set('notas',e.target.value)}/></label>
         {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+        <div style={{marginTop:18,padding:12,background:'#E24B4A08',border:'0.5px solid #E24B4A30',borderRadius:6}}>
+          <div style={{fontSize:11,color:'#E24B4A',fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:'.05em'}}>⚠ Zona peligrosa</div>
+          <div style={{fontSize:11,color:'#888',marginBottom:8,lineHeight:1.5}}>Si esta factura muestra un cobro o adelanto que NUNCA pasó (típico de migración del histórico), podés resetear todos los datos de cobro y borrar las entradas erróneas de COBROS.</div>
+          <button onClick={async()=>{
+            const soloMigrados=confirm('¿Borrar SOLO los cobros migrados del histórico?\n\nOK = solo los marcados como migración\nCancelar = TODOS los cobros de esta factura (incluso los reales)')
+            const revertirSaldo=confirm('¿También descontar de la cuenta destino los montos a borrar?\n\n(Solo si ya se habían sumado al saldo de alguna cuenta)')
+            try{
+              const r=await fetch('/api/factura-resetear-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],soloMigrados,revertirSaldoCuenta:revertirSaldo})})
+              const j=await r.json()
+              if(j.ok){alert(`✓ Reseteado. Cobros borrados: ${j.cobrosBorrados}${j.saldoActualizado?'. Cuenta(s) ajustada(s): '+j.saldoActualizado.map(s=>s.cuenta).join(', '):''}`);onSaved()}
+              else{alert('Error: '+(j.error||'?'))}
+            }catch(e){alert('Error: '+e.message)}
+          }} style={{padding:'6px 12px',borderRadius:4,border:'0.5px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,cursor:'pointer'}}>↺ Resetear cobros de esta factura</button>
+        </div>
       </div>
       <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
