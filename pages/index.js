@@ -1507,8 +1507,15 @@ function Facturacion({data,mail,onRefresh}){
           rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({...bodyFact,forzar:true})})
         }else{setSaving(false);return}
       }
-      if(!rf.ok&&rf.status!==409){const e=await rf.json().catch(()=>({}));throw new Error(e.error||'Error guardando factura')}
-      setToast('Factura guardada!')
+      if(rf.status===429){
+        alert('⚠ Google está limitando los pedidos.\n\nEsperá 30 segundos y volvé a apretar "Crear factura".\nLa factura NO se guardó.')
+        setSaving(false);return
+      }
+      if(!rf.ok&&rf.status!==409){const e=await rf.json().catch(()=>({}));throw new Error(e.error||'Error guardando factura (status '+rf.status+')')}
+      // Confirmar éxito leyendo la respuesta
+      const jOk=await rf.json().catch(()=>({}))
+      if(!jOk.ok){throw new Error(jOk.error||'El servidor no confirmó el guardado')}
+      setToast('✓ Factura guardada')
       if(pdfFile){
         try{
           setToast('Subiendo PDF a Drive...')
@@ -1530,7 +1537,10 @@ function Facturacion({data,mail,onRefresh}){
       setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setCuitAuto('');setPdfFile(null)
       setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
       if(typeof onRefresh==='function')setTimeout(onRefresh,800)
-    }catch(e){setToast('Error: '+e.message)}
+    }catch(e){
+      alert('❌ NO se pudo guardar la factura:\n\n'+e.message+'\n\nLa factura NO quedó cargada. Volvé a intentar.')
+      setToast('Error: '+e.message)
+    }
     setSaving(false)
   }
   const registrarCobro=async(f,tipoCobro,opts={})=>{
