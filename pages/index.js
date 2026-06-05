@@ -1466,7 +1466,36 @@ function Facturacion({data,mail,onRefresh}){
   const calcNeto=()=>{if(!presuSel)return 0;return montoTipo==='total'?presuSel.pendiente:parseFloat(montoCustom)||0}
   const calcIvaF=()=>formData.conIVA?Math.round(calcNeto()*0.21):0
   const calcTotalF=()=>calcNeto()+calcIvaF()
-  const guardarFactura=async()=>{if(!presuSel||!calcNeto())return;setSaving(true);try{await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()})});setToast('Factura guardada!');setTimeout(()=>setToast(''),2500);if(pdfFile){try{const fd=new FormData();fd.append('file',pdfFile,pdfFile.name);fd.append('entidad',formData.entidad);fd.append('nroFactura',formData.nroFactura);const now=new Date();fd.append('mes',String(now.getMonth()+1));fd.append('anio',String(now.getFullYear()));await fetch('/api/factura-upload',{method:'POST',body:fd});}catch(eu){console.error('upload error',eu)}}setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setCuitAuto('');setPdfFile(null);setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})}catch(e){setToast('Error: '+e.message);}setSaving(false)}
+  const guardarFactura=async()=>{
+    if(!presuSel||!calcNeto())return
+    setSaving(true)
+    try{
+      await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()})})
+      setToast('Factura guardada!')
+      if(pdfFile){
+        try{
+          setToast('Subiendo PDF a Drive...')
+          const fd=new FormData()
+          fd.append('file',pdfFile,pdfFile.name)
+          fd.append('entidad',formData.entidad)
+          fd.append('nroFactura',formData.nroFactura)
+          fd.append('presupuestoNum',String(presuSel['Columna 1']))
+          const now=new Date()
+          fd.append('mes',String(now.getMonth()+1))
+          fd.append('anio',String(now.getFullYear()))
+          const ur=await fetch('/api/factura-upload',{method:'POST',body:fd})
+          const uj=await ur.json()
+          if(uj.ok){setToast('Factura + PDF guardado ✓')}
+          else{setToast('Factura OK, PDF falló: '+(uj.error||'?'))}
+        }catch(eu){console.error('upload error',eu);setToast('Factura OK pero PDF falló')}
+      }
+      setTimeout(()=>setToast(''),3000)
+      setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setCuitAuto('');setPdfFile(null)
+      setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
+      if(typeof onRefresh==='function')setTimeout(onRefresh,800)
+    }catch(e){setToast('Error: '+e.message)}
+    setSaving(false)
+  }
   const registrarCobro=async(f,tipoCobro,opts={})=>{
     const nro=f['N° Presupuesto']
     const cobro=cobroData[nro]||{}
@@ -1681,7 +1710,7 @@ function Facturacion({data,mail,onRefresh}){
         const ent=getEntidad(f),entCfg=ENT_FC[ent]||ENT_FC.SRL
         const bord=e==='reclamar'?'3px solid #E24B4A':e==='cobrada'?'3px solid #1D9E75':e==='vencida'?'3px solid #BA7517':'3px solid #2A2A2A'
         return <div key={i} style={{background:'#161616',border:'0.5px solid #2A2A2A',borderLeft:bord,borderRadius:10,marginBottom:8,overflow:'hidden'}}>
-          <div style={{display:'grid',gridTemplateColumns:'auto auto 1fr auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
+          <div style={{display:'grid',gridTemplateColumns:'auto auto 1fr auto auto auto auto',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}} onClick={()=>setAbierto(isOpen?null:f['N° Presupuesto'])}>
             <span style={{fontFamily:'monospace',fontSize:11,color:'#1543F8',whiteSpace:'nowrap'}}>{f['Nro de Factura']||'s/n'}</span>
             <span style={{fontSize:10,padding:'2px 6px',borderRadius:3,whiteSpace:'nowrap',fontWeight:500,background:entCfg.bg,color:entCfg.color}}>{entCfg.label}</span>
             <div style={{minWidth:0}}>
@@ -1692,6 +1721,31 @@ function Facturacion({data,mail,onRefresh}){
               <div style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8'}}>{fmt(neto)}</div>
               <div style={{fontFamily:'monospace',fontSize:10,color:'#555'}}>{iva>0?'+IVA '+fmt(iva):'Sin IVA'}</div>
             </div>
+            {f['Factura']&&String(f['Factura']).startsWith('http')
+              ? <a href={f['Factura']} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} title="Ver PDF en Drive" style={{padding:'4px 8px',borderRadius:4,border:'0.5px solid #1D9E7540',background:'#1D9E7510',color:'#1D9E75',fontSize:10,textDecoration:'none',whiteSpace:'nowrap'}}>📄 PDF</a>
+              : <label onClick={e=>e.stopPropagation()} title="Subir PDF de la factura" style={{padding:'4px 8px',borderRadius:4,border:'0.5px dashed #BA751740',background:'transparent',color:'#BA7517',fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}}>📎 PDF
+                  <input type="file" accept=".pdf,.PDF" style={{display:'none'}} onChange={async e=>{
+                    const file=e.target.files?.[0];if(!file)return
+                    setToast('Subiendo PDF a Drive...')
+                    try{
+                      const now=new Date()
+                      const fd=new FormData()
+                      fd.append('file',file,file.name)
+                      fd.append('entidad',ent)
+                      fd.append('nroFactura',f['Nro de Factura']||'')
+                      fd.append('presupuestoNum',String(f['N° Presupuesto']))
+                      const fEv=parseD(f['Fecha emision'])||parseD(f['Fecha Evento'])||now
+                      fd.append('mes',String(fEv.getMonth()+1))
+                      fd.append('anio',String(fEv.getFullYear()))
+                      const r=await fetch('/api/factura-upload',{method:'POST',body:fd})
+                      const j=await r.json()
+                      if(j.ok){setToast('PDF subido ✓ ('+j.carpeta+')');if(typeof onRefresh==='function')setTimeout(onRefresh,800)}
+                      else{setToast('Error: '+(j.error||'?'))}
+                      setTimeout(()=>setToast(''),3000)
+                    }catch(eu){setToast('Error subiendo: '+eu.message);setTimeout(()=>setToast(''),3000)}
+                  }}/>
+                </label>
+            }
             <span style={{...S.badge,background:bm.bg,color:bm.c,whiteSpace:'nowrap'}}>{bl}</span>
             <span style={{fontSize:11,color:'#555'}}>{isOpen?'▲':'▶'}</span>
           </div>
