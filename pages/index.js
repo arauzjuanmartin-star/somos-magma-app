@@ -1057,7 +1057,7 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
           <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
             <select style={{...inp,...campoFaltante(p['PM Interno'])}} value={pm} onChange={e=>setPm(e.target.value)}>
-              <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
+              <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option><option>Tomi</option>
             </select>
           </label>
           <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha evento (DD/MM/YYYY)</span>
@@ -1479,7 +1479,18 @@ function Facturacion({data,mail,onRefresh}){
     }
     return ''
   }
-  const presusConPendiente=presus.map(p=>{const facturado=fc.filter(f=>String(f['N° Presupuesto'])===String(p['Columna 1'])).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0);const neto=parseMonto(p['Precio Final']);return{...p,facturado,neto,pendiente:neto-facturado,completo:facturado>=neto}}).filter(p=>!p.completo&&p.neto>0)
+  const presusConPendiente=presus.map(p=>{
+    // Sumar SOLO facturas no anuladas. Comparar SIN IVA para que coincida con el monto del presu.
+    const facturasActivas = fc.filter(f =>
+      String(f['N° Presupuesto']||'').trim() === String(p['Columna 1']||'').trim() &&
+      !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')
+    )
+    const facturado = facturasActivas.reduce((s,f) => s + (parseMonto(f['Precio SIN IVA']) || parseMonto(f['Precio FINAL'])), 0)
+    const neto = parseMonto(p['Precio Final'])
+    // Considera completo si está facturado >= 95% del neto (tolerancia por redondeo)
+    const completo = neto > 0 && facturado >= (neto * 0.95)
+    return {...p, facturado, neto, pendiente: Math.max(0, neto-facturado), completo, cantFacturas: facturasActivas.length}
+  }).filter(p => !p.completo && p.neto > 0)
   const presusFiltrados=presusConPendiente.filter(p=>!pQuery||[String(p['Columna 1']),p['Proyecto']||'',p['Cliente']||'',p['Agencia']||''].some(v=>v.toLowerCase().includes(pQuery.toLowerCase())))
   const calcNeto=()=>{if(!presuSel)return 0;return montoTipo==='total'?presuSel.pendiente:parseFloat(montoCustom)||0}
   const calcIvaF=()=>formData.conIVA?Math.round(calcNeto()*0.21):0
@@ -3007,7 +3018,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Fecha presupuesto</span><input style={inp} type="date" value={form.fp} onChange={e=>setF('fp',e.target.value)}/></label>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
               <select style={inp} value={form.pm} onChange={e=>setF('pm',e.target.value)}>
-                <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option>
+                <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option><option>Tomi</option>
               </select>
             </label>
           </div>
