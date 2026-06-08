@@ -97,21 +97,69 @@ const prettifySvc = s => {
 }
 const cleanSvc = prettifySvc
 
+// Cláusulas predefinidas según tipo de presupuesto
+const CLAUSULAS_PROD = {
+  validez: 'Este presupuesto es válido por un plazo de 5 días hábiles a partir de la fecha de emisión. Una vez transcurrido este período, los costos y la disponibilidad para el proyecto podrían variar y requerirán una reevaluación.',
+  pago: [
+    {titulo:'Anticipo 50%', texto:'Se abona a la aceptación del presupuesto para iniciar el trabajo y reservar el tiempo en nuestra agenda.'},
+    {titulo:'Pago Intermedio 30%', texto:'Se abona al completar la fase de diseño o animación y antes de comenzar la etapa de correcciones provistas por el cliente.'},
+    {titulo:'Pago Final 20%', texto:'Se abona contra entrega del material final y antes de la transferencia de los derechos de uso o archivos fuente.'},
+  ],
+  clausulas: [
+    {titulo:'1. Cláusula de Retraso en el Pago (Morosidad)', texto:'El incumplimiento en las fechas de pago acordadas puede generar un cargo por mora del 15% mensual sobre el monto pendiente, calculado a partir del día siguiente a la fecha de vencimiento. Además, cualquier retraso en el pago de una fase detendrá automáticamente el avance del proyecto hasta que el pago se regularice.'},
+    {titulo:'2. Cláusula de Derechos de Propiedad y Explotación', texto:'La propiedad intelectual y los derechos de explotación del material creado (incluidos videos finales, diseños y archivos fuente) seguirán siendo propiedad de SOMOS MAGMA S.R.L. hasta que el pago total del proyecto, incluyendo impuestos y posibles cargos por mora, haya sido recibido en su totalidad. La entrega del material final no realizará una cesión completa de la propiedad del pago del mismo. Asimismo, se reservan los derechos de uso del resultado del proyecto a fines publicitarios como portafolio y promociones propias de SOMOS MAGMA S.R.L. salvo petición indicada por el cliente.'},
+    {titulo:'3. Cláusula de Revisiones y Cambios', texto:'El presupuesto incluye un máximo de 3 rondas de revisión por proyecto. Las revisiones adicionales a las incluidas serán cotizadas y facturadas a una tarifa de 10 USD por hora/revisión, o se incluirán en un nuevo presupuesto acordado previamente.'},
+    {titulo:'4. Cláusula de Cancelación del Proyecto', texto:'En caso de que el cliente decida cancelar el proyecto por razones ajenas a nuestro control, los pagos realizados hasta la fecha (incluido el anticipo) no son reembolsables y serán retenidos en concepto de compensación por el tiempo y recursos invertidos.'},
+  ],
+}
+
+const CLAUSULAS_COBERTURA = {
+  validez: 'Este presupuesto es válido por 20 días desde la fecha de emisión.',
+  pago: [
+    {titulo:'Reserva 50%', texto:'Para confirmar la reserva de la fecha se deberá abonar el 50% del valor total del servicio.'},
+    {titulo:'Pago Final 50%', texto:'El 50% restante deberá abonarse hasta 7 días antes del evento.'},
+  ],
+  clausulas: [
+    {titulo:'1. Entrega del material', texto:'Incluye fotografías editadas en alta resolución y/o video resumen según servicio contratado. Todo el material se entrega de manera digital. No incluye archivos crudos ni editables salvo acuerdo expreso por escrito.'},
+    {titulo:'2. Revisiones', texto:'El video incluye hasta dos rondas de correcciones sin costo adicional. Cambios adicionales podrán presupuestarse por separado.'},
+    {titulo:'3. Plazos de entrega', texto:'Las fotografías y/o video serán entregados en formato digital dentro de los plazos acordados previamente entre las partes.'},
+    {titulo:'4. Cancelación', texto:'En caso de cancelación por parte del cliente, el importe abonado para la reserva de fecha no será reembolsable, ya que la fecha queda bloqueada exclusivamente para el evento.'},
+    {titulo:'5. Uso del material', texto:'Somos Magma podrá utilizar fotografías y fragmentos del material realizado con fines de portfolio, sitio web y redes sociales. Si preferís mantener el material privado, comunicalo por escrito previamente.'},
+  ],
+}
+
+// Carga una imagen del public y devuelve dataURL (base64). null si falla.
+const loadImageAsDataURL = async (url) => {
+  try {
+    const r = await fetch(url)
+    if (!r.ok) return null
+    const blob = await r.blob()
+    return await new Promise(resolve => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result)
+      fr.onerror = () => resolve(null)
+      fr.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
 export default function Presupuesto() {
   const hoy = new Date().toISOString().slice(0,10)
   const [form, setForm] = useState({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
-    servicios:[''], observaciones:'', precioTotal:'',
+    servicios:[''], observaciones:'', descripcion:'', precioTotal:'',
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'7',
+    tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
   })
-  const [validez, setValidez] = useState(addDays(hoy, 20))
-  const [clausulas, setClausulas] = useState([
-    'No se entregan crudos ni archivos editables salvo acuerdo expreso por escrito.',
-    'Se incluyen hasta dos rondas de correcciones sin costo. Cambios adicionales tendrán un costo a convenir. Las revisiones deben solicitarse dentro de los 7 días posteriores a la primera entrega.',
-    'El pago debe realizarse dentro del plazo indicado. En caso de demora, Somos Magma se reserva el derecho de pausar la entrega hasta regularizar el pago.',
-    'Este presupuesto tiene validez hasta el [fecha]. Pasada esa fecha los precios podrán ser revisados.',
-    'El material es para uso exclusivo del cliente indicado. Somos Magma se reserva el derecho de utilizarlo con fines de portfolio, salvo acuerdo en contrario.',
-  ])
+  const [validez, setValidez] = useState(addDays(hoy, 5))
+  // Cláusulas editables — se reinician cuando cambia el tipo
+  const tipoActual = form.tipoPresu
+  const tplBase = tipoActual === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA
+  const [clausulas, setClausulas] = useState(tplBase)
+  useEffect(() => {
+    setClausulas(form.tipoPresu === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tipoPresu])
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
 
@@ -175,176 +223,255 @@ export default function Presupuesto() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
-      const W=210, H=297, M=22
+      const W=210, H=297, M=18
       let y=0
 
-      // ====== FONDO BLANCO + BANDA SUPERIOR DE COLOR ======
+      // Cargar assets (logo + líneas onduladas) en paralelo
+      const [logoImg, linea1, linea2, linea3, linea4] = await Promise.all([
+        loadImageAsDataURL('/branding/logo-magma.png'),
+        loadImageAsDataURL('/branding/linea-1.png'),
+        loadImageAsDataURL('/branding/linea-2.png'),
+        loadImageAsDataURL('/branding/linea-3.png'),
+        loadImageAsDataURL('/branding/linea-4.png'),
+      ])
+
+      // ====== FONDO BLANCO ======
       doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
-      doc.setFillColor(206,38,55); doc.rect(0,0,W,6,'F')
-      doc.setFillColor(21,67,248); doc.rect(W*0.55,0,W*0.45,6,'F')
 
-      // ====== HEADER LOGO ======
-      y=24
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120)
-      doc.text('somos', M, y-7)
-      doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(206,38,55)
-      doc.text('MAGMA', M, y)
-      const mw = doc.getTextWidth('MAGMA')
-      doc.setFontSize(18); doc.setTextColor(21,67,248)
-      doc.text('//', M+mw+3, y)
-
-      // Datos arriba derecha
-      const rX = W-M
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(130,130,130)
-      doc.text('Buenos Aires · Argentina', rX, y-10, {align:'right'})
-      doc.text('hola@somosmagma.com', rX, y-5, {align:'right'})
-      doc.text('somosmagma.com', rX, y, {align:'right'})
-
-      // ====== TÍTULO BIG ======
-      y+=22
-      doc.setFont('helvetica','bold'); doc.setFontSize(36); doc.setTextColor(20,20,20)
-      doc.text('Presupuesto', M, y)
-      // Pequeño número junto al título
-      const titleW = doc.getTextWidth('Presupuesto')
-      doc.setFontSize(11); doc.setTextColor(206,38,55); doc.setFont('helvetica','normal')
-      doc.text('N° '+(form.nro||'___'), M+titleW+5, y-2)
-      doc.setFontSize(9); doc.setTextColor(130,130,130)
-      doc.text(toDisplay(form.fechaEmision), M+titleW+5, y+4)
-
-      // Subtítulo
-      y+=10; doc.setFontSize(13); doc.setTextColor(80,80,80); doc.setFont('helvetica','normal')
-      doc.text('Cobertura audiovisual', M, y)
-
-      // ====== CAJA DATOS DEL CLIENTE (con fondo gris muy claro) ======
-      y+=14
-      const filas = [
-        ['Cliente', form.cliente],
-        form.agencia ? ['Agencia', form.agencia] : null,
-        form.proyecto ? ['Proyecto', form.proyecto] : null,
-        form.fechaEvento ? ['Fecha del evento', form.fechaEvento] : null,
-      ].filter(Boolean)
-      const filaH = 9
-      const boxH = filas.length * filaH + 10
-      doc.setFillColor(248,248,248); doc.roundedRect(M, y, W-M*2, boxH, 2, 2, 'F')
-      doc.setDrawColor(206,38,55); doc.setLineWidth(0.8); doc.line(M, y, M, y+boxH)  // borde izq rojo
-      let yBox = y+9
-      for(const [k,v] of filas){
-        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(140,140,140); doc.text(k.toUpperCase(), M+5, yBox)
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(30,30,30); doc.text(String(v), M+50, yBox)
-        yBox += filaH
-      }
-      y += boxH+12
-
-      // ====== SERVICIOS ======
-      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
-      doc.text('SERVICIOS INCLUIDOS', M, y)
-      const swLine = doc.getTextWidth('SERVICIOS INCLUIDOS')
-      doc.setDrawColor(220,220,220); doc.setLineWidth(0.3); doc.line(M+swLine+4, y-1, W-M, y-1)
-      y+=8
-
-      const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
-      const svcsMap = {}
-      const ordenInsercion = []
-      for(const s of svcsLimpios){
-        if (!svcsMap[s]) { svcsMap[s] = 0; ordenInsercion.push(s) }
-        svcsMap[s]++
-      }
-      for(let idx=0; idx<ordenInsercion.length; idx++){
-        const s = ordenInsercion[idx]
-        const cant = svcsMap[s]
-        // Fondo alternado para legibilidad
-        if (idx % 2 === 0) { doc.setFillColor(252,252,252); doc.rect(M-1, y-4.5, W-M*2+2, 7.5, 'F') }
-        // Bullet en cuadrado de color
-        doc.setFillColor(21,67,248); doc.rect(M, y-3, 1.8, 1.8, 'F')
-        doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(50,50,50)
-        const lines = doc.splitTextToSize(s, W-M*2-15)
-        doc.text(lines, M+5, y)
-        if (cant > 1) {
-          doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
-          doc.text('×'+cant, W-M, y, {align:'right'})
-        }
-        y += lines.length * 5.5 + 1
-      }
-
-      if(form.observaciones){
-        y+=6
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(140,140,140)
-        doc.text('OBSERVACIONES', M, y); y+=5
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(80,80,80)
-        const obs = doc.splitTextToSize(form.observaciones, W-M*2)
-        doc.text(obs, M, y); y+=obs.length*5
-      }
-
-      y+=10
-
-      // ====== CAJA TOTAL (destacado) ======
-      const totH = form.pagoAlt && parseFloat(form.pagoAltMonto) > 0 ? 30 : 22
-      doc.setFillColor(20,20,20); doc.roundedRect(M, y, W-M*2, totH, 3, 3, 'F')
-
-      // Opción pago a plazo (arriba del total si existe)
-      if(form.pagoAlt && parseFloat(form.pagoAltMonto) > 0){
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(160,160,160)
-        doc.text('Pago a '+form.pagoAltDias+' días', M+6, y+8)
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(220,220,220)
-        doc.text('$'+fmt$(form.pagoAltMonto)+' + IVA', W-M-6, y+8, {align:'right'})
-        // Línea separadora interna
-        doc.setDrawColor(50,50,50); doc.setLineWidth(0.3); doc.line(M+6, y+11.5, W-M-6, y+11.5)
-        // Total contado
-        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(255,255,255)
-        doc.text('Total contado ('+form.plazo+' días)', M+6, y+21)
-        doc.setFontSize(16); doc.setTextColor(206,38,55)
-        doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M-6, y+21, {align:'right'})
+      // ====== HEADER: LOGO IZQ + DATOS DER ======
+      // Logo grande arriba a la izquierda
+      if (logoImg) {
+        try { doc.addImage(logoImg, 'PNG', M, 14, 48, 22) } catch(e) {}
       } else {
-        doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255)
-        doc.text('Valor total', M+6, y+14)
-        doc.setFontSize(8); doc.setTextColor(160,160,160); doc.setFont('helvetica','normal')
-        doc.text('Pago a '+form.plazo+' días · IVA por fuera', M+6, y+18.5)
-        doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(206,38,55)
-        doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M-6, y+15, {align:'right'})
-      }
-      y += totH+12
-
-      // ====== TÉRMINOS Y CONDICIONES (compacto, fondo gris claro) ======
-      const tcTitulos = ['1. Entrega de material','2. Revisiones','3. Pago','4. Validez','5. Derechos de uso']
-      const tc = tcTitulos.map((t,i) => {
-        let texto = clausulas[i] || ''
-        if(i===3) texto = texto.replace('[fecha]', toDisplay(validez))
-        return [t, texto]
-      })
-
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
-      doc.text('TÉRMINOS Y CONDICIONES', M, y)
-      const tcw = doc.getTextWidth('TÉRMINOS Y CONDICIONES')
-      doc.setDrawColor(220,220,220); doc.setLineWidth(0.3); doc.line(M+tcw+4, y-1, W-M, y-1)
-      y+=7
-
-      doc.setFontSize(7.5)
-      for(const [titulo, texto] of tc){
-        doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60)
-        doc.text(titulo+': ', M, y)
-        const tw = doc.getTextWidth(titulo+': ')
-        doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100)
-        const ls = doc.splitTextToSize(texto, W-M*2-tw)
-        if(ls[0]) doc.text(ls[0], M+tw, y)
-        for(let i=1;i<ls.length;i++){ y+=3.8; doc.text(ls[i], M, y) }
-        y+=5.5
+        // Fallback texto si no se cargó la imagen
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80)
+        doc.text('somos', M, 22)
+        doc.setFont('helvetica','bold'); doc.setFontSize(34); doc.setTextColor(0,0,0)
+        doc.text('MAGMA', M, 33)
+        const mw = doc.getTextWidth('MAGMA')
+        doc.setFontSize(22); doc.setTextColor(0,0,0)
+        doc.text('!!', M+mw+2, 31)
       }
 
-      // ====== FOOTER ======
-      // Banda inferior color
-      doc.setFillColor(206,38,55); doc.rect(0,H-6,W*0.45,6,'F')
-      doc.setFillColor(21,67,248); doc.rect(W*0.45,H-6,W*0.55,6,'F')
+      // Mini banda de color al lado de los datos (como en el casamiento)
+      doc.setFillColor(21,67,248); doc.rect(W-M-38, 14, 13, 1.2, 'F')
+      doc.setFillColor(206,38,55); doc.rect(W-M-24, 14, 11, 1.2, 'F')
 
-      const fY = H-12
-      doc.setFontSize(8)
-      doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120); doc.text('somos ', M, fY)
-      const sw=doc.getTextWidth('somos ')
-      doc.setFont('helvetica','bold'); doc.setTextColor(206,38,55); doc.text('MAGMA', M+sw, fY)
-      const mw2=doc.getTextWidth('MAGMA')
-      doc.setTextColor(21,67,248); doc.text(' //', M+sw+mw2, fY)
-      doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120)
-      doc.text(' · Productora audiovisual · Buenos Aires', M+sw+mw2+5, fY)
-      doc.setTextColor(21,67,248); doc.text('somosmagma.com', W-M, fY, {align:'right'})
+      // Datos arriba derecha en monospace estilo Courier
+      const rX = W-M
+      doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
+      doc.text('Somos Magma', rX, 19, {align:'right'})
+      doc.text('Buenos Aires', rX, 23.5, {align:'right'})
+      doc.text(toDisplay(form.fechaEmision), rX, 28, {align:'right'})
+      doc.text('Presu. N°'+(form.nro||'___'), rX, 32.5, {align:'right'})
+
+      y = 42
+
+      // Línea decorativa ondulada (debajo del header)
+      doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
+
+      // ====== TÍTULO ======
+      y += 11
+      doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(20,20,20)
+      const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
+      doc.text(titulo, M, y)
+
+      // Garabato ondulado debajo del título (línea-3 o un path)
+      if (linea3) {
+        try { doc.addImage(linea3, 'PNG', M, y+1.5, 40, 4) } catch(e) {}
+      } else {
+        // Fallback gradient line
+        const lw = 38
+        for(let i=0;i<=80;i++){
+          const t=i/80
+          const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7)
+          doc.line(M+lw*(i/80), y+2.5, M+lw*((i+1)/80), y+2.5)
+        }
+      }
+
+      // Subtítulo (proyecto)
+      if (form.proyecto) {
+        y += 11
+        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80)
+        doc.text(form.proyecto, M, y)
+      } else {
+        y += 4
+      }
+
+      // ====== DATOS CLIENTE (una línea, separados por |) ======
+      y += 12
+      // Caja con borde fino
+      doc.setDrawColor(20,20,20); doc.setLineWidth(0.4)
+      doc.rect(M, y-5, W-M*2, 9)
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
+      const partes = [
+        `Cliente: ${form.cliente}`,
+        form.agencia ? `Agencia: ${form.agencia}` : null,
+        `Fecha: ${form.fechaEvento || toDisplay(form.fechaEmision)}`,
+      ].filter(Boolean)
+      doc.text(partes.join('   |   '), M+4, y+1)
+
+      y += 18
+
+      // ====== DESCRIPCIÓN + SERVICIOS ======
+      // Título del servicio principal
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(20,20,20)
+      const tituloServ = form.proyecto || 'Servicio audiovisual'
+      doc.text(tituloServ, M, y)
+      y += 7
+
+      // Descripción larga si la hay
+      if (form.descripcion) {
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,50)
+        const desc = doc.splitTextToSize(form.descripcion, W-M*2)
+        doc.text(desc, M, y); y += desc.length*5.2 + 4
+      }
+
+      // Lista de servicios incluidos
+      const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
+      if (svcsLimpios.length > 0) {
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,20,20)
+        doc.text('Incluye:', M, y); y += 6
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,50)
+        const svcsMap = {}
+        const orden = []
+        for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
+        for (const s of orden) {
+          const cant = svcsMap[s]
+          const label = cant > 1 ? `${cant} ${s}` : s
+          doc.setFillColor(20,20,20); doc.circle(M+2, y-1.3, 0.9, 'F')
+          const lines = doc.splitTextToSize(label, W-M*2-8)
+          doc.text(lines, M+6, y)
+          y += lines.length * 5.2
+        }
+        y += 4
+      }
+
+      // Observaciones (notas adicionales)
+      if (form.observaciones) {
+        y += 3
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70,70,70)
+        const obs = doc.splitTextToSize(form.observaciones, W-M*2)
+        doc.text(obs, M, y); y += obs.length*4.8 + 3
+      }
+
+      y += 6
+
+      // ====== VALOR TOTAL ======
+      // Línea con puntos y precio al final
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(0,0,0)
+      doc.text('Valor total', M, y)
+      const totalLabelW = doc.getTextWidth('Valor total')
+      const precioStr = '$' + fmt$(form.precioTotal) + ' + IVA'
+      const precioW = doc.getTextWidth(precioStr)
+      // Underscore largo entre label y precio
+      doc.setLineWidth(0.5); doc.setDrawColor(0,0,0)
+      doc.line(M+totalLabelW+3, y, W-M-precioW-2, y)
+      doc.text(precioStr, W-M, y, {align:'right'})
+
+      // Línea ondulada de color debajo
+      y += 4
+      if (linea1) {
+        try { doc.addImage(linea1, 'PNG', M, y, W-M*2, 3.5) } catch(e) {}
+      } else {
+        const lw = W-M*2
+        for(let i=0;i<=200;i++){
+          const t=i/200
+          const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7)
+          doc.line(M+lw*(i/200), y+1.5, M+lw*((i+1)/200), y+1.5)
+        }
+      }
+
+      // ====== PÁGINA 2: TÉRMINOS Y CONDICIONES (estilo Ferrero) ======
+      doc.addPage()
+      doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
+
+      // Header igual que página 1
+      if (logoImg) {
+        try { doc.addImage(logoImg, 'PNG', M, 14, 48, 22) } catch(e) {}
+      } else {
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80)
+        doc.text('somos', M, 22)
+        doc.setFont('helvetica','bold'); doc.setFontSize(34); doc.setTextColor(0,0,0)
+        doc.text('MAGMA', M, 33)
+        const mw = doc.getTextWidth('MAGMA')
+        doc.setFontSize(22)
+        doc.text('!!', M+mw+2, 31)
+      }
+      doc.setFillColor(21,67,248); doc.rect(W-M-38, 14, 13, 1.2, 'F')
+      doc.setFillColor(206,38,55); doc.rect(W-M-24, 14, 11, 1.2, 'F')
+      doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
+      doc.text('Somos Magma', W-M, 19, {align:'right'})
+      doc.text('Buenos Aires', W-M, 23.5, {align:'right'})
+      doc.text(toDisplay(form.fechaEmision), W-M, 28, {align:'right'})
+      doc.text('Presu. N°'+(form.nro||'___'), W-M, 32.5, {align:'right'})
+
+      y = 42
+      doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
+
+      // Título secundario (mismo proyecto)
+      y += 11
+      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,20,20)
+      doc.text(titulo, M, y)
+      if (linea3) { try { doc.addImage(linea3, 'PNG', M, y+1.5, 32, 3) } catch(e) {} }
+      y += 16
+
+      // Caja datos cliente compacta
+      doc.setDrawColor(20,20,20); doc.setLineWidth(0.4)
+      doc.rect(M, y-5, W-M*2, 8)
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(20,20,20)
+      doc.text(partes.join('   |   '), M+4, y+0.5)
+      y += 13
+
+      // CONDICIONES GENERALES
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(206,38,55)
+      doc.text('CONDICIONES GENERALES (Por favor leer)', M, y); y += 6
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(40,40,40)
+      const validezTxt = doc.splitTextToSize(clausulas.validez, W-M*2)
+      doc.text(validezTxt, M, y); y += validezTxt.length*5 + 6
+
+      // Condiciones de Pago
+      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,20,20)
+      doc.text('Condiciones de Pago', M, y); y += 5
+      for (const p of clausulas.pago) {
+        doc.setFillColor(20,20,20); doc.circle(M+2, y+0.5, 0.9, 'F')
+        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
+        doc.text(p.titulo, M+6, y+1.5)
+        y += 5
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
+        const ls = doc.splitTextToSize(p.texto, W-M*2)
+        doc.text(ls, M, y); y += ls.length*4.5 + 3
+      }
+      y += 3
+
+      // CLÁUSULAS PARA EL COBRO Y LA ENTREGA
+      const tituloClausulas = form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'TÉRMINOS Y CONDICIONES DEL SERVICIO'
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(206,38,55)
+      doc.text(tituloClausulas, M, y); y += 7
+
+      for (const c of clausulas.clausulas) {
+        // Auto-page-break si nos quedamos cortos
+        if (y > H - 30) {
+          doc.addPage(); doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F'); y = 20
+        }
+        doc.setFillColor(20,20,20); doc.circle(M+2, y+0.5, 0.9, 'F')
+        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
+        doc.text(c.titulo, M+6, y+1.5)
+        y += 5
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
+        const ls = doc.splitTextToSize(c.texto, W-M*2)
+        doc.text(ls, M, y); y += ls.length*4.5 + 3
+      }
+
+      // Page numbers
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i=1; i<=pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120)
+        doc.text(String(i), W-M, H-8, {align:'right'})
+      }
 
       doc.save(`presu-${form.nro||'borrador'}-${(form.cliente||'cliente').toLowerCase().replace(/\s+/g,'-')}.pdf`)
     } catch(e){ alert('Error: '+e.message) }
@@ -375,13 +502,23 @@ export default function Presupuesto() {
         <div style={{display:'grid',gap:14}}>
 
           <div style={S.card}>
-            <div style={{...S.sec,color:'#CE2637'}}>Datos del presupuesto</div>
+            <div style={{...S.sec,color:'#CE2637'}}>Tipo de presupuesto</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+              <button onClick={()=>setF('tipoPresu','cobertura')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='cobertura'?'#1543F8':'#2A2A2A'),background:form.tipoPresu==='cobertura'?'#1543F818':'transparent',color:form.tipoPresu==='cobertura'?'#1543F8':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
+                <div style={{fontWeight:600,marginBottom:3}}>📸 Cobertura / Evento</div>
+                <div style={{fontSize:10,color:form.tipoPresu==='cobertura'?'#1543F8':'#555',lineHeight:1.4}}>Fotografía, video, evento corporativo, casamiento. Pago 50/50. Validez 20 días.</div>
+              </button>
+              <button onClick={()=>setF('tipoPresu','produccion')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='produccion'?'#CE2637':'#2A2A2A'),background:form.tipoPresu==='produccion'?'#CE263718':'transparent',color:form.tipoPresu==='produccion'?'#CE2637':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
+                <div style={{fontWeight:600,marginBottom:3}}>🎬 Producción Audiovisual</div>
+                <div style={{fontSize:10,color:form.tipoPresu==='produccion'?'#CE2637':'#555',lineHeight:1.4}}>Animación, motion, IA, post-producción larga. Pago 50/30/20. Validez 5 días hábiles.</div>
+              </button>
+            </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <label><span style={S.lbl}>N° presupuesto</span><input style={S.inp} value={form.nro} onChange={e=>setF('nro',e.target.value)} placeholder="ej: 944a"/></label>
               <label><span style={S.lbl}>Fecha de emisión</span><input style={S.inp} type="date" value={form.fechaEmision} onChange={e=>setF('fechaEmision',e.target.value)}/></label>
             </div>
             <div style={{marginTop:8,padding:'7px 10px',background:'#0D0D0D',borderRadius:6,fontSize:11,color:'#555'}}>
-              Válido hasta: <span style={{color:'#1D9E75',fontFamily:'monospace'}}>{toDisplay(validez)}</span><span style={{color:'#333'}}> (20 días automático)</span>
+              Validez: <span style={{color:'#1D9E75'}}>{form.tipoPresu==='produccion'?'5 días hábiles':'20 días'}</span> · Cambia automáticamente con el tipo de presupuesto
             </div>
           </div>
 
@@ -411,9 +548,15 @@ export default function Presupuesto() {
             </div>
           </div>
 
+          {form.tipoPresu==='produccion'&&<div style={S.card}>
+            <div style={{...S.sec,color:'#CE2637'}}>Descripción del proyecto</div>
+            <div style={{fontSize:11,color:'#555',marginBottom:8}}>Texto largo descriptivo del proyecto. Aparece arriba de la lista de "Incluye:" en el PDF.</div>
+            <textarea style={{...S.inp,minHeight:90,resize:'vertical',fontSize:12,lineHeight:1.5}} value={form.descripcion} onChange={e=>setF('descripcion',e.target.value)} placeholder="Ej: Producción y postproducción de pieza audiovisual corporativa de aproximadamente 5 minutos de duración, desarrollada a partir de assets, referencias visuales, motions y guión provistos por el cliente."/>
+          </div>}
+
           <div style={S.card}>
-            <div style={{...S.sec,color:'#555'}}>Observaciones</div>
-            <textarea style={{...S.inp,minHeight:70,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Evento de 3 días Hotel AMBA · 1 día 9am a 18hs 21hs a 24hs · 2 día..."/>
+            <div style={{...S.sec,color:'#555'}}>Observaciones / notas extra</div>
+            <textarea style={{...S.inp,minHeight:60,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Evento de 3 días Hotel AMBA · 1 día 9am a 18hs 21hs a 24hs · 2 día..."/>
           </div>
 
           <div style={S.card}>
@@ -458,23 +601,32 @@ export default function Presupuesto() {
 
           <div style={S.card}>
             <div style={{...S.sec,color:'#555'}}>Términos y condiciones</div>
-            <div style={{fontSize:11,color:'#555',marginBottom:12}}>Podés editar cada cláusula antes de generar el PDF.</div>
-            {[
-              '1. Entrega de material',
-              '2. Revisiones',
-              '3. Pago',
-              '4. Validez',
-              '5. Derechos de uso',
-            ].map((titulo,i)=>(
-              <div key={i} style={{marginBottom:10}}>
-                <div style={{fontSize:11,color:'#9635AB',fontWeight:600,marginBottom:4}}>{titulo}</div>
-                <textarea
-                  style={{...S.inp,minHeight:52,resize:'vertical',fontSize:11}}
-                  value={i===3?clausulas[i].replace('[fecha]',toDisplay(validez)):clausulas[i]}
-                  onChange={e=>{const n=[...clausulas];n[i]=e.target.value;setClausulas(n)}}
-                />
-              </div>
-            ))}
+            <div style={{fontSize:11,color:'#555',marginBottom:12}}>Editá si necesitás. Si cambiás el tipo de presupuesto arriba, se reinicia con el template default.</div>
+
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:'#CE2637',fontWeight:600,marginBottom:4}}>Validez (condiciones generales)</div>
+              <textarea style={{...S.inp,minHeight:48,resize:'vertical',fontSize:11}} value={clausulas.validez} onChange={e=>setClausulas(c=>({...c,validez:e.target.value}))}/>
+            </div>
+
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:'#CE2637',fontWeight:600,marginBottom:6}}>Condiciones de Pago ({clausulas.pago.length} ítems)</div>
+              {clausulas.pago.map((p,i)=>(
+                <div key={i} style={{marginBottom:8,padding:'8px 10px',background:'#0D0D0D',borderRadius:6,border:'0.5px solid #1A1A1A'}}>
+                  <input style={{...S.inp,fontSize:11,fontWeight:600,marginBottom:6}} value={p.titulo} onChange={e=>{const n=[...clausulas.pago];n[i]={...n[i],titulo:e.target.value};setClausulas(c=>({...c,pago:n}))}}/>
+                  <textarea style={{...S.inp,minHeight:40,resize:'vertical',fontSize:11}} value={p.texto} onChange={e=>{const n=[...clausulas.pago];n[i]={...n[i],texto:e.target.value};setClausulas(c=>({...c,pago:n}))}}/>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <div style={{fontSize:11,color:'#CE2637',fontWeight:600,marginBottom:6}}>Cláusulas ({clausulas.clausulas.length} ítems)</div>
+              {clausulas.clausulas.map((c,i)=>(
+                <div key={i} style={{marginBottom:8,padding:'8px 10px',background:'#0D0D0D',borderRadius:6,border:'0.5px solid #1A1A1A'}}>
+                  <input style={{...S.inp,fontSize:11,fontWeight:600,marginBottom:6}} value={c.titulo} onChange={e=>{const n=[...clausulas.clausulas];n[i]={...n[i],titulo:e.target.value};setClausulas(cl=>({...cl,clausulas:n}))}}/>
+                  <textarea style={{...S.inp,minHeight:52,resize:'vertical',fontSize:11}} value={c.texto} onChange={e=>{const n=[...clausulas.clausulas];n[i]={...n[i],texto:e.target.value};setClausulas(cl=>({...cl,clausulas:n}))}}/>
+                </div>
+              ))}
+            </div>
           </div>
 
           <button onClick={generarPDF} disabled={generando||!form.cliente||!form.precioTotal}
