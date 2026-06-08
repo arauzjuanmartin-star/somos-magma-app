@@ -175,66 +175,72 @@ export default function Presupuesto() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
-      const W=210, H=297, M=20
+      const W=210, H=297, M=22
       let y=0
 
-      doc.setFillColor(9,9,9); doc.rect(0,0,W,H,'F')
+      // ====== FONDO BLANCO + BANDA SUPERIOR DE COLOR ======
+      doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
+      doc.setFillColor(206,38,55); doc.rect(0,0,W,6,'F')
+      doc.setFillColor(21,67,248); doc.rect(W*0.55,0,W*0.45,6,'F')
 
-      // ====== HEADER ======
-      y=28
-      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140)
+      // ====== HEADER LOGO ======
+      y=24
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120)
       doc.text('somos', M, y-7)
-      doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.setTextColor(206,38,55)
+      doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(206,38,55)
       doc.text('MAGMA', M, y)
+      const mw = doc.getTextWidth('MAGMA')
       doc.setFontSize(18); doc.setTextColor(21,67,248)
-      doc.text('//', M+44, y)
+      doc.text('//', M+mw+3, y)
 
+      // Datos arriba derecha
       const rX = W-M
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(150,150,150)
-      doc.text('Somos Magma', rX, y-10, {align:'right'})
-      doc.text('Buenos Aires', rX, y-5, {align:'right'})
-      doc.text(toDisplay(form.fechaEmision), rX, y, {align:'right'})
-      doc.setTextColor(206,38,55); doc.setFont('helvetica','bold'); doc.setFontSize(9)
-      doc.text('Presu. N° '+(form.nro||'___'), rX, y+5, {align:'right'})
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(130,130,130)
+      doc.text('Buenos Aires · Argentina', rX, y-10, {align:'right'})
+      doc.text('hola@somosmagma.com', rX, y-5, {align:'right'})
+      doc.text('somosmagma.com', rX, y, {align:'right'})
 
-      y+=14
-      const lineW = W-M*2
-      for(let i=0;i<=120;i++){
-        const t = i/120
-        const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-        doc.setDrawColor(r,g,b); doc.setLineWidth(0.5)
-        doc.line(M+lineW*t, y, M+lineW*((i+1)/120), y)
-      }
-
-      // ====== TÍTULO ======
-      y+=15
-      doc.setFont('helvetica','bold'); doc.setFontSize(32); doc.setTextColor(255,255,255)
+      // ====== TÍTULO BIG ======
+      y+=22
+      doc.setFont('helvetica','bold'); doc.setFontSize(36); doc.setTextColor(20,20,20)
       doc.text('Presupuesto', M, y)
-      y+=10; doc.setFontSize(15); doc.setTextColor(206,38,55); doc.setFont('helvetica','normal')
-      doc.text('Cobertura Audiovisual', M, y)
+      // Pequeño número junto al título
+      const titleW = doc.getTextWidth('Presupuesto')
+      doc.setFontSize(11); doc.setTextColor(206,38,55); doc.setFont('helvetica','normal')
+      doc.text('N° '+(form.nro||'___'), M+titleW+5, y-2)
+      doc.setFontSize(9); doc.setTextColor(130,130,130)
+      doc.text(toDisplay(form.fechaEmision), M+titleW+5, y+4)
 
-      // ====== DATOS DEL CLIENTE ======
-      y+=16
+      // Subtítulo
+      y+=10; doc.setFontSize(13); doc.setTextColor(80,80,80); doc.setFont('helvetica','normal')
+      doc.text('Cobertura audiovisual', M, y)
+
+      // ====== CAJA DATOS DEL CLIENTE (con fondo gris muy claro) ======
+      y+=14
       const filas = [
         ['Cliente', form.cliente],
         form.agencia ? ['Agencia', form.agencia] : null,
-        form.fechaEvento ? ['Evento', form.fechaEvento] : null,
         form.proyecto ? ['Proyecto', form.proyecto] : null,
+        form.fechaEvento ? ['Fecha del evento', form.fechaEvento] : null,
       ].filter(Boolean)
+      const filaH = 9
+      const boxH = filas.length * filaH + 10
+      doc.setFillColor(248,248,248); doc.roundedRect(M, y, W-M*2, boxH, 2, 2, 'F')
+      doc.setDrawColor(206,38,55); doc.setLineWidth(0.8); doc.line(M, y, M, y+boxH)  // borde izq rojo
+      let yBox = y+9
       for(const [k,v] of filas){
-        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(21,67,248)
-        doc.text(k, M, y)
-        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(230,230,230)
-        doc.text(String(v), M+30, y)
-        y+=7
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(140,140,140); doc.text(k.toUpperCase(), M+5, yBox)
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(30,30,30); doc.text(String(v), M+50, yBox)
+        yBox += filaH
       }
-
-      y+=4; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y)
+      y += boxH+12
 
       // ====== SERVICIOS ======
-      y+=12
-      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(206,38,55)
-      doc.text('SERVICIOS', M, y); y+=8
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
+      doc.text('SERVICIOS INCLUIDOS', M, y)
+      const swLine = doc.getTextWidth('SERVICIOS INCLUIDOS')
+      doc.setDrawColor(220,220,220); doc.setLineWidth(0.3); doc.line(M+swLine+4, y-1, W-M, y-1)
+      y+=8
 
       const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
       const svcsMap = {}
@@ -243,83 +249,101 @@ export default function Presupuesto() {
         if (!svcsMap[s]) { svcsMap[s] = 0; ordenInsercion.push(s) }
         svcsMap[s]++
       }
-      for(const s of ordenInsercion){
+      for(let idx=0; idx<ordenInsercion.length; idx++){
+        const s = ordenInsercion[idx]
         const cant = svcsMap[s]
-        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(220,220,220)
-        const label = cant > 1 ? `${cant}x ${s}` : s
-        doc.setFillColor(206,38,55); doc.circle(M+2, y-1.3, 0.9, 'F')
-        const lines = doc.splitTextToSize(label, W-M*2-10)
-        doc.text(lines, M+7, y)
-        y += lines.length * 5.8
+        // Fondo alternado para legibilidad
+        if (idx % 2 === 0) { doc.setFillColor(252,252,252); doc.rect(M-1, y-4.5, W-M*2+2, 7.5, 'F') }
+        // Bullet en cuadrado de color
+        doc.setFillColor(21,67,248); doc.rect(M, y-3, 1.8, 1.8, 'F')
+        doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(50,50,50)
+        const lines = doc.splitTextToSize(s, W-M*2-15)
+        doc.text(lines, M+5, y)
+        if (cant > 1) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
+          doc.text('×'+cant, W-M, y, {align:'right'})
+        }
+        y += lines.length * 5.5 + 1
       }
 
       if(form.observaciones){
         y+=6
-        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(150,150,150)
-        doc.text('OBSERVACIONES', M, y); y+=6
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(180,180,180)
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(140,140,140)
+        doc.text('OBSERVACIONES', M, y); y+=5
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(80,80,80)
         const obs = doc.splitTextToSize(form.observaciones, W-M*2)
-        doc.text(obs, M, y); y+=obs.length*5.2
+        doc.text(obs, M, y); y+=obs.length*5
       }
 
-      y+=10; doc.setDrawColor(40,40,40); doc.setLineWidth(0.3); doc.line(M,y,W-M,y); y+=12
+      y+=10
 
+      // ====== CAJA TOTAL (destacado) ======
+      const totH = form.pagoAlt && parseFloat(form.pagoAltMonto) > 0 ? 30 : 22
+      doc.setFillColor(20,20,20); doc.roundedRect(M, y, W-M*2, totH, 3, 3, 'F')
+
+      // Opción pago a plazo (arriba del total si existe)
       if(form.pagoAlt && parseFloat(form.pagoAltMonto) > 0){
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(155,155,155)
-        doc.text('Pago a '+form.pagoAltDias+' días', M, y)
-        doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(60,60,60)
-        doc.line(M+34, y-0.8, W-M-44, y-0.8)
-        doc.setLineDashPattern([],0)
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(190,190,190)
-        doc.text('$'+fmt$(form.pagoAltMonto)+' + IVA', W-M, y, {align:'right'}); y+=10
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(160,160,160)
+        doc.text('Pago a '+form.pagoAltDias+' días', M+6, y+8)
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(220,220,220)
+        doc.text('$'+fmt$(form.pagoAltMonto)+' + IVA', W-M-6, y+8, {align:'right'})
+        // Línea separadora interna
+        doc.setDrawColor(50,50,50); doc.setLineWidth(0.3); doc.line(M+6, y+11.5, W-M-6, y+11.5)
+        // Total contado
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(255,255,255)
+        doc.text('Total contado ('+form.plazo+' días)', M+6, y+21)
+        doc.setFontSize(16); doc.setTextColor(206,38,55)
+        doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M-6, y+21, {align:'right'})
+      } else {
+        doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255)
+        doc.text('Valor total', M+6, y+14)
+        doc.setFontSize(8); doc.setTextColor(160,160,160); doc.setFont('helvetica','normal')
+        doc.text('Pago a '+form.plazo+' días · IVA por fuera', M+6, y+18.5)
+        doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(206,38,55)
+        doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M-6, y+15, {align:'right'})
       }
+      y += totH+12
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255)
-      doc.text('Valor total', M, y)
-      doc.setLineDashPattern([1,1.5],0); doc.setDrawColor(70,70,70)
-      doc.line(M+28, y-1, W-M-50, y-1)
-      doc.setLineDashPattern([],0)
-      doc.setFontSize(16); doc.setTextColor(206,38,55)
-      doc.text('$'+fmt$(form.precioTotal)+' + IVA', W-M, y, {align:'right'})
-
-      y+=14
-      for(let i=0;i<=120;i++){
-        const t = i/120
-        const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-        doc.setDrawColor(r,g,b); doc.setLineWidth(0.5)
-        doc.line(M+lineW*t, y, M+lineW*((i+1)/120), y)
-      }
-
-      y+=12
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(105,105,105)
-      doc.text('TÉRMINOS Y CONDICIONES', M, y); y+=8
-
+      // ====== TÉRMINOS Y CONDICIONES (compacto, fondo gris claro) ======
       const tcTitulos = ['1. Entrega de material','2. Revisiones','3. Pago','4. Validez','5. Derechos de uso']
       const tc = tcTitulos.map((t,i) => {
         let texto = clausulas[i] || ''
         if(i===3) texto = texto.replace('[fecha]', toDisplay(validez))
         return [t, texto]
       })
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
+      doc.text('TÉRMINOS Y CONDICIONES', M, y)
+      const tcw = doc.getTextWidth('TÉRMINOS Y CONDICIONES')
+      doc.setDrawColor(220,220,220); doc.setLineWidth(0.3); doc.line(M+tcw+4, y-1, W-M, y-1)
+      y+=7
+
       doc.setFontSize(7.5)
       for(const [titulo, texto] of tc){
-        doc.setFont('helvetica','bold'); doc.setTextColor(160,160,160)
+        doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60)
         doc.text(titulo+': ', M, y)
         const tw = doc.getTextWidth(titulo+': ')
-        doc.setFont('helvetica','normal'); doc.setTextColor(110,110,110)
+        doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100)
         const ls = doc.splitTextToSize(texto, W-M*2-tw)
         if(ls[0]) doc.text(ls[0], M+tw, y)
-        for(let i=1;i<ls.length;i++){ y+=4.2; doc.text(ls[i], M, y) }
-        y+=7
+        for(let i=1;i<ls.length;i++){ y+=3.8; doc.text(ls[i], M, y) }
+        y+=5.5
       }
 
-      const fY = 287
-      doc.setFontSize(7.5)
-      doc.setFont('helvetica','normal'); doc.setTextColor(60,60,60); doc.text('somos ', M, fY)
+      // ====== FOOTER ======
+      // Banda inferior color
+      doc.setFillColor(206,38,55); doc.rect(0,H-6,W*0.45,6,'F')
+      doc.setFillColor(21,67,248); doc.rect(W*0.45,H-6,W*0.55,6,'F')
+
+      const fY = H-12
+      doc.setFontSize(8)
+      doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120); doc.text('somos ', M, fY)
       const sw=doc.getTextWidth('somos ')
       doc.setFont('helvetica','bold'); doc.setTextColor(206,38,55); doc.text('MAGMA', M+sw, fY)
-      const mw=doc.getTextWidth('MAGMA')
-      doc.setTextColor(21,67,248); doc.text(' //', M+sw+mw, fY)
-      doc.setFont('helvetica','normal'); doc.setTextColor(50,50,50); doc.text('  Buenos Aires', M+sw+mw+5, fY)
+      const mw2=doc.getTextWidth('MAGMA')
+      doc.setTextColor(21,67,248); doc.text(' //', M+sw+mw2, fY)
+      doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120)
+      doc.text(' · Productora audiovisual · Buenos Aires', M+sw+mw2+5, fY)
       doc.setTextColor(21,67,248); doc.text('somosmagma.com', W-M, fY, {align:'right'})
 
       doc.save(`presu-${form.nro||'borrador'}-${(form.cliente||'cliente').toLowerCase().replace(/\s+/g,'-')}.pdf`)

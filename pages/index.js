@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'⌂'},{id:'presupuestos',label:'Presupuestos',icon:'📋'},{id:'proyectos',label:'Proyectos',icon:'🎬'},{id:'facturacion',label:'Facturación',icon:'💵'},{id:'pagos',label:'Pagos Staff',icon:'👥'},{id:'egresos',label:'Egresos',icon:'💳'},{id:'agencias',label:'Agencias',icon:'🏢'},{id:'clientes',label:'Clientes',icon:'🎯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'📊'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'⌂'},{id:'calendario',label:'Calendario',icon:'📅'},{id:'presupuestos',label:'Presupuestos',icon:'📋'},{id:'proyectos',label:'Proyectos',icon:'🎬'},{id:'facturacion',label:'Facturación',icon:'💵'},{id:'pagos',label:'Pagos Staff',icon:'👥'},{id:'egresos',label:'Egresos',icon:'💳'},{id:'agencias',label:'Agencias',icon:'🏢'},{id:'clientes',label:'Clientes',icon:'🎯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'📊'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -138,6 +138,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'agencias': return <Agencias data={data} mail={mail} onRefresh={onRefresh}/>
     case 'clientes': return <Clientes data={data} mail={mail}/>
     case 'contactos': return <Contactos data={data} mail={mail}/>
+    case 'calendario': return <Calendario data={data} mail={mail} onRefresh={onRefresh}/>
     case 'historico': return <Historico data={data}/>
     default: return <div style={S.nd}>En construcción</div>
   }
@@ -1138,7 +1139,15 @@ function Proyectos({data,mail,onRefresh}){
     const mMatch=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
     const aMatch=anio==='todos'||fecha.includes(anio)
     return (agencia==='todos'||(p['Agencia']||'')===agencia)&&(mes==='todos'||mMatch)&&(anio==='todos'||aMatch)&&(estado==='todos'||(estado==='ok'&&(p['Carga Staff']===true||p['Carga Staff']==='TRUE'))||(estado==='pendiente'&&p['Carga Staff']!==true&&p['Carga Staff']!=='TRUE'))&&(!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))
-  }).sort((a,b)=>parseFechaEv(a['Fecha Evento'])-parseFechaEv(b['Fecha Evento']))
+  }).sort((a,b)=>{
+    const fa=parseFechaEv(a['Fecha Evento']), fb=parseFechaEv(b['Fecha Evento'])
+    const hoy=Date.now()
+    const faF=fa>=hoy-86400000, fbF=fb>=hoy-86400000  // futuro o de hoy (24h tolerancia)
+    if (faF && !fbF) return -1   // futuros primero
+    if (!faF && fbF) return 1
+    if (faF && fbF) return fa-fb // entre futuros: el más próximo primero (ASC)
+    return fb-fa                  // entre pasados: el más reciente primero (DESC)
+  })
   const getBase=(proy)=>{const svcs=[];for(let j=1;j<=20;j++){const ped=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||'',qui=proy['Staff '+j]||(j===1?proy['Staff']:'')||'',prc=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')||0),precioRef=prc||getPrecioLista(ped);if(ped)svcs.push({pedido:ped,quien:qui,precio:precioRef,precioRef,esExtra:false})};return svcs}
   const getSel=(num,base)=>sels[num]||base.map(s=>({...s}))
   const upd=(num,idx,field,val,base)=>setSels(prev=>{const cur=[...getSel(num,base)];cur[idx]={...cur[idx],[field]:field==='precio'?parseFloat(val)||0:val};if(field==='pedido'){const pL=getPrecioLista(val);if(pL>0)cur[idx].precio=pL};return {...prev,[num]:cur}})
@@ -3800,6 +3809,177 @@ function Contactos({data,mail}){
         </tbody>
       </table>
       {filtrados.length===0&&<div style={{padding:30,textAlign:'center',color:'#555',fontSize:13}}>Sin contactos que coincidan</div>}
+    </div>
+  </div>
+}
+
+// ---- CALENDARIO ----
+function Calendario({data,mail,onRefresh}){
+  const hoy=new Date()
+  const [mesActual,setMesActual]=useState(new Date(hoy.getFullYear(),hoy.getMonth(),1))
+  const [diaSel,setDiaSel]=useState(null)
+  const [eventosCalendar,setEventosCalendar]=useState([])
+  const [loadingCal,setLoadingCal]=useState(false)
+
+  const proyectos=data?.proyectos||[]
+  const presus=data?.presupuestos||[]
+
+  // Cargar eventos del Calendar Magma
+  useEffect(()=>{
+    setLoadingCal(true)
+    fetch('/api/calendar-huerfanos',{headers:{'x-user-email':mail}})
+      .then(r=>r.json()).then(j=>{
+        if(j.ok){
+          const todos=[...(j.huerfanos||[]),...(j.matcheados||[])]
+          setEventosCalendar(todos)
+        }
+      }).catch(()=>{}).finally(()=>setLoadingCal(false))
+  },[mail])
+
+  const parseFecha=s=>{const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1]))}
+  const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()
+
+  // Index proyectos por día
+  const proyectosPorDia={}
+  proyectos.forEach(p=>{
+    const f=parseFecha(p['Fecha Evento'])
+    if(!f) return
+    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
+    if(!proyectosPorDia[key])proyectosPorDia[key]=[]
+    proyectosPorDia[key].push(p)
+  })
+
+  // Index presus aprobados pero sin proyecto (huérfanos)
+  const presusAprobadosPorDia={}
+  presus.forEach(p=>{
+    if(String(p['Estado']||'').toUpperCase()!=='APROBADO')return
+    const f=parseFecha(p['Fecha Evento'])
+    if(!f) return
+    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
+    if(!presusAprobadosPorDia[key])presusAprobadosPorDia[key]=[]
+    presusAprobadosPorDia[key].push(p)
+  })
+
+  // Index eventos Calendar por día
+  const eventosCalPorDia={}
+  eventosCalendar.forEach(e=>{
+    const f=parseFecha(e.inicio?.slice(0,10).split('-').reverse().join('/'))||(()=>{const d=e.inicio?new Date(e.inicio):null;return d&&!isNaN(d)?d:null})()
+    if(!f) return
+    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
+    if(!eventosCalPorDia[key])eventosCalPorDia[key]=[]
+    eventosCalPorDia[key].push(e)
+  })
+
+  // Construir grilla del mes
+  const año=mesActual.getFullYear(), mes=mesActual.getMonth()
+  const primDiaMes=new Date(año,mes,1)
+  const ultDiaMes=new Date(año,mes+1,0).getDate()
+  const offsetInicio=(primDiaMes.getDay()+6)%7  // semana arranca lunes
+  const semanas=[]
+  let semana=[]
+  for(let i=0;i<offsetInicio;i++)semana.push(null)
+  for(let d=1;d<=ultDiaMes;d++){
+    semana.push(new Date(año,mes,d))
+    if(semana.length===7){semanas.push(semana);semana=[]}
+  }
+  if(semana.length>0){while(semana.length<7)semana.push(null);semanas.push(semana)}
+
+  const NOMBRES_MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const DIAS_SEM=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
+  const navMes=delta=>setMesActual(new Date(año,mes+delta,1))
+
+  const proyectosDiaSel=diaSel?proyectosPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+  const presusDiaSel=diaSel?presusAprobadosPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+  const evCalDiaSel=diaSel?eventosCalPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+
+  return <div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,gap:10,flexWrap:'wrap'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <button onClick={()=>navMes(-1)} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#B0B0B0',fontSize:14,cursor:'pointer'}}>◀</button>
+        <div style={{fontSize:18,fontWeight:600,color:'#F0F0F0',minWidth:200,textAlign:'center'}}>{NOMBRES_MES[mes]} {año}</div>
+        <button onClick={()=>navMes(1)} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#B0B0B0',fontSize:14,cursor:'pointer'}}>▶</button>
+        <button onClick={()=>setMesActual(new Date(hoy.getFullYear(),hoy.getMonth(),1))} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #1543F840',background:'#1543F810',color:'#1543F8',fontSize:11,cursor:'pointer',marginLeft:6}}>Hoy</button>
+      </div>
+      <div style={{display:'flex',gap:10,fontSize:10,color:'#888',alignItems:'center',flexWrap:'wrap'}}>
+        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#1D9E75'}}/>Proyecto cargado</span>
+        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#BA7517'}}/>Presu aprobado sin proyecto</span>
+        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#9635AB'}}/>Calendar (sin sistema)</span>
+      </div>
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:diaSel?'1fr 400px':'1fr',gap:12}}>
+      <div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
+          {DIAS_SEM.map(d=><div key={d} style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.06em',textAlign:'center',padding:6,fontWeight:600}}>{d}</div>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+          {semanas.flat().map((d,i)=>{
+            if(!d)return <div key={i} style={{minHeight:90,background:'#0E0E0E',borderRadius:6}}/>
+            const key=d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
+            const proys=proyectosPorDia[key]||[]
+            const pres=presusAprobadosPorDia[key]||[]
+            const cal=eventosCalPorDia[key]||[]
+            const esHoy=sameDay(d,hoy)
+            const esSel=diaSel&&sameDay(d,diaSel)
+            const totalEventos=proys.length+pres.length+cal.length
+            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:90,background:esSel?'#1A1A1A':'#161616',border:esSel?'1px solid #1543F8':'0.5px solid #262626',borderRadius:6,padding:6,cursor:'pointer',position:'relative',transition:'all .12s'}}>
+              <div style={{fontSize:11,fontWeight:esHoy?700:500,color:esHoy?'#1543F8':'#E0E0E0',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span>{d.getDate()}</span>
+                {esHoy&&<span style={{fontSize:8,color:'#1543F8',textTransform:'uppercase'}}>Hoy</span>}
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                {proys.slice(0,3).map((p,j)=><div key={'p'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#1D9E7515',color:'#1D9E75',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+                {pres.slice(0,Math.max(0,3-proys.length)).map((p,j)=><div key={'r'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#BA751715',color:'#BA7517',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+                {cal.slice(0,Math.max(0,3-proys.length-pres.length)).map((e,j)=><div key={'c'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#9635AB15',color:'#9635AB',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={e.titulo}>{e.titulo}</div>)}
+                {totalEventos>3&&<div style={{fontSize:9,color:'#666',padding:'1px 4px'}}>+{totalEventos-3} más</div>}
+              </div>
+            </div>
+          })}
+        </div>
+        {loadingCal&&<div style={{textAlign:'center',color:'#666',fontSize:11,marginTop:8}}>Cargando eventos del Calendar...</div>}
+      </div>
+
+      {diaSel&&<div style={{background:'#161616',border:'0.5px solid #262626',borderRadius:10,padding:16,position:'sticky',top:0,maxHeight:'calc(100vh - 200px)',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div>
+            <div style={{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em'}}>{DIAS_SEM[(diaSel.getDay()+6)%7]}</div>
+            <div style={{fontSize:20,fontWeight:600,color:'#F0F0F0'}}>{diaSel.getDate()} de {NOMBRES_MES[diaSel.getMonth()].toLowerCase()}</div>
+          </div>
+          <button onClick={()=>setDiaSel(null)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>×</button>
+        </div>
+        {proyectosDiaSel.length===0&&presusDiaSel.length===0&&evCalDiaSel.length===0&&<div style={{padding:20,textAlign:'center',color:'#666',fontSize:12}}>Sin eventos este día</div>}
+        {proyectosDiaSel.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,color:'#1D9E75',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>🎬 Proyectos ({proyectosDiaSel.length})</div>
+          {proyectosDiaSel.map((p,i)=><div key={i} style={{background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6,padding:10,marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+              <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['N° presupuesto']}</span>
+              <span style={{fontSize:10,color:'#888'}}>{p['PM']||p['PM Interno']||'—'}</span>
+            </div>
+            <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
+            <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+            <div style={{fontSize:10,color:'#888',marginTop:4}}>Total: <span style={{fontFamily:'monospace',color:'#1D9E75'}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</span></div>
+          </div>)}
+        </div>}
+        {presusDiaSel.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,color:'#BA7517',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>📋 Presupuestos aprobados sin proyecto ({presusDiaSel.length})</div>
+          {presusDiaSel.map((p,i)=><div key={i} style={{background:'#BA751708',border:'0.5px solid #BA751730',borderRadius:6,padding:10,marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+              <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['Columna 1']}</span>
+              <span style={{fontSize:10,color:'#888'}}>{p['PM Interno']||'—'}</span>
+            </div>
+            <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
+            <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+            <div style={{fontSize:10,color:'#888',marginTop:4}}>Precio: <span style={{fontFamily:'monospace',color:'#BA7517'}}>{p['Precio Final']||'—'}</span></div>
+          </div>)}
+        </div>}
+        {evCalDiaSel.length>0&&<div>
+          <div style={{fontSize:10,color:'#9635AB',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>📅 Calendar (sin sistema) ({evCalDiaSel.length})</div>
+          {evCalDiaSel.map((e,i)=><div key={i} style={{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:10,marginBottom:6}}>
+            <div style={{fontSize:13,color:'#F0F0F0'}}>{e.titulo}</div>
+            {e.lugar&&<div style={{fontSize:11,color:'#888',marginTop:3}}>📍 {e.lugar}</div>}
+          </div>)}
+        </div>}
+      </div>}
     </div>
   </div>
 }
