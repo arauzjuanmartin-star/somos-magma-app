@@ -180,13 +180,15 @@ export default function Presupuesto() {
     const nro = params.get('nro')
     if (!nro) return
     setLoading(true)
-    const mail = localStorage.getItem('magma_mail') || ''
-    fetch('/api/data')
+    // Forzar fresh (saltear cache de 30s) para que los servicios recién cargados aparezcan
+    fetch('/api/data?fresh=1')
       .then(r => r.json())
       .then(d => {
         const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
-        if (!p) return
+        if (!p) { console.warn('Presu no encontrado:', nro); return }
+        // PEDIDO_KEYS incluye 'Pedido3 ' (con espacio raro en el header del sheet original)
         const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean).map(prettifySvc)
+        console.log('Presu cargado:', nro, '· servicios encontrados:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
         const fechaHoy = new Date().toISOString().slice(0,10)
         // Fecha evento: usar Fecha Adicionales si hay rango/multiples
         const fechaEv = (() => {
@@ -236,7 +238,7 @@ export default function Presupuesto() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
-      const W=210, H=297, M=15
+      const W=210, H=297, M=18
       let y=0
 
       // Cargar assets (logo + líneas onduladas) en paralelo
@@ -252,187 +254,207 @@ export default function Presupuesto() {
       // ====== FONDO BLANCO ======
       doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
 
-      // ====== HEADER COMPACTO: LOGO IZQ + DATOS DER ======
+      // ════════════════════════════════════════════════════════════════════
+      // HEADER — Logo izq + Datos cliente der (en monospace)
+      // ════════════════════════════════════════════════════════════════════
       if (logoImg) {
-        try { doc.addImage(logoImg, 'PNG', M, 11, 38, 17) } catch(e) {}
+        try { doc.addImage(logoImg, 'PNG', M, 13, 40, 18) } catch(e) {}
       } else {
         doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(80,80,80)
-        doc.text('somos', M, 17)
-        doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(0,0,0)
-        doc.text('MAGMA', M, 25)
+        doc.text('somos', M, 19)
+        doc.setFont('helvetica','bold'); doc.setFontSize(28); doc.setTextColor(0,0,0)
+        doc.text('MAGMA', M, 28)
         const mw = doc.getTextWidth('MAGMA')
-        doc.setFontSize(17); doc.setTextColor(0,0,0)
-        doc.text('!!', M+mw+2, 24)
+        doc.setFontSize(18); doc.text('!!', M+mw+2, 27)
       }
 
-      // Banderín de color
-      if (banderinImg) { try { doc.addImage(banderinImg, 'PNG', W-M-30, 10, 20, 2.5) } catch(e) {} }
+      // Banderín colorido al lado de los datos
+      if (banderinImg) { try { doc.addImage(banderinImg, 'PNG', W-M-30, 11, 22, 3) } catch(e) {} }
       else {
-        doc.setFillColor(21,67,248); doc.rect(W-M-30, 11, 11, 1.2, 'F')
-        doc.setFillColor(206,38,55); doc.rect(W-M-18, 11, 8, 1.2, 'F')
+        doc.setFillColor(21,67,248); doc.rect(W-M-30, 12, 12, 1.4, 'F')
+        doc.setFillColor(206,38,55); doc.rect(W-M-17, 12, 9, 1.4, 'F')
       }
 
-      // Datos arriba derecha en monospace
-      const rX = W-M
-      doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(60,60,60)
-      doc.text('Somos Magma', rX, 16, {align:'right'})
-      doc.text('Buenos Aires', rX, 19.5, {align:'right'})
-      doc.text(toDisplay(form.fechaEmision), rX, 23, {align:'right'})
-      doc.text('Presu. N°'+(form.nro||'___'), rX, 26.5, {align:'right'})
+      // Datos en monospace estilo terminal
+      doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(60,60,60)
+      doc.text('Somos Magma',     W-M, 18,   {align:'right'})
+      doc.text('Buenos Aires',    W-M, 22,   {align:'right'})
+      doc.text(toDisplay(form.fechaEmision), W-M, 26, {align:'right'})
+      doc.text('Presu. N°'+(form.nro||'___'), W-M, 30, {align:'right'})
 
-      y = 31
-
-      // Línea divisoria
-      if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 2.5) } catch(e) {} }
+      // ════════════════════════════════════════════════════════════════════
+      // DIVISOR pincelado (full-width)
+      // ════════════════════════════════════════════════════════════════════
+      y = 38
+      if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 3) } catch(e) {} }
       else { doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y) }
 
-      // ====== TÍTULO ======
-      y += 8
-      doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(20,20,20)
+      // ════════════════════════════════════════════════════════════════════
+      // TÍTULO PRINCIPAL + squiggle
+      // ════════════════════════════════════════════════════════════════════
+      y += 13
+      doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(15,15,15)
       const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
       doc.text(titulo, M, y)
-
-      // Garabato bajo título
-      if (lineaTitulo) { try { doc.addImage(lineaTitulo, 'PNG', M, y+1.2, 36, 2.8) } catch(e) {} }
+      if (lineaTitulo) { try { doc.addImage(lineaTitulo, 'PNG', M, y+2, 42, 3.5) } catch(e) {} }
       else {
-        const lw = 32
-        for(let i=0;i<=80;i++){
-          const t=i/80
+        const lw = 36
+        for(let i=0;i<=80;i++){ const t=i/80
           const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-          doc.setDrawColor(r,g,b); doc.setLineWidth(0.6)
-          doc.line(M+lw*(i/80), y+2.2, M+lw*((i+1)/80), y+2.2)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7); doc.line(M+lw*(i/80), y+3, M+lw*((i+1)/80), y+3)
         }
       }
 
-      // Subtítulo (proyecto)
-      if (form.proyecto) {
-        y += 7
-        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(80,80,80)
-        doc.text(form.proyecto, M, y)
-      }
-
-      // ====== DATOS CLIENTE (línea con borde) ======
-      y += 8
-      doc.setDrawColor(20,20,20); doc.setLineWidth(0.4)
-      doc.rect(M, y-4, W-M*2, 7)
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20)
-      const partes = [
+      // ════════════════════════════════════════════════════════════════════
+      // CAJA DATOS — Cliente | Agencia (sin proyecto, va aparte)
+      // ════════════════════════════════════════════════════════════════════
+      y += 14
+      doc.setDrawColor(20,20,20); doc.setLineWidth(0.5)
+      doc.rect(M, y-5, W-M*2, 10)
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(15,15,15)
+      const partesArriba = [
         `Cliente: ${form.cliente}`,
         form.agencia ? `Agencia: ${form.agencia}` : null,
-        `Fecha: ${form.fechaEvento || toDisplay(form.fechaEmision)}`,
       ].filter(Boolean)
-      doc.text(partes.join('   |   '), M+3, y+0.5)
-      y += 9
+      doc.text(partesArriba.join('     |     '), M+4, y+1)
 
-      // ====== DESCRIPCIÓN + SERVICIOS ======
-      // Descripción larga si la hay (solo modo Producción)
+      // ════════════════════════════════════════════════════════════════════
+      // PROYECTO — bloque propio, abajo (orden pedido por Juan)
+      // ════════════════════════════════════════════════════════════════════
+      y += 16
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140)
+      doc.text('PROYECTO', M, y)
+      y += 5
+      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(20,20,20)
+      const proyText = form.proyecto || '(sin nombre de proyecto)'
+      const proyLines = doc.splitTextToSize(proyText, W-M*2)
+      doc.text(proyLines, M, y); y += proyLines.length * 5.5
+      // Fecha del evento debajo si la hay
+      if (form.fechaEvento) {
+        y += 1
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(206,38,55)
+        doc.text(`Fecha del evento: ${form.fechaEvento}`, M, y)
+      }
+      y += 8
+
+      // ════════════════════════════════════════════════════════════════════
+      // DESCRIPCIÓN larga (modo Producción)
+      // ════════════════════════════════════════════════════════════════════
       if (form.descripcion) {
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(50,50,50)
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(45,45,45)
         const desc = doc.splitTextToSize(form.descripcion, W-M*2)
-        doc.text(desc, M, y); y += desc.length*4.5 + 3
+        doc.text(desc, M, y); y += desc.length*4.7 + 4
       }
 
-      // Lista de servicios incluidos
+      // ════════════════════════════════════════════════════════════════════
+      // SERVICIOS INCLUIDOS
+      // ════════════════════════════════════════════════════════════════════
       const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
       if (svcsLimpios.length > 0) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
-        doc.text('El servicio incluye:', M, y); y += 5
-        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(50,50,50)
-        const svcsMap = {}
-        const orden = []
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(15,15,15)
+        doc.text('El servicio incluye:', M, y); y += 6
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,50)
+        const svcsMap = {}, orden = []
         for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
         for (const s of orden) {
           const cant = svcsMap[s]
           const label = cant > 1 ? `${cant} ${s}` : s
-          doc.setFillColor(20,20,20); doc.circle(M+1.5, y-1.2, 0.7, 'F')
-          const lines = doc.splitTextToSize(label, W-M*2-6)
+          doc.setFillColor(20,20,20); doc.circle(M+1.5, y-1.3, 0.85, 'F')
+          const lines = doc.splitTextToSize(label, W-M*2-7)
           doc.text(lines, M+5, y)
-          y += lines.length * 4.5
+          y += lines.length * 5
         }
-        y += 2
+        y += 5
+      } else {
+        // Warning visible si no hay servicios — algo está mal cargado
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(206,38,55)
+        doc.text('⚠ Falta detalle de servicios — completar antes de enviar', M, y); y += 8
       }
 
-      // Observaciones (notas extra que escribe el PM)
-      if (form.observaciones) {
-        y += 2
-        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(20,20,20)
-        doc.text('Observaciones:', M, y); y += 4
-        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(60,60,60)
-        const obs = doc.splitTextToSize(form.observaciones, W-M*2)
-        doc.text(obs, M, y); y += obs.length*4 + 2
+      // ════════════════════════════════════════════════════════════════════
+      // OBSERVACIONES (si hay) — caja destacada gris
+      // ════════════════════════════════════════════════════════════════════
+      if (form.observaciones && form.observaciones.trim()) {
+        const obs = doc.splitTextToSize(form.observaciones.trim(), W-M*2-8)
+        const obsH = obs.length*4.5 + 8
+        doc.setFillColor(248,248,248); doc.roundedRect(M, y-2, W-M*2, obsH, 1.5, 1.5, 'F')
+        doc.setDrawColor(206,38,55); doc.setLineWidth(0.6); doc.line(M, y-2, M, y-2+obsH)  // borde izq rojo
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(140,140,140)
+        doc.text('OBSERVACIONES', M+4, y+1.5)
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(50,50,50)
+        doc.text(obs, M+4, y+6)
+        y += obsH + 4
       }
 
-      y += 3
-
-      // ====== VALOR TOTAL ======
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0)
+      // ════════════════════════════════════════════════════════════════════
+      // VALOR TOTAL — bloque destacado
+      // ════════════════════════════════════════════════════════════════════
+      y += 2
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(0,0,0)
       doc.text('Valor total', M, y)
       const totalLabelW = doc.getTextWidth('Valor total')
       const precioStr = '$' + fmt$(form.precioTotal) + ' + IVA'
       const precioW = doc.getTextWidth(precioStr)
-      doc.setLineWidth(0.5); doc.setDrawColor(0,0,0)
-      doc.line(M+totalLabelW+3, y, W-M-precioW-2, y)
+      doc.setLineWidth(0.6); doc.setDrawColor(0,0,0)
+      doc.line(M+totalLabelW+4, y-0.5, W-M-precioW-3, y-0.5)
       doc.text(precioStr, W-M, y, {align:'right'})
 
-      // Línea ondulada de color debajo
-      y += 3
-      if (lineaTotal) { try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 4) } catch(e) {} }
+      // Línea ondulada de color debajo del valor total
+      y += 4
+      if (lineaTotal) { try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 5) } catch(e) {} }
       else {
         const lw = W-M*2
-        for(let i=0;i<=200;i++){
-          const t=i/200
+        for(let i=0;i<=200;i++){ const t=i/200
           const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-          doc.setDrawColor(r,g,b); doc.setLineWidth(0.6)
-          doc.line(M+lw*(i/200), y+1.5, M+lw*((i+1)/200), y+1.5)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7); doc.line(M+lw*(i/200), y+1.5, M+lw*((i+1)/200), y+1.5)
         }
       }
-      y += 7
+      y += 12
 
-      // ====== T&C COMPACTOS (todo en página 1) ======
+      // ════════════════════════════════════════════════════════════════════
+      // TÉRMINOS Y CONDICIONES — todo abajo, formato inline compacto
+      // ════════════════════════════════════════════════════════════════════
       // Validez
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
-      doc.text('CONDICIONES GENERALES', M, y); y += 3.5
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(60,60,60)
+      doc.text('CONDICIONES GENERALES', M, y); y += 4
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.8); doc.setTextColor(55,55,55)
       const validezTxt = doc.splitTextToSize(clausulas.validez, W-M*2)
-      doc.text(validezTxt, M, y); y += validezTxt.length*3.5 + 2
+      doc.text(validezTxt, M, y); y += validezTxt.length*3.8 + 3
 
-      // Condiciones de Pago — inline (titulo: texto)
+      // Condiciones de Pago
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
-      doc.text('CONDICIONES DE PAGO', M, y); y += 3.5
-      doc.setFontSize(7.5)
+      doc.text('CONDICIONES DE PAGO', M, y); y += 4
+      doc.setFontSize(7.8)
       for (const p of clausulas.pago) {
-        doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20)
+        doc.setFont('helvetica','bold'); doc.setTextColor(15,15,15)
         doc.text(p.titulo+': ', M, y)
         const tw = doc.getTextWidth(p.titulo+': ')
-        doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80)
+        doc.setFont('helvetica','normal'); doc.setTextColor(75,75,75)
         const ls = doc.splitTextToSize(p.texto, W-M*2-tw)
         if (ls[0]) doc.text(ls[0], M+tw, y)
-        for (let i=1; i<ls.length; i++) { y += 3.2; doc.text(ls[i], M, y) }
+        for (let i=1; i<ls.length; i++) { y += 3.4; doc.text(ls[i], M, y) }
         y += 4
       }
-      y += 1
+      y += 2
 
       // Cláusulas
       const tituloClausulas = form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'CLÁUSULAS DEL SERVICIO'
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
       doc.text(tituloClausulas, M, y); y += 4
 
-      doc.setFontSize(7.5)
+      doc.setFontSize(7.8)
       for (const c of clausulas.clausulas) {
-        doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20)
+        doc.setFont('helvetica','bold'); doc.setTextColor(15,15,15)
         doc.text(c.titulo+': ', M, y)
         const tw = doc.getTextWidth(c.titulo+': ')
-        doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80)
+        doc.setFont('helvetica','normal'); doc.setTextColor(75,75,75)
         const ls = doc.splitTextToSize(c.texto, W-M*2-tw)
         if (ls[0]) doc.text(ls[0], M+tw, y)
-        for (let i=1; i<ls.length; i++) { y += 3.2; doc.text(ls[i], M, y) }
+        for (let i=1; i<ls.length; i++) { y += 3.4; doc.text(ls[i], M, y) }
         y += 4
       }
 
-      // Si y > H-12 significa que se desbordó — avisar
-      if (y > H - 5) {
-        console.warn('PDF desbordó la página', y, 'mm de', H)
-      }
+      if (y > H - 5) console.warn('PDF desbordó la página', y, 'mm de', H)
 
       doc.save(`presu-${form.nro||'borrador'}-${(form.cliente||'cliente').toLowerCase().replace(/\s+/g,'-')}.pdf`)
     } catch(e){ alert('Error: '+e.message) }
