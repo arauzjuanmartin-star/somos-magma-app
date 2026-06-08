@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'agencias',label:'Agencias',icon:'◉'},{id:'clientes',label:'Clientes',icon:'◯'},{id:'historico',label:'Histórico',icon:'⏱'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'agencias',label:'Agencias',icon:'◉'},{id:'clientes',label:'Clientes',icon:'◯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'⏱'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -137,6 +137,7 @@ function Mod({id,data,mail,onRefresh}){
     case 'egresos': return <Egresos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'agencias': return <Agencias data={data} mail={mail} onRefresh={onRefresh}/>
     case 'clientes': return <Clientes data={data} mail={mail}/>
+    case 'contactos': return <Contactos data={data} mail={mail}/>
     case 'historico': return <Historico data={data}/>
     default: return <div style={S.nd}>En construcción</div>
   }
@@ -2991,7 +2992,11 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
         await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
       }
     }catch(e){}
-    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:agenciaFinal,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({nombre:form.contacto,agencia:agenciaFinal,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    // Persistir cliente nuevo a CLIENTES (no solo en presu)
+    if(hintCl&&form.cliente.trim()){
+      try{await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({nombre:form.cliente,agenciaHabitual:agenciaFinal})})}catch(e){}
+    }
     // Persistir agencia nueva (con datos fiscales)
     if(hintAg&&agenciaFinal&&agenciaFinal.toLowerCase()!=='sin agencia / directo'){
       try{await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({nombre:agenciaFinal,cuit:agData.cuit,condIVA:agData.condIVA,mailFact:agData.mailFact,telefono:agData.telefono,pmDefault:form.pm})})}catch(e){}
@@ -3719,6 +3724,78 @@ function Clientes({data,mail}){
           </tr>)}
         </tbody>
       </table>
+    </div>
+  </div>
+}
+
+// ---- CONTACTOS ----
+function Contactos({data,mail}){
+  const contactos=data?.contactos||[]
+  const [q,setQ]=useState('')
+  const [agFilter,setAgFilter]=useState('todas')
+  const [editandoFila,setEditandoFila]=useState(null)
+  const [editForm,setEditForm]=useState({})
+  const [saving,setSaving]=useState(false)
+  const [toast,setToast]=useState('')
+
+  const norm=v=>String(v||'').toLowerCase()
+  const agencias=[...new Set(contactos.map(c=>c['Agencia']).filter(Boolean))].sort()
+  const filtrados=contactos.filter(c=>{
+    const matchQ=!q||[c['Nombre'],c['Mail'],c['Agencia'],c['Cargo'],c['Teléfono'],c['Cuit']].some(v=>norm(v).includes(norm(q)))
+    const matchAg=agFilter==='todas'||c['Agencia']===agFilter
+    return matchQ&&matchAg
+  }).sort((a,b)=>(a['Nombre']||'').localeCompare(b['Nombre']||''))
+
+  const empezarEditar=(c,i)=>{setEditandoFila(i);setEditForm({nombre:c['Nombre']||'',mail:c['Mail']||'',agencia:c['Agencia']||'',cargo:c['Cargo']||'',telefono:c['Teléfono']||'',cuit:c['Cuit']||''})}
+  const guardarEdit=async(c)=>{
+    setSaving(true)
+    try{
+      const r=await fetch('/api/contacto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombreOriginal:c['Nombre'],agenciaOriginal:c['Agencia'],cambios:editForm})})
+      const j=await r.json()
+      if(j.ok){setToast('Contacto actualizado ✓');setTimeout(()=>setToast(''),2000);setEditandoFila(null)}
+      else{alert('Error: '+(j.error||'?'))}
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(false)
+  }
+
+  const inp={padding:'5px 7px',borderRadius:4,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:11,outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+
+  return <div>
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:'#1D9E75',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:12,zIndex:999}}>{toast}</div>}
+    <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+      <input style={{...S.inp,flex:1,minWidth:200,marginBottom:0}} placeholder='Buscar nombre, mail, CUIT, agencia, teléfono...' value={q} onChange={e=>setQ(e.target.value)}/>
+      <select style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}} value={agFilter} onChange={e=>setAgFilter(e.target.value)}>
+        <option value='todas'>Todas las agencias ({contactos.length})</option>
+        {agencias.map(a=><option key={a} value={a}>{a}</option>)}
+      </select>
+      <span style={{fontSize:11,color:'#555'}}>{filtrados.length} contactos</span>
+    </div>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 200px)'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr style={{background:'#1A1A1A',position:'sticky',top:0,zIndex:1}}>
+          {['Nombre','Agencia','Cargo','Mail','Teléfono','CUIT',''].map(h=><th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {filtrados.map((c,i)=>{
+            const editando=editandoFila===i
+            return <tr key={i} style={{background:i%2===0?'#161616':'#1A1A1A'}}>
+              <td style={{...S.td,fontSize:12,fontWeight:500}}>{editando?<input style={inp} value={editForm.nombre} onChange={e=>setEditForm(p=>({...p,nombre:e.target.value}))}/>:c['Nombre']||'—'}</td>
+              <td style={{...S.td,fontSize:11,color:'#888'}}>{editando?<input style={inp} value={editForm.agencia} onChange={e=>setEditForm(p=>({...p,agencia:e.target.value}))}/>:c['Agencia']||'—'}</td>
+              <td style={{...S.td,fontSize:11,color:'#555'}}>{editando?<input style={inp} value={editForm.cargo} onChange={e=>setEditForm(p=>({...p,cargo:e.target.value}))}/>:c['Cargo']||'—'}</td>
+              <td style={{...S.td,fontSize:11}}>{editando?<input style={inp} type='email' value={editForm.mail} onChange={e=>setEditForm(p=>({...p,mail:e.target.value}))}/>:c['Mail']?<a href={'mailto:'+c['Mail']} style={{color:'#1543F8',textDecoration:'none'}}>{c['Mail']}</a>:<span style={{color:'#555'}}>—</span>}</td>
+              <td style={{...S.td,fontSize:11,fontFamily:'monospace',color:'#888'}}>{editando?<input style={inp} value={editForm.telefono} onChange={e=>setEditForm(p=>({...p,telefono:e.target.value}))}/>:c['Teléfono']||'—'}</td>
+              <td style={{...S.td,fontSize:10,fontFamily:'monospace',color:'#666'}}>{editando?<input style={inp} value={editForm.cuit} onChange={e=>setEditForm(p=>({...p,cuit:e.target.value}))}/>:c['Cuit']||'—'}</td>
+              <td style={{...S.td}}>
+                {editando?<div style={{display:'flex',gap:4}}>
+                  <button onClick={()=>guardarEdit(c)} disabled={saving} style={{padding:'3px 8px',borderRadius:3,border:'none',background:'#1D9E75',color:'#fff',fontSize:10,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'...':'✓'}</button>
+                  <button onClick={()=>setEditandoFila(null)} style={{padding:'3px 8px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:10,cursor:'pointer'}}>×</button>
+                </div>:<button onClick={()=>empezarEditar(c,i)} style={{padding:'3px 8px',borderRadius:3,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:10,cursor:'pointer'}}>✎</button>}
+              </td>
+            </tr>
+          })}
+        </tbody>
+      </table>
+      {filtrados.length===0&&<div style={{padding:30,textAlign:'center',color:'#555',fontSize:13}}>Sin contactos que coincidan</div>}
     </div>
   </div>
 }
