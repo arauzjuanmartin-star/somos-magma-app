@@ -1,6 +1,5 @@
 import { getAllData } from '../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../lib/auth-helpers'
 
 // Cache en memoria del proceso (vive lo que vive el lambda en Vercel)
 // Reduce drásticamente las llamadas a Sheets API entre usuarios concurrentes.
@@ -9,8 +8,8 @@ let cacheTime = 0
 const CACHE_MS = 30 * 1000  // 30 segundos
 
 export default async function handler(req, res) {
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
 
   try {
     const forzar = req.query.fresh === '1' || req.query.refresh === '1'
@@ -36,7 +35,6 @@ export default async function handler(req, res) {
     console.error(err)
     const status = err.code || err.response?.status
     if (status === 429) {
-      // Si hay cache aunque sea viejo, devolvemos eso en vez de error
       if (cacheData) {
         res.setHeader('X-Cache-Source', 'stale-by-quota')
         return res.status(200).json({ ok: true, data: cacheData, warning: 'Datos desde cache (quota excedida)' })

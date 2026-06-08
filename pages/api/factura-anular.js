@@ -1,14 +1,15 @@
 // Marca una factura como ANULADA (no la elimina, queda para auditoría)
 // y elimina las entradas de COBROS asociadas si no estaban realmente cobradas.
 import { getSheets } from '../../lib/sheets'
+import { requireAuth } from '../../lib/auth-helpers'
 
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
 
   const { presupuestoNum, motivo } = req.body
   if (!presupuestoNum) return res.status(400).json({ error: 'Falta presupuestoNum' })

@@ -2,8 +2,7 @@
 // y devuelve los huérfanos (eventos sin proyecto en sistema).
 import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../lib/auth-helpers'
 
 const CALENDAR_ID = '5gc9hdvh4vi28bf8uemr2vfnn4@group.calendar.google.com'
 
@@ -20,8 +19,9 @@ function getAuth(scopes) {
 const norm = v => String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'')
 
 export default async function handler(req, res) {
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const a = await requireAuth(req, res)
+  if (!a) return
+  const mail = a.mail
 
   try {
     // 1. Leer eventos próximos del Calendar

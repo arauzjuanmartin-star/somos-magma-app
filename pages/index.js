@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
+import { useSession, signIn, signOut } from 'next-auth/react'
 
 const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
@@ -65,14 +66,23 @@ const CONTACTOS_LIST=[
 ]
 
 export default function App() {
-  const [mail,setMail]=useState(''), [mi,setMi]=useState(''), [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
+  const { data: session, status } = useSession()
+  const mail = session?.user?.email || ''
+  const [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
 
-  useEffect(()=>{ const s=localStorage.getItem('magma_mail'); if(s&&MAILS.includes(s)){setMail(s);load(s)} },[])
+  // Cargar data cuando hay sesión válida
+  useEffect(()=>{
+    if (status === 'authenticated' && mail && !data && !loading) {
+      load()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[status, mail])
 
-  async function load(m) {
+  async function load() {
     setLoading(true);setErr('')
     try {
-      const r=await fetch('/api/data',{headers:{'x-user-email':m}})
+      // Ya no necesita 'x-user-email' header — el middleware + getServerSession valida del cookie
+      const r=await fetch('/api/data')
       const j=await r.json()
       if(j.ok) setData(j.data)
       else setErr('Error: '+j.error)
@@ -80,16 +90,15 @@ export default function App() {
     setLoading(false)
   }
 
-  function login(){
-    const m=mi.trim().toLowerCase()
-    if(!MAILS.includes(m)){setErr('Mail no autorizado');return}
-    localStorage.setItem('magma_mail',m);setMail(m);load(m);setErr('')
-  }
-  function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
+  function logout(){ signOut({callbackUrl:'/login'}) }
 
   const NAV=[{id:'dashboard',label:'Dashboard',icon:'⌂'},{id:'calendario',label:'Calendario',icon:'📅'},{id:'presupuestos',label:'Presupuestos',icon:'📋'},{id:'proyectos',label:'Proyectos',icon:'🎬'},{id:'facturacion',label:'Facturación',icon:'💵'},{id:'pagos',label:'Pagos Staff',icon:'👥'},{id:'egresos',label:'Egresos',icon:'💳'},{id:'agencias',label:'Agencias',icon:'🏢'},{id:'clientes',label:'Clientes',icon:'🎯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'📊'}]
 
-  if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
+  // Mientras NextAuth resuelve la sesión
+  if(status === 'loading') return <><Head><title>Somos Magma</title></Head><GS/><div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'#090909'}}><div style={S.logo}>M//</div><div style={{color:'#555',marginTop:16}}>Verificando sesión...</div></div></>
+
+  // Sin sesión: el middleware ya debería haber redirigido a /login. Por las dudas, botón manual.
+  if(status === 'unauthenticated' || !mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Necesitás iniciar sesión</div><button style={S.bp} onClick={()=>signIn('google',{callbackUrl:'/'})}>Ingresar con Google</button></div></div></>
 
   if(loading) return <><Head><title>Somos Magma</title></Head><GS/><div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'#090909'}}><div style={S.logo}>M//</div><div style={{color:'#555',marginTop:16}}>Cargando...</div><div style={S.sp}/></div></>
 
@@ -107,19 +116,19 @@ export default function App() {
             </button>
           })}
         </nav>
-        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail} onDataChange={()=>load(mail)}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
+        <div style={{padding:'12px 16px',borderTop:'1px solid #2A2A2A'}}><div style={{fontSize:11,color:'#555',marginBottom:6}}>{mail}</div><button style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#555',cursor:'pointer'}} onClick={logout}>Salir</button>{mail==='arauzjuanmartin@gmail.com'&&<SetupBtn mail={mail} onDataChange={()=>load()}/>}<div style={{fontSize:11,color:'#333',marginTop:12}}>Productora Audiovisual<br/>since '23 //</div></div>
       </div>
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div><div style={{fontSize:18,fontWeight:700}}>{NAV.find(n=>n.id===mod)?.label}</div><div style={{fontSize:12,color:'#555',marginTop:2}}>Vista general</div></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {mod==='presupuestos'&&<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}} onClick={()=>setShowNP(true)}>+ Nuevo presupuesto</button>}
-            <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load(mail)}>↻ Actualizar</button>
+            <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load()}>↻ Actualizar</button>
           </div>
         </div>
         <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
           {err&&<div style={{background:'#E24B4A20',border:'0.5px solid #E24B4A',borderRadius:8,padding:'10px 14px',color:'#E24B4A',fontSize:13,marginBottom:14}}>{err}</div>}
-          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} mail={mail} onRefresh={()=>load(mail)}/>}
+          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} mail={mail} onRefresh={()=>load()}/>}
         </div>
       </div>
     </div>
@@ -154,7 +163,7 @@ function NuevaReservaForm({cuenta,mail,onDone,onCancel}){
     if(!form.concepto||!form.monto){setErr('Faltan concepto o monto');return}
     setSaving(true);setErr('')
     try{
-      const r=await fetch('/api/reserva-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({cuenta,concepto:form.concepto,monto:parseFloat(form.monto)||0,tipo:form.tipo,notas:form.notas})})
+      const r=await fetch('/api/reserva-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta,concepto:form.concepto,monto:parseFloat(form.monto)||0,tipo:form.tipo,notas:form.notas})})
       const j=await r.json()
       if(j.ok){onDone()}else setErr(j.error)
     }catch(e){setErr(e.message)}
@@ -189,7 +198,7 @@ function CuentaCard({c,reservas,mail,onSaved}){
   const guardar=async()=>{
     setSaving(true)
     try{
-      const r=await fetch('/api/cuenta-saldo-update',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:c['Nombre'],saldoArs:parseFloat(val)||0,saldoUsd:parseFloat(valUsd)||0,notas:nota})})
+      const r=await fetch('/api/cuenta-saldo-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:c['Nombre'],saldoArs:parseFloat(val)||0,saldoUsd:parseFloat(valUsd)||0,notas:nota})})
       const j=await r.json()
       if(j.ok){setEditing(false);if(onSaved)onSaved()}
       else alert('Error: '+j.error)
@@ -199,7 +208,7 @@ function CuentaCard({c,reservas,mail,onSaved}){
   const liberar=async(res)=>{
     if(!confirm(`Liberar reserva "${res['Concepto']}" de ${fmt(parseMonto(res['Monto']))}?`))return
     try{
-      const r=await fetch('/api/reserva-liberar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({cuenta:res['Cuenta'],concepto:res['Concepto'],fecha:res['Fecha']})})
+      const r=await fetch('/api/reserva-liberar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:res['Cuenta'],concepto:res['Concepto'],fecha:res['Fecha']})})
       const j=await r.json()
       if(j.ok&&onSaved)onSaved()
       else alert('Error: '+(j.error||'desconocido'))
@@ -256,7 +265,7 @@ function Dashboard({data,mail,onRefresh}){
   const [ignorados,setIgnorados]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem('cal_ignorar')||'[]'))}catch(e){return new Set()}})
   useEffect(()=>{
     setCalLoading(true)
-    fetch('/api/calendar-huerfanos',{headers:{'x-user-email':mail}})
+    fetch('/api/calendar-huerfanos')
       .then(r=>r.json()).then(j=>setCalHuerfanos(j)).catch(()=>{}).finally(()=>setCalLoading(false))
   },[mail])
   const ignorarEvento=(id)=>{const n=new Set(ignorados);n.add(id);setIgnorados(n);localStorage.setItem('cal_ignorar',JSON.stringify([...n]))}
@@ -639,7 +648,7 @@ function SetupBtn({mail,onDataChange}){
   const runSetup=async()=>{
     setWorking(true);setStatus('Setup...')
     try{
-      const r=await fetch('/api/admin/setup-sheets',{method:'POST',headers:{'x-user-email':mail}})
+      const r=await fetch('/api/admin/setup-sheets',{method:'POST'})
       const j=await r.json()
       setStatus(j.ok?`✓ Creadas: ${j.created.join(', ')||'ninguna'}. Ya existían: ${j.skipped.join(', ')||'ninguna'}`:'✗ '+(j.error||'Error'))
     }catch(e){setStatus('✗ '+e.message)}
@@ -649,7 +658,7 @@ function SetupBtn({mail,onDataChange}){
   const runBackfill=async(año,dryRun,replace)=>{
     setWorking(true);setStatus(`Backfill ${año} ${dryRun?'(dry run)':'(escribiendo)'}...`)
     try{
-      const r=await fetch('/api/admin/backfill-historico',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({año,dryRun,replaceExisting:replace})})
+      const r=await fetch('/api/admin/backfill-historico',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({año,dryRun,replaceExisting:replace})})
       const j=await r.json()
       if(j.ok){
         if(dryRun){
@@ -739,7 +748,7 @@ function RepresupuestarModal({p, mail, onClose, onDone}){
     try{
       const body={num:p['Columna 1'],motivo,fechaEvento,pedidos:pedidos.filter(x=>x.svc||x.precio)}
       if(precioFinalManual!=='') body.precioFinal=parseFloat(precioFinalManual)||0
-      const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(body)})
+      const r=await fetch('/api/presupuesto-represupuestar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const j=await r.json()
       if(j.ok){setCreadoVersion(j.nuevaVersion);onDone(j.nuevaVersion)}
       else setErr(j.error||'Error')
@@ -1037,7 +1046,7 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
     if(fechaEv!==(p['Fecha Evento']||''))cambios['Fecha Evento']=fechaEv
     if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
     try{
-      const r=await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['Columna 1'],cambios})})
+      const r=await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],cambios})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onSaved(p['Columna 1'],cambios)
@@ -1154,7 +1163,7 @@ function Proyectos({data,mail,onRefresh}){
   const addExtra=(num,base)=>setSels(prev=>({...prev,[num]:[...getSel(num,base),{pedido:'',quien:'',precio:0,precioRef:0,esExtra:true}]}))
   const delExtra=(num,idx,base)=>setSels(prev=>({...prev,[num]:getSel(num,base).filter((_,i)=>i!==idx)}))
   const resumen=(items,totalProy)=>{let fl=0,mg=0;items.forEach(s=>{if(!s.quien)return;const v=s.precio||0;if(s.quien==='Somos Magma')mg+=v;else fl+=v});return {fl,mg,fee:totalProy-fl-mg}}
-  const guardar=async(num,base)=>{setSaving(num);const items=getSel(num,base);try{await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num,staffData:items.map(s=>({nombre:s.quien,monto:s.precio||0,pedido:s.pedido}))})});setGuardados(prev=>({...prev,[num]:true}));setOpen(null);setToast2('Staff guardado ✓');setTimeout(()=>setToast2(''),2500)}catch(e){};setSaving(null)}
+  const guardar=async(num,base)=>{setSaving(num);const items=getSel(num,base);try{await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,staffData:items.map(s=>({nombre:s.quien,monto:s.precio||0,pedido:s.pedido}))})});setGuardados(prev=>({...prev,[num]:true}));setOpen(null);setToast2('Staff guardado ✓');setTimeout(()=>setToast2(''),2500)}catch(e){};setSaving(null)}
   const inp={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none',width:'100%'}
   const sel3={padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#555',fontSize:12,outline:'none',cursor:'pointer'}
   return <div>
@@ -1305,7 +1314,7 @@ function EditarProyectoModal({p,data,mail,onClose,onSaved}){
     }
     if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
     try{
-      const r=await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],cambios,propagarPresupuesto:true})})
+      const r=await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['N° presupuesto'],cambios,propagarPresupuesto:true})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onSaved()
@@ -1395,7 +1404,7 @@ function BorrarProyectoModal({p,mail,onClose,onBorrado}){
   const borrar=async()=>{
     setSaving(true);setErr('')
     try{
-      const r=await fetch('/api/proyecto-eliminar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],accionPresupuesto:accionPresu})})
+      const r=await fetch('/api/proyecto-eliminar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['N° presupuesto'],accionPresupuesto:accionPresu})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onBorrado()
@@ -1446,7 +1455,7 @@ function FreelancerNuevoModal({nombre,mail,onClose,onSaved}){
     if(!f.nombre.trim()){setErr('Nombre requerido');return}
     setSaving(true);setErr('')
     try{
-      const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(f)})
+      const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onSaved()
@@ -1601,11 +1610,11 @@ function Facturacion({data,mail,onRefresh}){
     setSaving(true)
     try{
       const bodyFact={presupuestoNum:presuSel['Columna 1'],proyecto:presuSel['Proyecto'],agencia:presuSel['Agencia'],cliente:presuSel['Cliente'],entidad:formData.entidad,tipo:formData.tipo,nroFactura:formData.nroFactura,fechaEmision:fechaHoy(),fechaVenc:calcVencF(),plazo:formData.plazo,conIVA:formData.conIVA,neto:calcNeto(),iva:calcIvaF(),total:calcTotalF()}
-      let rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify(bodyFact)})
+      let rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bodyFact)})
       if(rf.status===409){
         const jd=await rf.json()
         if(confirm(jd.mensaje+'\n\n¿Crear de todos modos? (Cancelar para corregir el N°)')){
-          rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({...bodyFact,forzar:true})})
+          rf=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...bodyFact,forzar:true})})
         }else{setSaving(false);return}
       }
       if(rf.status===429){
@@ -1661,7 +1670,7 @@ function Facturacion({data,mail,onRefresh}){
     const tipoFC=String(f['Tipo de Factura']||'').toUpperCase()
     const reservarIVA=tipoFC==='A'&&parseMonto(f['IVA'])>0&&(opts.reservarIVA!==false)
     try{
-      const resp=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+      const resp=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         nroPresupuesto:nro,
         tipoCobro,
         monto,
@@ -1934,7 +1943,7 @@ function Facturacion({data,mail,onRefresh}){
                 <button onClick={()=>setEditarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎ Editar datos</button>
                 <button onClick={async()=>{
                   const motivo=prompt('Motivo de anulación:');if(motivo===null)return
-                  const r=await fetch('/api/factura-anular',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],motivo})})
+                  const r=await fetch('/api/factura-anular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],motivo})})
                   const j=await r.json()
                   if(j.ok){setToast('Factura anulada ✓');setTimeout(()=>setToast(''),2500);if(typeof onRefresh==='function')setTimeout(onRefresh,500)}
                   else{alert('Error: '+(j.error||'?'))}
@@ -1997,7 +2006,7 @@ function EnviarFacturaModal({f,mail,onClose}){
   const [to,setTo]=useState(''),[cc,setCc]=useState('')
   const [asunto,setAsunto]=useState(''),[cuerpo,setCuerpo]=useState('')
   useEffect(()=>{
-    fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto']})})
+    fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto']})})
       .then(r=>r.json()).then(j=>{
         if(!j.ok){setErr(j.error||'Error');setLoading(false);return}
         setPrep(j)
@@ -2095,7 +2104,7 @@ function EditarFacturaModal({f,mail,onClose,onSaved}){
     if(form.notas!==(f['COMENTARIOS']||''))cambios['COMENTARIOS']=form.notas
     if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
     try{
-      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],cambios})})
+      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],cambios})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onSaved()
@@ -2135,7 +2144,7 @@ function EditarFacturaModal({f,mail,onClose,onSaved}){
             const soloMigrados=confirm('¿Borrar SOLO los cobros migrados del histórico?\n\nOK = solo los marcados como migración\nCancelar = TODOS los cobros de esta factura (incluso los reales)')
             const revertirSaldo=confirm('¿También descontar de la cuenta destino los montos a borrar?\n\n(Solo si ya se habían sumado al saldo de alguna cuenta)')
             try{
-              const r=await fetch('/api/factura-resetear-cobro',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],soloMigrados,revertirSaldoCuenta:revertirSaldo})})
+              const r=await fetch('/api/factura-resetear-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],soloMigrados,revertirSaldoCuenta:revertirSaldo})})
               const j=await r.json()
               if(j.ok){alert(`✓ Reseteado. Cobros borrados: ${j.cobrosBorrados}${j.saldoActualizado?'. Cuenta(s) ajustada(s): '+j.saldoActualizado.map(s=>s.cuenta).join(', '):''}`);onSaved()}
               else{alert('Error: '+(j.error||'?'))}
@@ -2220,7 +2229,7 @@ function PagosStaff({data,mail,onRefresh}){
     setSavingPerson(persona.nombre)
     try{
       for(const t of trabajosAMarcar){
-        await fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesActual,persona:persona.nombre,nroProyecto:t.nro,proyecto:t.proyecto,pedido:t.pedido,monto:t.precio,fechaEvento:t.fechaEvento,agencia:t.agencia,pagado,cuenta:getCuenta(persona.nombre)})})
+        await fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mes:mesActual,persona:persona.nombre,nroProyecto:t.nro,proyecto:t.proyecto,pedido:t.pedido,monto:t.precio,fechaEvento:t.fechaEvento,agencia:t.agencia,pagado,cuenta:getCuenta(persona.nombre)})})
       }
       clearSelPersona(persona)
       if(onRefresh)await onRefresh()
@@ -2423,7 +2432,7 @@ function Egresos({data,mail,onRefresh}){
     const nuevoPagado=!isPagado(item['Pagado'])
     setSaving(`${hoja}-${fila}`)
     try{
-      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         hoja,fila,pagado:nuevoPagado,tipoPago:'total',
         fechaPago:nuevoPagado?(hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear()):'',
         ...extras,
@@ -2448,7 +2457,7 @@ function Egresos({data,mail,onRefresh}){
     const montoNum=parseFloat(m);if(!montoNum||montoNum<=0){setToast('Monto invalido');return}
     setSaving(`${hoja}-${fila}-pp`)
     try{
-      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({
+      const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         hoja,fila,tipoPago:'parcial',montoParcial:montoNum,cuentaPago:cuenta,
         fechaPago:hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear(),
       })}).then(r=>r.json())
@@ -2466,7 +2475,7 @@ function Egresos({data,mail,onRefresh}){
     const fila=findFila(arrFuente,item);if(!fila)return
     setSaving(`${hoja}-${fila}-cta`)
     try{
-      await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({hoja,fila,cuentaPago:nuevaCuenta})})
+      await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja,fila,cuentaPago:nuevaCuenta})})
       if(typeof onRefresh==='function')await onRefresh()
     }catch(e){setToast('Error: '+e.message)}
     setSaving(null)
@@ -2480,7 +2489,7 @@ function Egresos({data,mail,onRefresh}){
       const bytes=new Uint8Array(buf)
       let bin='';for(let i=0;i<bytes.byteLength;i++)bin+=String.fromCharCode(bytes[i])
       const b64=btoa(bin)
-      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({pdfBase64:b64,fileName:file.name})}).then(r=>r.json())
+      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b64,fileName:file.name})}).then(r=>r.json())
       if(r.error){setToast('Error: '+r.error);setUploading(false);return}
       // Pre-llenar datos editables con default mes/año
       const d=r.data
@@ -2503,7 +2512,7 @@ function Egresos({data,mail,onRefresh}){
     if(movs.length===0){setToast('No hay movimientos para guardar');return}
     setUploading(true)
     try{
-      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({tarjeta:previewData.tarjeta,mes:Number(previewData.mes),anio:Number(previewData.anio),movimientos:movs})}).then(r=>r.json())
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta:previewData.tarjeta,mes:Number(previewData.mes),anio:Number(previewData.anio),movimientos:movs})}).then(r=>r.json())
       if(r.error){setToast('Error: '+r.error);setUploading(false);return}
       setToast(`Guardados ${r.guardados} movimientos en ${previewData.tarjeta}`)
       setTimeout(()=>setToast(''),4000)
@@ -2741,7 +2750,7 @@ function MovimientosTarjeta({data,mail,mesNum,anio,onRefresh}){
     const fila=findFilaOriginal(m);if(!fila)return
     setSaving(fila)
     try{
-      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({fila,revisado:!isRev(m['Revisado'])})})
+      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila,revisado:!isRev(m['Revisado'])})})
       if(typeof onRefresh==='function')await onRefresh()
     }catch(e){alert('Error: '+e.message)}
     setSaving(null)
@@ -2751,7 +2760,7 @@ function MovimientosTarjeta({data,mail,mesNum,anio,onRefresh}){
     const fila=findFilaOriginal(m);if(!fila)return
     setSaving(fila)
     try{
-      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({fila,categoria:nueva})})
+      await fetch('/api/movimiento-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila,categoria:nueva})})
       if(typeof onRefresh==='function')await onRefresh()
     }catch(e){alert('Error: '+e.message)}
     setSaving(null)
@@ -2828,7 +2837,7 @@ function Balance({data,mail,onRefresh}){
   const upsertSueldo=async(persona,updates)=>{
     setSaving(persona)
     try{
-      await fetch('/api/sueldo-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({mes:mesNum,anio,persona,tipo:'fijo',...updates})})
+      await fetch('/api/sueldo-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mes:mesNum,anio,persona,tipo:'fijo',...updates})})
       if(onRefresh)await onRefresh()
     }catch(e){alert('Error: '+e.message)}
     setSaving(null)
@@ -3109,22 +3118,22 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
-      const r = await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify(row)})
+      const r = await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j = await r.json().catch(()=>({}))
       if (!j.ok) { setErroresValidacion(j.detalles||[j.error||'Error al guardar']); setSaving(false); return }
       if (j.numero) { setNumAsignado(j.numero); row['Columna 1'] = j.numero }
       if (isRepresupuestar) {
-        await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
+        await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'],estado:'REPRESUPUESTADO',motivo:form.motivo})})
       }
     }catch(e){}
-    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({nombre:form.contacto,agencia:agenciaFinal,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
+    if(hintCt&&form.contacto.trim()){try{await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto,agencia:agenciaFinal,mail:ctData.mail,telefono:ctData.telefono,cuit:ctData.cuit,cargo:ctData.cargo})})}catch(e){}}
     // Persistir cliente nuevo a CLIENTES (no solo en presu)
     if(hintCl&&form.cliente.trim()){
-      try{await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({nombre:form.cliente,agenciaHabitual:agenciaFinal})})}catch(e){}
+      try{await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.cliente,agenciaHabitual:agenciaFinal})})}catch(e){}
     }
     // Persistir agencia nueva (con datos fiscales)
     if(hintAg&&agenciaFinal&&agenciaFinal.toLowerCase()!=='sin agencia / directo'){
-      try{await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||'juan@somosmagma.com'},body:JSON.stringify({nombre:agenciaFinal,cuit:agData.cuit,condIVA:agData.condIVA,mailFact:agData.mailFact,telefono:agData.telefono,pmDefault:form.pm})})}catch(e){}
+      try{await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agenciaFinal,cuit:agData.cuit,condIVA:agData.condIVA,mailFact:agData.mailFact,telefono:agData.telefono,pmDefault:form.pm})})}catch(e){}
     }
     setOk(true);onGuardado(row);setSaving(false)
   }
@@ -3687,7 +3696,7 @@ function FichaAgencia({ag,m,presus,contactos,mail,onSaved,editando,setEditando})
   const guardar=async()=>{
     setSaving(true)
     try{
-      const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombre:ag['Nombre'],cuit:form.cuit,condIVA:form.condIVA,mailFact:form.mailFact,telefono:form.telefono,direccion:form.direccion,notas:form.notas})})
+      const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:ag['Nombre'],cuit:form.cuit,condIVA:form.condIVA,mailFact:form.mailFact,telefono:form.telefono,direccion:form.direccion,notas:form.notas})})
       const j=await r.json()
       if(j.ok)onSaved({'CUIT':form.cuit,'Condicion IVA':form.condIVA,'Mail facturacion':form.mailFact,'Telefono':form.telefono,'Direccion fiscal':form.direccion,'Notas':form.notas})
     }catch(e){}
@@ -3879,7 +3888,7 @@ function Contactos({data,mail}){
   const guardarEdit=async(c)=>{
     setSaving(true)
     try{
-      const r=await fetch('/api/contacto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({nombreOriginal:c['Nombre'],agenciaOriginal:c['Agencia'],cambios:editForm})})
+      const r=await fetch('/api/contacto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombreOriginal:c['Nombre'],agenciaOriginal:c['Agencia'],cambios:editForm})})
       const j=await r.json()
       if(j.ok){setToast('Contacto actualizado ✓');setTimeout(()=>setToast(''),2000);setEditandoFila(null)}
       else{alert('Error: '+(j.error||'?'))}
@@ -3967,7 +3976,7 @@ function Calendario({data,mail,onRefresh}){
   const ejecutarCambioEstado = async (num, estado, motivo) => {
     setSavingEstado(true)
     try {
-      const r = await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({num,estado,motivo})})
+      const r = await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,motivo})})
       const j = await r.json()
       if (j.ok) {
         setToast('Estado actualizado ✓')

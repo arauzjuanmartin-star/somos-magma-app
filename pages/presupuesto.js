@@ -121,7 +121,7 @@ export default function Presupuesto() {
     if (!nro) return
     setLoading(true)
     const mail = localStorage.getItem('magma_mail') || ''
-    fetch('/api/data', { headers: { 'x-user-email': mail } })
+    fetch('/api/data')
       .then(r => r.json())
       .then(d => {
         const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))

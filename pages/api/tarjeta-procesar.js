@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getSheets } from '../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../lib/auth-helpers'
 
 export const config = { api: { bodyParser: { sizeLimit: '15mb' } } }
 
@@ -62,8 +61,9 @@ Devolvé SOLAMENTE un JSON válido (sin texto extra, sin backticks):
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada en Vercel. Crear key en console.anthropic.com y agregarla a env vars.' })
   }

@@ -1,10 +1,13 @@
 import { getSheets, withSheetsRetry as withRetry } from '../../lib/sheets'
+import { requireAuth } from '../../lib/auth-helpers'
 
 const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
   const {
     entidad, tipo, nroFactura, fechaEmision, fechaVenc, plazo,
     conIVA, neto, iva, total, presupuestoNum, proyecto, agencia, cliente,

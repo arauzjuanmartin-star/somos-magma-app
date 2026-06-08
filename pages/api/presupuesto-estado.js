@@ -1,8 +1,11 @@
 import { getSheets } from '../../lib/sheets'
+import { requireAuth } from '../../lib/auth-helpers'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
   const { num, estado, motivo } = req.body
   try {
     const { sheets, SHEET_ID } = await getSheets()

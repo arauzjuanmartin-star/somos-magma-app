@@ -2,11 +2,10 @@ import { google } from 'googleapis'
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
 import Busboy from 'busboy'
 import { Readable } from 'stream'
+import { requireAuth } from '../../lib/auth-helpers'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
 function getAuth() {
   return new google.auth.GoogleAuth({
@@ -70,7 +69,9 @@ export const config = { api: { bodyParser: false } }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
 
   let parsed
   try {

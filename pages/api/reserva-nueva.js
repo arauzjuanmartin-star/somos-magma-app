@@ -1,11 +1,11 @@
 import { getSheets } from '../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../lib/auth-helpers'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
 
   const { cuenta, concepto, monto, tipo, origen, notas } = req.body || {}
   if (!cuenta || !concepto || !monto) return res.status(400).json({ error: 'Faltan cuenta, concepto o monto' })

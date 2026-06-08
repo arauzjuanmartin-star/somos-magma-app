@@ -1,6 +1,5 @@
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
 // 0 Columna 1 | 1 Fecha Evento | 2 PM Interno | 3 Estado | 4 Agencia | 5 Cliente
@@ -33,8 +32,9 @@ const calcularSiguienteNumero = async (sheets, SHEET_ID) => {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
-  if (mail && !MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
 
   const p = req.body
 

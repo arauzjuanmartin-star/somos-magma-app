@@ -1,6 +1,5 @@
 import { getSheets } from '../../../lib/sheets'
-
-const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
+import { requireAuth } from '../../../lib/auth-helpers'
 
 const FUENTES = {
   '2024': { sheetId: '1eu6oeHNrv0XmQN__lbiDpFmJ_YWXiO8kdxAYRH4TGoc', tab: '2024', target: 'HISTORICO_2024' },
@@ -155,8 +154,9 @@ function parseRow2023(row, año) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
-  if (!MAILS.includes(mail)) return res.status(401).json({ error: 'No autorizado' })
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
 
   const { año, dryRun = true, replaceExisting = false } = req.body || {}
   if (!año || !FUENTES[año]) return res.status(400).json({ error: 'Año invalido. Usar 2023/2024/2025' })

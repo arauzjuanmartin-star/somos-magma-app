@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import { requireAuth } from '../../lib/auth-helpers'
 
 const SHEET_ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 
@@ -29,7 +30,9 @@ const mesDeFecha = s => {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const mail = req.headers['x-user-email'] || ''
+  const auth = await requireAuth(req, res)
+  if (!auth) return
+  const mail = auth.mail
   const { num, staffData } = req.body
   if (!num) return res.status(400).json({ error: 'Falta num' })
 
