@@ -2166,16 +2166,65 @@ function PagosStaff({data,mail,onRefresh}){
   const COLORS=['#1543F8','#CE2637','#9635AB','#1D9E75','#BA7517','#E24B4A']
   const getColor=n=>COLORS[n.charCodeAt(0)%COLORS.length]
   const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+  const normNombre=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
 
   const [mesSel,setMesSel]=useState(null)
   const [abierto,setAbierto]=useState(null)
   const [showDesc,setShowDesc]=useState(null)
+  const [editBank,setEditBank]=useState(null)  // nombre persona con banco abierto
+  const [bankForm,setBankForm]=useState({})    // {nombre: {cuit, banco, alias, cbu, mail, celular}}
+  const [savingBank,setSavingBank]=useState(false)
   const [cuentaLocal,setCuentaLocal]=useState({})
   const [savingPerson,setSavingPerson]=useState(null)
   const [copiado,setCopiado]=useState(null)
+  const [busqueda,setBusqueda]=useState('')
+  const [filtroEstado,setFiltroEstado]=useState('todos') // todos / pendientes / pagados
 
   const proyectos=(data.proyectos||[]).filter(p=>p['N° presupuesto'])
   const pagosPersistidos=data.pagosStaff||[]
+  const rrhh=data.rrhh||[]
+
+  // Mapeo rápido: nombre normalizado → fila de RRHH (para datos bancarios)
+  const rrhhMap = {}
+  rrhh.forEach(r => { const k = normNombre(r['Nombre Apellido']); if (k) rrhhMap[k] = r })
+  const datosFreelancer = (nombre) => rrhhMap[normNombre(nombre)] || null
+
+  // Copiar al portapapeles (CBU/alias)
+  const copiarTexto = (texto, etiqueta) => {
+    navigator.clipboard.writeText(String(texto||'').trim()).then(()=>{
+      setCopiado(etiqueta); setTimeout(()=>setCopiado(null), 1500)
+    })
+  }
+
+  // Abre el form de edición bancaria con datos actuales del freelancer
+  const abrirEditBank = (nombre) => {
+    const d = datosFreelancer(nombre) || {}
+    setBankForm(prev => ({...prev, [nombre]: {
+      cuit: String(d['CUIT/CUIL']||'').replace(/[^\d]/g,''),
+      banco: d['Banco']||'',
+      alias: d['Alias']||'',
+      cbu: String(d['CBU']||'').replace(/[^\d]/g,''),
+      mail: d['Mail']||'',
+      celular: d['Celular']||'',
+    }}))
+    setEditBank(editBank===nombre ? null : nombre)
+  }
+  const guardarBank = async (nombre) => {
+    const f = bankForm[nombre] || {}
+    setSavingBank(true)
+    try {
+      const body = {nombre, cuit:f.cuit, banco:f.banco, alias:f.alias, cbu:f.cbu, mailFreelancer:f.mail, celular:f.celular}
+      const r = await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const j = await r.json()
+      if (j.ok) {
+        setEditBank(null)
+        if (onRefresh) await onRefresh()
+      } else {
+        alert('Error: '+(j.error||'?'))
+      }
+    } catch(e){ alert('Error: '+e.message) }
+    setSavingBank(false)
+  }
 
   const MESES_VALIDOS=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
   const meses=[...new Set(proyectos.map(p=>p['2']||'').filter(m=>m&&MESES_VALIDOS.some(mv=>m.includes(mv))))].sort()
@@ -2254,9 +2303,17 @@ function PagosStaff({data,mail,onRefresh}){
   const totalPag=lista.reduce((s,p)=>s+p.totalPagado,0)
   const personasFullPagadas=lista.filter(p=>getPersonaPagado(p)).length
 
+  // Filtrado: búsqueda por nombre + estado (todos/pendientes/pagados)
+  const listaFiltrada = lista.filter(p => {
+    if (busqueda && !normNombre(p.nombre).includes(normNombre(busqueda))) return false
+    if (filtroEstado === 'pendientes' && p.totalPendiente <= 0) return false
+    if (filtroEstado === 'pagados' && !getPersonaPagado(p)) return false
+    return true
+  })
+
   return <div>
     {/* Tabs de meses */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:8}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:8}}>
       <div style={{fontSize:13,fontWeight:500,color:'#555'}}>Pagos staff — se paga el 15 de cada mes</div>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
         {meses.map(m=>{
@@ -2268,6 +2325,21 @@ function PagosStaff({data,mail,onRefresh}){
       </div>
     </div>
 
+    {/* Buscador + filtros */}
+    <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+      <div style={{position:'relative',flex:'1 1 280px',maxWidth:380}}>
+        <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#555',fontSize:13,pointerEvents:'none'}}>🔍</span>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar freelancer (nombre o apellido)" style={{width:'100%',padding:'8px 32px 8px 32px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'#1A1A1A',color:'#F0F0F0',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+        {busqueda&&<button onClick={()=>setBusqueda('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'transparent',border:'none',color:'#666',cursor:'pointer',fontSize:14,padding:'2px 6px'}}>×</button>}
+      </div>
+      <div style={{display:'flex',gap:0,borderRadius:6,overflow:'hidden',border:'0.5px solid #2A2A2A'}}>
+        {[['todos','Todos',lista.length],['pendientes','Pendientes',lista.filter(p=>p.totalPendiente>0).length],['pagados','Pagados',personasFullPagadas]].map(([v,l,c])=>
+          <button key={v} onClick={()=>setFiltroEstado(v)} style={{padding:'7px 12px',background:filtroEstado===v?'#1E1E1E':'transparent',color:filtroEstado===v?'#F0F0F0':'#666',border:'none',fontSize:11,cursor:'pointer',borderRight:v!=='pagados'?'0.5px solid #2A2A2A':'none'}}>{l} <span style={{color:'#555',fontSize:10,marginLeft:3}}>{c}</span></button>
+        )}
+      </div>
+      {listaFiltrada.length<lista.length&&<span style={{fontSize:11,color:'#777'}}>Mostrando {listaFiltrada.length} de {lista.length}</span>}
+    </div>
+
     {/* KPIs */}
     <div style={S.k4}>
       <K lbl='Total a pagar' val={fmtM(totalPend)} sub={lista.filter(p=>p.totalPendiente>0).length+' persona/s · vence el 15'} c='#E24B4A'/>
@@ -2277,9 +2349,10 @@ function PagosStaff({data,mail,onRefresh}){
     </div>
 
     {/* Lista */}
-    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 280px)'}}>
+    <div style={{overflowY:'auto',maxHeight:'calc(100vh - 320px)'}}>
       {lista.length===0&&<div style={S.nd}>Sin staff asignado en proyectos de {mesActual||'este mes'}</div>}
-      {lista.map((persona,i)=>{
+      {lista.length>0&&listaFiltrada.length===0&&<div style={S.nd}>Ningún freelancer coincide con "{busqueda}"</div>}
+      {listaFiltrada.map((persona,i)=>{
         const fullPagado=getPersonaPagado(persona)
         const isOpen=abierto===persona.nombre
         const isDesc=showDesc===persona.nombre
@@ -2307,6 +2380,72 @@ function PagosStaff({data,mail,onRefresh}){
 
           {/* Panel detalle */}
           {isOpen&&<div style={{borderTop:'0.5px solid #2A2A2A'}}>
+            {/* DATOS BANCARIOS Y CONTACTO */}
+            {(() => {
+              const fl = datosFreelancer(persona.nombre)
+              const isEdit = editBank === persona.nombre
+              const form = bankForm[persona.nombre] || {cuit:'',banco:'',alias:'',cbu:'',mail:'',celular:''}
+              const setF = (k,v) => setBankForm(prev => ({...prev, [persona.nombre]: {...(prev[persona.nombre]||form), [k]:v}}))
+              const cbuClean = String(fl?.['CBU']||'').replace(/[^\d]/g,'')
+              const cuitClean = String(fl?.['CUIT/CUIL']||'').replace(/[^\d]/g,'')
+              const aliasV = fl?.['Alias']||''
+              const bancoV = fl?.['Banco']||''
+              const mailV = fl?.['Mail']||''
+              const celV = fl?.['Celular']||''
+              const tienAlgo = cbuClean || aliasV || cuitClean
+              const faltaInfo = !cbuClean || !aliasV
+              const inp = {flex:1,minWidth:0,padding:'6px 9px',borderRadius:5,border:'0.5px solid #2A2A2A',background:'#0D0D0D',color:'#F0F0F0',fontSize:11,outline:'none',fontFamily:'inherit'}
+
+              if (isEdit) return <div style={{background:'#0F0F0F',padding:'12px 16px',borderBottom:'0.5px solid #2A2A2A'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <span style={{fontSize:11,color:'#1D9E75',textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{fl ? 'Editar datos bancarios' : 'Cargar freelancer + datos bancarios'}</span>
+                  <button onClick={()=>setEditBank(null)} style={{padding:'3px 8px',borderRadius:4,border:'0.5px solid #2A2A2A',background:'transparent',color:'#666',fontSize:11,cursor:'pointer'}}>Cancelar</button>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
+                  <input style={inp} placeholder="CUIT (solo números)" value={form.cuit||''} onChange={e=>setF('cuit',e.target.value.replace(/[^\d]/g,''))} maxLength={11}/>
+                  <input style={inp} placeholder="Banco" value={form.banco||''} onChange={e=>setF('banco',e.target.value)}/>
+                  <input style={inp} placeholder="Alias" value={form.alias||''} onChange={e=>setF('alias',e.target.value)}/>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:6,marginBottom:8}}>
+                  <input style={inp} placeholder="CBU (22 dígitos)" value={form.cbu||''} onChange={e=>setF('cbu',e.target.value.replace(/[^\d]/g,''))} maxLength={22}/>
+                  <input style={inp} placeholder="Mail" value={form.mail||''} onChange={e=>setF('mail',e.target.value)}/>
+                  <input style={inp} placeholder="Celular" value={form.celular||''} onChange={e=>setF('celular',e.target.value)}/>
+                </div>
+                <button disabled={savingBank} onClick={()=>guardarBank(persona.nombre)} style={{padding:'6px 14px',borderRadius:5,border:'none',background:'#1D9E75',color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer',opacity:savingBank?0.5:1}}>{savingBank?'Guardando...':'Guardar en RRHH'}</button>
+                {!fl && <span style={{fontSize:10,color:'#888',marginLeft:10}}>Crea ficha nueva en RRHH</span>}
+              </div>
+
+              return <div style={{background:faltaInfo?'#BA751708':'#0F0F0F',padding:'10px 16px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+                {!fl && <>
+                  <span style={{fontSize:11,color:'#E24B4A'}}>⚠ {persona.nombre} no está en RRHH</span>
+                  <button onClick={()=>abrirEditBank(persona.nombre)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #1D9E7560',background:'#1D9E7515',color:'#1D9E75',fontSize:11,cursor:'pointer'}}>+ Cargar ficha</button>
+                </>}
+                {fl && <>
+                  {cuitClean && <div onClick={()=>copiarTexto(cuitClean,'cuit-'+i)} style={{cursor:'pointer'}} title="Click para copiar">
+                    <span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>CUIT</span>
+                    <span style={{fontSize:11,fontFamily:'monospace',color:'#B0B0B0'}}>{cuitClean}</span>
+                    {copiado==='cuit-'+i&&<span style={{fontSize:10,color:'#1D9E75',marginLeft:4}}>✓</span>}
+                  </div>}
+                  {bancoV && <div><span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>Banco</span><span style={{fontSize:11,color:'#B0B0B0'}}>{bancoV}</span></div>}
+                  {aliasV && <div onClick={()=>copiarTexto(aliasV,'alias-'+i)} style={{cursor:'pointer'}} title="Click para copiar">
+                    <span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>Alias</span>
+                    <span style={{fontSize:11,fontFamily:'monospace',color:'#1D9E75'}}>{aliasV}</span>
+                    {copiado==='alias-'+i&&<span style={{fontSize:10,color:'#1D9E75',marginLeft:4}}>✓</span>}
+                  </div>}
+                  {cbuClean && <div onClick={()=>copiarTexto(cbuClean,'cbu-'+i)} style={{cursor:'pointer'}} title="Click para copiar">
+                    <span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>CBU</span>
+                    <span style={{fontSize:11,fontFamily:'monospace',color:'#1543F8'}}>{cbuClean}</span>
+                    {copiado==='cbu-'+i&&<span style={{fontSize:10,color:'#1D9E75',marginLeft:4}}>✓</span>}
+                  </div>}
+                  {mailV && <div><span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>Mail</span><span style={{fontSize:11,color:'#B0B0B0'}}>{mailV}</span></div>}
+                  {celV && <div><span style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginRight:4}}>Tel</span><span style={{fontSize:11,color:'#B0B0B0'}}>{celV}</span></div>}
+                  {!tienAlgo && <span style={{fontSize:11,color:'#BA7517'}}>⚠ Ficha vacía — falta info bancaria</span>}
+                  {faltaInfo && tienAlgo && <span style={{fontSize:10,color:'#BA7517'}}>⚠ Falta {!cbuClean?'CBU':''}{!cbuClean&&!aliasV?' y ':''}{!aliasV?'Alias':''}</span>}
+                  <button onClick={()=>abrirEditBank(persona.nombre)} style={{marginLeft:'auto',padding:'4px 10px',borderRadius:4,border:'0.5px solid '+(faltaInfo?'#BA7517':'#2A2A2A'),background:faltaInfo?'#BA751715':'transparent',color:faltaInfo?'#BA7517':'#888',fontSize:11,cursor:'pointer'}}>{faltaInfo?'Completar':'Editar'}</button>
+                </>}
+              </div>
+            })()}
+
             {/* Headers */}
             <div style={{display:'grid',gridTemplateColumns:'32px 1fr 2fr 80px 110px',background:'#1A1A1A'}}>
               {['','Proyecto','Servicio','Fecha','Monto'].map((h,k)=><div key={k} style={{fontSize:10,color:'#555',padding:'7px 10px',textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</div>)}
