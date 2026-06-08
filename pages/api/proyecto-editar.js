@@ -54,15 +54,19 @@ export default async function handler(req, res) {
     // Propagar a PRESUPUESTOS (Fecha Evento, Cliente, Proyecto, Agencia, PM)
     let propagado = false
     if (propagarPresupuesto !== false) {
-      const rPres = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:K' })
-      const presHeaders = rPres.data.values[0]
-      const presRows = rPres.data.values
+      // Leer headers (col 47/48 incluidas) + col A para buscar fila
+      const [rHead, rColA] = await Promise.all([
+        sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:AX1' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:A' }),
+      ])
+      const presHeaders = rHead.data.values?.[0] || []
+      const presRows = rColA.data.values || []
       let filaPres = -1
       for (let i = 1; i < presRows.length; i++) {
         if (String(presRows[i][0]||'').trim() === String(num).trim()) { filaPres = i + 1; break }
       }
       if (filaPres > 0) {
-        const propagables = ['Fecha Evento','Cliente','Proyecto','Agencia','PM Interno','Contacto']
+        const propagables = ['Fecha Evento','Cliente','Proyecto','Agencia','PM Interno','Contacto','Tipo Fechas','Fechas Adicionales','Cant. Fechas']
         const updPres = []
         propagables.forEach(campo => {
           if (cambios[campo] === undefined) return

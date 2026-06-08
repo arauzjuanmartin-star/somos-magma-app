@@ -1234,29 +1234,75 @@ function Proyectos({data,mail,onRefresh}){
       })}
     </div>
     {freelancerNuevo&&<FreelancerNuevoModal nombre={freelancerNuevo.nombre} mail={mail} onClose={()=>setFreelancerNuevo(null)} onSaved={()=>{setFreelancerNuevo(null);setToast2('Freelancer agregado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
-    {editarP&&<EditarProyectoModal p={editarP} mail={mail} onClose={()=>setEditarP(null)} onSaved={()=>{setEditarP(null);setToast2('Proyecto actualizado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
+    {editarP&&<EditarProyectoModal p={editarP} data={data} mail={mail} onClose={()=>setEditarP(null)} onSaved={()=>{setEditarP(null);setToast2('Proyecto actualizado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
     {borrarP&&<BorrarProyectoModal p={borrarP} mail={mail} onClose={()=>setBorrarP(null)} onBorrado={()=>{setBorrarP(null);setToast2('Proyecto eliminado ✓');setTimeout(()=>setToast2(''),2500);if(onRefresh)setTimeout(onRefresh,500)}}/>}
   </div>
 }
 
-function EditarProyectoModal({p,mail,onClose,onSaved}){
+function EditarProyectoModal({p,data,mail,onClose,onSaved}){
+  // Buscar presupuesto original para conocer modo de fechas
+  const presu = (data?.presupuestos||[]).find(x => String(x['Columna 1'])===String(p['N° presupuesto']))
+  const tipoOrig = String(presu?.['Tipo Fechas']||'').toLowerCase().trim() || 'dia'
+  const adicionalesOrig = String(presu?.['Fechas Adicionales']||'').trim()
+  const parseFechaSheet = s => { const parts=String(s||'').split('/'); if(parts.length===3){const yr=parts[2].length===4?parts[2]:'20'+parts[2]; return `${yr}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`}; return '' }
+  const toDMY = iso => { const [y,m,d]=iso.split('-'); return `${parseInt(d)}/${parseInt(m)}/${y}` }
+  const fechaEv1 = parseFechaSheet(p['Fecha Evento'])
+
   const [form,setForm]=useState({
-    fechaEvento: p['Fecha Evento']||'',
+    fechaMode: (tipoOrig==='rango'||tipoOrig==='multi') ? tipoOrig : 'dia',
+    fe1: fechaEv1,
+    feIni: tipoOrig==='rango' ? fechaEv1 : '',
+    feFin: tipoOrig==='rango' && adicionalesOrig ? parseFechaSheet(adicionalesOrig) : '',
     cliente: p['Cliente']||'',
     proyecto: p['Proyecto']||'',
     agencia: p['Agencia']||'',
     pm: p['PM']||p['PM Interno']||'',
+    contacto: p['Contacto']||presu?.['Contacto']||'',
   })
+  const [diasMulti,setDiasMulti]=useState(
+    tipoOrig==='multi' && adicionalesOrig
+      ? [fechaEv1, ...adicionalesOrig.split('|').filter(Boolean).map(parseFechaSheet)]
+      : ['']
+  )
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
   const set=(k,v)=>setForm(p=>({...p,[k]:v}))
+
+  // Autocompletes dinámicos del sheet
+  const agenciasAuto = [...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
+  const clientesAuto = [...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
+  const contactosAuto = [...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
+
   const guardar=async()=>{
     setSaving(true);setErr('')
+    // Determinar Fecha Evento + Tipo + Adicionales según modo
+    let fechaEvento='', tipo='dia', adicionales='', cantFechas=1
+    if (form.fechaMode==='dia') {
+      if(!form.fe1){setErr('Falta la fecha');setSaving(false);return}
+      fechaEvento = toDMY(form.fe1); tipo='dia'; cantFechas=1
+    } else if (form.fechaMode==='rango') {
+      if(!form.feIni||!form.feFin){setErr('Faltan fechas del rango');setSaving(false);return}
+      if(new Date(form.feFin)<new Date(form.feIni)){setErr('La fecha fin no puede ser antes que la inicial');setSaving(false);return}
+      fechaEvento = toDMY(form.feIni); tipo='rango'; adicionales = toDMY(form.feFin)
+      cantFechas = Math.max(1, Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1)
+    } else {
+      const ms = diasMulti.filter(Boolean)
+      if(ms.length<2){setErr('Cargá al menos 2 fechas');setSaving(false);return}
+      const dmy = ms.map(toDMY)
+      fechaEvento = dmy[0]; tipo='multi'; adicionales = dmy.slice(1).join('|'); cantFechas = dmy.length
+    }
     const cambios={}
-    if(form.fechaEvento!==(p['Fecha Evento']||''))cambios['Fecha Evento']=form.fechaEvento
+    if(fechaEvento!==(p['Fecha Evento']||''))cambios['Fecha Evento']=fechaEvento
     if(form.cliente!==(p['Cliente']||''))cambios['Cliente']=form.cliente
     if(form.proyecto!==(p['Proyecto']||''))cambios['Proyecto']=form.proyecto
     if(form.agencia!==(p['Agencia']||''))cambios['Agencia']=form.agencia
     if(form.pm!==(p['PM']||p['PM Interno']||''))cambios['PM Interno']=form.pm
+    if(form.contacto!==(p['Contacto']||presu?.['Contacto']||''))cambios['Contacto']=form.contacto
+    // Siempre mandamos tipo/adicionales si hay cambio en modo o fechas (van a PRESUPUESTOS via propagables)
+    if(tipo!==tipoOrig || adicionales!==adicionalesOrig){
+      cambios['Tipo Fechas']=tipo
+      cambios['Fechas Adicionales']=adicionales
+      cambios['Cant. Fechas']=cantFechas
+    }
     if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
     try{
       const r=await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail},body:JSON.stringify({num:p['N° presupuesto'],cambios,propagarPresupuesto:true})})
@@ -1265,34 +1311,79 @@ function EditarProyectoModal({p,mail,onClose,onSaved}){
       onSaved()
     }catch(e){setErr(e.message);setSaving(false)}
   }
-  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
-  const lbl={fontSize:10,color:'#555',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}
-  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div style={{width:520,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden'}}>
-      <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
-        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{p['N° presupuesto']}</span>
-        <span style={{fontSize:13,fontWeight:500}}>Editar proyecto</span>
+  const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'8px 10px',outline:'none',width:'100%',fontFamily:'inherit',boxSizing:'border-box'}
+  const lbl={fontSize:10,color:'#777',display:'block',marginBottom:4,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}
+  const modoBtn = (v,label) => <button onClick={()=>set('fechaMode',v)} style={{flex:1,padding:'7px',borderRadius:5,border:'0.5px solid '+(form.fechaMode===v?'#1543F8':'#2A2A2A'),background:form.fechaMode===v?'#1543F818':'transparent',color:form.fechaMode===v?'#1543F8':'#888',fontSize:11,cursor:'pointer',fontWeight:form.fechaMode===v?600:400}}>{label}</button>
+
+  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.78)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{width:580,maxHeight:'90vh',overflowY:'auto',background:'#0D0D0D',borderRadius:12,border:'0.5px solid #2A2A2A',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'16px 22px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,background:'#111'}}>
+        <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:'monospace',fontWeight:600}}>#{p['N° presupuesto']}</span>
+        <div>
+          <div style={{fontSize:14,fontWeight:600,color:'#F0F0F0'}}>Editar proyecto</div>
+          <div style={{fontSize:10,color:'#666',marginTop:1}}>{p['Cliente']||p['Agencia']||'—'} · {p['Proyecto']||''}</div>
+        </div>
         <div style={{flex:1}}/>
-        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+        <button onClick={onClose} style={{fontSize:20,background:'transparent',border:'none',color:'#555',cursor:'pointer',width:30,height:30}}>×</button>
       </div>
-      <div style={{padding:20}}>
-        <div style={{fontSize:11,color:'#888',marginBottom:14}}>Los cambios se propagan al presupuesto original también.</div>
-        <label style={{display:'block',marginBottom:10}}><span style={lbl}>Fecha de evento (DD/MM/YYYY)</span><input style={inp} value={form.fechaEvento} onChange={e=>set('fechaEvento',e.target.value)} placeholder="15/3/2026"/></label>
+
+      <div style={{padding:'18px 22px',overflowY:'auto'}}>
+        <div style={{fontSize:11,color:'#666',marginBottom:14,padding:'8px 10px',background:'#1543F808',borderLeft:'2px solid #1543F8',borderRadius:'3px 5px 5px 3px'}}>Los cambios se reflejan también en PRESUPUESTOS — fecha, tipo de jornada y todo lo demás queda sincronizado.</div>
+
+        {/* MODO DE FECHA */}
+        <div style={{marginBottom:14}}>
+          <div style={lbl}>Modo de fecha</div>
+          <div style={{display:'flex',gap:6}}>
+            {modoBtn('dia','📅 Un día')}
+            {modoBtn('rango','↔ Rango')}
+            {modoBtn('multi','🗓 Varios días')}
+          </div>
+        </div>
+
+        {form.fechaMode==='dia'&&<label style={{display:'block',marginBottom:14}}><span style={lbl}>Fecha del evento</span><input style={inp} type="date" value={form.fe1} onChange={e=>set('fe1',e.target.value)}/></label>}
+        {form.fechaMode==='rango'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+          <label><span style={lbl}>Desde</span><input style={inp} type="date" value={form.feIni} onChange={e=>set('feIni',e.target.value)}/></label>
+          <label><span style={lbl}>Hasta</span><input style={inp} type="date" value={form.feFin} onChange={e=>set('feFin',e.target.value)}/></label>
+        </div>}
+        {form.fechaMode==='multi'&&<div style={{marginBottom:14}}>
+          <span style={lbl}>Fechas del evento</span>
+          {diasMulti.map((d,i)=>(
+            <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 32px',gap:6,alignItems:'center',marginBottom:6}}>
+              <input style={inp} type="date" value={d} onChange={e=>{const n=[...diasMulti];n[i]=e.target.value;setDiasMulti(n)}}/>
+              <button onClick={()=>{if(diasMulti.length>1)setDiasMulti(diasMulti.filter((_,j)=>j!==i))}} style={{width:32,height:34,border:'0.5px solid #2A2A2A',background:'transparent',color:'#666',borderRadius:5,cursor:'pointer',fontSize:14}}>×</button>
+            </div>
+          ))}
+          <button onClick={()=>setDiasMulti([...diasMulti,''])} style={{padding:'6px',borderRadius:5,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#666',fontSize:11,cursor:'pointer',width:'100%'}}>+ Agregar día</button>
+        </div>}
+
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-          <label><span style={lbl}>Agencia</span><input style={inp} value={form.agencia} onChange={e=>set('agencia',e.target.value)}/></label>
-          <label><span style={lbl}>Cliente</span><input style={inp} value={form.cliente} onChange={e=>set('cliente',e.target.value)}/></label>
+          <label><span style={lbl}>Agencia</span>
+            <input list="ep-ag" style={inp} value={form.agencia} onChange={e=>set('agencia',e.target.value)}/>
+            <datalist id="ep-ag">{agenciasAuto.map(a=><option key={a} value={a}/>)}</datalist>
+          </label>
+          <label><span style={lbl}>Cliente / Marca</span>
+            <input list="ep-cl" style={inp} value={form.cliente} onChange={e=>set('cliente',e.target.value)}/>
+            <datalist id="ep-cl">{clientesAuto.map(a=><option key={a} value={a}/>)}</datalist>
+          </label>
         </div>
         <label style={{display:'block',marginBottom:10}}><span style={lbl}>Proyecto / descripción</span><input style={inp} value={form.proyecto} onChange={e=>set('proyecto',e.target.value)}/></label>
-        <label style={{display:'block',marginBottom:10}}><span style={lbl}>PM interno</span>
-          <select style={inp} value={form.pm} onChange={e=>set('pm',e.target.value)}>
-            <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option><option>Tomi</option>
-          </select>
-        </label>
-        {err&&<div style={{marginTop:8,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <label><span style={lbl}>PM interno</span>
+            <select style={inp} value={form.pm} onChange={e=>set('pm',e.target.value)}>
+              <option value="">— PM —</option><option>Juan</option><option>Sofi</option><option>Lulu</option><option>Tomi</option>
+            </select>
+          </label>
+          <label><span style={lbl}>Contacto</span>
+            <input list="ep-ct" style={inp} value={form.contacto} onChange={e=>set('contacto',e.target.value)}/>
+            <datalist id="ep-ct">{contactosAuto.map(c=><option key={c} value={c}/>)}</datalist>
+          </label>
+        </div>
+        {err&&<div style={{marginTop:8,padding:9,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
       </div>
-      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
-        <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={guardar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
+
+      <div style={{padding:'14px 22px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end',background:'#0A0A0A'}}>
+        <button onClick={onClose} style={{padding:'9px 18px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'9px 22px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
       </div>
     </div>
   </div>
@@ -2840,16 +2931,24 @@ const readPedidos = p => {
     const rx = new RegExp('^\\s*'+prefix+'\\s*'+idx+'\\s*$','i')
     return Object.keys(p).find(k => rx.test(k)) || null
   }
+  // Lee 'Fee Servicios' guardado como csv '1|0|1' — preserva el flag por servicio del original
+  const feeFlags = String(p['Fee Servicios']||'').split('|')
   const out = []
+  let svcIdx = 0
   for (let i=1;i<=12;i++) {
     const pk = findKey('pedido', i), ck = findKey('precio', i)
     const rawSvc = pk ? (p[pk]||'') : ''
     const svcClean = stripSvcPrefix(rawSvc)
-    // Match contra SVCS_LIST para validar el nombre
     const match = SVCS_LIST.find(s => stripSvcPrefix(s.n) === svcClean || s.n === rawSvc)
     const svc = match ? match.n : (svcClean || '')
     const precio = ck ? parseMonto(p[ck]) : 0
-    if (svc || precio) out.push({svc, precio})
+    if (svc || precio) {
+      // Fee del original: '0' explícito → false, '1' → true, vacío → fallback al default del servicio
+      const flag = feeFlags[svcIdx]
+      const fee = flag === '0' ? false : flag === '1' ? true : (SVCS_LIST.find(s=>s.n===svc)?.fee ?? true)
+      out.push({svc, precio, fee})
+      svcIdx++
+    }
   }
   return out
 }
@@ -2873,15 +2972,21 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const pedidosIniciales = isRepresupuestar ? readPedidos(initialData) : []
   const [peds,setPeds]=useState(
     isRepresupuestar && pedidosIniciales.length > 0
-      ? pedidosIniciales.map((x,i)=>({id:i+1,svc:x.svc,precio:String(x.precio||''),feeAg:(SVCS_LIST.find(s=>s.n===x.svc)?.fee)??true,manual:false}))
+      ? pedidosIniciales.map((x,i)=>({id:i+1,svc:x.svc,precio:String(x.precio||''),feeAg:x.fee,manual:false}))
       : [{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}]
   )
   const parseFechaSheet = s => { const parts=String(s||'').split('/'); if(parts.length===3){const yr=parts[2].length===4?parts[2]:'20'+parts[2]; return `${yr}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`}; return '' }
+  // Para represupuestar: recuperar tipo de fechas y adicionales (col 47/48 del sheet)
+  const tipoOrig = String(initialData?.['Tipo Fechas']||'').toLowerCase().trim() || 'dia'
+  const adicionalesOrig = String(initialData?.['Fechas Adicionales']||'').trim()
+  // Para represupuestar: el ajuste original puede ser negativo (descuento) o positivo (recargo)
+  const ajusteOrig = parseMonto(initialData?.['Ajuste'])
   const [form,setForm]=useState(isRepresupuestar ? {
     fp:new Date().toISOString().slice(0,10),
-    fechaMode:'dia',
+    fechaMode:(tipoOrig==='rango'||tipoOrig==='multi')?tipoOrig:'dia',
     fe1:parseFechaSheet(initialData['Fecha Evento']),
-    feIni:'',feFin:'',
+    feIni: tipoOrig==='rango' ? parseFechaSheet(initialData['Fecha Evento']) : '',
+    feFin: tipoOrig==='rango' && adicionalesOrig ? parseFechaSheet(adicionalesOrig) : '',
     agencia:initialData['Agencia']||'',
     cliente:initialData['Cliente']||'',
     proyecto:initialData['Proyecto']||'',
@@ -2892,15 +2997,19 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     interes:String(initialData['Interes %']||'0').replace(/[^\d.]/g,'')||'0',
     gan: parseMonto(initialData['Impuesto a las ganancias'])>0,
     iibb: parseMonto(initialData['IIBB'])>0,
-    tajuste:'1',
-    ajuste:String(parseMonto(initialData['Ajuste'])||'0'),
+    tajuste: ajusteOrig < 0 ? '-1' : '1',
+    ajuste:String(Math.abs(ajusteOrig)||'0'),
     motivo:'',
   } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:''})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false),[numAsignado,setNumAsignado]=useState(null)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
   const [agData,setAgData]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
-  const [diasMulti,setDiasMulti]=useState([''])
+  const [diasMulti,setDiasMulti]=useState(
+    isRepresupuestar && tipoOrig==='multi' && adicionalesOrig
+      ? [parseFechaSheet(initialData['Fecha Evento']), ...adicionalesOrig.split('|').filter(Boolean).map(parseFechaSheet)]
+      : ['']
+  )
   const agenciasData = data?.agencias || []
   const listadoData = data?.listado || {}
   // Combinar fuentes: AGENCIAS (con ficha fiscal) + listado.agencias (histórico) + presupuestos previos
