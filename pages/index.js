@@ -1023,9 +1023,9 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
   const [contacto,setContacto]=useState(p['Contacto']||'')
   const [fechaEv,setFechaEv]=useState(p['Fecha Evento']||'')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
-  const ags=[...new Set((data?.presupuestos||[]).map(x=>x['Agencia']).filter(Boolean))].sort()
-  const clis=[...new Set((data?.presupuestos||[]).map(x=>x['Cliente']).filter(Boolean))].sort()
-  const cts=[...new Set((data?.presupuestos||[]).map(x=>x['Contacto']).filter(Boolean))].sort()
+  const ags=[...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
+  const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
+  const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
   const guardar=async()=>{
     setSaving(true);setErr('')
     const cambios={}
@@ -2915,6 +2915,13 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     ...((data?.clientes||[]).map(c => c['Nombre'])),
     ...((data?.presupuestos||[]).map(p => p['Cliente']))
   ].map(v => String(v||'').trim()).filter(Boolean))].sort()
+  // Contactos: solapa Contactos/agencias (real) + historico CONTACTOS_LIST + presupuestos previos
+  // Antes era solo CONTACTOS_LIST hardcoded → no aparecían contactos cargados al sheet (bug Analia Canepa 2026-06-08)
+  const contactosAutocomplete = [...new Set([
+    ...((data?.contactos||[]).map(c => c['Nombre'])),
+    ...CONTACTOS_LIST.map(c => c.n),
+    ...((data?.presupuestos||[]).map(p => p['Contacto']))
+  ].map(v => String(v||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
   const agenciaSeleccionada = agenciasData.find(a => String(a['Nombre']||'').toLowerCase() === form.agencia.toLowerCase().trim())
   const [erroresValidacion,setErroresValidacion]=useState([])
   const validar = () => {
@@ -3109,8 +3116,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Proyecto / descripcion</span><input style={inp} value={form.proyecto} onChange={e=>setF('proyecto',e.target.value)} placeholder="Ej: Evento anual, Film..."/></label>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <span style={lbl}>Contacto</span>
-              <input style={inp} list="np-ct" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!CONTACTOS_LIST.some(a=>a.n.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del contacto"/>
-              <datalist id="np-ct">{CONTACTOS_LIST.map(c=><option key={c.n} value={c.n}/>)}</datalist>
+              <input style={inp} list="np-ct" value={form.contacto} onChange={e=>{setF('contacto',e.target.value);setHintCt(!!e.target.value&&!contactosAutocomplete.some(a=>a.toLowerCase()===e.target.value.toLowerCase()))}} placeholder="Nombre del contacto"/>
+              <datalist id="np-ct">{contactosAutocomplete.map(c=><option key={c} value={c}/>)}</datalist>
               {hintCt&&<div style={{marginTop:6,padding:10,background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6}}><div style={{fontSize:10,color:'#1D9E75',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>Contacto nuevo - completar datos</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}><input style={{...inp,fontSize:11}} placeholder='Mail' value={ctData.mail} onChange={e=>setCtData(p=>({...p,mail:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Telefono' value={ctData.telefono} onChange={e=>setCtData(p=>({...p,telefono:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='CUIT' value={ctData.cuit} onChange={e=>setCtData(p=>({...p,cuit:e.target.value}))}/><input style={{...inp,fontSize:11}} placeholder='Cargo' value={ctData.cargo} onChange={e=>setCtData(p=>({...p,cargo:e.target.value}))}/></div></div>}
             </div>
           </div>
