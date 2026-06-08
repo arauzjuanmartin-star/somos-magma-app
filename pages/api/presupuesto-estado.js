@@ -67,8 +67,20 @@ export default async function handler(req, res) {
       } catch (e) { console.error('Error eliminando proyecto al represupuestar:', e) }
     }
 
-    // El motivo NO se escribe en una columna de PRESUPUESTOS (antes iba a AU y pisaba Ajuste).
-    // Va solo al LOG para auditoría.
+    // Escribir el motivo en col Y (Motivo Desaprobado) — se guarda siempre que venga, no solo para DESAPROBADO.
+    // Si el estado vuelve a APROBADO o EN ESPERA, el motivo se limpia (no aplica más).
+    try {
+      const motivoFinal = (estado === 'DESAPROBADO' || estado === 'REPRESUPUESTADO') ? (motivo || '') : ''
+      if (motivoFinal || estado === 'APROBADO' || estado === 'EN ESPERA') {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `PRESUPUESTOS!Y${rowIndex}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[motivoFinal]] }
+        })
+      }
+    } catch (e) { console.error('Error escribiendo motivo:', e) }
+
     if (motivo) {
       try {
         await sheets.spreadsheets.values.append({

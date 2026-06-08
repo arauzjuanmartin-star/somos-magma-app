@@ -3935,9 +3935,55 @@ function Calendario({data,mail,onRefresh}){
   const [mesActual,setMesActual]=useState(new Date(hoy.getFullYear(),hoy.getMonth(),1))
   const [diaSel,setDiaSel]=useState(null)
   const [mostrarPresus,setMostrarPresus]=useState(true)
+  const [cambiandoEstado,setCambiandoEstado]=useState(null)  // {num, estado, motivo}
+  const [savingEstado,setSavingEstado]=useState(false)
+  const [toast,setToast]=useState('')
 
   const proyectos=data?.proyectos||[]
   const presus=data?.presupuestos||[]
+
+  // Lee staff asignados a un proyecto desde la fila de PROYECTOS
+  // Keys reales: 'Staff 1'..'Staff 12' (toProyectos renumera). Puede haber múltiples personas separadas por coma/| en una celda.
+  const staffDeProyecto = (p) => {
+    if (!p) return []
+    const out = []
+    for (let j=1; j<=12; j++) {
+      const s = String(p['Staff '+j]||'').trim()
+      const ped = String(p['Pedido '+j]||'').trim()
+      if (!s) continue
+      s.split(/[,|]/).map(x=>x.trim()).filter(Boolean).forEach(persona => out.push({pedido:ped, persona}))
+    }
+    return out
+  }
+
+  // Cambiar estado: si DESAPROBADO o REPRESUPUESTADO → pide motivo. Si APROBADO → confirma.
+  const iniciarCambioEstado = (num, estadoNuevo) => {
+    if (estadoNuevo === 'DESAPROBADO' || estadoNuevo === 'REPRESUPUESTADO') {
+      setCambiandoEstado({num, estado:estadoNuevo, motivo:''})
+    } else {
+      ejecutarCambioEstado(num, estadoNuevo, '')
+    }
+  }
+  const ejecutarCambioEstado = async (num, estado, motivo) => {
+    setSavingEstado(true)
+    try {
+      const r = await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json','x-user-email':mail||''},body:JSON.stringify({num,estado,motivo})})
+      const j = await r.json()
+      if (j.ok) {
+        setToast('Estado actualizado ✓')
+        setCambiandoEstado(null)
+        if (onRefresh) setTimeout(onRefresh, 500)
+        setTimeout(()=>setToast(''), 2200)
+      } else {
+        setToast('Error: '+(j.error||'?'))
+        setTimeout(()=>setToast(''), 3000)
+      }
+    } catch(e) {
+      setToast('Error de conexión')
+      setTimeout(()=>setToast(''), 3000)
+    }
+    setSavingEstado(false)
+  }
 
   const parseFecha=s=>{const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1]))}
   const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()
@@ -4078,35 +4124,82 @@ function Calendario({data,mail,onRefresh}){
         {aprobDiaSel.length===0&&enEsperaDiaSel.length===0&&<div style={{padding:20,textAlign:'center',color:'#666',fontSize:12}}>Sin actividad este día</div>}
         {aprobDiaSel.length>0&&<div style={{marginBottom:14}}>
           <div style={{fontSize:10,color:VERDE,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>Aprobados ({aprobDiaSel.length})</div>
-          {aprobDiaSel.map((p,i)=><div key={i} style={{background:VERDE+'08',border:'0.5px solid '+VERDE+'30',borderRadius:6,padding:10,marginBottom:6}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-              <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['N° presupuesto']}</span>
-              <span style={{fontSize:10,color:'#888'}}>{p['PM']||p['PM Interno']||'—'}</span>
+          {aprobDiaSel.map((p,i)=>{
+            const staff = staffDeProyecto(p)
+            const num = p['N° presupuesto']
+            return <div key={i} style={{background:VERDE+'08',border:'0.5px solid '+VERDE+'30',borderRadius:6,padding:10,marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+                <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{num}</span>
+                <span style={{fontSize:10,color:'#888'}}>PM: {p['PM']||p['PM Interno']||'—'}</span>
+              </div>
+              <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
+              <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+              {staff.length>0 ? <div style={{marginTop:6,padding:'6px 8px',background:'#0E0E0E',borderRadius:4,border:'0.5px solid #1F1F1F'}}>
+                <div style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3,fontWeight:600}}>Staff asignado</div>
+                {staff.map((s,j)=><div key={j} style={{fontSize:10,color:'#B0B0B0',display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span>{s.persona}</span><span style={{color:'#555'}}>{s.pedido}</span></div>)}
+              </div> : <div style={{marginTop:6,padding:'5px 8px',background:'#BA751712',borderLeft:'2px solid '+NARANJA,fontSize:10,color:NARANJA,borderRadius:'2px 4px 4px 2px'}}>⚠ Sin staff cargado todavía</div>}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,paddingTop:6,borderTop:'0.5px solid '+VERDE+'15',gap:6}}>
+                <span style={{fontSize:10,color:'#888'}}>Total: <span style={{fontFamily:'monospace',color:VERDE,fontWeight:600}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</span></span>
+                <div style={{display:'flex',gap:4}}>
+                  <button onClick={()=>iniciarCambioEstado(num,'DESAPROBADO')} disabled={savingEstado} title="Marcar desaprobado" style={{fontSize:10,color:'#E24B4A',background:'#E24B4A12',border:'0.5px solid #E24B4A40',padding:'3px 7px',borderRadius:3,cursor:'pointer'}}>Desaprobar</button>
+                  <button onClick={()=>iniciarCambioEstado(num,'REPRESUPUESTADO')} disabled={savingEstado} title="Marcar represupuestado" style={{fontSize:10,color:'#9635AB',background:'#9635AB12',border:'0.5px solid #9635AB40',padding:'3px 7px',borderRadius:3,cursor:'pointer'}}>Represup.</button>
+                  <a href={'/presupuesto?nro='+encodeURIComponent(num)} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'3px 7px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>
+                </div>
+              </div>
             </div>
-            <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
-            <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,paddingTop:6,borderTop:'0.5px solid '+VERDE+'15'}}>
-              <span style={{fontSize:10,color:'#888'}}>Total: <span style={{fontFamily:'monospace',color:VERDE}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</span></span>
-              {p['N° presupuesto']&&<a href={'/presupuesto?nro='+encodeURIComponent(p['N° presupuesto'])} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'2px 6px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>}
-            </div>
-          </div>)}
+          })}
         </div>}
         {enEsperaDiaSel.length>0&&<div>
           <div style={{fontSize:10,color:NARANJA,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>En espera ({enEsperaDiaSel.length})</div>
-          {enEsperaDiaSel.map((p,i)=><div key={i} style={{background:NARANJA+'08',border:'0.5px dashed '+NARANJA+'40',borderRadius:6,padding:10,marginBottom:6}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-              <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['Columna 1']}</span>
-              <span style={{fontSize:10,color:'#888'}}>{p['PM Interno']||'—'}</span>
+          {enEsperaDiaSel.map((p,i)=>{
+            const num = p['Columna 1']
+            return <div key={i} style={{background:NARANJA+'08',border:'0.5px dashed '+NARANJA+'40',borderRadius:6,padding:10,marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+                <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{num}</span>
+                <span style={{fontSize:10,color:'#888'}}>PM: {p['PM Interno']||'—'}</span>
+              </div>
+              <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
+              <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,paddingTop:6,borderTop:'0.5px solid '+NARANJA+'15',gap:6}}>
+                <span style={{fontSize:10,color:'#888'}}>Precio: <span style={{fontFamily:'monospace',color:NARANJA,fontWeight:600}}>{p['Precio Final']||'—'}</span></span>
+                <div style={{display:'flex',gap:4}}>
+                  <button onClick={()=>iniciarCambioEstado(num,'APROBADO')} disabled={savingEstado} title="Aprobar" style={{fontSize:10,color:VERDE,background:VERDE+'15',border:'0.5px solid '+VERDE+'60',padding:'3px 7px',borderRadius:3,cursor:'pointer',fontWeight:600}}>✓ Aprobar</button>
+                  <button onClick={()=>iniciarCambioEstado(num,'DESAPROBADO')} disabled={savingEstado} title="Marcar desaprobado" style={{fontSize:10,color:'#E24B4A',background:'#E24B4A12',border:'0.5px solid #E24B4A40',padding:'3px 7px',borderRadius:3,cursor:'pointer'}}>Desaprobar</button>
+                  <a href={'/presupuesto?nro='+encodeURIComponent(num)} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'3px 7px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>
+                </div>
+              </div>
             </div>
-            <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
-            <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,paddingTop:6,borderTop:'0.5px solid '+NARANJA+'15'}}>
-              <span style={{fontSize:10,color:'#888'}}>Precio: <span style={{fontFamily:'monospace',color:NARANJA}}>{p['Precio Final']||'—'}</span></span>
-              {p['Columna 1']&&<a href={'/presupuesto?nro='+encodeURIComponent(p['Columna 1'])} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'2px 6px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>}
-            </div>
-          </div>)}
+          })}
         </div>}
       </div>}
     </div>
+
+    {/* Modal de motivo cuando se cambia a DESAPROBADO o REPRESUPUESTADO */}
+    {cambiandoEstado&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.78)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>!savingEstado&&setCambiandoEstado(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{width:460,background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10,background:'#111'}}>
+          <span style={{background:(cambiandoEstado.estado==='DESAPROBADO'?'#E24B4A':'#9635AB')+'20',color:cambiandoEstado.estado==='DESAPROBADO'?'#E24B4A':'#9635AB',borderRadius:4,padding:'3px 9px',fontSize:11,fontWeight:600}}>{cambiandoEstado.estado}</span>
+          <span style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>Presu #{cambiandoEstado.num}</span>
+          <div style={{flex:1}}/>
+          <button onClick={()=>setCambiandoEstado(null)} disabled={savingEstado} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
+        </div>
+        <div style={{padding:20}}>
+          <div style={{fontSize:11,color:'#888',marginBottom:10}}>{cambiandoEstado.estado==='DESAPROBADO' ? '¿Por qué se desaprobó? (elegí una o escribí libre)' : 'Motivo del represupuesto'}</div>
+          {cambiandoEstado.estado==='DESAPROBADO' && <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:10}}>
+            {['Precio alto','No contestaron','Cambió alcance','Eligió otra productora','Se suspendió el evento','Fecha no disponible'].map(m=>
+              <button key={m} onClick={()=>setCambiandoEstado(c=>({...c,motivo:m}))} style={{padding:'5px 10px',borderRadius:4,border:'0.5px solid '+(cambiandoEstado.motivo===m?'#E24B4A':'#2A2A2A'),background:cambiandoEstado.motivo===m?'#E24B4A15':'transparent',color:cambiandoEstado.motivo===m?'#E24B4A':'#888',fontSize:11,cursor:'pointer'}}>{m}</button>
+            )}
+          </div>}
+          <textarea autoFocus value={cambiandoEstado.motivo} onChange={e=>setCambiandoEstado(c=>({...c,motivo:e.target.value}))} placeholder={cambiandoEstado.estado==='DESAPROBADO'?'Ej: precio muy alto vs competencia, o escribí el detalle':'Ej: cliente pidió más cámaras / cambio de fecha'} style={{width:'100%',minHeight:60,padding:10,borderRadius:6,border:'0.5px solid #2A2A2A',background:'#1A1A1A',color:'#F0F0F0',fontSize:12,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}/>
+        </div>
+        <div style={{padding:'12px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end',background:'#0A0A0A'}}>
+          <button onClick={()=>setCambiandoEstado(null)} disabled={savingEstado} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={()=>ejecutarCambioEstado(cambiandoEstado.num,cambiandoEstado.estado,cambiandoEstado.motivo.trim())} disabled={savingEstado||!cambiandoEstado.motivo.trim()} style={{padding:'8px 20px',borderRadius:6,border:'none',background:cambiandoEstado.estado==='DESAPROBADO'?'#E24B4A':'#9635AB',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:savingEstado||!cambiandoEstado.motivo.trim()?0.5:1}}>{savingEstado?'Guardando...':'Confirmar'}</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Toast */}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,padding:'10px 16px',background:'#1A1A1A',border:'0.5px solid #333',borderRadius:8,fontSize:12,color:'#F0F0F0',boxShadow:'0 4px 16px #000a',zIndex:400}}>{toast}</div>}
   </div>
 }
