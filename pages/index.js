@@ -3818,63 +3818,40 @@ function Calendario({data,mail,onRefresh}){
   const hoy=new Date()
   const [mesActual,setMesActual]=useState(new Date(hoy.getFullYear(),hoy.getMonth(),1))
   const [diaSel,setDiaSel]=useState(null)
-  const [eventosCalendar,setEventosCalendar]=useState([])
-  const [loadingCal,setLoadingCal]=useState(false)
+  const [mostrarPresus,setMostrarPresus]=useState(true)
 
   const proyectos=data?.proyectos||[]
   const presus=data?.presupuestos||[]
 
-  // Cargar eventos del Calendar Magma
-  useEffect(()=>{
-    setLoadingCal(true)
-    fetch('/api/calendar-huerfanos',{headers:{'x-user-email':mail}})
-      .then(r=>r.json()).then(j=>{
-        if(j.ok){
-          const todos=[...(j.huerfanos||[]),...(j.matcheados||[])]
-          setEventosCalendar(todos)
-        }
-      }).catch(()=>{}).finally(()=>setLoadingCal(false))
-  },[mail])
-
   const parseFecha=s=>{const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1]))}
   const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()
 
-  // Index proyectos por día
-  const proyectosPorDia={}
+  // APROBADOS: todos los proyectos en PROYECTOS (ya están confirmados)
+  const aprobadosPorDia={}
   proyectos.forEach(p=>{
     const f=parseFecha(p['Fecha Evento'])
     if(!f) return
     const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
-    if(!proyectosPorDia[key])proyectosPorDia[key]=[]
-    proyectosPorDia[key].push(p)
+    if(!aprobadosPorDia[key])aprobadosPorDia[key]=[]
+    aprobadosPorDia[key].push(p)
   })
 
-  // Index presus aprobados pero sin proyecto (huérfanos)
-  const presusAprobadosPorDia={}
+  // PRESUPUESTADOS: EN ESPERA en PRESUPUESTOS (todavía no confirmados)
+  const enEsperaPorDia={}
   presus.forEach(p=>{
-    if(String(p['Estado']||'').toUpperCase()!=='APROBADO')return
+    if(String(p['Estado']||'').toUpperCase()!=='EN ESPERA')return
     const f=parseFecha(p['Fecha Evento'])
     if(!f) return
     const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
-    if(!presusAprobadosPorDia[key])presusAprobadosPorDia[key]=[]
-    presusAprobadosPorDia[key].push(p)
-  })
-
-  // Index eventos Calendar por día
-  const eventosCalPorDia={}
-  eventosCalendar.forEach(e=>{
-    const f=parseFecha(e.inicio?.slice(0,10).split('-').reverse().join('/'))||(()=>{const d=e.inicio?new Date(e.inicio):null;return d&&!isNaN(d)?d:null})()
-    if(!f) return
-    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
-    if(!eventosCalPorDia[key])eventosCalPorDia[key]=[]
-    eventosCalPorDia[key].push(e)
+    if(!enEsperaPorDia[key])enEsperaPorDia[key]=[]
+    enEsperaPorDia[key].push(p)
   })
 
   // Construir grilla del mes
   const año=mesActual.getFullYear(), mes=mesActual.getMonth()
   const primDiaMes=new Date(año,mes,1)
   const ultDiaMes=new Date(año,mes+1,0).getDate()
-  const offsetInicio=(primDiaMes.getDay()+6)%7  // semana arranca lunes
+  const offsetInicio=(primDiaMes.getDay()+6)%7
   const semanas=[]
   let semana=[]
   for(let i=0;i<offsetInicio;i++)semana.push(null)
@@ -3888,9 +3865,25 @@ function Calendario({data,mail,onRefresh}){
   const DIAS_SEM=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
   const navMes=delta=>setMesActual(new Date(año,mes+delta,1))
 
-  const proyectosDiaSel=diaSel?proyectosPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
-  const presusDiaSel=diaSel?presusAprobadosPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
-  const evCalDiaSel=diaSel?eventosCalPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+  // KPIs del mes visible
+  let totAprob=0, totEsperaQty=0, totEsperaMonto=0, cntAprob=0
+  Object.keys(aprobadosPorDia).forEach(k=>{
+    const [y,m]=k.split('-').map(Number)
+    if (y===año && m===mes) {
+      aprobadosPorDia[k].forEach(p=>{ totAprob+=parseMonto(p['Total ']||p['Total']||p['Precio Final']); cntAprob++ })
+    }
+  })
+  Object.keys(enEsperaPorDia).forEach(k=>{
+    const [y,m]=k.split('-').map(Number)
+    if (y===año && m===mes) {
+      enEsperaPorDia[k].forEach(p=>{ totEsperaMonto+=parseMonto(p['Precio Final']); totEsperaQty++ })
+    }
+  })
+
+  const aprobDiaSel=diaSel?aprobadosPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+  const enEsperaDiaSel=diaSel?enEsperaPorDia[diaSel.getFullYear()+'-'+diaSel.getMonth()+'-'+diaSel.getDate()]||[]:[]
+
+  const VERDE='#1D9E75', NARANJA='#BA7517'
 
   return <div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,gap:10,flexWrap:'wrap'}}>
@@ -3900,11 +3893,28 @@ function Calendario({data,mail,onRefresh}){
         <button onClick={()=>navMes(1)} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#B0B0B0',fontSize:14,cursor:'pointer'}}>▶</button>
         <button onClick={()=>setMesActual(new Date(hoy.getFullYear(),hoy.getMonth(),1))} style={{padding:'6px 12px',borderRadius:6,border:'0.5px solid #1543F840',background:'#1543F810',color:'#1543F8',fontSize:11,cursor:'pointer',marginLeft:6}}>Hoy</button>
       </div>
-      <div style={{display:'flex',gap:10,fontSize:10,color:'#888',alignItems:'center',flexWrap:'wrap'}}>
-        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#1D9E75'}}/>Proyecto cargado</span>
-        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#BA7517'}}/>Presu aprobado sin proyecto</span>
-        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'#9635AB'}}/>Calendar (sin sistema)</span>
+      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'#B0B0B0',cursor:'pointer',userSelect:'none'}}>
+        <input type="checkbox" checked={mostrarPresus} onChange={e=>setMostrarPresus(e.target.checked)} style={{accentColor:NARANJA}}/>
+        Mostrar presupuestos en espera
+      </label>
+    </div>
+
+    {/* KPIs del mes */}
+    <div style={{display:'grid',gridTemplateColumns:mostrarPresus?'1fr 1fr':'1fr',gap:10,marginBottom:14}}>
+      <div style={{background:VERDE+'10',border:'0.5px solid '+VERDE+'30',borderRadius:8,padding:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:10,color:VERDE,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>Aprobados este mes</div>
+          <div style={{fontSize:18,fontWeight:700,color:'#F0F0F0',marginTop:2}}>{cntAprob} <span style={{fontSize:11,color:'#888',fontWeight:400}}>proyectos</span></div>
+        </div>
+        <div style={{fontSize:16,fontFamily:'monospace',color:VERDE,fontWeight:700}}>{fmtM(totAprob)}</div>
       </div>
+      {mostrarPresus&&<div style={{background:NARANJA+'10',border:'0.5px solid '+NARANJA+'30',borderRadius:8,padding:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:10,color:NARANJA,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>Presupuestados en espera</div>
+          <div style={{fontSize:18,fontWeight:700,color:'#F0F0F0',marginTop:2}}>{totEsperaQty} <span style={{fontSize:11,color:'#888',fontWeight:400}}>presus</span></div>
+        </div>
+        <div style={{fontSize:16,fontFamily:'monospace',color:NARANJA,fontWeight:700}}>{fmtM(totEsperaMonto)}</div>
+      </div>}
     </div>
 
     <div style={{display:'grid',gridTemplateColumns:diaSel?'1fr 400px':'1fr',gap:12}}>
@@ -3914,29 +3924,31 @@ function Calendario({data,mail,onRefresh}){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
           {semanas.flat().map((d,i)=>{
-            if(!d)return <div key={i} style={{minHeight:90,background:'#0E0E0E',borderRadius:6}}/>
+            if(!d)return <div key={i} style={{minHeight:100,background:'#0E0E0E',borderRadius:6}}/>
             const key=d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
-            const proys=proyectosPorDia[key]||[]
-            const pres=presusAprobadosPorDia[key]||[]
-            const cal=eventosCalPorDia[key]||[]
+            const aprob=aprobadosPorDia[key]||[]
+            const esp=mostrarPresus?(enEsperaPorDia[key]||[]):[]
             const esHoy=sameDay(d,hoy)
             const esSel=diaSel&&sameDay(d,diaSel)
-            const totalEventos=proys.length+pres.length+cal.length
-            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:90,background:esSel?'#1A1A1A':'#161616',border:esSel?'1px solid #1543F8':'0.5px solid #262626',borderRadius:6,padding:6,cursor:'pointer',position:'relative',transition:'all .12s'}}>
-              <div style={{fontSize:11,fontWeight:esHoy?700:500,color:esHoy?'#1543F8':'#E0E0E0',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            const total=aprob.length+esp.length
+            const finde=d.getDay()===0||d.getDay()===6
+            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:100,background:esSel?'#1F1F1F':(finde?'#131313':'#161616'),border:esSel?'1px solid '+VERDE:(esHoy?'0.5px solid '+VERDE:'0.5px solid #262626'),borderRadius:6,padding:6,cursor:'pointer',position:'relative',transition:'all .12s'}}>
+              <div style={{fontSize:11,fontWeight:esHoy?700:500,color:esHoy?VERDE:(finde?'#777':'#E0E0E0'),marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span>{d.getDate()}</span>
-                {esHoy&&<span style={{fontSize:8,color:'#1543F8',textTransform:'uppercase'}}>Hoy</span>}
+                {esHoy&&<span style={{fontSize:7.5,color:VERDE,textTransform:'uppercase',fontWeight:700,letterSpacing:'.06em'}}>Hoy</span>}
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                {proys.slice(0,3).map((p,j)=><div key={'p'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#1D9E7515',color:'#1D9E75',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
-                {pres.slice(0,Math.max(0,3-proys.length)).map((p,j)=><div key={'r'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#BA751715',color:'#BA7517',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
-                {cal.slice(0,Math.max(0,3-proys.length-pres.length)).map((e,j)=><div key={'c'+j} style={{fontSize:9.5,padding:'2px 5px',background:'#9635AB15',color:'#9635AB',borderRadius:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={e.titulo}>{e.titulo}</div>)}
-                {totalEventos>3&&<div style={{fontSize:9,color:'#666',padding:'1px 4px'}}>+{totalEventos-3} más</div>}
+                {aprob.slice(0,4).map((p,j)=><div key={'a'+j} style={{fontSize:10,padding:'2.5px 5px',background:VERDE+'25',color:'#E0F4EA',borderLeft:'2px solid '+VERDE,borderRadius:'2px 3px 3px 2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:500}} title={(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+                {esp.slice(0,Math.max(0,4-aprob.length)).map((p,j)=><div key={'e'+j} style={{fontSize:10,padding:'2.5px 5px',background:NARANJA+'18',color:'#F0D9B0',borderLeft:'2px dashed '+NARANJA,borderRadius:'2px 3px 3px 2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={'EN ESPERA: '+(p['Cliente']||'')+' / '+(p['Proyecto']||'')}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+                {total>4&&<div style={{fontSize:9,color:'#666',padding:'1px 4px'}}>+{total-4} más</div>}
               </div>
             </div>
           })}
         </div>
-        {loadingCal&&<div style={{textAlign:'center',color:'#666',fontSize:11,marginTop:8}}>Cargando eventos del Calendar...</div>}
+        <div style={{display:'flex',gap:14,fontSize:10,color:'#888',alignItems:'center',justifyContent:'center',marginTop:10,flexWrap:'wrap'}}>
+          <span style={{display:'flex',alignItems:'center',gap:5}}><span style={{width:14,height:10,borderLeft:'2px solid '+VERDE,background:VERDE+'25'}}/>Proyecto aprobado</span>
+          {mostrarPresus&&<span style={{display:'flex',alignItems:'center',gap:5}}><span style={{width:14,height:10,borderLeft:'2px dashed '+NARANJA,background:NARANJA+'18'}}/>Presupuesto en espera</span>}
+        </div>
       </div>
 
       {diaSel&&<div style={{background:'#161616',border:'0.5px solid #262626',borderRadius:10,padding:16,position:'sticky',top:0,maxHeight:'calc(100vh - 200px)',overflowY:'auto'}}>
@@ -3947,36 +3959,35 @@ function Calendario({data,mail,onRefresh}){
           </div>
           <button onClick={()=>setDiaSel(null)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>×</button>
         </div>
-        {proyectosDiaSel.length===0&&presusDiaSel.length===0&&evCalDiaSel.length===0&&<div style={{padding:20,textAlign:'center',color:'#666',fontSize:12}}>Sin eventos este día</div>}
-        {proyectosDiaSel.length>0&&<div style={{marginBottom:14}}>
-          <div style={{fontSize:10,color:'#1D9E75',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>🎬 Proyectos ({proyectosDiaSel.length})</div>
-          {proyectosDiaSel.map((p,i)=><div key={i} style={{background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6,padding:10,marginBottom:6}}>
+        {aprobDiaSel.length===0&&enEsperaDiaSel.length===0&&<div style={{padding:20,textAlign:'center',color:'#666',fontSize:12}}>Sin actividad este día</div>}
+        {aprobDiaSel.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,color:VERDE,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>Aprobados ({aprobDiaSel.length})</div>
+          {aprobDiaSel.map((p,i)=><div key={i} style={{background:VERDE+'08',border:'0.5px solid '+VERDE+'30',borderRadius:6,padding:10,marginBottom:6}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
               <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['N° presupuesto']}</span>
               <span style={{fontSize:10,color:'#888'}}>{p['PM']||p['PM Interno']||'—'}</span>
             </div>
             <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
             <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
-            <div style={{fontSize:10,color:'#888',marginTop:4}}>Total: <span style={{fontFamily:'monospace',color:'#1D9E75'}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,paddingTop:6,borderTop:'0.5px solid '+VERDE+'15'}}>
+              <span style={{fontSize:10,color:'#888'}}>Total: <span style={{fontFamily:'monospace',color:VERDE}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</span></span>
+              {p['N° presupuesto']&&<a href={'/presupuesto?nro='+encodeURIComponent(p['N° presupuesto'])} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'2px 6px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>}
+            </div>
           </div>)}
         </div>}
-        {presusDiaSel.length>0&&<div style={{marginBottom:14}}>
-          <div style={{fontSize:10,color:'#BA7517',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>📋 Presupuestos aprobados sin proyecto ({presusDiaSel.length})</div>
-          {presusDiaSel.map((p,i)=><div key={i} style={{background:'#BA751708',border:'0.5px solid #BA751730',borderRadius:6,padding:10,marginBottom:6}}>
+        {enEsperaDiaSel.length>0&&<div>
+          <div style={{fontSize:10,color:NARANJA,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>En espera ({enEsperaDiaSel.length})</div>
+          {enEsperaDiaSel.map((p,i)=><div key={i} style={{background:NARANJA+'08',border:'0.5px dashed '+NARANJA+'40',borderRadius:6,padding:10,marginBottom:6}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
               <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{p['Columna 1']}</span>
               <span style={{fontSize:10,color:'#888'}}>{p['PM Interno']||'—'}</span>
             </div>
             <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
             <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
-            <div style={{fontSize:10,color:'#888',marginTop:4}}>Precio: <span style={{fontFamily:'monospace',color:'#BA7517'}}>{p['Precio Final']||'—'}</span></div>
-          </div>)}
-        </div>}
-        {evCalDiaSel.length>0&&<div>
-          <div style={{fontSize:10,color:'#9635AB',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>📅 Calendar (sin sistema) ({evCalDiaSel.length})</div>
-          {evCalDiaSel.map((e,i)=><div key={i} style={{background:'#9635AB08',border:'0.5px solid #9635AB30',borderRadius:6,padding:10,marginBottom:6}}>
-            <div style={{fontSize:13,color:'#F0F0F0'}}>{e.titulo}</div>
-            {e.lugar&&<div style={{fontSize:11,color:'#888',marginTop:3}}>📍 {e.lugar}</div>}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,paddingTop:6,borderTop:'0.5px solid '+NARANJA+'15'}}>
+              <span style={{fontSize:10,color:'#888'}}>Precio: <span style={{fontFamily:'monospace',color:NARANJA}}>{p['Precio Final']||'—'}</span></span>
+              {p['Columna 1']&&<a href={'/presupuesto?nro='+encodeURIComponent(p['Columna 1'])} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#1543F8',textDecoration:'none',padding:'2px 6px',borderRadius:3,border:'0.5px solid #1543F840'}}>📄 PDF</a>}
+            </div>
           </div>)}
         </div>}
       </div>}
