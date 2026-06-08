@@ -1,8 +1,11 @@
 import { google } from 'googleapis'
-import { getSheets } from '../../lib/sheets'
+import { getSheets, withSheetsRetry } from '../../lib/sheets'
+import Busboy from 'busboy'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+const MAILS = ['juan@somosmagma.com','sofi@somosmagma.com','tom@somosmagma.com','admin@somosmagma.com','lulu@somosmagma.com','arauzjuanmartin@gmail.com']
 
 function getAuth() {
   return new google.auth.GoogleAuth({
@@ -15,7 +18,9 @@ function getAuth() {
 }
 
 async function getOrCreateFolder(drive, name, parentId) {
-  const q = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+  // Escapar comillas simples en el nombre para query
+  const safe = name.replace(/'/g, "\\'")
+  const q = `name='${safe}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
   const res = await drive.files.list({
     q,
     fields: 'files(id,name)',
@@ -31,73 +36,91 @@ async function getOrCreateFolder(drive, name, parentId) {
   return f.data.id
 }
 
+// Parser multipart con busboy — promesa que resuelve con {fields, file}
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const bb = Busboy({ headers: req.headers, limits: { fileSize: 25 * 1024 * 1024 } })  // max 25MB
+    const fields = {}
+    let fileBuffer = null, fileName = '', fileMime = ''
+    let truncated = false
+
+    bb.on('field', (name, val) => { fields[name] = val })
+
+    bb.on('file', (name, fileStream, info) => {
+      fileName = info.filename || 'archivo'
+      fileMime = info.mimeType || 'application/octet-stream'
+      const chunks = []
+      fileStream.on('data', c => chunks.push(c))
+      fileStream.on('limit', () => { truncated = true })
+      fileStream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+    })
+
+    bb.on('close', () => {
+      if (truncated) return reject(new Error('Archivo demasiado grande (máx 25MB)'))
+      resolve({ fields, fileBuffer, fileName, fileMime })
+    })
+    bb.on('error', reject)
+
+    req.pipe(bb)
+  })
+}
+
 export const config = { api: { bodyParser: false } }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  const mail = req.headers['x-user-email'] || ''
+
+  let parsed
+  try {
+    parsed = await parseMultipart(req)
+  } catch (e) {
+    console.error('Error parseando multipart:', e)
+    return res.status(400).json({ error: 'Error procesando el archivo: ' + e.message })
+  }
+
+  const { fields, fileBuffer, fileName, fileMime } = parsed
+  if (!fileBuffer || fileBuffer.length === 0) {
+    return res.status(400).json({ error: 'No llegó archivo o está vacío' })
+  }
+
+  const entidad = fields.entidad || 'SRL'
+  const mes = fields.mes || ''
+  const anio = fields.anio || ''
+  const nroFactura = fields.nroFactura || ''
+  const presupuestoNum = fields.presupuestoNum || ''
 
   try {
     const auth = getAuth()
     const drive = google.drive({ version: 'v3', auth })
 
-    // Leer multipart manualmente
-    const chunks = []
-    for await (const chunk of req) chunks.push(chunk)
-    const body = Buffer.concat(chunks)
-
-    const contentType = req.headers['content-type'] || ''
-    const boundaryMatch = contentType.match(/boundary=(.+)/)
-    if (!boundaryMatch) return res.status(400).json({ error: 'No boundary' })
-    const boundary = '--' + boundaryMatch[1]
-
-    const parts = body.toString('binary').split(boundary).slice(1,-1)
-    let entidad = 'SRL', mes = '', anio = '', nroFactura = '', presupuestoNum = '', fileBuffer = null, fileName = 'factura.pdf', fileMime = 'application/pdf'
-
-    for (const part of parts) {
-      const [headerRaw, ...bodyParts] = part.split('\r\n\r\n')
-      const bodyStr = bodyParts.join('\r\n\r\n').replace(/\r\n$/, '')
-      const nameMatch = headerRaw.match(/name="([^"]+)"/)
-      if (!nameMatch) continue
-      const fieldName = nameMatch[1]
-
-      if (fieldName === 'entidad') entidad = bodyStr.trim()
-      else if (fieldName === 'mes') mes = bodyStr.trim()
-      else if (fieldName === 'anio') anio = bodyStr.trim()
-      else if (fieldName === 'nroFactura') nroFactura = bodyStr.trim()
-      else if (fieldName === 'presupuestoNum') presupuestoNum = bodyStr.trim()
-      else if (fieldName === 'file') {
-        const fnMatch = headerRaw.match(/filename="([^"]+)"/)
-        if (fnMatch) fileName = fnMatch[1]
-        const mimeMatch = headerRaw.match(/Content-Type:\s*([^\r\n]+)/)
-        if (mimeMatch) fileMime = mimeMatch[1].trim()
-        fileBuffer = Buffer.from(bodyStr, 'binary')
-      }
-    }
-
-    if (!fileBuffer) return res.status(400).json({ error: 'No file' })
-
-    const entidadNombre = entidad === 'SRL' ? 'Somos Magma SRL' : entidad === 'Sofia' ? 'Sofia Grenier' : entidad === 'Lulu' ? 'Lucia Grenier' : 'Efectivo'
+    const entidadNombre = entidad === 'SRL' ? 'Somos Magma SRL'
+      : entidad === 'Sofia' ? 'Sofia Grenier'
+      : entidad === 'Lulu' ? 'Lucia Grenier'
+      : 'Efectivo'
     const mesNombre = mes ? (parseInt(mes).toString().padStart(2,'0') + ' - ' + (MESES_N[parseInt(mes)-1]||mes)) : 'Sin mes'
     const carpetaMes = anio ? anio + '-' + mesNombre : mesNombre
 
-    const entidadFolderId = await getOrCreateFolder(drive, entidadNombre, FOLDER_ROOT)
-    const mesFolderId = await getOrCreateFolder(drive, carpetaMes, entidadFolderId)
+    // Crear/encontrar carpeta de entidad y mes (con retry)
+    const entidadFolderId = await withSheetsRetry(() => getOrCreateFolder(drive, entidadNombre, FOLDER_ROOT))
+    const mesFolderId = await withSheetsRetry(() => getOrCreateFolder(drive, carpetaMes, entidadFolderId))
 
+    // Subir archivo
     const { Readable } = await import('stream')
     const stream = Readable.from(fileBuffer)
-    const fileRes = await drive.files.create({
+    const fileRes = await withSheetsRetry(() => drive.files.create({
       requestBody: { name: fileName, parents: [mesFolderId] },
-      media: { mimeType: fileMime, body: stream },
+      media: { mimeType: fileMime, body: Readable.from(fileBuffer) },
       fields: 'id,webViewLink',
       supportsAllDrives: true,
-    })
+    }))
 
-    // GUARDAR el link en FACTURACION (col Factura) si tenemos un presupuestoNum
+    // Asociar el link a la fila de FACTURACION
     let factualizada = false
     if (presupuestoNum) {
       try {
         const { sheets, SHEET_ID } = await getSheets()
-        const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
+        const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' }))
         const headers = r.data.values?.[0] || []
         const idxNro = headers.indexOf('N° Presupuesto')
         const idxFactura = headers.indexOf('Factura')
@@ -105,23 +128,42 @@ export default async function handler(req, res) {
           for (let i = 1; i < r.data.values.length; i++) {
             if (String(r.data.values[i][idxNro]||'').trim() === String(presupuestoNum).trim()) {
               const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
-              await sheets.spreadsheets.values.update({
+              await withSheetsRetry(() => sheets.spreadsheets.values.update({
                 spreadsheetId: SHEET_ID,
                 range: `FACTURACION!${colLetra(idxFactura)}${i+1}`,
                 valueInputOption: 'USER_ENTERED',
                 requestBody: { values: [[fileRes.data.webViewLink]] }
-              })
+              }))
               factualizada = true
               break
             }
           }
         }
-      } catch(e) { console.error('Error guardando link en sheet:', e) }
+
+        // Log de la acción
+        try {
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: SHEET_ID,
+            range: 'LOG!A:F',
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[new Date().toISOString(), mail, 'factura-upload', 'FACTURACION+DRIVE', String(presupuestoNum), `archivo=${fileName} carpeta=${entidadNombre}/${carpetaMes} link=${fileRes.data.webViewLink} actualizada=${factualizada}`]] },
+          })
+        } catch (e) {}
+      } catch (e) { console.error('Error guardando link en sheet:', e) }
     }
 
-    res.json({ ok: true, fileId: fileRes.data.id, link: fileRes.data.webViewLink, fileName, carpeta: `${entidadNombre} / ${carpetaMes}`, factualizada })
-  } catch(e) {
-    console.error('Error upload:', e)
-    res.status(500).json({ error: e.message })
+    res.json({
+      ok: true,
+      fileId: fileRes.data.id,
+      link: fileRes.data.webViewLink,
+      fileName,
+      carpeta: `${entidadNombre} / ${carpetaMes}`,
+      factualizada,
+    })
+  } catch (e) {
+    console.error('Error upload (drive):', e)
+    const status = e.code || e.response?.status
+    if (status === 429) return res.status(429).json({ error: 'Google está limitando los pedidos. Esperá 30 segundos y volvé a intentar.' })
+    res.status(500).json({ error: e.message || 'Error subiendo archivo' })
   }
 }
