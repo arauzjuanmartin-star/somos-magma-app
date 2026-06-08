@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
 import Busboy from 'busboy'
+import { Readable } from 'stream'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -105,9 +106,7 @@ export default async function handler(req, res) {
     const entidadFolderId = await withSheetsRetry(() => getOrCreateFolder(drive, entidadNombre, FOLDER_ROOT))
     const mesFolderId = await withSheetsRetry(() => getOrCreateFolder(drive, carpetaMes, entidadFolderId))
 
-    // Subir archivo
-    const { Readable } = await import('stream')
-    const stream = Readable.from(fileBuffer)
+    // Subir archivo (stream nuevo en cada retry para evitar consumido)
     const fileRes = await withSheetsRetry(() => drive.files.create({
       requestBody: { name: fileName, parents: [mesFolderId] },
       media: { mimeType: fileMime, body: Readable.from(fileBuffer) },
