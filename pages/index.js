@@ -87,7 +87,7 @@ export default function App() {
   }
   function logout(){localStorage.removeItem('magma_mail');setMail('');setData(null)}
 
-  const NAV=[{id:'dashboard',label:'Dashboard',icon:'◆'},{id:'presupuestos',label:'Presupuestos',icon:'□'},{id:'proyectos',label:'Proyectos',icon:'▷'},{id:'facturacion',label:'Facturación',icon:'$'},{id:'pagos',label:'Pagos Staff',icon:'✓'},{id:'egresos',label:'Egresos',icon:'≡'},{id:'agencias',label:'Agencias',icon:'◉'},{id:'clientes',label:'Clientes',icon:'◯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'⏱'}]
+  const NAV=[{id:'dashboard',label:'Dashboard',icon:'⌂'},{id:'presupuestos',label:'Presupuestos',icon:'📋'},{id:'proyectos',label:'Proyectos',icon:'🎬'},{id:'facturacion',label:'Facturación',icon:'💵'},{id:'pagos',label:'Pagos Staff',icon:'👥'},{id:'egresos',label:'Egresos',icon:'💳'},{id:'agencias',label:'Agencias',icon:'🏢'},{id:'clientes',label:'Clientes',icon:'🎯'},{id:'contactos',label:'Contactos',icon:'☎'},{id:'historico',label:'Histórico',icon:'📊'}]
 
   if(!mail) return <><Head><title>Somos Magma</title></Head><GS/><div style={S.lw}><div style={S.lb}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div><div style={{marginBottom:24,fontSize:13,color:'#555'}}>Ingresá con tu mail de trabajo</div><input style={S.inp} type='email' placeholder='tu@somosmagma.com' value={mi} onChange={e=>setMi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} autoFocus/>{err&&<div style={{color:'#E24B4A',fontSize:12,marginBottom:8}}>{err}</div>}<button style={S.bp} onClick={login}>Entrar</button></div></div></>
 
@@ -3451,25 +3451,29 @@ function Historico({data}){
 function K({lbl,val,sub,c}){return <div style={S.kpi}><div style={S.kl}>{lbl}</div><div style={{...S.kv,...(c?{color:c}:{})}}>{val}</div>{sub&&<div style={S.ks}>{sub}</div>}</div>}
 function Row({cols,vc}){return <div style={S.lr}><span style={{color:'#1543F8',fontFamily:'monospace',fontSize:11,flexShrink:0}}>{cols[0]}</span><span style={{flex:1,marginLeft:10,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cols[1]}</span><span style={{fontFamily:'monospace',fontSize:12,color:vc||'inherit'}}>{cols[2]}</span></div>}
 
+// Paleta consolidada (de 6 niveles de gris a 3 + acentos)
+// Fondos: #0A0A0A (app) → #161616 (card) → #1E1E1E (input/hover)
+// Texto: #F0F0F0 (principal) → #B0B0B0 (secundario) → #777 (terciario/labels)
+// Bordes: #262626 (sutil) → #333 (input) → #404040 (hover)
 const S={
   app:{display:'flex',height:'100vh',overflow:'hidden'},
-  sb:{width:220,background:'#161616',borderRight:'1px solid #2A2A2A',display:'flex',flexDirection:'column',flexShrink:0},
+  sb:{width:220,background:'#161616',borderRight:'1px solid #262626',display:'flex',flexDirection:'column',flexShrink:0},
   logo:{fontSize:22,fontWeight:900,background:'linear-gradient(135deg,#1543F8,#9635AB,#CE2637)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'},
-  ls:{fontFamily:"'Azeret Mono',monospace",fontSize:9,color:'#555',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
-  ni:{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:6,cursor:'pointer',color:'#777',fontSize:13,fontWeight:500,transition:'all 0.15s',marginBottom:2,border:'none',background:'transparent',width:'100%',textAlign:'left'},
+  ls:{fontFamily:"'Azeret Mono',monospace",fontSize:9,color:'#777',letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2},
+  ni:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:6,cursor:'pointer',color:'#B0B0B0',fontSize:13,fontWeight:500,transition:'all 0.15s',marginBottom:2,border:'none',background:'transparent',width:'100%',textAlign:'left'},
   k4:{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:10,marginBottom:12},
-  kpi:{background:'#1E1E1E',borderRadius:8,padding:'11px 13px'},
-  kl:{fontSize:11,color:'#555',marginBottom:4},
-  kv:{fontSize:18,fontWeight:500},
-  ks:{fontSize:10,color:'#555',marginTop:3},
-  card:{background:'#161616',border:'0.5px solid #2A2A2A',borderRadius:10,overflow:'hidden',marginBottom:8},
-  ch:{padding:'10px 14px',background:'#1A1A1A',borderBottom:'0.5px solid #2A2A2A',fontSize:12,fontWeight:500},
-  lr:{display:'flex',alignItems:'center',padding:'9px 14px',borderBottom:'0.5px solid #2A2A2A',fontSize:13},
-  badge:{display:'inline-flex',padding:'2px 8px',borderRadius:3,fontSize:11,whiteSpace:'nowrap'},
-  td:{padding:'9px 12px',borderBottom:'0.5px solid #1E1E1E',fontSize:13},
-  fb:{padding:'5px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'},
+  kpi:{background:'#1E1E1E',borderRadius:8,padding:'12px 14px'},
+  kl:{fontSize:11,color:'#888',marginBottom:4,fontWeight:500,letterSpacing:'.02em'},
+  kv:{fontSize:19,fontWeight:600,color:'#F0F0F0'},
+  ks:{fontSize:11,color:'#888',marginTop:3},
+  card:{background:'#161616',border:'0.5px solid #262626',borderRadius:10,overflow:'hidden',marginBottom:8},
+  ch:{padding:'11px 14px',background:'#1A1A1A',borderBottom:'0.5px solid #262626',fontSize:12,fontWeight:600,color:'#E0E0E0',letterSpacing:'.02em'},
+  lr:{display:'flex',alignItems:'center',padding:'10px 14px',borderBottom:'0.5px solid #262626',fontSize:13},
+  badge:{display:'inline-flex',padding:'3px 9px',borderRadius:4,fontSize:11,whiteSpace:'nowrap',fontWeight:500},
+  td:{padding:'10px 12px',borderBottom:'0.5px solid #1E1E1E',fontSize:13,color:'#D8D8D8'},
+  fb:{padding:'6px 12px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11.5,cursor:'pointer',fontWeight:500,transition:'all 0.15s'},
   fa:{background:'#1E1E1E',color:'#F0F0F0',borderColor:'#555'},
-  nd:{textAlign:'center',padding:48,color:'#555',fontSize:13},
+  nd:{textAlign:'center',padding:48,color:'#888',fontSize:13},
   inp:{width:'100%',padding:'10px 12px',borderRadius:8,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:14,outline:'none',marginBottom:12},
   bp:{width:'100%',padding:10,borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:14,fontWeight:500,cursor:'pointer'},
   lw:{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#090909'},
