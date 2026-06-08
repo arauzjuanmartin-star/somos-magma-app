@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       const nuevoNum = await calcularSiguienteNumero(sheets, SHEET_ID)
       numeroAsignado = nuevoNum
 
-      const row = new Array(50).fill('')
+      const row = new Array(52).fill('')
       row[0] = nuevoNum  // ← N° asignado por servidor, ignora lo que vino del cliente
       row[1] = p['Fecha Evento'] || ''
       row[2] = p['PM Interno'] || ''
@@ -113,6 +113,8 @@ export default async function handler(req, res) {
       row[47] = p['Tipo Fechas'] || ''
       row[48] = p['Fechas Adicionales'] || ''
       row[49] = p['Fee Servicios'] || ''
+      row[50] = ''  // AY: Motivo Desaprobado (vacío al crear)
+      row[51] = p['Observaciones'] || ''  // AZ: notas del PM para el cliente, autocompletan el PDF
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({

@@ -70,14 +70,14 @@ export default async function handler(req, res) {
       } catch (e) { console.error('Error eliminando proyecto al represupuestar:', e) }
     }
 
-    // Escribir el motivo en col Y (Motivo Desaprobado) — se guarda siempre que venga, no solo para DESAPROBADO.
-    // Si el estado vuelve a APROBADO o EN ESPERA, el motivo se limpia (no aplica más).
+    // Escribir el motivo en col AY (Motivo Desaprobado, índice 50).
+    // ATENCIÓN: la col Y (índice 24) era Precio 7 — escribir ahí pisaba datos. Bug fixed 2026-06-08.
     try {
       const motivoFinal = (estado === 'DESAPROBADO' || estado === 'REPRESUPUESTADO') ? (motivo || '') : ''
       if (motivoFinal || estado === 'APROBADO' || estado === 'EN ESPERA') {
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: `PRESUPUESTOS!Y${rowIndex}`,
+          range: `PRESUPUESTOS!AY${rowIndex}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[motivoFinal]] }
         })

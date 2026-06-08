@@ -3148,7 +3148,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     tajuste: ajusteOrig < 0 ? '-1' : '1',
     ajuste:String(Math.abs(ajusteOrig)||'0'),
     motivo:'',
-  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:''})
+    observaciones: initialData['Observaciones']||'',
+  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:'',observaciones:''})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false),[numAsignado,setNumAsignado]=useState(null)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
@@ -3254,6 +3255,7 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Tipo Fechas':tipoFechas,
       'Fechas Adicionales':fechasAdicionales,
       'Fee Servicios':feeServicios,
+      'Observaciones':form.observaciones||'',
     }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
@@ -3380,6 +3382,11 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           </div>
           <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:isRepresupuestar?4:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo" readOnly={isRepresupuestar}/></label>
           {isRepresupuestar&&<label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={{...lbl,color:'#9635AB'}}>Motivo del represupuesto *</span><input style={{...inp,borderColor:form.motivo?'#333':'#9635AB'}} value={form.motivo||''} onChange={e=>setF('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente..." autoFocus/></label>}
+          <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}>
+            <span style={lbl}>Observaciones (para el cliente)</span>
+            <textarea style={{...inp,minHeight:50,resize:'vertical',fontFamily:'inherit'}} value={form.observaciones||''} onChange={e=>setF('observaciones',e.target.value)} placeholder="Notas que querés que aparezcan en el PDF: detalles del horario, particularidades del evento, etc."/>
+            <span style={{fontSize:10,color:'#555'}}>Aparece en el PDF debajo de los servicios. Opcional.</span>
+          </label>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
             {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}

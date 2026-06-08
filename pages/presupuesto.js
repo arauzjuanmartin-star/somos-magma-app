@@ -50,40 +50,52 @@ const stripSvc = s => String(s||'')
 
 // Mapeo de códigos cortos del sheet a descripciones amigables para el cliente del PDF.
 // El usuario puede editar libremente después en el formulario.
+// Labels cortos y prácticos (Juan, 2026-06-08): "Foto 1" → "Fotógrafo", "Foto 1/2" → "Fotógrafo media jornada"
 const SVC_LABELS = {
-  'Foto ½':       '1 Fotógrafo (media jornada)',
-  'Foto 1/2':     '1 Fotógrafo (media jornada)',
-  'Foto 1':       '1 Fotógrafo (jornada completa)',
-  'Video ½':      '1 Videografo (media jornada)',
-  'Video 1/2':    '1 Videografo (media jornada)',
-  'Video 1':      '1 Videografo (jornada completa)',
-  'Film ½':       '1 Filmmaker (media jornada)',
-  'Film 1/2':     '1 Filmmaker (media jornada)',
-  'Film 1':       '1 Filmmaker (jornada completa)',
-  'Film 12hs':    '1 Filmmaker (jornada extendida 12 hs)',
+  // Fotografía
+  'Foto ½':       'Fotógrafo (media jornada)',
+  'Foto 1/2':     'Fotógrafo (media jornada)',
+  'Foto 1':       'Fotógrafo (jornada completa)',
+  'Foto 2':       'Fotógrafo (doble jornada)',
+  'Foto 12hs':    'Fotógrafo (jornada extendida 12 hs)',
+  // Video / Filmmaker
+  'Video ½':      'Videógrafo (media jornada)',
+  'Video 1/2':    'Videógrafo (media jornada)',
+  'Video 1':      'Videógrafo (jornada completa)',
+  'Video 2':      'Videógrafo (doble jornada)',
+  'Film ½':       'Filmmaker (media jornada)',
+  'Film 1/2':     'Filmmaker (media jornada)',
+  'Film 1':       'Filmmaker (jornada completa)',
+  'Film 12hs':    'Filmmaker (jornada extendida 12 hs)',
+  // Equipos especiales
   'Drone':        'Drone',
   'FPV':          'Dron FPV',
+  'Go Pro':       'Cámara GoPro',
+  'Rental':       'Rental de equipos',
+  // Postproducción / Animación
   'Motion':       'Animación motion graphics',
-  'Sonido':       'Sonido',
-  'DirFoto':      'Director de Fotografía',
-  'Edit 60s':     'Edición 1 video resumen horizontal con adaptación vertical',
+  'Edit 60s':     'Edición video resumen (60s) + adaptación vertical',
   'Edit 60s+':    'Edición video resumen extendido (más de 60s)',
   'Edit 15-30s':  'Edición video corto (15 a 30 segundos)',
-  'Vivo 1':       '1 Streaming en vivo (jornada completa)',
+  // Directores y roles especializados
+  'Sonido':       'Sonido directo',
+  'DirFoto':      'Director de Fotografía',
+  // Streaming
+  'Vivo 1':       'Streaming en vivo (jornada completa)',
   'Vivo ½':       'Streaming en vivo (media jornada)',
   'Vivo 1/2':     'Streaming en vivo (media jornada)',
-  'Go Pro':       'Cámara GoPro',
-  'Asist 1':      '1 Asistente (jornada completa)',
-  'Asist ½':      '1 Asistente (media jornada)',
-  'Asist 1/2':    '1 Asistente (media jornada)',
+  // Asistentes y producción
+  'Asist 1':      'Asistente (jornada completa)',
+  'Asist ½':      'Asistente (media jornada)',
+  'Asist 1/2':    'Asistente (media jornada)',
+  'Produ':        'Productor',
+  // Misceláneos / talento
   'MakeUp':       'Maquilladora',
   'Model':        'Modelo',
-  'Produ':        'Productor',
   'Catering':     'Catering',
   'Viaticos':     'Viáticos',
   'Crudos':       'Entrega de material crudo',
   'Fotos':        'Fotografías',
-  'Rental':       'Rental de equipos',
 }
 const prettifySvc = s => {
   if (!s) return ''
@@ -194,6 +206,7 @@ export default function Presupuesto() {
           fechaEvento: fechaEv,
           precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
           servicios: svcs.length > 0 ? svcs : [''],
+          observaciones: p['Observaciones']||'',  // autocompletar desde el sheet (lo que escribió el PM)
           fechaEmision: fechaHoy,
         }))
         setValidez(addDays(fechaHoy, 20))
@@ -223,7 +236,7 @@ export default function Presupuesto() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
-      const W=210, H=297, M=18
+      const W=210, H=297, M=15
       let y=0
 
       // Cargar assets (logo + líneas onduladas) en paralelo
@@ -239,250 +252,186 @@ export default function Presupuesto() {
       // ====== FONDO BLANCO ======
       doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
 
-      // ====== HEADER: LOGO IZQ + DATOS DER ======
-      // Logo grande arriba a la izquierda
+      // ====== HEADER COMPACTO: LOGO IZQ + DATOS DER ======
       if (logoImg) {
-        try { doc.addImage(logoImg, 'PNG', M, 14, 48, 22) } catch(e) {}
+        try { doc.addImage(logoImg, 'PNG', M, 11, 38, 17) } catch(e) {}
       } else {
-        // Fallback texto si no se cargó la imagen
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80)
-        doc.text('somos', M, 22)
-        doc.setFont('helvetica','bold'); doc.setFontSize(34); doc.setTextColor(0,0,0)
-        doc.text('MAGMA', M, 33)
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(80,80,80)
+        doc.text('somos', M, 17)
+        doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(0,0,0)
+        doc.text('MAGMA', M, 25)
         const mw = doc.getTextWidth('MAGMA')
-        doc.setFontSize(22); doc.setTextColor(0,0,0)
-        doc.text('!!', M+mw+2, 31)
+        doc.setFontSize(17); doc.setTextColor(0,0,0)
+        doc.text('!!', M+mw+2, 24)
       }
 
-      // Banderín de color encima de los datos (Recurso 6 si está, fallback a rectángulos)
-      if (banderinImg) {
-        try { doc.addImage(banderinImg, 'PNG', W-M-32, 13, 22, 3) } catch(e) {}
-      } else {
-        doc.setFillColor(21,67,248); doc.rect(W-M-32, 14, 12, 1.4, 'F')
-        doc.setFillColor(206,38,55); doc.rect(W-M-19, 14, 9, 1.4, 'F')
+      // Banderín de color
+      if (banderinImg) { try { doc.addImage(banderinImg, 'PNG', W-M-30, 10, 20, 2.5) } catch(e) {} }
+      else {
+        doc.setFillColor(21,67,248); doc.rect(W-M-30, 11, 11, 1.2, 'F')
+        doc.setFillColor(206,38,55); doc.rect(W-M-18, 11, 8, 1.2, 'F')
       }
 
-      // Datos arriba derecha en monospace estilo Courier
+      // Datos arriba derecha en monospace
       const rX = W-M
-      doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
-      doc.text('Somos Magma', rX, 19, {align:'right'})
-      doc.text('Buenos Aires', rX, 23.5, {align:'right'})
-      doc.text(toDisplay(form.fechaEmision), rX, 28, {align:'right'})
-      doc.text('Presu. N°'+(form.nro||'___'), rX, 32.5, {align:'right'})
+      doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(60,60,60)
+      doc.text('Somos Magma', rX, 16, {align:'right'})
+      doc.text('Buenos Aires', rX, 19.5, {align:'right'})
+      doc.text(toDisplay(form.fechaEmision), rX, 23, {align:'right'})
+      doc.text('Presu. N°'+(form.nro||'___'), rX, 26.5, {align:'right'})
 
-      y = 42
+      y = 31
 
-      // Línea decorativa ondulada full-width (debajo del header) — Recurso 33 pincelada
-      if (lineaDivider) {
-        try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 3) } catch(e) {}
-      } else {
-        doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
-      }
+      // Línea divisoria
+      if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 2.5) } catch(e) {} }
+      else { doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y) }
 
       // ====== TÍTULO ======
-      y += 11
-      doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(20,20,20)
+      y += 8
+      doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(20,20,20)
       const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
       doc.text(titulo, M, y)
 
-      // Garabato ondulado debajo del título — Recurso 26
-      if (lineaTitulo) {
-        try { doc.addImage(lineaTitulo, 'PNG', M, y+1.5, 44, 3.5) } catch(e) {}
-      } else {
-        const lw = 38
+      // Garabato bajo título
+      if (lineaTitulo) { try { doc.addImage(lineaTitulo, 'PNG', M, y+1.2, 36, 2.8) } catch(e) {} }
+      else {
+        const lw = 32
         for(let i=0;i<=80;i++){
           const t=i/80
           const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7)
-          doc.line(M+lw*(i/80), y+2.5, M+lw*((i+1)/80), y+2.5)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.6)
+          doc.line(M+lw*(i/80), y+2.2, M+lw*((i+1)/80), y+2.2)
         }
       }
 
       // Subtítulo (proyecto)
       if (form.proyecto) {
-        y += 11
-        doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80)
+        y += 7
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(80,80,80)
         doc.text(form.proyecto, M, y)
-      } else {
-        y += 4
       }
 
-      // ====== DATOS CLIENTE (una línea, separados por |) ======
-      y += 12
-      // Caja con borde fino
+      // ====== DATOS CLIENTE (línea con borde) ======
+      y += 8
       doc.setDrawColor(20,20,20); doc.setLineWidth(0.4)
-      doc.rect(M, y-5, W-M*2, 9)
-      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
+      doc.rect(M, y-4, W-M*2, 7)
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20)
       const partes = [
         `Cliente: ${form.cliente}`,
         form.agencia ? `Agencia: ${form.agencia}` : null,
         `Fecha: ${form.fechaEvento || toDisplay(form.fechaEmision)}`,
       ].filter(Boolean)
-      doc.text(partes.join('   |   '), M+4, y+1)
-
-      y += 18
+      doc.text(partes.join('   |   '), M+3, y+0.5)
+      y += 9
 
       // ====== DESCRIPCIÓN + SERVICIOS ======
-      // Título del servicio principal
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(20,20,20)
-      const tituloServ = form.proyecto || 'Servicio audiovisual'
-      doc.text(tituloServ, M, y)
-      y += 7
-
-      // Descripción larga si la hay
+      // Descripción larga si la hay (solo modo Producción)
       if (form.descripcion) {
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,50)
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(50,50,50)
         const desc = doc.splitTextToSize(form.descripcion, W-M*2)
-        doc.text(desc, M, y); y += desc.length*5.2 + 4
+        doc.text(desc, M, y); y += desc.length*4.5 + 3
       }
 
       // Lista de servicios incluidos
       const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
       if (svcsLimpios.length > 0) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,20,20)
-        doc.text('Incluye:', M, y); y += 6
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,50)
+        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
+        doc.text('El servicio incluye:', M, y); y += 5
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(50,50,50)
         const svcsMap = {}
         const orden = []
         for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
         for (const s of orden) {
           const cant = svcsMap[s]
           const label = cant > 1 ? `${cant} ${s}` : s
-          doc.setFillColor(20,20,20); doc.circle(M+2, y-1.3, 0.9, 'F')
-          const lines = doc.splitTextToSize(label, W-M*2-8)
-          doc.text(lines, M+6, y)
-          y += lines.length * 5.2
+          doc.setFillColor(20,20,20); doc.circle(M+1.5, y-1.2, 0.7, 'F')
+          const lines = doc.splitTextToSize(label, W-M*2-6)
+          doc.text(lines, M+5, y)
+          y += lines.length * 4.5
         }
-        y += 4
+        y += 2
       }
 
-      // Observaciones (notas adicionales)
+      // Observaciones (notas extra que escribe el PM)
       if (form.observaciones) {
-        y += 3
-        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70,70,70)
+        y += 2
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(20,20,20)
+        doc.text('Observaciones:', M, y); y += 4
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(60,60,60)
         const obs = doc.splitTextToSize(form.observaciones, W-M*2)
-        doc.text(obs, M, y); y += obs.length*4.8 + 3
+        doc.text(obs, M, y); y += obs.length*4 + 2
       }
 
-      y += 6
+      y += 3
 
       // ====== VALOR TOTAL ======
-      // Línea con puntos y precio al final
-      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(0,0,0)
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0)
       doc.text('Valor total', M, y)
       const totalLabelW = doc.getTextWidth('Valor total')
       const precioStr = '$' + fmt$(form.precioTotal) + ' + IVA'
       const precioW = doc.getTextWidth(precioStr)
-      // Underscore largo entre label y precio
       doc.setLineWidth(0.5); doc.setDrawColor(0,0,0)
       doc.line(M+totalLabelW+3, y, W-M-precioW-2, y)
       doc.text(precioStr, W-M, y, {align:'right'})
 
-      // Línea ondulada de color debajo del valor total — Recurso 27 (doble línea fuerte)
-      y += 4
-      if (lineaTotal) {
-        try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 5) } catch(e) {}
-      } else {
+      // Línea ondulada de color debajo
+      y += 3
+      if (lineaTotal) { try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 4) } catch(e) {} }
+      else {
         const lw = W-M*2
         for(let i=0;i<=200;i++){
           const t=i/200
           const r=Math.round(21+(206-21)*t), g=Math.round(67+(38-67)*t), b=Math.round(248+(55-248)*t)
-          doc.setDrawColor(r,g,b); doc.setLineWidth(0.7)
+          doc.setDrawColor(r,g,b); doc.setLineWidth(0.6)
           doc.line(M+lw*(i/200), y+1.5, M+lw*((i+1)/200), y+1.5)
         }
       }
+      y += 7
 
-      // ====== PÁGINA 2: TÉRMINOS Y CONDICIONES (estilo Ferrero) ======
-      doc.addPage()
-      doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
-
-      // Header igual que página 1
-      if (logoImg) {
-        try { doc.addImage(logoImg, 'PNG', M, 14, 48, 22) } catch(e) {}
-      } else {
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80)
-        doc.text('somos', M, 22)
-        doc.setFont('helvetica','bold'); doc.setFontSize(34); doc.setTextColor(0,0,0)
-        doc.text('MAGMA', M, 33)
-        const mw = doc.getTextWidth('MAGMA')
-        doc.setFontSize(22)
-        doc.text('!!', M+mw+2, 31)
-      }
-      if (banderinImg) { try { doc.addImage(banderinImg, 'PNG', W-M-32, 13, 22, 3) } catch(e) {} }
-      else {
-        doc.setFillColor(21,67,248); doc.rect(W-M-32, 14, 12, 1.4, 'F')
-        doc.setFillColor(206,38,55); doc.rect(W-M-19, 14, 9, 1.4, 'F')
-      }
-      doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
-      doc.text('Somos Magma', W-M, 19, {align:'right'})
-      doc.text('Buenos Aires', W-M, 23.5, {align:'right'})
-      doc.text(toDisplay(form.fechaEmision), W-M, 28, {align:'right'})
-      doc.text('Presu. N°'+(form.nro||'___'), W-M, 32.5, {align:'right'})
-
-      y = 42
-      if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 3) } catch(e) {} }
-      else { doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y) }
-
-      // Título secundario (mismo proyecto)
-      y += 11
-      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,20,20)
-      doc.text(titulo, M, y)
-      if (lineaTitulo) { try { doc.addImage(lineaTitulo, 'PNG', M, y+1.5, 38, 3) } catch(e) {} }
-      y += 16
-
-      // Caja datos cliente compacta
-      doc.setDrawColor(20,20,20); doc.setLineWidth(0.4)
-      doc.rect(M, y-5, W-M*2, 8)
-      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(20,20,20)
-      doc.text(partes.join('   |   '), M+4, y+0.5)
-      y += 13
-
-      // CONDICIONES GENERALES
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(206,38,55)
-      doc.text('CONDICIONES GENERALES (Por favor leer)', M, y); y += 6
-      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(40,40,40)
+      // ====== T&C COMPACTOS (todo en página 1) ======
+      // Validez
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
+      doc.text('CONDICIONES GENERALES', M, y); y += 3.5
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(60,60,60)
       const validezTxt = doc.splitTextToSize(clausulas.validez, W-M*2)
-      doc.text(validezTxt, M, y); y += validezTxt.length*5 + 6
+      doc.text(validezTxt, M, y); y += validezTxt.length*3.5 + 2
 
-      // Condiciones de Pago
-      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,20,20)
-      doc.text('Condiciones de Pago', M, y); y += 5
+      // Condiciones de Pago — inline (titulo: texto)
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
+      doc.text('CONDICIONES DE PAGO', M, y); y += 3.5
+      doc.setFontSize(7.5)
       for (const p of clausulas.pago) {
-        doc.setFillColor(20,20,20); doc.circle(M+2, y+0.5, 0.9, 'F')
-        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
-        doc.text(p.titulo, M+6, y+1.5)
-        y += 5
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
-        const ls = doc.splitTextToSize(p.texto, W-M*2)
-        doc.text(ls, M, y); y += ls.length*4.5 + 3
+        doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20)
+        doc.text(p.titulo+': ', M, y)
+        const tw = doc.getTextWidth(p.titulo+': ')
+        doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80)
+        const ls = doc.splitTextToSize(p.texto, W-M*2-tw)
+        if (ls[0]) doc.text(ls[0], M+tw, y)
+        for (let i=1; i<ls.length; i++) { y += 3.2; doc.text(ls[i], M, y) }
+        y += 4
       }
-      y += 3
+      y += 1
 
-      // CLÁUSULAS PARA EL COBRO Y LA ENTREGA
-      const tituloClausulas = form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'TÉRMINOS Y CONDICIONES DEL SERVICIO'
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(206,38,55)
-      doc.text(tituloClausulas, M, y); y += 7
+      // Cláusulas
+      const tituloClausulas = form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'CLÁUSULAS DEL SERVICIO'
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(206,38,55)
+      doc.text(tituloClausulas, M, y); y += 4
 
+      doc.setFontSize(7.5)
       for (const c of clausulas.clausulas) {
-        // Auto-page-break si nos quedamos cortos
-        if (y > H - 30) {
-          doc.addPage(); doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F'); y = 20
-        }
-        doc.setFillColor(20,20,20); doc.circle(M+2, y+0.5, 0.9, 'F')
-        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20)
-        doc.text(c.titulo, M+6, y+1.5)
-        y += 5
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
-        const ls = doc.splitTextToSize(c.texto, W-M*2)
-        doc.text(ls, M, y); y += ls.length*4.5 + 3
+        doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20)
+        doc.text(c.titulo+': ', M, y)
+        const tw = doc.getTextWidth(c.titulo+': ')
+        doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80)
+        const ls = doc.splitTextToSize(c.texto, W-M*2-tw)
+        if (ls[0]) doc.text(ls[0], M+tw, y)
+        for (let i=1; i<ls.length; i++) { y += 3.2; doc.text(ls[i], M, y) }
+        y += 4
       }
 
-      // Page numbers
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i=1; i<=pageCount; i++) {
-        doc.setPage(i)
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120)
-        doc.text(String(i), W-M, H-8, {align:'right'})
+      // Si y > H-12 significa que se desbordó — avisar
+      if (y > H - 5) {
+        console.warn('PDF desbordó la página', y, 'mm de', H)
       }
 
       doc.save(`presu-${form.nro||'borrador'}-${(form.cliente||'cliente').toLowerCase().replace(/\s+/g,'-')}.pdf`)
