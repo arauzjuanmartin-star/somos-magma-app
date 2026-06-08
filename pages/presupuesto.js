@@ -227,12 +227,13 @@ export default function Presupuesto() {
       let y=0
 
       // Cargar assets (logo + líneas onduladas) en paralelo
-      const [logoImg, linea1, linea2, linea3, linea4] = await Promise.all([
+      const [logoImg, lineaTitulo, lineaTotal, lineaDivider, lineaSeccion, banderinImg] = await Promise.all([
         loadImageAsDataURL('/branding/logo-magma.png'),
-        loadImageAsDataURL('/branding/linea-1.png'),
-        loadImageAsDataURL('/branding/linea-2.png'),
-        loadImageAsDataURL('/branding/linea-3.png'),
-        loadImageAsDataURL('/branding/linea-4.png'),
+        loadImageAsDataURL('/branding/linea-titulo.png'),
+        loadImageAsDataURL('/branding/linea-total.png'),
+        loadImageAsDataURL('/branding/linea-divider.png'),
+        loadImageAsDataURL('/branding/linea-seccion.png'),
+        loadImageAsDataURL('/branding/banderin.png'),
       ])
 
       // ====== FONDO BLANCO ======
@@ -253,9 +254,13 @@ export default function Presupuesto() {
         doc.text('!!', M+mw+2, 31)
       }
 
-      // Mini banda de color al lado de los datos (como en el casamiento)
-      doc.setFillColor(21,67,248); doc.rect(W-M-38, 14, 13, 1.2, 'F')
-      doc.setFillColor(206,38,55); doc.rect(W-M-24, 14, 11, 1.2, 'F')
+      // Banderín de color encima de los datos (Recurso 6 si está, fallback a rectángulos)
+      if (banderinImg) {
+        try { doc.addImage(banderinImg, 'PNG', W-M-32, 13, 22, 3) } catch(e) {}
+      } else {
+        doc.setFillColor(21,67,248); doc.rect(W-M-32, 14, 12, 1.4, 'F')
+        doc.setFillColor(206,38,55); doc.rect(W-M-19, 14, 9, 1.4, 'F')
+      }
 
       // Datos arriba derecha en monospace estilo Courier
       const rX = W-M
@@ -267,8 +272,12 @@ export default function Presupuesto() {
 
       y = 42
 
-      // Línea decorativa ondulada (debajo del header)
-      doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
+      // Línea decorativa ondulada full-width (debajo del header) — Recurso 33 pincelada
+      if (lineaDivider) {
+        try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 3) } catch(e) {}
+      } else {
+        doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
+      }
 
       // ====== TÍTULO ======
       y += 11
@@ -276,11 +285,10 @@ export default function Presupuesto() {
       const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
       doc.text(titulo, M, y)
 
-      // Garabato ondulado debajo del título (línea-3 o un path)
-      if (linea3) {
-        try { doc.addImage(linea3, 'PNG', M, y+1.5, 40, 4) } catch(e) {}
+      // Garabato ondulado debajo del título — Recurso 26
+      if (lineaTitulo) {
+        try { doc.addImage(lineaTitulo, 'PNG', M, y+1.5, 44, 3.5) } catch(e) {}
       } else {
-        // Fallback gradient line
         const lw = 38
         for(let i=0;i<=80;i++){
           const t=i/80
@@ -370,10 +378,10 @@ export default function Presupuesto() {
       doc.line(M+totalLabelW+3, y, W-M-precioW-2, y)
       doc.text(precioStr, W-M, y, {align:'right'})
 
-      // Línea ondulada de color debajo
+      // Línea ondulada de color debajo del valor total — Recurso 27 (doble línea fuerte)
       y += 4
-      if (linea1) {
-        try { doc.addImage(linea1, 'PNG', M, y, W-M*2, 3.5) } catch(e) {}
+      if (lineaTotal) {
+        try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 5) } catch(e) {}
       } else {
         const lw = W-M*2
         for(let i=0;i<=200;i++){
@@ -400,8 +408,11 @@ export default function Presupuesto() {
         doc.setFontSize(22)
         doc.text('!!', M+mw+2, 31)
       }
-      doc.setFillColor(21,67,248); doc.rect(W-M-38, 14, 13, 1.2, 'F')
-      doc.setFillColor(206,38,55); doc.rect(W-M-24, 14, 11, 1.2, 'F')
+      if (banderinImg) { try { doc.addImage(banderinImg, 'PNG', W-M-32, 13, 22, 3) } catch(e) {} }
+      else {
+        doc.setFillColor(21,67,248); doc.rect(W-M-32, 14, 12, 1.4, 'F')
+        doc.setFillColor(206,38,55); doc.rect(W-M-19, 14, 9, 1.4, 'F')
+      }
       doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60)
       doc.text('Somos Magma', W-M, 19, {align:'right'})
       doc.text('Buenos Aires', W-M, 23.5, {align:'right'})
@@ -409,13 +420,14 @@ export default function Presupuesto() {
       doc.text('Presu. N°'+(form.nro||'___'), W-M, 32.5, {align:'right'})
 
       y = 42
-      doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y)
+      if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, y-2, W-M*2, 3) } catch(e) {} }
+      else { doc.setDrawColor(40,40,40); doc.setLineWidth(0.4); doc.line(M, y, W-M, y) }
 
       // Título secundario (mismo proyecto)
       y += 11
       doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,20,20)
       doc.text(titulo, M, y)
-      if (linea3) { try { doc.addImage(linea3, 'PNG', M, y+1.5, 32, 3) } catch(e) {} }
+      if (lineaTitulo) { try { doc.addImage(lineaTitulo, 'PNG', M, y+1.5, 38, 3) } catch(e) {} }
       y += 16
 
       // Caja datos cliente compacta
