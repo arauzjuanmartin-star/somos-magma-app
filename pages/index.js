@@ -1922,7 +1922,19 @@ function Facturacion({data,mail,onRefresh}){
         {busqueda&&<button onClick={()=>setBusqueda('')} style={{padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>×</button>}
       </div>
     </div>
-    <div style={{fontSize:11,color:'#555',marginBottom:6}}>{filtradas.length} {filtradas.length===1?'factura':'facturas'}{filtro==='cobrada'?' (más recientes arriba)':''}{busqueda?' · filtrado por "'+busqueda+'"':''}</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,gap:10,flexWrap:'wrap'}}>
+      <div style={{fontSize:11,color:'#555'}}>{filtradas.length} {filtradas.length===1?'factura':'facturas'}{filtro!=='todas'?' · estado: '+filtro:''}{busqueda?' · buscando "'+busqueda+'"':''}</div>
+      {(filtro!=='todas'||busqueda)&&<button onClick={()=>{setFiltro('todas');setBusqueda('')}} style={{fontSize:10,padding:'4px 10px',borderRadius:4,border:'0.5px solid #BA7517',background:'#BA751715',color:'#BA7517',cursor:'pointer'}}>↺ Limpiar filtros</button>}
+    </div>
+    {filtradas.length===0&&fc.length>0&&<div style={{padding:'24px 16px',textAlign:'center',background:'#1A1A1A',border:'0.5px dashed #BA7517',borderRadius:8,marginBottom:10}}>
+      <div style={{fontSize:13,color:'#BA7517',marginBottom:8,fontWeight:500}}>Ninguna factura matchea los filtros actuales</div>
+      <div style={{fontSize:11,color:'#888',marginBottom:12}}>
+        {filtro!=='todas'&&<span>Filtro: <strong>{filtro}</strong> · </span>}
+        {busqueda&&<span>Búsqueda: <strong>"{busqueda}"</strong> · </span>}
+        Hay {fc.length} facturas en total. Probá limpiar para verlas.
+      </div>
+      <button onClick={()=>{setFiltro('todas');setBusqueda('')}} style={{fontSize:12,padding:'7px 16px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}}>↺ Limpiar todos los filtros</button>
+    </div>}
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 420px)'}}>
       {filtradas.map((f,i)=>{
         const e=estF(f),bm=bmap[e]||bmap.pendiente,isOpen=abierto===f['N° Presupuesto'],d=diffD(f)
