@@ -71,6 +71,7 @@ export default function App() {
   const [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
   const [showSearch,setShowSearch]=useState(false)
   const [showAtajos,setShowAtajos]=useState(false)
+  const [openTarget,setOpenTarget]=useState(null)  // {mod, query, num} → filtro automático al cambiar de módulo desde Cmd+K
 
   // Listener global de atajos de teclado
   useEffect(()=>{
@@ -165,22 +166,23 @@ export default function App() {
         </div>
         <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
           {err&&<div style={{background:'#E24B4A20',border:'0.5px solid #E24B4A',borderRadius:8,padding:'10px 14px',color:'#E24B4A',fontSize:13,marginBottom:14}}>{err}</div>}
-          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} mail={mail} onRefresh={()=>load()}/>}
+          {!data?<div style={S.nd}>Sin datos</div>:<Mod id={mod} data={data} mail={mail} onRefresh={()=>load()} openTarget={openTarget} clearTarget={()=>setOpenTarget(null)}/>}
         </div>
       </div>
     </div>
     {showNP&&<NuevoPresupuesto mail={mail} onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}))}} data={data}/>}
-    {showSearch&&<GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(modulo)=>{setMod(modulo);setShowSearch(false)}}/>}
+    {showSearch&&<GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(modulo, target)=>{setMod(modulo);setOpenTarget(target);setShowSearch(false)}}/>}
     {showAtajos&&<AtajosModal onClose={()=>setShowAtajos(false)} nav={NAV}/>}
   </>
 }
 
-function Mod({id,data,mail,onRefresh}){
+function Mod({id,data,mail,onRefresh,openTarget,clearTarget}){
+  const targetForThis = openTarget && openTarget.q ? openTarget : null
   switch(id){
     case 'dashboard': return <Dashboard data={data} mail={mail} onRefresh={onRefresh}/>
-    case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh}/>
-    case 'proyectos': return <Proyectos data={data} mail={mail} onRefresh={onRefresh}/>
-    case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh}/>
+    case 'presupuestos': return <Presupuestos data={data} mail={mail} onRefresh={onRefresh} openTarget={targetForThis} clearTarget={clearTarget}/>
+    case 'proyectos': return <Proyectos data={data} mail={mail} onRefresh={onRefresh} openTarget={targetForThis} clearTarget={clearTarget}/>
+    case 'facturacion': return <Facturacion data={data} mail={mail} onRefresh={onRefresh} openTarget={targetForThis} clearTarget={clearTarget}/>
     case 'pagos': return <PagosStaff data={data} mail={mail} onRefresh={onRefresh}/>
     case 'egresos': return <Egresos data={data} mail={mail} onRefresh={onRefresh}/>
     case 'agencias': return <Agencias data={data} mail={mail} onRefresh={onRefresh}/>
@@ -1014,9 +1016,18 @@ function DetallePresupuesto({p}){
   </div>
 }
 
-function Presupuestos({data:initialData,mail,onRefresh}){
+function Presupuestos({data:initialData,mail,onRefresh,openTarget,clearTarget}){
   const [localData,setLocalData]=useState(initialData)
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [pm,setPm]=useState('todos'), [anio,setAnio]=useState(String(new Date().getFullYear())), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [toast,setToast]=useState('')
+  // Aplica el filtro automáticamente cuando llegamos desde el buscador global
+  useEffect(()=>{
+    if (openTarget?.q) {
+      setQ(openTarget.q); setF('todos'); setPm('todos'); setMes('todos'); setAnio('todos')
+      if (openTarget.num) setOpen(openTarget.num) // expandir la fila
+      clearTarget?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[openTarget?.q])
   const [repP,setRepP]=useState(null) // presupuesto a represupuestar (abre NuevoPresupuesto con initialData)
   const [completarP,setCompletarP]=useState(null) // presu a completar datos faltantes
   const faltas=p=>{const f=[];if(!p['PM Interno'])f.push('PM');if(!p['Cliente'])f.push('Cliente');if(!p['Proyecto'])f.push('Proyecto');if(!p['Contacto'])f.push('Contacto');if(!p['Fecha Evento'])f.push('Fecha Evento');return f}
@@ -1234,10 +1245,18 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
 }
 
 // ---- PROYECTOS ----
-function Proyectos({data,mail,onRefresh}){
+function Proyectos({data,mail,onRefresh,openTarget,clearTarget}){
   const MESES_F=[['01','Enero'],['02','Febrero'],['03','Marzo'],['04','Abril'],['05','Mayo'],['06','Junio'],['07','Julio'],['08','Agosto'],['09','Septiembre'],['10','Octubre'],['11','Noviembre'],['12','Diciembre']]
   const [open,setOpen]=useState(null),[sels,setSels]=useState({}),[guardados,setGuardados]=useState({}),[saving,setSaving]=useState(null),[toast2,setToast2]=useState('')
   const [q,setQ]=useState(''),[anio,setAnio]=useState(String(new Date().getFullYear())),[mes,setMes]=useState('todos'),[pm,setPm]=useState('todos'),[agencia,setAgencia]=useState('todos'),[estado,setEstado]=useState('todos')
+  useEffect(()=>{
+    if (openTarget?.q) {
+      setQ(openTarget.q); setAnio('todos'); setMes('todos'); setPm('todos'); setAgencia('todos'); setEstado('todos')
+      if (openTarget.num) setOpen(openTarget.num)
+      clearTarget?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[openTarget?.q])
   const [freelancerNuevo,setFreelancerNuevo]=useState(null) // {nombre, ctx:{num,idx}}
   const [editarP,setEditarP]=useState(null) // proyecto a editar (fecha, datos básicos)
   const [borrarP,setBorrarP]=useState(null) // proyecto a confirmar borrado
@@ -1636,8 +1655,16 @@ function FreelancerNuevoModal({nombre,mail,onClose,onSaved}){
 // ---- FACTURACION ----
 const CUENTAS_FC=['SRL-BBVA','Sofia-Galicia','Sofia-Santander','Lulu-Santander']
 const ENT_FC={SRL:{label:'SRL',color:'#1543F8',bg:'#1543F815'},Sofia:{label:'Sofia',color:'#9635AB',bg:'#9635AB15'},Lulu:{label:'Lulu',color:'#1D9E75',bg:'#1D9E7515'},Efectivo:{label:'Efectivo',color:'#BA7517',bg:'#BA751715'}}
-function Facturacion({data,mail,onRefresh}){
+function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
   const [filtro,setFiltro]=useState('todas'),[abierto,setAbierto]=useState(null),[nuevaOpen,setNuevaOpen]=useState(false),[busqueda,setBusqueda]=useState('')
+  useEffect(()=>{
+    if (openTarget?.q) {
+      setBusqueda(openTarget.q); setFiltro('todas')
+      if (openTarget.num) setAbierto(openTarget.num)
+      clearTarget?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[openTarget?.q])
   const [presuSel,setPresuSel]=useState(null),[montoTipo,setMontoTipo]=useState('total'),[montoCustom,setMontoCustom]=useState('')
   const [formData,setFormData]=useState({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
   const [saving,setSaving]=useState(false),[toast,setToast]=useState(''),[cobroData,setCobroData]=useState({})
@@ -3588,6 +3615,39 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:15,fontWeight:500,borderTop:'0.5px solid #333',marginTop:6}}>
             <span>Precio final</span><span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
           </div>
+          {/* Si es represupuesto, mostrar el precio del ORIGINAL como referencia + ayuda para igualar */}
+          {isRepresupuestar && (()=>{
+            const precioOrig = parseMonto(initialData?.['Precio Final'])
+            const diff = T.total - precioOrig
+            const igual = Math.abs(diff) < 1
+            return <div style={{marginTop:10,padding:'8px 10px',background:igual?'#1D9E7508':'#9635AB10',border:'0.5px solid '+(igual?'#1D9E7530':'#9635AB30'),borderRadius:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:igual?0:4}}>
+                <span style={{color:'#888'}}>Original #{initialData['Columna 1']}</span>
+                <span style={{fontFamily:'monospace',color:'#B0B0B0'}}>{fmt(precioOrig)}</span>
+              </div>
+              {!igual && <>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:diff>0?'#E24B4A':'#1D9E75',marginBottom:6}}>
+                  <span>Diferencia con el nuevo</span>
+                  <span style={{fontFamily:'monospace'}}>{diff>0?'+':''}{fmt(diff)}</span>
+                </div>
+                <button onClick={()=>{
+                  // Calcular qué ajuste hace falta para igualar al original
+                  const subtotal = peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+                  const feeBase = peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
+                  const fee = tieneAg?feeBase:0
+                  const base = subtotal+fee
+                  const gan = form.gan?fee*0.35:0
+                  const iibb = form.iibb?fee*0.04:0
+                  const intRatio = (parseFloat(form.interes)||0)/100
+                  const intMto = (base+gan+iibb)*intRatio
+                  const totalSinAjuste = base+gan+iibb+intMto
+                  const ajusteNecesario = precioOrig - totalSinAjuste
+                  setF('tajuste', ajusteNecesario >= 0 ? '1' : '-1')
+                  setF('ajuste', String(Math.round(Math.abs(ajusteNecesario))))
+                }} style={{width:'100%',padding:'6px',borderRadius:4,border:'0.5px solid #9635AB',background:'#9635AB20',color:'#9635AB',fontSize:11,fontWeight:500,cursor:'pointer'}}>↺ Forzar precio igual al original</button>
+              </>}
+            </div>
+          })()}
           <div style={{background:'#1A1A1A',borderRadius:8,padding:10,marginTop:14}}>
             <div style={{fontSize:10,color:'#555',marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em'}}>Servicios</div>
             {peds.filter(p=>p.svc).length===0?<span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>Ninguno aun</span>
@@ -4628,9 +4688,16 @@ function GlobalSearch({data, onClose, onNavegar}){
   const onKey = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(visibles.length-1, i+1)) }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setIdx(i => Math.max(0, i-1)) }
-    if (e.key === 'Enter' && visibles[idx]) { e.preventDefault(); guardarReciente(visibles[idx]); onNavegar(visibles[idx].mod) }
+    if (e.key === 'Enter' && visibles[idx]) { e.preventDefault(); const r = visibles[idx]; guardarReciente(r); onNavegar(r.mod, {q: extraerQuery(r), num: extraerNum(r)}) }
   }
-  const elegir = (r) => { guardarReciente(r); onNavegar(r.mod) }
+  // Extrae el N° del título "#1949 · BBVA" → "1949"
+  const extraerNum = (r) => {
+    const m = String(r.titulo||'').match(/#([\w\d-]+)/)
+    return m ? m[1] : null
+  }
+  // Extrae el texto buscable: si tiene #N°, usa eso; si no, el título
+  const extraerQuery = (r) => extraerNum(r) || String(r.titulo||'').split('·')[0].trim()
+  const elegir = (r) => { guardarReciente(r); onNavegar(r.mod, {q: extraerQuery(r), num: extraerNum(r)}) }
 
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:500,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:90}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'90%',maxWidth:640,background:'#0D0D0D',borderRadius:12,border:'0.5px solid #2A2A2A',overflow:'hidden',boxShadow:'0 20px 60px #000a'}}>
