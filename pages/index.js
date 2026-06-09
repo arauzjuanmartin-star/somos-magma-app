@@ -450,7 +450,67 @@ function Dashboard({data,mail,onRefresh}){
   const cColor=(val)=>val===0?'#555':val>0?'#1D9E75':'#E24B4A'
   const fmtPct=v=>(v>0?'+':'')+v+'%'
 
+  // ════════════════════════════════════════════════════════════════════
+  // BANNER DE ALERTAS — top de cosas pendientes que requieren acción (separate from alertas array)
+  // ════════════════════════════════════════════════════════════════════
+  const alertasBanner = (() => {
+    const out = []
+    // Presus aprobados sin proyecto (bug clásico del sheet)
+    const proyectosNumSet = new Set(proyectos.map(p => String(p['N° presupuesto']||'').trim()).filter(Boolean))
+    const aprobadosSinProy = pr.filter(p => isAprobado(p) && !proyectosNumSet.has(String(p['Columna 1']||'').trim()))
+    if (aprobadosSinProy.length > 0) out.push({tipo:'critico', icon:'⚠', titulo:aprobadosSinProy.length+' presu'+(aprobadosSinProy.length>1?'s':'')+' aprobado'+(aprobadosSinProy.length>1?'s':'')+' sin proyecto', sub:'Ej: '+aprobadosSinProy.slice(0,3).map(p=>'#'+p['Columna 1']).join(', '), mod:'presupuestos'})
+
+    // Proyectos próximos (siguientes 14 días) sin staff
+    const proxSinStaff = proyectos.filter(p => {
+      const f = parseD(p['Fecha Evento'])
+      if (!f) return false
+      const dias = (f.getTime() - hoy.getTime())/86400000
+      if (dias < 0 || dias > 14) return false
+      // chequear si tiene staff
+      let tieneStaff = false
+      for (let j=1; j<=20; j++) {
+        const s = String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim()
+        if (s && s !== 'Somos Magma') { tieneStaff = true; break }
+      }
+      return !tieneStaff
+    })
+    if (proxSinStaff.length > 0) out.push({tipo:'critico', icon:'👥', titulo:proxSinStaff.length+' proyecto'+(proxSinStaff.length>1?'s':'')+' en 14d sin staff', sub:'Ej: '+proxSinStaff.slice(0,3).map(p=>'#'+p['N° presupuesto']+' '+p['Fecha Evento']).join(', '), mod:'proyectos'})
+
+    // Facturas vencen esta semana
+    const venceSemana = porCobrar.filter(f => { const v = parseD(f['Vencimiento']); if (!v) return false; const dias = (v.getTime()-hoy.getTime())/86400000; return dias >= 0 && dias <= 7 })
+    if (venceSemana.length > 0) out.push({tipo:'aviso', icon:'💵', titulo:venceSemana.length+' factura'+(venceSemana.length>1?'s':'')+' vence'+(venceSemana.length>1?'n':'')+' en 7 días', sub:'Total: '+fmt(venceSemana.reduce((s,f)=>s+f.monto,0)), mod:'facturacion'})
+
+    // Facturas atrasadas +30d
+    if (kpis.atrasadas > 0) out.push({tipo:'aviso', icon:'🔥', titulo:kpis.atrasadas+' factura'+(kpis.atrasadas>1?'s':'')+' atrasada'+(kpis.atrasadas>1?'s':'')+' +30d', sub:fmtM(kpis.montoAtrasado)+' pendientes de cobro', mod:'facturacion'})
+
+    // Agencias sin CUIT con presus este año
+    const agSinCuit = (data.agencias||[]).filter(a => !a['CUIT'] && a['Activa']==='SI').length
+    if (agSinCuit > 5) out.push({tipo:'info', icon:'🏢', titulo:agSinCuit+' agencias activas sin CUIT', sub:'Crítico para facturar — completar fichas', mod:'agencias'})
+
+    return out
+  })()
+
   return <div>
+
+    {/* ALERTAS — banner top con cosas que requieren acción */}
+    {alertasBanner.length > 0 && <div style={{marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:'.06em'}}>
+        <span>Necesita tu atención</span>
+        <span style={{padding:'1px 6px',borderRadius:8,background:'#E24B4A30',color:'#E24B4A',fontSize:10,fontWeight:600}}>{alertasBanner.length}</span>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:8}}>
+        {alertasBanner.map((a,i) => {
+          const colorBg = a.tipo==='critico'?'#E24B4A':a.tipo==='aviso'?'#BA7517':'#1543F8'
+          return <div key={i} onClick={()=>typeof onRefresh==='function'?null:null} style={{padding:'10px 12px',background:colorBg+'10',border:'0.5px solid '+colorBg+'40',borderRadius:6,borderLeft:'3px solid '+colorBg,display:'flex',alignItems:'flex-start',gap:10}}>
+            <span style={{fontSize:18,lineHeight:1}}>{a.icon}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:'#F0F0F0',marginBottom:2}}>{a.titulo}</div>
+              <div style={{fontSize:10,color:'#888',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.sub}</div>
+            </div>
+          </div>
+        })}
+      </div>
+    </div>}
 
     {/* 1. SALDOS EN CUENTA */}
     <div style={{...S.card,marginBottom:12,padding:'14px 18px',background:'#0F1A0F',borderColor:'#1D9E7530'}}>

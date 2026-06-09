@@ -52,11 +52,12 @@ export default async function handler(req, res) {
     // APPEND con retry. Si falla todo, devuelve error claro.
     // CRÍTICO 2026-06-09: sin insertDataOption Google usa OVERWRITE en filas "vacías" y pisaba data
     // (3 facturas de Flor se perdieron por este bug — Santander 1894, Mondelez 1933, Clinica 1948)
-    await withRetry(() => sheets.spreadsheets.values.append({
+    const appendResult = await withRetry(() => sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'FACTURACION!A:Y',
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',   // ← fuerza nueva fila en vez de overwrite
+      includeValuesInResponse: true,
       requestBody: { values: [[
         mesStr, presupuestoNum, false, false, false, '', '',
         agencia||'', cliente||'', proyecto||'',
@@ -67,17 +68,49 @@ export default async function handler(req, res) {
       ]] }
     }))
 
+    // VERIFICACIÓN POST-GUARDADO (defensa contra bug de pérdida silenciosa):
+    // releemos la fila escrita y confirmamos que existe el presupuestoNum + total esperado
+    let filaVerificada = null
+    try {
+      const updatedRange = appendResult?.data?.updates?.updatedRange  // ej: 'FACTURACION!A140:Y140'
+      if (updatedRange) {
+        const m = updatedRange.match(/!\D+(\d+)/)
+        const filaNum = m ? parseInt(m[1]) : null
+        if (filaNum) {
+          const check = await withRetry(() => sheets.spreadsheets.values.get({
+            spreadsheetId: SHEET_ID, range: `FACTURACION!B${filaNum}:M${filaNum}`
+          }))
+          const fila = check.data.values?.[0] || []
+          const presuLeido = String(fila[0]||'').trim()
+          const totalLeido = parseFloat(String(fila[11]||'').replace(/[^\d.-]/g,''))
+          if (presuLeido === String(presupuestoNum).trim() && Math.abs(totalLeido - total) < 1) {
+            filaVerificada = filaNum
+          } else {
+            // La fila se "escribió" pero no contiene lo esperado → falla loud
+            return res.status(500).json({
+              error: 'La factura no se guardó correctamente en el sheet (verificación falló).',
+              detalle: `Fila ${filaNum}: presu esperado ${presupuestoNum}, leído "${presuLeido}". Total esperado ${total}, leído ${totalLeido}.`,
+              reintentar: true,
+            })
+          }
+        }
+      }
+    } catch (verifyErr) {
+      console.warn('Verificación post-guardado falló:', verifyErr.message)
+      // No bloqueamos si solo falla la verificación
+    }
+
     // LOG solo después de confirmar append exitoso
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'factura-nueva', 'FACTURACION', String(presupuestoNum), `nro=${nroFactura||'-'} ${entidad}-${tipo} $${total} cliente=${cliente||''}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'factura-nueva', 'FACTURACION', String(presupuestoNum), `nro=${nroFactura||'-'} ${entidad}-${tipo} $${total} cliente=${cliente||''}${filaVerificada?' fila='+filaVerificada:' (sin verificar)'}`]] },
       })
     } catch (e) {}
 
-    res.json({ ok: true })
+    res.json({ ok: true, filaVerificada })
   } catch(e) {
     console.error('Error factura-nueva:', e)
     const status = e.code || e.response?.status
