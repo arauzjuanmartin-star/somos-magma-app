@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { useSession, signIn, signOut } from 'next-auth/react'
 
@@ -69,6 +69,20 @@ export default function App() {
   const { data: session, status } = useSession()
   const mail = session?.user?.email || ''
   const [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
+  const [showSearch,setShowSearch]=useState(false)
+
+  // Listener global Cmd+K / Ctrl+K para abrir el buscador
+  useEffect(()=>{
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowSearch(true)
+      }
+      if (e.key === 'Escape') setShowSearch(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  },[])
 
   // Cargar data cuando hay sesión válida
   useEffect(()=>{
@@ -122,6 +136,11 @@ export default function App() {
         <div style={{padding:'16px 24px',borderBottom:'1px solid #2A2A2A',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div><div style={{fontSize:18,fontWeight:700}}>{NAV.find(n=>n.id===mod)?.label}</div><div style={{fontSize:12,color:'#555',marginTop:2}}>Vista general</div></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={()=>setShowSearch(true)} title="Buscar (Cmd+K)" style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:6,border:'0.5px solid #333',background:'#1A1A1A',color:'#888',fontSize:12,cursor:'pointer'}}>
+              <span style={{fontSize:13}}>🔍</span>
+              <span>Buscar...</span>
+              <span style={{fontSize:10,padding:'1px 5px',borderRadius:3,background:'#262626',color:'#666',fontFamily:'monospace'}}>⌘K</span>
+            </button>
             {mod==='presupuestos'&&<button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'none',background:'#1543F8',color:'#fff',cursor:'pointer',fontWeight:500}} onClick={()=>setShowNP(true)}>+ Nuevo presupuesto</button>}
             <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'0.5px solid #333',background:'transparent',color:'#777',cursor:'pointer'}} onClick={()=>load()}>↻ Actualizar</button>
           </div>
@@ -133,6 +152,7 @@ export default function App() {
       </div>
     </div>
     {showNP&&<NuevoPresupuesto mail={mail} onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}))}} data={data}/>}
+    {showSearch&&<GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(modulo)=>{setMod(modulo);setShowSearch(false)}}/>}
   </>
 }
 
@@ -4375,5 +4395,120 @@ function Calendario({data,mail,onRefresh}){
 
     {/* Toast */}
     {toast&&<div style={{position:'fixed',bottom:24,right:24,padding:'10px 16px',background:'#1A1A1A',border:'0.5px solid #333',borderRadius:8,fontSize:12,color:'#F0F0F0',boxShadow:'0 4px 16px #000a',zIndex:400}}>{toast}</div>}
+  </div>
+}
+
+// ════════════════════════════════════════════════════════════════════
+// BUSCADOR GLOBAL — Cmd+K
+// ════════════════════════════════════════════════════════════════════
+function GlobalSearch({data, onClose, onNavegar}){
+  const [q, setQ] = useState('')
+  const [idx, setIdx] = useState(0)
+  const inputRef = useRef(null)
+  useEffect(()=>{ inputRef.current?.focus() },[])
+
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  const nq = norm(q.trim())
+
+  const resultados = []
+  if (nq.length >= 1) {
+    // PRESUPUESTOS
+    ;(data?.presupuestos||[]).forEach(p => {
+      const num = String(p['Columna 1']||''), cli=String(p['Cliente']||''), ag=String(p['Agencia']||''), pr=String(p['Proyecto']||'')
+      const blob = norm(num+' '+cli+' '+ag+' '+pr)
+      if (blob.includes(nq)) {
+        resultados.push({tipo:'Presupuesto', icon:'📋', mod:'presupuestos', titulo:'#'+num+' · '+(cli||ag||'—'), sub:pr, meta:p['Estado']||'', color:'#1543F8'})
+      }
+    })
+    // PROYECTOS
+    ;(data?.proyectos||[]).forEach(p => {
+      const num=String(p['N° presupuesto']||''), cli=String(p['Cliente']||''), ag=String(p['Agencia']||''), pr=String(p['Proyecto']||'')
+      const blob = norm(num+' '+cli+' '+ag+' '+pr)
+      if (blob.includes(nq)) {
+        resultados.push({tipo:'Proyecto', icon:'🎬', mod:'proyectos', titulo:'#'+num+' · '+(cli||ag||'—'), sub:pr, meta:p['Fecha Evento']||'', color:'#1D9E75'})
+      }
+    })
+    // FACTURAS
+    ;(data?.facturacion||[]).forEach(f => {
+      const num=String(f['N° Presupuesto']||f['N° Factura']||''), cli=String(f['Cliente']||''), ag=String(f['Agencia']||''), pr=String(f['Proyecto']||'')
+      const blob = norm(num+' '+cli+' '+ag+' '+pr)
+      if (blob.includes(nq)) {
+        const cobrada = String(f['cobrados']||'').toUpperCase()==='TRUE' || String(f['Pagado']||'').toUpperCase()==='SÍ'
+        resultados.push({tipo:'Factura', icon:'💵', mod:'facturacion', titulo:'#'+num+' · '+(cli||ag||'—'), sub:pr, meta:cobrada?'Cobrada':'Pendiente', color:'#BA7517'})
+      }
+    })
+    // FREELANCERS (RRHH)
+    ;(data?.rrhh||[]).forEach(r => {
+      const nombre=String(r['Nombre Apellido']||''), rubro=String(r['Rubro']||''), mail=String(r['Mail']||'')
+      const blob = norm(nombre+' '+rubro+' '+mail)
+      if (blob.includes(nq) && nombre.trim()) {
+        resultados.push({tipo:'Freelancer', icon:'👤', mod:'pagos', titulo:nombre, sub:rubro, meta:r['Banco']?'Con CBU':'Sin CBU', color:'#9635AB'})
+      }
+    })
+    // AGENCIAS
+    ;(data?.agencias||[]).forEach(a => {
+      const nombre=String(a['Nombre']||'')
+      if (norm(nombre).includes(nq) && nombre.trim()) {
+        resultados.push({tipo:'Agencia', icon:'🏢', mod:'agencias', titulo:nombre, sub:a['Tipo']||'', meta:a['Activa']==='SI'?'Activa':'', color:'#E24B4A'})
+      }
+    })
+    // CLIENTES
+    ;(data?.clientes||[]).forEach(c => {
+      const nombre=String(c['Nombre']||'')
+      if (norm(nombre).includes(nq) && nombre.trim()) {
+        resultados.push({tipo:'Cliente', icon:'🎯', mod:'clientes', titulo:nombre, sub:c['Industria']||'', meta:c['Cant. presus historicos']?(c['Cant. presus historicos']+' presus'):'', color:'#CE2637'})
+      }
+    })
+    // CONTACTOS
+    ;(data?.contactos||[]).forEach(c => {
+      const nombre=String(c['Nombre']||''), agencia=String(c['Agencia']||''), tel=String(c['Teléfono']||''), mail=String(c['Mail']||'')
+      const blob = norm(nombre+' '+agencia+' '+tel+' '+mail)
+      if (blob.includes(nq) && nombre.trim()) {
+        resultados.push({tipo:'Contacto', icon:'☎', mod:'contactos', titulo:nombre, sub:agencia, meta:c['Cargo']||'', color:'#4A90E2'})
+      }
+    })
+  }
+
+  // Limitar a 30 para no saturar
+  const visibles = resultados.slice(0, 30)
+  const total = resultados.length
+
+  // Navegar con flechas
+  useEffect(()=>{ setIdx(0) },[q])
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(visibles.length-1, i+1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setIdx(i => Math.max(0, i-1)) }
+    if (e.key === 'Enter' && visibles[idx]) { e.preventDefault(); onNavegar(visibles[idx].mod) }
+  }
+
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:500,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:90}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'90%',maxWidth:640,background:'#0D0D0D',borderRadius:12,border:'0.5px solid #2A2A2A',overflow:'hidden',boxShadow:'0 20px 60px #000a'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:'0.5px solid #2A2A2A'}}>
+        <span style={{fontSize:16,color:'#666'}}>🔍</span>
+        <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={onKey} placeholder="Buscar presus, proyectos, facturas, freelancers, agencias..." style={{flex:1,background:'transparent',border:'none',color:'#F0F0F0',fontSize:15,outline:'none',fontFamily:'inherit'}}/>
+        <span style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>ESC para cerrar</span>
+      </div>
+      <div style={{maxHeight:'60vh',overflowY:'auto'}}>
+        {!q && <div style={{padding:'30px 20px',textAlign:'center',color:'#555',fontSize:12}}>Escribí algo para buscar en todos los módulos · usá ↑↓ para navegar, Enter para abrir</div>}
+        {q && visibles.length === 0 && <div style={{padding:'24px 20px',textAlign:'center',color:'#666',fontSize:13}}>No encontré nada con "{q}"</div>}
+        {visibles.map((r,i) => (
+          <div key={i} onClick={()=>onNavegar(r.mod)} onMouseEnter={()=>setIdx(i)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 18px',cursor:'pointer',background:i===idx?'#1E1E1E':'transparent',borderBottom:'0.5px solid #161616'}}>
+            <span style={{fontSize:18,width:24,textAlign:'center'}}>{r.icon}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,color:'#F0F0F0',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.titulo}</div>
+              {r.sub && <div style={{fontSize:11,color:'#777',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.sub}</div>}
+            </div>
+            <span style={{fontSize:9,padding:'2px 7px',borderRadius:3,background:r.color+'20',color:r.color,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{r.tipo}</span>
+            {r.meta && <span style={{fontSize:10,color:'#666'}}>{r.meta}</span>}
+          </div>
+        ))}
+        {total > 30 && <div style={{padding:'10px 18px',fontSize:10,color:'#555',textAlign:'center',borderTop:'0.5px solid #1A1A1A'}}>+{total-30} resultados más · refiná la búsqueda</div>}
+      </div>
+      {q && total > 0 && <div style={{display:'flex',gap:14,padding:'8px 18px',background:'#0A0A0A',borderTop:'0.5px solid #2A2A2A',fontSize:10,color:'#555',justifyContent:'flex-end'}}>
+        <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>↑↓</kbd> navegar</span>
+        <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>Enter</kbd> ir</span>
+        <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>ESC</kbd> cerrar</span>
+      </div>}
+    </div>
   </div>
 }
