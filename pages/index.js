@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { useSession, signIn, signOut } from 'next-auth/react'
 
@@ -70,18 +70,34 @@ export default function App() {
   const mail = session?.user?.email || ''
   const [loading,setLoading]=useState(false), [data,setData]=useState(null), [mod,setMod]=useState('dashboard'), [err,setErr]=useState(''), [showNP,setShowNP]=useState(false)
   const [showSearch,setShowSearch]=useState(false)
+  const [showAtajos,setShowAtajos]=useState(false)
 
-  // Listener global Cmd+K / Ctrl+K para abrir el buscador
+  // Listener global de atajos de teclado
   useEffect(()=>{
     const handler = (e) => {
+      // Si el foco está en input/textarea/select → no aplicar atajos numéricos (solo Cmd+K y Esc)
+      const enInput = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) || e.target.isContentEditable
+
+      // Cmd+K / Ctrl+K → buscador (siempre, incluso en inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setShowSearch(true)
+        e.preventDefault(); setShowSearch(true); return
       }
-      if (e.key === 'Escape') setShowSearch(false)
+      // Esc cierra modales (siempre)
+      if (e.key === 'Escape') { setShowSearch(false); setShowAtajos(false); return }
+      // ? muestra ayuda (solo fuera de inputs)
+      if (!enInput && e.key === '?' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); setShowAtajos(true); return
+      }
+      // Atajos numéricos para módulos (solo fuera de inputs)
+      if (!enInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const num = parseInt(e.key)
+        if (num >= 1 && num <= 9 && NAV[num-1]) { e.preventDefault(); setMod(NAV[num-1].id) }
+        if (e.key === '0' && NAV[9]) { e.preventDefault(); setMod(NAV[9].id) }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[])
 
   // Cargar data cuando hay sesión válida
@@ -121,12 +137,14 @@ export default function App() {
       <div style={S.sb}>
         <div style={{padding:'20px 16px 16px',borderBottom:'1px solid #2A2A2A'}}><div style={S.logo}>M//</div><div style={S.ls}>SOMOS MAGMA</div></div>
         <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
-          {NAV.map(n=>{
+          {NAV.map((n,i)=>{
             const badge = n.id==='proyectos' ? (data?.proyectos||[]).filter(p=>{const carga=p['Carga Staff'];if(carga===true||carga==='TRUE')return false;const staffs=[];for(let j=1;j<=20;j++){if(p['Staff '+j]||(j===1?p['Staff']:null))staffs.push(true)}return staffs.length===0}).length : null
-            return <button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)}>
+            const atajo = i < 9 ? String(i+1) : (i===9 ? '0' : null)
+            return <button key={n.id} style={{...S.ni,...(mod===n.id?{color:'#F0F0F0',background:'#262626'}:{})}} onClick={()=>setMod(n.id)} title={atajo?`Atajo: ${atajo}`:''}>
               <span style={{fontSize:12,width:16,textAlign:'center'}}>{n.icon}</span>
               <span style={{flex:1}}>{n.label}</span>
               {badge!=null&&badge>0&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:8,background:'#E24B4A30',color:'#E24B4A',fontWeight:600}}>{badge}</span>}
+              {atajo&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:3,background:mod===n.id?'#1A1A1A':'#161616',color:'#555',fontFamily:'monospace'}}>{atajo}</span>}
             </button>
           })}
         </nav>
@@ -153,6 +171,7 @@ export default function App() {
     </div>
     {showNP&&<NuevoPresupuesto mail={mail} onClose={()=>setShowNP(false)} onGuardado={(p)=>{setData(prev=>({...prev,presupuestos:[...(prev.presupuestos||[]),p]}))}} data={data}/>}
     {showSearch&&<GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(modulo)=>{setMod(modulo);setShowSearch(false)}}/>}
+    {showAtajos&&<AtajosModal onClose={()=>setShowAtajos(false)} nav={NAV}/>}
   </>
 }
 
@@ -4455,6 +4474,16 @@ function GlobalSearch({data, onClose, onNavegar}){
   const inputRef = useRef(null)
   useEffect(()=>{ inputRef.current?.focus() },[])
 
+  // Items recientes (últimos 8 abiertos desde el buscador)
+  const [recientes,setRecientes] = useState(()=>{try{return JSON.parse(localStorage.getItem('magma_search_recent')||'[]')}catch(e){return []}})
+  const guardarReciente = (r) => {
+    const item = {tipo:r.tipo, icon:r.icon, mod:r.mod, titulo:r.titulo, sub:r.sub, color:r.color, ts:Date.now()}
+    const nueva = [item, ...recientes.filter(x=>x.titulo!==r.titulo||x.tipo!==r.tipo)].slice(0,8)
+    setRecientes(nueva)
+    try{localStorage.setItem('magma_search_recent',JSON.stringify(nueva))}catch(e){}
+  }
+  const limpiarRecientes = () => { setRecientes([]); try{localStorage.removeItem('magma_search_recent')}catch(e){} }
+
   const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
   const nq = norm(q.trim())
 
@@ -4526,8 +4555,9 @@ function GlobalSearch({data, onClose, onNavegar}){
   const onKey = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(visibles.length-1, i+1)) }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setIdx(i => Math.max(0, i-1)) }
-    if (e.key === 'Enter' && visibles[idx]) { e.preventDefault(); onNavegar(visibles[idx].mod) }
+    if (e.key === 'Enter' && visibles[idx]) { e.preventDefault(); guardarReciente(visibles[idx]); onNavegar(visibles[idx].mod) }
   }
+  const elegir = (r) => { guardarReciente(r); onNavegar(r.mod) }
 
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:500,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:90}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'90%',maxWidth:640,background:'#0D0D0D',borderRadius:12,border:'0.5px solid #2A2A2A',overflow:'hidden',boxShadow:'0 20px 60px #000a'}}>
@@ -4537,10 +4567,26 @@ function GlobalSearch({data, onClose, onNavegar}){
         <span style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>ESC para cerrar</span>
       </div>
       <div style={{maxHeight:'60vh',overflowY:'auto'}}>
-        {!q && <div style={{padding:'30px 20px',textAlign:'center',color:'#555',fontSize:12}}>Escribí algo para buscar en todos los módulos · usá ↑↓ para navegar, Enter para abrir</div>}
+        {!q && recientes.length === 0 && <div style={{padding:'30px 20px',textAlign:'center',color:'#555',fontSize:12}}>Escribí algo para buscar en todos los módulos · usá ↑↓ para navegar, Enter para abrir</div>}
+        {!q && recientes.length > 0 && <>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 18px',fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>
+            <span>Recientes</span>
+            <button onClick={limpiarRecientes} style={{fontSize:10,color:'#666',background:'transparent',border:'none',cursor:'pointer'}}>Limpiar</button>
+          </div>
+          {recientes.map((r,i) => (
+            <div key={'rec'+i} onClick={()=>elegir(r)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 18px',cursor:'pointer',borderBottom:'0.5px solid #161616'}} onMouseEnter={e=>e.currentTarget.style.background='#1E1E1E'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <span style={{fontSize:18,width:24,textAlign:'center'}}>{r.icon}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:'#F0F0F0',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.titulo}</div>
+                {r.sub && <div style={{fontSize:11,color:'#777',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.sub}</div>}
+              </div>
+              <span style={{fontSize:9,padding:'2px 7px',borderRadius:3,background:r.color+'20',color:r.color,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{r.tipo}</span>
+            </div>
+          ))}
+        </>}
         {q && visibles.length === 0 && <div style={{padding:'24px 20px',textAlign:'center',color:'#666',fontSize:13}}>No encontré nada con "{q}"</div>}
-        {visibles.map((r,i) => (
-          <div key={i} onClick={()=>onNavegar(r.mod)} onMouseEnter={()=>setIdx(i)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 18px',cursor:'pointer',background:i===idx?'#1E1E1E':'transparent',borderBottom:'0.5px solid #161616'}}>
+        {q && visibles.map((r,i) => (
+          <div key={i} onClick={()=>elegir(r)} onMouseEnter={()=>setIdx(i)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 18px',cursor:'pointer',background:i===idx?'#1E1E1E':'transparent',borderBottom:'0.5px solid #161616'}}>
             <span style={{fontSize:18,width:24,textAlign:'center'}}>{r.icon}</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,color:'#F0F0F0',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.titulo}</div>
@@ -4550,13 +4596,60 @@ function GlobalSearch({data, onClose, onNavegar}){
             {r.meta && <span style={{fontSize:10,color:'#666'}}>{r.meta}</span>}
           </div>
         ))}
-        {total > 30 && <div style={{padding:'10px 18px',fontSize:10,color:'#555',textAlign:'center',borderTop:'0.5px solid #1A1A1A'}}>+{total-30} resultados más · refiná la búsqueda</div>}
+        {q && total > 30 && <div style={{padding:'10px 18px',fontSize:10,color:'#555',textAlign:'center',borderTop:'0.5px solid #1A1A1A'}}>+{total-30} resultados más · refiná la búsqueda</div>}
       </div>
       {q && total > 0 && <div style={{display:'flex',gap:14,padding:'8px 18px',background:'#0A0A0A',borderTop:'0.5px solid #2A2A2A',fontSize:10,color:'#555',justifyContent:'flex-end'}}>
         <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>↑↓</kbd> navegar</span>
         <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>Enter</kbd> ir</span>
         <span><kbd style={{padding:'1px 4px',background:'#1A1A1A',borderRadius:3,fontFamily:'monospace'}}>ESC</kbd> cerrar</span>
       </div>}
+    </div>
+  </div>
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ATAJOS DE TECLADO — Modal de ayuda (se abre con ?)
+// ════════════════════════════════════════════════════════════════════
+function AtajosModal({onClose, nav}){
+  const Kbd = ({children}) => <kbd style={{padding:'3px 8px',background:'#1A1A1A',border:'0.5px solid #2A2A2A',borderRadius:4,fontSize:11,fontFamily:'monospace',color:'#F0F0F0',minWidth:24,display:'inline-block',textAlign:'center'}}>{children}</kbd>
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:550,display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'90%',maxWidth:520,background:'#0D0D0D',borderRadius:12,border:'0.5px solid #2A2A2A',overflow:'hidden',maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:'0.5px solid #2A2A2A'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:16}}>⌨️</span>
+          <span style={{fontSize:14,fontWeight:600,color:'#F0F0F0'}}>Atajos de teclado</span>
+        </div>
+        <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#666',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{padding:'16px 18px',overflowY:'auto'}}>
+        <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:600}}>General</div>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'10px 14px',marginBottom:20,alignItems:'center'}}>
+          <div><Kbd>⌘</Kbd> + <Kbd>K</Kbd></div><div style={{fontSize:12,color:'#B0B0B0'}}>Abrir buscador global</div>
+          <div><Kbd>?</Kbd></div><div style={{fontSize:12,color:'#B0B0B0'}}>Mostrar esta ayuda</div>
+          <div><Kbd>Esc</Kbd></div><div style={{fontSize:12,color:'#B0B0B0'}}>Cerrar modal / cancelar</div>
+        </div>
+
+        <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:600}}>Cambiar módulo</div>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 14px',marginBottom:20,alignItems:'center'}}>
+          {nav.slice(0,10).map((n,i) => {
+            const k = i < 9 ? String(i+1) : '0'
+            return <React.Fragment key={n.id}>
+              <div><Kbd>{k}</Kbd></div>
+              <div style={{fontSize:12,color:'#B0B0B0'}}><span style={{marginRight:6}}>{n.icon}</span>{n.label}</div>
+            </React.Fragment>
+          })}
+        </div>
+
+        <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:600}}>En el buscador</div>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'10px 14px',alignItems:'center'}}>
+          <div><Kbd>↑</Kbd> <Kbd>↓</Kbd></div><div style={{fontSize:12,color:'#B0B0B0'}}>Navegar resultados</div>
+          <div><Kbd>Enter</Kbd></div><div style={{fontSize:12,color:'#B0B0B0'}}>Abrir seleccionado</div>
+        </div>
+
+        <div style={{marginTop:20,padding:'10px 12px',background:'#1543F810',border:'0.5px solid #1543F830',borderRadius:6,fontSize:11,color:'#B0B0B0'}}>
+          💡 Los atajos numéricos solo funcionan cuando NO estás escribiendo en un input.
+        </div>
+      </div>
     </div>
   </div>
 }
