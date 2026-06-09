@@ -48,6 +48,7 @@ export default async function handler(req, res) {
         spreadsheetId: SHEET_ID,
         range: 'SUELDOS!A:J',
         valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',  // crítico: sin esto Google puede pisar filas
         requestBody: { values: [[mes, anio, persona, tipoReal, Number(monto)||0, Number(adelantos)||0, pagado?'SÍ':'NO', fechaPago||'', metodo||'', observacion||'']] },
       })
     }

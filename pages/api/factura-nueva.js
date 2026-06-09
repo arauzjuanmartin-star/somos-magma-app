@@ -50,10 +50,13 @@ export default async function handler(req, res) {
     }
 
     // APPEND con retry. Si falla todo, devuelve error claro.
+    // CRÍTICO 2026-06-09: sin insertDataOption Google usa OVERWRITE en filas "vacías" y pisaba data
+    // (3 facturas de Flor se perdieron por este bug — Santander 1894, Mondelez 1933, Clinica 1948)
     await withRetry(() => sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'FACTURACION!A:Y',
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',   // ← fuerza nueva fila en vez de overwrite
       requestBody: { values: [[
         mesStr, presupuestoNum, false, false, false, '', '',
         agencia||'', cliente||'', proyecto||'',

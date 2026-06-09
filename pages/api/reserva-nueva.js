@@ -19,6 +19,7 @@ export default async function handler(req, res) {
       spreadsheetId: SHEET_ID,
       range: 'RESERVAS!A:I',
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',  // crítico: sin esto Google puede pisar filas
       requestBody: { values: [[cuenta, concepto, Number(monto)||0, fechaStr, tipo||'Otros', origen||'', 'SÍ', '', notas||'']] },
     })
 

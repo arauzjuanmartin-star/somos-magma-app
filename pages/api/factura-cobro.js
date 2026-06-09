@@ -126,6 +126,7 @@ export default async function handler(req, res) {
           spreadsheetId: SHEET_ID,
           range: 'RESERVAS!A:I',
           valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [[cuentaDestino, `IVA factura #${nroPresupuesto}`, montoIVAReserva, hoy(), 'IVA', String(nroPresupuesto), 'SÍ', '', `Auto. Cliente: ${cliente}. ${tipoCobro}`]] },
         }))
         reservaCreada = { monto: montoIVAReserva, concepto: `IVA factura #${nroPresupuesto}` }
@@ -138,6 +139,7 @@ export default async function handler(req, res) {
       spreadsheetId: SHEET_ID,
       range: 'COBROS!A:L',
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [[
         new Date().toISOString(), String(nroPresupuesto), cliente,
         tipoCobro + (porcentajeAdelanto ? ` ${porcentajeAdelanto}%` : ''),
