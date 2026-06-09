@@ -996,6 +996,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                 <td style={{...S.td}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <BadgeEstado p={p} mail={mail} data={localData} onUpdate={handleEstadoUpdate} onRefresh={onRefresh} onRepresupuestar={setRepP}/>
+                    <button title='Editar datos del presu (cliente, agencia, proyecto, observaciones)' onClick={e=>{e.stopPropagation();setCompletarP(p)}} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎</button>
                     <button title='Generar PDF' onClick={e=>{e.stopPropagation();window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1']),'_blank')}} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>PDF</button>
                   </div>
                 </td>
@@ -1031,11 +1032,15 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
   const [proyecto,setProyecto]=useState(p['Proyecto']||'')
   const [contacto,setContacto]=useState(p['Contacto']||'')
   const [fechaEv,setFechaEv]=useState(p['Fecha Evento']||'')
+  const [observaciones,setObservaciones]=useState(p['Observaciones']||'')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
+  // Si NO hay campos faltantes, el modal funciona como "Editar"; si hay → como "Completar"
+  const faltasCount=[p['PM Interno'],p['Agencia'],p['Cliente'],p['Proyecto'],p['Contacto'],p['Fecha Evento']].filter(v=>!v).length
+  const titulo = faltasCount > 0 ? 'Completar datos' : 'Editar datos'
   const ags=[...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
   const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
   const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
-  const guardar=async()=>{
+  const guardar=async(luegoGenerarPDF=false)=>{
     setSaving(true);setErr('')
     const cambios={}
     if(pm!==(p['PM Interno']||''))cambios['PM Interno']=pm
@@ -1044,12 +1049,21 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
     if(proyecto!==(p['Proyecto']||''))cambios['Proyecto']=proyecto
     if(contacto!==(p['Contacto']||''))cambios['Contacto']=contacto
     if(fechaEv!==(p['Fecha Evento']||''))cambios['Fecha Evento']=fechaEv
-    if(Object.keys(cambios).length===0){setErr('No hay cambios');setSaving(false);return}
+    if(observaciones!==(p['Observaciones']||''))cambios['Observaciones']=observaciones
+    if(Object.keys(cambios).length===0){
+      // Si no hay cambios pero quería generar PDF → directamente abre el PDF
+      if (luegoGenerarPDF) { window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1']),'_blank'); onClose(); return }
+      setErr('No hay cambios');setSaving(false);return
+    }
     try{
       const r=await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:p['Columna 1'],cambios})})
       const j=await r.json()
       if(!j.ok){setErr(j.error||'Error');setSaving(false);return}
       onSaved(p['Columna 1'],cambios)
+      if (luegoGenerarPDF) {
+        // Pequeño delay para que el cache de /api/data se invalide y el PDF lea fresh
+        setTimeout(()=>window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1'])+'&t='+Date.now(),'_blank'), 800)
+      }
     }catch(e){setErr(e.message);setSaving(false)}
   }
   const inp={background:'#1E1E1E',border:'0.5px solid #333',borderRadius:6,color:'#F0F0F0',fontSize:12,padding:'7px 10px',outline:'none',width:'100%',fontFamily:'inherit'}
@@ -1059,12 +1073,12 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
     <div style={{width:560,maxHeight:'90vh',background:'#0D0D0D',borderRadius:10,border:'0.5px solid #2A2A2A',overflow:'hidden',display:'flex',flexDirection:'column'}}>
       <div style={{padding:'16px 20px',borderBottom:'0.5px solid #2A2A2A',display:'flex',alignItems:'center',gap:10}}>
         <span style={{background:'#1543F820',color:'#1543F8',borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:'monospace'}}>#{p['Columna 1']}</span>
-        <span style={{fontSize:13,fontWeight:500}}>Completar datos</span>
+        <span style={{fontSize:13,fontWeight:500}}>{titulo}</span>
         <div style={{flex:1}}/>
         <button onClick={onClose} style={{fontSize:18,background:'transparent',border:'none',color:'#555',cursor:'pointer'}}>×</button>
       </div>
       <div style={{padding:20,overflowY:'auto'}}>
-        <div style={{fontSize:11,color:'#888',marginBottom:12}}>Campos en rojo están faltando. Los podés completar y guardar.</div>
+        <div style={{fontSize:11,color:'#888',marginBottom:12}}>{faltasCount>0?'Campos en rojo están faltando. Los podés completar y guardar.':'Editá cliente, agencia, proyecto o cualquier dato básico sin necesidad de represupuestar.'}</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
           <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>PM interno</span>
             <select style={{...inp,...campoFaltante(p['PM Interno'])}} value={pm} onChange={e=>setPm(e.target.value)}>
@@ -1094,11 +1108,16 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
             <datalist id="ed-ct">{cts.map(c=><option key={c} value={c}/>)}</datalist>
           </label>
         </div>
+        <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+          <span style={lbl}>Observaciones (aparecen en el PDF)</span>
+          <textarea style={{...inp,minHeight:55,resize:'vertical',fontFamily:'inherit'}} value={observaciones} onChange={e=>setObservaciones(e.target.value)} placeholder="Notas que querés que vea el cliente en el PDF. Ej: Entrevistas en calle para generar 4 videos."/>
+        </label>
         {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
       </div>
-      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end'}}>
+      <div style={{padding:'14px 20px',borderTop:'0.5px solid #2A2A2A',display:'flex',gap:10,justifyContent:'flex-end',flexWrap:'wrap'}}>
         <button onClick={onClose} style={{padding:'8px 16px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:12,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={guardar} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
+        <button onClick={()=>guardar(true)} disabled={saving} style={{padding:'8px 14px',borderRadius:6,border:'0.5px solid #1543F8',background:'#1543F815',color:'#1543F8',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar y abrir PDF'}</button>
+        <button onClick={()=>guardar(false)} disabled={saving} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer',opacity:saving?0.5:1}}>{saving?'Guardando...':'Guardar cambios'}</button>
       </div>
     </div>
   </div>

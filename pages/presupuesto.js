@@ -36,7 +36,16 @@ const fromSheet = s => {
   return ''
 }
 
-const PEDIDO_KEYS = ['Pedido 1','Pedido 2','Pedido3 ','Pedido 4','Pedido 5','Pedido 6','Pedido 7','Pedido 8','Pedido 9','Pedido 10','Pedido 11','Pedido 12']
+// Extrae todos los pedidos del objeto p de manera robusta — busca cualquier key 'Pedido N' independiente del espaciado
+const getPedidos = (p) => {
+  if (!p) return []
+  const pares = []
+  for (const k of Object.keys(p)) {
+    const m = k.match(/^pedido\s*(\d+)\s*$/i)
+    if (m) pares.push({n: parseInt(m[1]), val: p[k]})
+  }
+  return pares.sort((a,b) => a.n - b.n).map(x => x.val).filter(Boolean)
+}
 
 // Limpia emojis y variation selectors. Mantiene letras latinas, números, puntuación común.
 const stripSvc = s => String(s||'')
@@ -48,54 +57,53 @@ const stripSvc = s => String(s||'')
   .replace(/^[\s!'"`þÞ]+/, '')
   .trim()
 
-// Mapeo de códigos cortos del sheet a descripciones amigables para el cliente del PDF.
-// El usuario puede editar libremente después en el formulario.
-// Labels cortos y prácticos (Juan, 2026-06-08): "Foto 1" → "Fotógrafo", "Foto 1/2" → "Fotógrafo media jornada"
+// Mapeo de códigos cortos a descripciones ricas para el PDF al cliente.
+// Juan 2026-06-09: descripciones más detalladas (ej. Viáticos → Hospedaje, transportes y comida)
 const SVC_LABELS = {
   // Fotografía
-  'Foto ½':       'Fotógrafo (media jornada)',
-  'Foto 1/2':     'Fotógrafo (media jornada)',
-  'Foto 1':       'Fotógrafo (jornada completa)',
-  'Foto 2':       'Fotógrafo (doble jornada)',
-  'Foto 12hs':    'Fotógrafo (jornada extendida 12 hs)',
+  'Foto ½':       'Media jornada fotógrafo (hasta 4 horas, edición incluida)',
+  'Foto 1/2':     'Media jornada fotógrafo (hasta 4 horas, edición incluida)',
+  'Foto 1':       'Jornada completa fotógrafo (hasta 8 horas, edición incluida)',
+  'Foto 2':       'Doble jornada fotógrafo (2 jornadas completas, edición incluida)',
+  'Foto 12hs':    'Jornada extendida fotógrafo (hasta 12 horas, edición incluida)',
   // Video / Filmmaker
-  'Video ½':      'Videógrafo (media jornada)',
-  'Video 1/2':    'Videógrafo (media jornada)',
-  'Video 1':      'Videógrafo (jornada completa)',
-  'Video 2':      'Videógrafo (doble jornada)',
-  'Film ½':       'Filmmaker (media jornada)',
-  'Film 1/2':     'Filmmaker (media jornada)',
-  'Film 1':       'Filmmaker (jornada completa)',
-  'Film 12hs':    'Filmmaker (jornada extendida 12 hs)',
+  'Video ½':      'Media jornada videógrafo (hasta 4 horas)',
+  'Video 1/2':    'Media jornada videógrafo (hasta 4 horas)',
+  'Video 1':      'Jornada completa videógrafo (hasta 8 horas)',
+  'Video 2':      'Doble jornada videógrafo (2 jornadas completas)',
+  'Film ½':       'Media jornada filmmaker (hasta 4 horas)',
+  'Film 1/2':     'Media jornada filmmaker (hasta 4 horas)',
+  'Film 1':       'Jornada completa filmmaker (hasta 8 horas)',
+  'Film 12hs':    'Jornada extendida filmmaker (hasta 12 horas)',
   // Equipos especiales
-  'Drone':        'Drone',
-  'FPV':          'Dron FPV',
-  'Go Pro':       'Cámara GoPro',
-  'Rental':       'Rental de equipos',
+  'Drone':        'Operador de drone con piloto habilitado',
+  'FPV':          'Dron FPV (cinematic FPV con piloto especializado)',
+  'Go Pro':       'Cámara GoPro adicional para tomas dinámicas',
+  'Rental':       'Rental de equipos (cámaras, lentes, luces, accesorios)',
   // Postproducción / Animación
-  'Motion':       'Animación motion graphics',
-  'Edit 60s':     'Edición video resumen (60s) + adaptación vertical',
-  'Edit 60s+':    'Edición video resumen extendido (más de 60s)',
+  'Motion':       'Animación motion graphics 2D',
+  'Edit 60s':     'Edición video resumen 60 segundos + adaptación vertical 9:16',
+  'Edit 60s+':    'Edición video resumen extendido (más de 60 segundos)',
   'Edit 15-30s':  'Edición video corto (15 a 30 segundos)',
   // Directores y roles especializados
-  'Sonido':       'Sonido directo',
-  'DirFoto':      'Director de Fotografía',
+  'Sonido':       'Sonido directo (microfonía + grabador)',
+  'DirFoto':      'Director de Fotografía (DOP)',
   // Streaming
-  'Vivo 1':       'Streaming en vivo (jornada completa)',
-  'Vivo ½':       'Streaming en vivo (media jornada)',
-  'Vivo 1/2':     'Streaming en vivo (media jornada)',
+  'Vivo 1':       'Streaming en vivo jornada completa (1 cámara + transmisión)',
+  'Vivo ½':       'Streaming en vivo media jornada (1 cámara + transmisión)',
+  'Vivo 1/2':     'Streaming en vivo media jornada (1 cámara + transmisión)',
   // Asistentes y producción
-  'Asist 1':      'Asistente (jornada completa)',
-  'Asist ½':      'Asistente (media jornada)',
-  'Asist 1/2':    'Asistente (media jornada)',
-  'Produ':        'Productor',
+  'Asist 1':      'Asistente de producción jornada completa',
+  'Asist ½':      'Asistente de producción media jornada',
+  'Asist 1/2':    'Asistente de producción media jornada',
+  'Produ':        'Productor en set',
   // Misceláneos / talento
-  'MakeUp':       'Maquilladora',
-  'Model':        'Modelo',
-  'Catering':     'Catering',
-  'Viaticos':     'Viáticos',
-  'Crudos':       'Entrega de material crudo',
-  'Fotos':        'Fotografías',
+  'MakeUp':       'Maquilladora profesional',
+  'Model':        'Modelo (talento contratado)',
+  'Catering':     'Catering en set',
+  'Viaticos':     'Viáticos (hospedaje, transportes y comida)',
+  'Crudos':       'Entrega de archivos crudos sin editar',
+  'Fotos':        'Fotografías editadas en alta resolución',
 }
 const prettifySvc = s => {
   if (!s) return ''
@@ -186,9 +194,10 @@ export default function Presupuesto() {
       .then(d => {
         const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
         if (!p) { console.warn('Presu no encontrado:', nro); return }
-        // PEDIDO_KEYS incluye 'Pedido3 ' (con espacio raro en el header del sheet original)
-        const svcs = PEDIDO_KEYS.map(k => p[k]).filter(Boolean).map(prettifySvc)
-        console.log('Presu cargado:', nro, '· servicios encontrados:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
+        // Usa getPedidos() robusto: busca cualquier key 'Pedido N' sin importar espaciado raro
+        const pedidosRaw = getPedidos(p)
+        const svcs = pedidosRaw.map(prettifySvc)
+        console.log('[Presu '+nro+'] Pedidos raw del sheet:', pedidosRaw, '· prettified:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
         const fechaHoy = new Date().toISOString().slice(0,10)
         // Fecha evento: usar Fecha Adicionales si hay rango/multiples
         const fechaEv = (() => {
