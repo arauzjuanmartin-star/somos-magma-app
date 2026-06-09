@@ -48,13 +48,14 @@ const getPedidos = (p) => {
 }
 
 // Limpia emojis y variation selectors. Mantiene letras latinas, números, puntuación común.
+// BUG histórico: el regex [ -⁯] eliminaba TODO el texto (rango Unicode U+0020 a U+206F incluye letras).
+// Ahora apunto a caracteres invisibles específicos sin tocar texto normal.
 const stripSvc = s => String(s||'')
-  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')
-  .replace(/[☀-➿]/g,'')
-  .replace(/[︀-️]/g,'')
-  .replace(/[​-‏‪-‮]/g,'')
-  .replace(/[ -⁯]/g,'')
-  .replace(/^[\s!'"`þÞ]+/, '')
+  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')   // emojis pictográficos (😀🎥🚚 etc)
+  .replace(/[☀-➿]/g,'')          // símbolos misceláneos (☀ ✈ ⚠ etc)
+  .replace(/[​-‏‪-‮⁠-⁯﻿]/g,'')  // zero-width + bidi + word joiner
+  .replace(/[︀-️]/g,'')          // variation selectors
+  .replace(/^[\s!'"`þÞ]+/, '')              // prefijos de basura al inicio
   .trim()
 
 // Mapeo de códigos cortos a descripciones ricas para el PDF al cliente.
@@ -525,9 +526,10 @@ export default function Presupuesto() {
         {form.nro&&<span style={{fontSize:11,fontFamily:'monospace',color:'#1543F8',background:'#1543F810',padding:'2px 8px',borderRadius:4}}>#{form.nro}</span>}
       </div>
 
-      <div style={{maxWidth:700,margin:'0 auto',padding:'32px 20px 60px'}}>
-        <h1 style={{fontSize:24,fontWeight:900,margin:'0 0 4px',letterSpacing:-0.5}}>Generar <span style={{color:'#CE2637'}}>PDF</span></h1>
-        <p style={{color:'#555',fontSize:13,margin:'0 0 28px'}}>Los datos se cargan automáticamente del presu. Editá lo que necesites y generá el PDF.</p>
+      <div style={{maxWidth:1480,margin:'0 auto',padding:'24px 20px 60px',display:'grid',gridTemplateColumns:'minmax(360px,1fr) minmax(440px,1.05fr)',gap:24}}>
+        <div>
+        <h1 style={{fontSize:22,fontWeight:900,margin:'0 0 4px',letterSpacing:-0.5}}>Generar <span style={{color:'#CE2637'}}>PDF</span></h1>
+        <p style={{color:'#555',fontSize:12,margin:'0 0 20px'}}>Editá los datos. El preview de la derecha muestra cómo va a quedar el PDF.</p>
 
         <div style={{display:'grid',gap:14}}>
 
@@ -680,7 +682,128 @@ export default function Presupuesto() {
           </button>
 
         </div>
+        </div>
+        {/* ════════════════ PREVIEW COLUMN ════════════════ */}
+        <div style={{position:'sticky',top:14,alignSelf:'flex-start',maxHeight:'calc(100vh - 28px)',overflowY:'auto'}}>
+          <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8,fontWeight:600}}>Preview del PDF</div>
+          <PreviewPDF form={form} clausulas={clausulas}/>
+        </div>
       </div>
     </div>
   </>)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PREVIEW HTML — réplica simplificada del PDF para edición en vivo
+// ════════════════════════════════════════════════════════════════════
+function PreviewPDF({form, clausulas}) {
+  const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
+  // Servicios prettified + agrupados
+  const svcsLimpios = (form.servicios||[]).map(s => prettifySvc(s)).filter(Boolean)
+  const svcsMap = {}
+  const orden = []
+  for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
+
+  const C = {
+    black: '#090909', magma: '#CE2637', azul: '#1543F8',
+    texto: '#373737', gris: '#787878', muted: '#8C8C8C',
+    bg: '#fff', boxBg: '#FAFAFA',
+  }
+  const S = {
+    page: {background:C.bg, color:C.texto, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:'24px 28px', borderRadius:8, border:'0.5px solid #2A2A2A', fontSize:11, lineHeight:1.4},
+    mono: {fontFamily:"'Courier New',monospace"},
+    label: {fontSize:8.5, color:C.gris, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4, fontWeight:500},
+    h1: {fontSize:18, fontWeight:700, color:C.black, lineHeight:1.1, marginBottom:8},
+    h2: {fontSize:13, fontWeight:700, color:C.black, lineHeight:1.2, margin:'0 0 4px'},
+    cuerpo: {fontSize:10.5, color:C.texto, lineHeight:1.5},
+    sec: {fontSize:9, color:C.magma, fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em', margin:'12px 0 5px'},
+    bullet: {display:'flex',gap:7,alignItems:'flex-start',padding:'2px 0'},
+    cuadrado: {flexShrink:0, width:5, height:5, background:C.black, marginTop:6},
+  }
+
+  return <div style={S.page}>
+    {/* HEADER */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+      <img src="/branding/logo-magma.png" alt="MAGMA" style={{height:32,width:'auto'}} onError={e=>e.target.style.display='none'}/>
+      <div style={{textAlign:'right'}}>
+        <img src="/branding/banderin.png" alt="" style={{height:8,marginBottom:3,display:'block',marginLeft:'auto'}} onError={e=>e.target.style.display='none'}/>
+        <div style={{...S.mono, fontSize:9, color:C.texto, lineHeight:1.5}}>
+          <div>Somos Magma</div>
+          <div>Buenos Aires</div>
+          <div>{toDisplay(form.fechaEmision)}</div>
+          <div>Presu. N°{form.nro || '___'}</div>
+        </div>
+      </div>
+    </div>
+
+    <img src="/branding/linea-divider.png" alt="" style={{width:'100%',height:8,objectFit:'fill',display:'block',marginBottom:14}} onError={e=>e.target.style.display='none'}/>
+
+    {/* TÍTULO */}
+    <div style={S.h1}>{titulo}</div>
+    <img src="/branding/linea-titulo.png" alt="" style={{height:6,marginBottom:14,display:'block'}} onError={e=>e.target.style.display='none'}/>
+
+    {/* CLIENTE | AGENCIA */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:6}}>
+      <div>
+        <div style={S.label}>CLIENTE</div>
+        <div style={S.h2}>{form.cliente || '—'}</div>
+      </div>
+      {form.agencia && <div>
+        <div style={S.label}>AGENCIA</div>
+        <div style={S.h2}>{form.agencia}</div>
+      </div>}
+    </div>
+    <div style={{borderTop:'0.5px solid #DDD',margin:'4px 0 12px'}}/>
+
+    {/* PROYECTO */}
+    <div style={S.label}>PROYECTO</div>
+    <div style={{...S.h2,fontSize:14}}>{form.proyecto || '—'}</div>
+    {form.fechaEvento && <div style={{...S.mono, fontSize:10, color:C.magma, marginTop:3}}>Fecha: {form.fechaEvento}</div>}
+
+    {/* DESCRIPCIÓN PRODUCCIÓN */}
+    {form.descripcion && <div style={{...S.cuerpo, marginTop:10}}>{form.descripcion}</div>}
+
+    {/* SERVICIOS */}
+    {orden.length > 0 ? <>
+      <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5}}>El servicio incluye:</div>
+      <div>
+        {orden.map((s,i) => <div key={i} style={S.bullet}>
+          <span style={S.cuadrado}/>
+          <span style={{fontSize:10.5}}>{svcsMap[s] > 1 ? svcsMap[s]+' '+s : s}</span>
+        </div>)}
+      </div>
+    </> : <div style={{padding:'8px 10px',background:'#FEF3E0',border:'0.5px solid #BA7517',borderRadius:4,fontSize:10,color:'#7A5410',marginTop:12}}>
+      Sin servicios cargados. Completalos arriba o usá ↻ Recargar del sheet.
+    </div>}
+
+    {/* OBSERVACIONES → DETALLE DE SERVICIO */}
+    {form.observaciones && form.observaciones.trim() && <div style={{background:C.boxBg,padding:'10px 12px',borderLeft:'2px solid '+C.magma,marginTop:14,whiteSpace:'pre-wrap'}}>
+      <div style={S.label}>DETALLE DE SERVICIO</div>
+      <div style={{fontSize:10.5, color:C.texto, lineHeight:1.5}}>{form.observaciones}</div>
+    </div>}
+
+    {/* VALOR TOTAL */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:18, paddingTop:8, gap:10}}>
+      <div style={{fontWeight:700, fontSize:14, color:C.black}}>Valor total</div>
+      <div style={{flex:1, borderTop:'1px solid '+C.black, transform:'translateY(-4px)'}}/>
+      <div style={{fontWeight:700, fontSize:14, color:C.black, whiteSpace:'nowrap'}}>${fmt$(form.precioTotal)} + IVA</div>
+    </div>
+    <img src="/branding/linea-total.png" alt="" style={{width:'100%',height:10,objectFit:'fill',display:'block',marginTop:4}} onError={e=>e.target.style.display='none'}/>
+
+    {/* T&C compactos */}
+    <div style={{...S.sec, marginTop:18}}>CONDICIONES GENERALES</div>
+    <div style={{fontSize:9.5, color:C.texto}}>{clausulas.validez}</div>
+
+    <div style={S.sec}>CONDICIONES DE PAGO</div>
+    {clausulas.pago.map((p,i) => <div key={i} style={{fontSize:9.5, marginBottom:4}}>
+      <span style={{fontWeight:700, color:C.black}}>{p.titulo}: </span>
+      <span style={{color:C.texto}}>{p.texto}</span>
+    </div>)}
+
+    <div style={S.sec}>{form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'CLÁUSULAS DEL SERVICIO'}</div>
+    {clausulas.clausulas.map((c,i) => <div key={i} style={{fontSize:9.5, marginBottom:4}}>
+      <span style={{fontWeight:700, color:C.black}}>{c.titulo}: </span>
+      <span style={{color:C.texto}}>{c.texto}</span>
+    </div>)}
+  </div>
 }
