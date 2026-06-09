@@ -993,7 +993,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
     <div style={{overflowY:'auto',maxHeight:'calc(100vh - 240px)'}}>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr style={{background:'#1A1A1A'}}>
-          {['N°','Fecha','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=>(
+          {['N°','Carga','Evento','PM','Agencia','Cliente','Proyecto','Total','Estado'].map(h=>(
             <th key={h} style={{fontSize:10,color:'#555',padding:'8px 12px',textAlign:'left',fontWeight:400,textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'0.5px solid #2A2A2A'}}>{h}</th>
           ))}
         </tr></thead>
@@ -1008,6 +1008,16 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                   {faltas(p).length>0&&<button title={'Faltan: '+faltas(p).join(', ')} onClick={e=>{e.stopPropagation();setCompletarP(p)}} style={{marginLeft:6,padding:'1px 5px',borderRadius:3,border:'0.5px solid #E24B4A',background:'#E24B4A15',color:'#E24B4A',fontSize:9,cursor:'pointer'}}>⚠ {faltas(p).length}</button>}
                 </td>
                 <td style={{...S.td,fontSize:11,color:'#666'}}>{p['Fecha Presupuesto']||'—'}</td>
+                <td style={{...S.td,fontSize:11}}>
+                  {p['Fecha Evento'] ? <>
+                    <span style={{color:'#F0F0F0'}}>{p['Fecha Evento']}</span>
+                    {(()=>{ const t=String(p['Tipo Fechas']||'').toLowerCase().trim(); const ad=String(p['Fechas Adicionales']||'').trim()
+                      if (t==='rango' && ad) return <span style={{marginLeft:5,color:'#BA7517',fontSize:10}}>→ {ad}</span>
+                      if (t==='multi' && ad) return <span style={{marginLeft:5,padding:'1px 5px',borderRadius:3,background:'#9635AB20',color:'#9635AB',fontSize:9,fontWeight:600}}>+{ad.split('|').filter(Boolean).length} fechas</span>
+                      return null
+                    })()}
+                  </> : <span style={{color:'#E24B4A',fontSize:10}}>—</span>}
+                </td>
                 <td style={{...S.td,fontSize:12}}>{p['PM Interno']||'—'}</td>
                 <td style={{...S.td,fontSize:12}}>{p['Agencia']||'—'}</td>
                 <td style={{...S.td,fontSize:12,fontWeight:500}}>{p['Cliente']||'—'}</td>
@@ -1021,7 +1031,7 @@ function Presupuestos({data:initialData,mail,onRefresh}){
                   </div>
                 </td>
               </tr>
-              {isOpen&&<tr key={key+'d'}><td colSpan={8} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
+              {isOpen&&<tr key={key+'d'}><td colSpan={9} style={{padding:0}}><DetallePresupuesto p={p}/></td></tr>}
             </>
           })}
         </tbody>
@@ -4182,25 +4192,55 @@ function Calendario({data,mail,onRefresh}){
   const parseFecha=s=>{const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1]))}
   const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()
 
-  // APROBADOS: todos los proyectos en PROYECTOS (ya están confirmados)
+  // Mapa presus por N° para cruzar fechas adicionales (multi/rango)
+  const presusByNum = {}
+  presus.forEach(p => { const n = String(p['Columna 1']||'').trim(); if (n) presusByNum[n] = p })
+
+  // Genera TODAS las fechas que aplican a un evento — soporta dia/rango/multi
+  const fechasDelEvento = (fechaPrincipal, tipoFechas, fechasAdicionales) => {
+    const out = []
+    const f0 = parseFecha(fechaPrincipal)
+    if (!f0) return out
+    const tipo = String(tipoFechas||'').toLowerCase().trim()
+    const ad = String(fechasAdicionales||'').trim()
+    if (tipo === 'rango' && ad) {
+      const f1 = parseFecha(ad)
+      if (!f1) { out.push(f0); return out }
+      // Todos los días entre f0 y f1 inclusive
+      let d = new Date(f0)
+      while (d.getTime() <= f1.getTime()) { out.push(new Date(d)); d.setDate(d.getDate()+1) }
+    } else if (tipo === 'multi' && ad) {
+      out.push(f0)
+      ad.split('|').filter(Boolean).forEach(s => { const f = parseFecha(s); if (f) out.push(f) })
+    } else {
+      out.push(f0)
+    }
+    return out
+  }
+
+  // APROBADOS: proyectos en PROYECTOS — se distribuyen en TODAS sus fechas (multi/rango)
   const aprobadosPorDia={}
   proyectos.forEach(p=>{
-    const f=parseFecha(p['Fecha Evento'])
-    if(!f) return
-    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
-    if(!aprobadosPorDia[key])aprobadosPorDia[key]=[]
-    aprobadosPorDia[key].push(p)
+    const num = String(p['N° presupuesto']||'').trim()
+    const presu = presusByNum[num]  // info de fechas multi/rango está en el PRESUPUESTO
+    const fechas = fechasDelEvento(p['Fecha Evento'], presu?.['Tipo Fechas'], presu?.['Fechas Adicionales'])
+    fechas.forEach(f => {
+      const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
+      if(!aprobadosPorDia[key])aprobadosPorDia[key]=[]
+      aprobadosPorDia[key].push(p)
+    })
   })
 
-  // PRESUPUESTADOS: EN ESPERA en PRESUPUESTOS (todavía no confirmados)
+  // PRESUPUESTADOS: EN ESPERA — también en todas sus fechas
   const enEsperaPorDia={}
   presus.forEach(p=>{
     if(String(p['Estado']||'').toUpperCase()!=='EN ESPERA')return
-    const f=parseFecha(p['Fecha Evento'])
-    if(!f) return
-    const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
-    if(!enEsperaPorDia[key])enEsperaPorDia[key]=[]
-    enEsperaPorDia[key].push(p)
+    const fechas = fechasDelEvento(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales'])
+    fechas.forEach(f => {
+      const key=f.getFullYear()+'-'+f.getMonth()+'-'+f.getDate()
+      if(!enEsperaPorDia[key])enEsperaPorDia[key]=[]
+      enEsperaPorDia[key].push(p)
+    })
   })
 
   // Construir grilla del mes
@@ -4321,6 +4361,10 @@ function Calendario({data,mail,onRefresh}){
           {aprobDiaSel.map((p,i)=>{
             const staff = staffDeProyecto(p)
             const num = p['N° presupuesto']
+            // Cruzar con presu para info multi/rango
+            const presuRef = presusByNum[String(num).trim()]
+            const tipoF = String(presuRef?.['Tipo Fechas']||'').toLowerCase().trim()
+            const adF = String(presuRef?.['Fechas Adicionales']||'').trim()
             return <div key={i} style={{background:VERDE+'08',border:'0.5px solid '+VERDE+'30',borderRadius:6,padding:10,marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
                 <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{num}</span>
@@ -4328,6 +4372,7 @@ function Calendario({data,mail,onRefresh}){
               </div>
               <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
               <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+              {(tipoF==='rango'||tipoF==='multi')&&adF&&<div style={{fontSize:10,color:'#9635AB',marginTop:3,padding:'2px 6px',background:'#9635AB12',borderRadius:3,display:'inline-block'}}>{tipoF==='rango'?'Evento multi-día: '+p['Fecha Evento']+' al '+adF:'Evento en varias fechas: '+p['Fecha Evento']+', '+adF.replace(/\|/g,', ')}</div>}
               {staff.length>0 ? <div style={{marginTop:6,padding:'6px 8px',background:'#0E0E0E',borderRadius:4,border:'0.5px solid #1F1F1F'}}>
                 <div style={{fontSize:9,color:'#666',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3,fontWeight:600}}>Staff asignado</div>
                 {staff.map((s,j)=><div key={j} style={{fontSize:10,color:'#B0B0B0',display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span>{s.persona}</span><span style={{color:'#555'}}>{s.pedido}</span></div>)}
@@ -4347,6 +4392,8 @@ function Calendario({data,mail,onRefresh}){
           <div style={{fontSize:10,color:NARANJA,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>En espera ({enEsperaDiaSel.length})</div>
           {enEsperaDiaSel.map((p,i)=>{
             const num = p['Columna 1']
+            const tipoF = String(p['Tipo Fechas']||'').toLowerCase().trim()
+            const adF = String(p['Fechas Adicionales']||'').trim()
             return <div key={i} style={{background:NARANJA+'08',border:'0.5px dashed '+NARANJA+'40',borderRadius:6,padding:10,marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
                 <span style={{fontSize:11,color:'#1543F8',fontFamily:'monospace'}}>#{num}</span>
@@ -4354,6 +4401,7 @@ function Calendario({data,mail,onRefresh}){
               </div>
               <div style={{fontSize:13,color:'#F0F0F0',fontWeight:500}}>{p['Cliente']||p['Agencia']||'—'}</div>
               <div style={{fontSize:11,color:'#B0B0B0',marginTop:2}}>{p['Proyecto']||'—'}</div>
+              {(tipoF==='rango'||tipoF==='multi')&&adF&&<div style={{fontSize:10,color:'#9635AB',marginTop:3,padding:'2px 6px',background:'#9635AB12',borderRadius:3,display:'inline-block'}}>{tipoF==='rango'?'Multi-día: '+p['Fecha Evento']+' al '+adF:'Varias fechas: '+p['Fecha Evento']+', '+adF.replace(/\|/g,', ')}</div>}
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,paddingTop:6,borderTop:'0.5px solid '+NARANJA+'15',gap:6}}>
                 <span style={{fontSize:10,color:'#888'}}>Precio: <span style={{fontFamily:'monospace',color:NARANJA,fontWeight:600}}>{p['Precio Final']||'—'}</span></span>
                 <div style={{display:'flex',gap:4}}>
