@@ -496,13 +496,17 @@ export default function Presupuesto() {
 
       if (y > H - 5) console.warn('PDF desbordó la página', y, 'mm de', H)
 
-      // Nombre archivo: presu-NRO-cliente-agencia.pdf
-      const slug = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')
+      // Nombre archivo: Presu-NRO-Agencia-Cliente.pdf (Title Case, sin tildes)
+      const titleCase = s => String(s||'')
+        .normalize('NFD').replace(/[̀-ͯ]/g,'')                    // sacar tildes
+        .replace(/[^a-zA-Z0-9 ]+/g,' ').trim().split(/\s+/)          // limpiar y dividir
+        .map(w => w.charAt(0).toUpperCase()+w.slice(1).toLowerCase())  // capitalizar
+        .join('-')
       const partesNombre = [
-        'presu',
-        form.nro || 'borrador',
-        slug(form.cliente) || 'cliente',
-        form.agencia ? slug(form.agencia) : null,
+        'Presu',
+        form.nro || 'Borrador',
+        form.agencia ? titleCase(form.agencia) : null,
+        titleCase(form.cliente) || 'Cliente',
       ].filter(Boolean)
       doc.save(partesNombre.join('-') + '.pdf')
     } catch(e){ alert('Error: '+e.message) }
