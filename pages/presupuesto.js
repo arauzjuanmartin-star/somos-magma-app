@@ -182,48 +182,75 @@ export default function Presupuesto() {
   }, [form.tipoPresu])
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
+  const [serviciosRecargando, setServiciosRecargando] = useState(false)
+  const [ultimosServiciosDelSheet, setUltimosServiciosDelSheet] = useState([])  // para mostrar en UI
+
+  // Carga el presu del sheet y rellena el form (lo extraemos a función reusable)
+  const cargarDelSheet = async (nro) => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/data?fresh=1&_t='+Date.now(), { cache: 'no-store' })
+      const d = await r.json()
+      const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
+      if (!p) { console.warn('Presu no encontrado:', nro); setLoading(false); return null }
+      const pedidosRaw = getPedidos(p)
+      const svcs = pedidosRaw.map(prettifySvc)
+      console.log('[Presu '+nro+'] Pedidos raw del sheet:', pedidosRaw, '· prettified:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
+      setUltimosServiciosDelSheet(svcs)
+      return { p, svcs }
+    } catch (e) {
+      console.error('Error cargando presu:', e)
+      setLoading(false)
+      return null
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const nro = params.get('nro')
     if (!nro) return
-    setLoading(true)
-    // Forzar fresh (saltear cache de 30s) para que los servicios recién cargados aparezcan
-    fetch('/api/data?fresh=1')
-      .then(r => r.json())
-      .then(d => {
-        const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
-        if (!p) { console.warn('Presu no encontrado:', nro); return }
-        // Usa getPedidos() robusto: busca cualquier key 'Pedido N' sin importar espaciado raro
-        const pedidosRaw = getPedidos(p)
-        const svcs = pedidosRaw.map(prettifySvc)
-        console.log('[Presu '+nro+'] Pedidos raw del sheet:', pedidosRaw, '· prettified:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
-        const fechaHoy = new Date().toISOString().slice(0,10)
-        // Fecha evento: usar Fecha Adicionales si hay rango/multiples
-        const fechaEv = (() => {
-          const tipo = String(p['Tipo Fechas']||'').trim()
-          const fe = String(p['Fecha Evento']||'').trim()
-          const adicionales = String(p['Fechas Adicionales']||'').trim()
-          if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
-          if (tipo === 'multi' && adicionales) return [fe, ...adicionales.split('|').filter(Boolean)].join(', ')
-          return fe
-        })()
-        setForm(prev => ({
-          ...prev,
-          nro: String(p['Columna 1']||''),
-          cliente: p['Cliente']||'',
-          agencia: p['Agencia']||'',
-          proyecto: p['Proyecto']||'',
-          fechaEvento: fechaEv,
-          precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
-          servicios: svcs.length > 0 ? svcs : [''],
-          observaciones: p['Observaciones']||'',  // autocompletar desde el sheet (lo que escribió el PM)
-          fechaEmision: fechaHoy,
-        }))
-        setValidez(addDays(fechaHoy, 20))
-      })
-      .finally(() => setLoading(false))
+    cargarDelSheet(nro).then(res => {
+      if (!res) { setLoading(false); return }
+      const { p, svcs } = res
+      const fechaHoy = new Date().toISOString().slice(0,10)
+      const fechaEv = (() => {
+        const tipo = String(p['Tipo Fechas']||'').trim()
+        const fe = String(p['Fecha Evento']||'').trim()
+        const adicionales = String(p['Fechas Adicionales']||'').trim()
+        if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
+        if (tipo === 'multi' && adicionales) return [fe, ...adicionales.split('|').filter(Boolean)].join(', ')
+        return fe
+      })()
+      setForm(prev => ({
+        ...prev,
+        nro: String(p['Columna 1']||''),
+        cliente: p['Cliente']||'',
+        agencia: p['Agencia']||'',
+        proyecto: p['Proyecto']||'',
+        fechaEvento: fechaEv,
+        precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
+        servicios: svcs.length > 0 ? svcs : [''],
+        observaciones: p['Observaciones']||'',
+        fechaEmision: fechaHoy,
+      }))
+      setValidez(addDays(fechaHoy, 20))
+      setLoading(false)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Recarga manual de servicios desde el sheet (botón ↻ en el form)
+  const recargarServicios = async () => {
+    const nro = form.nro || new URLSearchParams(window.location.search).get('nro')
+    if (!nro) return
+    setServiciosRecargando(true)
+    const res = await cargarDelSheet(nro)
+    setLoading(false)
+    if (res && res.svcs.length > 0) {
+      setForm(prev => ({...prev, servicios: res.svcs}))
+    }
+    setServiciosRecargando(false)
+  }
 
   useEffect(() => {
     if (form.fechaEmision) setValidez(addDays(form.fechaEmision, 20))
@@ -348,11 +375,11 @@ export default function Presupuesto() {
       const proyText = form.proyecto || ''
       const proyLines = doc.splitTextToSize(proyText, W-M*2)
       doc.text(proyLines, M, y); y += proyLines.length * 5.8
-      // Fecha del evento debajo en Courier (azeret mono — destacado)
+      // Fecha del evento debajo en Courier (azeret mono — destacado) con label "Fecha: "
       if (form.fechaEvento) {
         y += 1
         doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(...C.magma)
-        doc.text(form.fechaEvento, M, y)
+        doc.text('Fecha: '+form.fechaEvento, M, y)
       }
       y += 10
 
@@ -399,7 +426,7 @@ export default function Presupuesto() {
         doc.setFillColor(250,250,250); doc.rect(M, y-3, W-M*2, obsH, 'F')
         doc.setDrawColor(...C.magma); doc.setLineWidth(0.8); doc.line(M, y-3, M, y-3+obsH)
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
-        doc.text('OBSERVACIONES', M+5, y+0.5)
+        doc.text('DETALLE DE SERVICIO', M+5, y+0.5)
         doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
         doc.text(obs, M+5, y+5)
         y += obsH + 4
@@ -538,8 +565,19 @@ export default function Presupuesto() {
           </div>
 
           <div style={S.card}>
-            <div style={{...S.sec,color:'#9635AB'}}>Servicios</div>
+            <div style={{...S.sec,color:'#9635AB',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span>Servicios</span>
+              <button onClick={recargarServicios} disabled={serviciosRecargando} title="Volver a leer los servicios del sheet" style={{fontSize:10,padding:'3px 8px',borderRadius:4,border:'0.5px solid #9635AB60',background:'#9635AB15',color:'#9635AB',cursor:'pointer',fontWeight:500,opacity:serviciosRecargando?0.5:1,textTransform:'none',letterSpacing:0}}>
+                {serviciosRecargando ? '...' : '↻ Recargar del sheet'}
+              </button>
+            </div>
             <div style={{fontSize:11,color:'#555',marginBottom:10}}>Pre-cargados desde el presu con descripción amigable. Editá libremente. Si repetís, aparece agrupado con cantidad.</div>
+            {ultimosServiciosDelSheet.length > 0 && <div style={{padding:'8px 10px',background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6,marginBottom:10,fontSize:11,color:'#1D9E75'}}>
+              <span style={{fontWeight:600}}>Sheet trajo:</span> {ultimosServiciosDelSheet.join(' · ')}
+            </div>}
+            {ultimosServiciosDelSheet.length === 0 && !loading && <div style={{padding:'8px 10px',background:'#BA751708',border:'0.5px solid #BA751730',borderRadius:6,marginBottom:10,fontSize:11,color:'#BA7517'}}>
+              ⚠ El sheet no devolvió servicios. Probá ↻ Recargar o completalos manualmente abajo.
+            </div>}
             <div style={{display:'grid',gap:8}}>
               {form.servicios.map((s,i)=>(
                 <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 28px',gap:6,alignItems:'center'}}>
