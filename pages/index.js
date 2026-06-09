@@ -480,8 +480,9 @@ function Dashboard({data,mail,onRefresh}){
     const venceSemana = porCobrar.filter(f => { const v = parseD(f['Vencimiento']); if (!v) return false; const dias = (v.getTime()-hoy.getTime())/86400000; return dias >= 0 && dias <= 7 })
     if (venceSemana.length > 0) out.push({tipo:'aviso', icon:'💵', titulo:venceSemana.length+' factura'+(venceSemana.length>1?'s':'')+' vence'+(venceSemana.length>1?'n':'')+' en 7 días', sub:'Total: '+fmt(venceSemana.reduce((s,f)=>s+f.monto,0)), mod:'facturacion'})
 
-    // Facturas atrasadas +30d
-    if (kpis.atrasadas > 0) out.push({tipo:'aviso', icon:'🔥', titulo:kpis.atrasadas+' factura'+(kpis.atrasadas>1?'s':'')+' atrasada'+(kpis.atrasadas>1?'s':'')+' +30d', sub:fmtM(kpis.montoAtrasado)+' pendientes de cobro', mod:'facturacion'})
+    // Facturas atrasadas +30d (uso variables locales del Dashboard, no kpis que es de Facturación)
+    const cantAtrasadasTotal = atrasadas90.length + atrasadas60.length + atrasadas30.length
+    if (cantAtrasadasTotal > 0) out.push({tipo:'aviso', icon:'🔥', titulo:cantAtrasadasTotal+' factura'+(cantAtrasadasTotal>1?'s':'')+' atrasada'+(cantAtrasadasTotal>1?'s':'')+' +30d', sub:fmt(totalAtrasadas)+' pendientes de cobro', mod:'facturacion'})
 
     // Agencias sin CUIT con presus este año
     const agSinCuit = (data.agencias||[]).filter(a => !a['CUIT'] && a['Activa']==='SI').length
