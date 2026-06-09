@@ -211,7 +211,27 @@ export default async function handler(req, res) {
       }
     }
 
-    res.json({ ok: true })
+    // 🗓 SINCRONIZAR CON CALENDAR MAGMA (best-effort, no bloquea el flujo si falla)
+    let calendarResult = null
+    try {
+      // Hacemos el call HTTP al endpoint interno con la sesión actual (forward la cookie)
+      const cookie = req.headers.cookie || ''
+      const host = req.headers.host
+      const proto = host?.includes('localhost') ? 'http' : 'https'
+      const accion = estado === 'APROBADO' ? 'aprobar'
+                   : (estado === 'DESAPROBADO' || estado === 'REPRESUPUESTADO') ? 'borrar'
+                   : 'pendiente'
+      const calR = await fetch(`${proto}://${host}/api/calendar-evento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ num, accion }),
+      })
+      calendarResult = await calR.json().catch(()=>({}))
+    } catch (e) {
+      console.warn('Calendar sync falló (no bloquea):', e.message)
+    }
+
+    res.json({ ok: true, calendar: calendarResult })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
