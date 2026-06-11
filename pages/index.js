@@ -1728,7 +1728,14 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
     // Proyectos sin factura: cruzar PROYECTOS con FACTURACION por N° presupuesto
     const facNums = new Set(fc.map(f => String(f['N° Presupuesto']||'').trim()).filter(Boolean))
     const sinFacturar = proyectos.filter(p => p['N° presupuesto'] && !facNums.has(String(p['N° presupuesto']).trim()))
-    return { totalF, cobradas:cobradas.length, sinCobrar:sinCobrar.length, atrasadas:atrasadas.length, montoSinCobrar, montoAtrasado, sinFacturar }
+    // Facturas en el sheet SIN N° AFIP (borrador / pendiente de cargar el nro real)
+    const sinNroAfip = fc.filter(f => {
+      const nro = String(f['Nro de Factura']||'').trim()
+      const tipo = String(f['Tipo de Factura']||'').toUpperCase()
+      return !nro && !tipo.includes('ANULADA') && f['N° Presupuesto']
+    })
+    const montoSinNroAfip = sinNroAfip.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+    return { totalF, cobradas:cobradas.length, sinCobrar:sinCobrar.length, atrasadas:atrasadas.length, montoSinCobrar, montoAtrasado, sinFacturar, sinNroAfip, montoSinNroAfip }
   })()
 
   const filtradas=fc.filter(f=>{
@@ -1736,6 +1743,7 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
     if(filtro==='parcial'&&estF(f)!=='parcial')return false
     if(filtro==='cobrada'&&!isCobrada(f))return false
     if(filtro==='atrasadas'){const fE=parseD(f['Fecha Evento']);const d=fE?Math.floor((Date.now()-fE)/864e5):0;if(isCobrada(f)||d<=30)return false}
+    if(filtro==='sin-nro'){const nro=String(f['Nro de Factura']||'').trim();const tipo=String(f['Tipo de Factura']||'').toUpperCase();if(nro||tipo.includes('ANULADA')||!f['N° Presupuesto'])return false}
     if(['SRL','Sofia','Lulu'].includes(filtro)&&getEntidad(f)!==filtro)return false
     if(busqueda){
       const q=busqueda.toLowerCase()
@@ -2015,7 +2023,7 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
       </div>}
     </div>
     {/* KPIs para Flor */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:14}}>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8,marginBottom:14}}>
       <div style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #1543F8'}}>
         <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Total facturas</div>
         <div style={{fontSize:20,fontWeight:600,color:'#F0F0F0',marginTop:3}}>{kpis.totalF}</div>
@@ -2038,6 +2046,11 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
         <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Sin facturar</div>
         <div style={{fontSize:20,fontWeight:600,color:'#9635AB',marginTop:3}}>{kpis.sinFacturar.length}</div>
         <div style={{fontSize:10,color:'#888',marginTop:1}}>proyectos</div>
+      </div>
+      <div onClick={()=>setFiltro('sin-nro')} style={{...S.card,padding:'10px 12px',borderLeft:'3px solid #FF9F0A',cursor:'pointer'}}>
+        <div style={{fontSize:9,color:'#555',textTransform:'uppercase',letterSpacing:'.06em'}}>Sin N° AFIP</div>
+        <div style={{fontSize:20,fontWeight:600,color:'#FF9F0A',marginTop:3}}>{kpis.sinNroAfip.length}</div>
+        <div style={{fontSize:10,color:'#888',fontFamily:'monospace',marginTop:1}}>{fmtM(kpis.montoSinNroAfip)}</div>
       </div>
     </div>
 
