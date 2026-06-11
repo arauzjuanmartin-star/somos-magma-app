@@ -1700,6 +1700,9 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
   const [saving,setSaving]=useState(false),[toast,setToast]=useState(''),[cobroData,setCobroData]=useState({})
   const [pQuery,setPQuery]=useState('')
   const [pdfFile,setPdfFile]=useState(null),[cuitAuto,setCuitAuto]=useState('')
+  // Marcar como cobrada al guardar (atajo para Flor cuando ya entró el dinero y aún no tenés el N° de factura)
+  const [cobrarAlGuardar,setCobrarAlGuardar]=useState(false)
+  const [cuentaDestinoNueva,setCuentaDestinoNueva]=useState('BBVA Somos Magma')
   const [editarF,setEditarF]=useState(null) // factura a editar
   const [enviarF,setEnviarF]=useState(null) // factura a mandar por mail
   const fc=data.facturacion||[]
@@ -1812,6 +1815,28 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
       const jOk=await rf.json().catch(()=>({}))
       if(!jOk.ok){throw new Error(jOk.error||'El servidor no confirmó el guardado')}
       setToast('✓ Factura guardada')
+      // Si se eligió marcar cobrada, llamamos a factura-cobro con el monto total
+      if(cobrarAlGuardar && cuentaDestinoNueva){
+        try{
+          setToast('Marcando cobrada...')
+          const totalCobro = calcTotalF()
+          const rC = await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            nroPresupuesto: String(presuSel['Columna 1']),
+            tipoCobro: 'total',
+            monto: totalCobro,
+            cuentaDestino: cuentaDestinoNueva,
+            formaPago: 'Transferencia',
+            retGanancias: 0, retIIBB: 0, retIVA: 0, comision: 0,
+            fechaCobro: fechaHoy(),
+            reservarIVA: formData.tipo === 'A' && formData.conIVA,
+          })}).then(r=>r.json())
+          if(rC.ok || rC.completa){
+            setToast('✓ Factura + cobro registrados en '+cuentaDestinoNueva)
+          } else {
+            setToast('Factura OK, pero cobro falló: '+(rC.error||'?'))
+          }
+        }catch(eC){console.error('cobro al guardar:',eC);setToast('Factura OK pero cobro falló')}
+      }
       if(pdfFile){
         try{
           setToast('Subiendo PDF a Drive...')
@@ -1832,6 +1857,7 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
       setTimeout(()=>setToast(''),3000)
       setNuevaOpen(false);setPresuSel(null);setMontoCustom('');setPQuery('');setCuitAuto('');setPdfFile(null)
       setFormData({entidad:'SRL',tipo:'A',nroFactura:'',plazo:'30',conIVA:true})
+      setCobrarAlGuardar(false);setCuentaDestinoNueva('BBVA Somos Magma')
       if(typeof onRefresh==='function')setTimeout(onRefresh,800)
     }catch(e){
       alert('❌ NO se pudo guardar la factura:\n\n'+e.message+'\n\nLa factura NO quedó cargada. Volvé a intentar.')
@@ -1968,7 +1994,23 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
             <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:13,fontWeight:500}}><span>Total a facturar</span><span style={{fontFamily:'monospace',fontSize:15,color:'#1543F8'}}>{fmt(calcTotalF())}</span></div>
             {montoTipo==='custom'&&calcNeto()>0&&calcNeto()<presuSel.pendiente&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:12}}><span style={{color:'#BA7517'}}>Queda pendiente</span><span style={{fontFamily:'monospace',color:'#BA7517'}}>{fmt(presuSel.pendiente-calcNeto())}</span></div>}
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><div><div style={{fontSize:11,color:'#555',marginBottom:4}}>CUIT del cliente</div><input style={{...inp2,color:cuitAuto?'#1D9E75':'#F0F0F0'}} value={cuitAuto} onChange={e=>setCuitAuto(e.target.value)} placeholder='Autocomplete por agencia/cliente'/></div><div><div style={{fontSize:11,color:'#555',marginBottom:4}}>Adjuntar factura PDF</div><input type='file' accept='.pdf,.PDF' onChange={e=>setPdfFile(e.target.files[0]||null)} style={{padding:'6px',border:'0.5px solid #333',borderRadius:6,background:'#1E1E1E',color:'#F0F0F0',fontSize:11,width:'100%',cursor:'pointer'}}/></div></div><button onClick={guardarFactura} disabled={!calcNeto()||saving} style={{padding:'10px 24px',borderRadius:8,border:'none',background:'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',width:'100%',opacity:!calcNeto()||saving?0.4:1}}>{saving?'Guardando...':'Crear factura'}</button>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><div><div style={{fontSize:11,color:'#555',marginBottom:4}}>CUIT del cliente</div><input style={{...inp2,color:cuitAuto?'#1D9E75':'#F0F0F0'}} value={cuitAuto} onChange={e=>setCuitAuto(e.target.value)} placeholder='Autocomplete por agencia/cliente'/></div><div><div style={{fontSize:11,color:'#555',marginBottom:4}}>Adjuntar factura PDF</div><input type='file' accept='.pdf,.PDF' onChange={e=>setPdfFile(e.target.files[0]||null)} style={{padding:'6px',border:'0.5px solid #333',borderRadius:6,background:'#1E1E1E',color:'#F0F0F0',fontSize:11,width:'100%',cursor:'pointer'}}/></div></div>
+          {/* Atajo: marcar como cobrada en el mismo paso */}
+          <div style={{padding:'10px 12px',background:'#1D9E7510',border:'0.5px solid #1D9E7530',borderRadius:8,marginBottom:12}}>
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'#F0F0F0'}}>
+              <input type='checkbox' checked={cobrarAlGuardar} onChange={e=>setCobrarAlGuardar(e.target.checked)} style={{accentColor:'#1D9E75'}}/>
+              <span><strong style={{color:'#1D9E75'}}>Marcar como cobrada</strong> · si ya entró la plata pero no tenés el N° de factura todavía</span>
+            </label>
+            {cobrarAlGuardar&&<div style={{marginTop:8,paddingTop:8,borderTop:'0.5px solid #1D9E7520'}}>
+              <div style={{fontSize:11,color:'#888',marginBottom:4}}>Cuenta donde entró:</div>
+              <select style={{...inp2,fontSize:12}} value={cuentaDestinoNueva} onChange={e=>setCuentaDestinoNueva(e.target.value)}>
+                {(data?.cuentas||[]).filter(c=>String(c['Activa']||'').toUpperCase()==='SÍ'||String(c['Activa']||'').toUpperCase()==='SI'||c['Activa']==='TRUE').map(c=><option key={c['Nombre']} value={c['Nombre']}>{c['Nombre']}</option>)}
+                <option value='Efectivo'>Efectivo</option>
+              </select>
+              <div style={{fontSize:10,color:'#666',marginTop:6}}>Se va a registrar cobro por {fmt(calcTotalF())} y sumar al saldo de la cuenta.</div>
+            </div>}
+          </div>
+          <button onClick={guardarFactura} disabled={!calcNeto()||saving} style={{padding:'10px 24px',borderRadius:8,border:'none',background:cobrarAlGuardar?'#1D9E75':'#1543F8',color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',width:'100%',opacity:!calcNeto()||saving?0.4:1}}>{saving?'Guardando...':(cobrarAlGuardar?'Crear factura y marcar cobrada':'Crear factura')}</button>
         </div>}
       </div>}
     </div>
