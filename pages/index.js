@@ -490,6 +490,36 @@ function Dashboard({data,mail,onRefresh}){
     const agSinCuit = (data.agencias||[]).filter(a => !a['CUIT'] && a['Activa']==='SI').length
     if (agSinCuit > 5) out.push({tipo:'info', icon:'🏢', titulo:agSinCuit+' agencias activas sin CUIT', sub:'Crítico para facturar — completar fichas', mod:'agencias'})
 
+    // FACTURAS ZOMBIES: facturas cuyo presu está en REPRESUPUESTADO/DESAPROBADO/EN ESPERA o ya no existe
+    const estadoByPresu = {}
+    pr.forEach(p => { const n=String(p['Columna 1']||'').trim(); if(n) estadoByPresu[n] = String(p['Estado']||'').toUpperCase() })
+    const zombies = fc.filter(f => {
+      const nro = String(f['N° Presupuesto']||'').trim()
+      if (!nro) return false
+      const nroFact = String(f['Nro de Factura']||'').trim().toUpperCase()
+      if (nroFact.startsWith('ANULADA')) return false  // ya anuladas no cuentan
+      const estado = estadoByPresu[nro]
+      return !estado || ['REPRESUPUESTADO','DESAPROBADO','EN ESPERA'].includes(estado)
+    })
+    if (zombies.length > 0) {
+      const cobradas = zombies.filter(z => isCobrada(z)).length
+      out.push({tipo:'critico', icon:'🧟', titulo:zombies.length+' factura'+(zombies.length>1?'s':'')+' zombie'+(zombies.length>1?'s':'')+' (presu represupuestado/desaprobado)', sub: cobradas>0 ? cobradas+' YA COBRADAS — investigar urgente' : 'Revisar y anular o anclar al presu correcto', mod:'facturacion'})
+    }
+
+    // PROYECTOS APROBADOS SIN FACTURA EMITIDA — del año actual
+    const facturasPorPresuSet = new Set(fc.map(f => String(f['N° Presupuesto']||'').trim()).filter(Boolean))
+    const proysSinFactura = proyectos.filter(p => {
+      const nro = String(p['N° presupuesto']||'').trim()
+      if (!nro) return false
+      const fe = String(p['Fecha Evento']||'')
+      if (!fe.includes(String(anioActual))) return false  // solo del año
+      return !facturasPorPresuSet.has(nro)
+    })
+    if (proysSinFactura.length > 0) {
+      const montoTotal = proysSinFactura.reduce((s,p)=>s+parseMonto(p['Total ']||p['Total']),0)
+      out.push({tipo:'aviso', icon:'📄', titulo:proysSinFactura.length+' proyecto'+(proysSinFactura.length>1?'s':'')+' aprobado'+(proysSinFactura.length>1?'s':'')+' sin factura emitida', sub:fmtM(montoTotal)+' potencial de facturar', mod:'proyectos'})
+    }
+
     return out
   })()
 
