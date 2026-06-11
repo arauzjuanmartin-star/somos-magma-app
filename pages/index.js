@@ -1978,8 +1978,8 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
             {[['Factura por',' '],['Tipo',' '],['N° factura',' '],['Plazo',' ']].map(([l])=>(
               <div key={l} style={{display:'flex',flexDirection:'column',gap:4}}>
                 <label style={{fontSize:11,color:'#555'}}>{l}</label>
-                {l==='Factura por'&&<select style={inp2} value={formData.entidad} onChange={e=>setFormData(p=>({...p,entidad:e.target.value}))}><option value='SRL'>Somos Magma SRL</option><option value='Sofia'>Sofia Grenier</option><option value='Lulu'>Lucia Grenier</option><option value='Efectivo'>Efectivo (sin factura)</option></select>}
-                {l==='Tipo'&&<select style={inp2} value={formData.tipo} onChange={e=>setFormData(p=>({...p,tipo:e.target.value}))}>{['A','B','C'].map(o=><option key={o}>{o}</option>)}</select>}
+                {l==='Factura por'&&<select style={inp2} value={formData.entidad} onChange={e=>{const v=e.target.value;setFormData(p=>({...p,entidad:v,conIVA:v==='Efectivo'?false:p.conIVA}))}}><option value='SRL'>Somos Magma SRL</option><option value='Sofia'>Sofia Grenier</option><option value='Lulu'>Lucia Grenier</option><option value='Efectivo'>Efectivo (sin factura)</option></select>}
+                {l==='Tipo'&&<select style={inp2} value={formData.tipo} onChange={e=>{const v=e.target.value;setFormData(p=>({...p,tipo:v,conIVA:v==='A'?true:false}))}}>{['A','B','C'].map(o=><option key={o}>{o}</option>)}</select>}
                 {l==='N° factura'&&<input style={{...inp2,fontFamily:'monospace'}} value={formData.nroFactura} onChange={e=>setFormData(p=>({...p,nroFactura:e.target.value}))} placeholder='0001-00001234'/>}
                 {l==='Plazo'&&<select style={inp2} value={formData.plazo} onChange={e=>setFormData(p=>({...p,plazo:e.target.value}))}>{[['0','Contado'],['15','15 dias'],['30','30 dias'],['60','60 dias']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>}
               </div>
@@ -2125,7 +2125,7 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
             <span style={{fontSize:10,padding:'2px 6px',borderRadius:3,whiteSpace:'nowrap',fontWeight:500,background:entCfg.bg,color:entCfg.color}}>{entCfg.label}</span>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f['Proyecto']||f['Cliente']}</div>
-              <div style={{fontSize:11,color:'#555',marginTop:1}}>{f['Cliente']}{f['Agencia']?' · '+f['Agencia']:''} · {isCobrada(f)?'cobrado '+( f['Fecha cobro']||''):'vence '+(f['Vencimiento']||'—')}</div>
+              <div style={{fontSize:11,color:'#555',marginTop:1}}>{f['Cliente']}{f['Agencia']?' · '+f['Agencia']:''}{f['Fecha Evento']?' · evento '+f['Fecha Evento']:''} · {isCobrada(f)?'cobrado '+( f['Fecha cobro']||''):'vence '+(f['Vencimiento']||'—')}</div>
             </div>
             <div style={{textAlign:'right',whiteSpace:'nowrap'}}>
               <div style={{fontFamily:'monospace',fontSize:13,fontWeight:500,color:'#1543F8'}}>{fmt(neto)}</div>
