@@ -1940,7 +1940,16 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
       if(typeof onRefresh==='function')await onRefresh()
     }catch(e){setToast('Error: '+e.message)}
   }
-  const marcarCobrada=f=>registrarCobro(f,'total')
+  const marcarCobrada=f=>{
+    // Confirmación explícita — fueron varios casos de cobradas tildadas sin querer (Ostara junio 2026)
+    const total=parseMonto(f['Precio FINAL'])
+    const yaCob=parseMonto(f['Monto cobrado'])
+    const pend=Math.max(0,total-yaCob)
+    const cobro=cobroData[f['N° Presupuesto']]||{}
+    const cuentaTxt=cobro.cuenta?` en cuenta '${cobro.cuenta}'`:''
+    if(!confirm(`¿Marcar #${f['N° Presupuesto']} · ${f['Cliente']||'?'} - ${f['Proyecto']||'?'} como COBRADA por ${fmt(pend)}${cuentaTxt}?\n\nVa a sumar al saldo de la cuenta y quedar tildada como Cobrada.`))return
+    registrarCobro(f,'total')
+  }
   const inp2={padding:'7px 9px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:13,outline:'none',width:'100%'}
   const bmap={cobrada:{bg:'#1D9E7520',c:'#1D9E75',l:'Cobrada'},parcial:{bg:'#9635AB20',c:'#9635AB',l:'Parcial'},pendiente:{bg:'#1543F820',c:'#1543F8',l:'Pendiente'},'por-vencer':{bg:'#BA751720',c:'#BA7517',l:'Por vencer'},vencida:{bg:'#E24B4A20',c:'#E24B4A',l:'Vencida'},reclamar:{bg:'#FCEBEB',c:'#A32D2D',l:'Reclamar!'}}
   const cobrosForFc=(nro)=>(data.cobros||[]).filter(c=>String(c['N° Presupuesto'])===String(nro))
@@ -2242,6 +2251,17 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
                 <button onClick={()=>setEnviarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #1543F840',background:'#1543F810',color:'#1543F8',fontSize:11,cursor:'pointer'}}>✉ Enviar por mail</button>
                 <button onClick={()=>setEditarF(f)} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎ Editar datos</button>
                 <button onClick={async()=>{
+                  // Destildar Cobrada — para casos en que alguien tildó por error desde el sheet o la app
+                  const monto=fmt(yaCob||parseMonto(f['Precio FINAL']))
+                  const cuentaTxt=cuenta?` y descontar ${monto} de la cuenta '${cuenta}'`:''
+                  const ok=confirm(`¿Destildar Cobrada de #${f['N° Presupuesto']} · ${f['Cliente']||'?'} - ${f['Proyecto']||'?'}?\n\nEsto va a:\n• Quitar el tilde de Cobrada y borrar Fecha cobro\n• Borrar registros en COBROS asociados (si hay)${cuentaTxt}\n\nSolo hacelo si fue tildado por error.`)
+                  if(!ok)return
+                  const r=await fetch('/api/factura-resetear-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],soloMigrados:false,revertirSaldoCuenta:!!cuenta})})
+                  const j=await r.json()
+                  if(j.ok){setToast(`Destildada ✓ ${j.cobrosBorrados?`(${j.cobrosBorrados} cobros borrados)`:''}`);setTimeout(()=>setToast(''),3500);if(typeof onRefresh==='function')setTimeout(onRefresh,500)}
+                  else{alert('Error: '+(j.error||'?'))}
+                }} style={{padding:'4px 10px',borderRadius:4,border:'0.5px solid #BA751740',background:'transparent',color:'#BA7517',fontSize:11,cursor:'pointer'}}>↺ Destildar cobrada</button>
+                <button onClick={async()=>{
                   const motivo=prompt('Motivo de anulación:');if(motivo===null)return
                   const r=await fetch('/api/factura-anular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto'],motivo})})
                   const j=await r.json()
@@ -2283,7 +2303,7 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
                     <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'adelanto')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #BA7517',background:'transparent',color:'#BA7517',fontSize:12,fontWeight:500,...btnDis}}>Adelanto / Seña</button>
                     <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'parcial')} style={{padding:'8px 6px',borderRadius:6,border:'0.5px solid #9635AB',background:'transparent',color:'#9635AB',fontSize:12,fontWeight:500,...btnDis}}>Pago parcial</button>
-                    <button disabled={sinCuenta} onClick={()=>registrarCobro(f,'total')} style={{padding:'8px 6px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,...btnDis}}>Cobro total</button>
+                    <button disabled={sinCuenta} onClick={()=>marcarCobrada(f)} style={{padding:'8px 6px',borderRadius:6,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:500,...btnDis}}>Cobro total</button>
                   </div>
                   {sinCuenta&&<div style={{fontSize:10,color:'#E24B4A',marginTop:6,textAlign:'center'}}>↑ Elegí una cuenta para poder cobrar</div>}
                 </div>
