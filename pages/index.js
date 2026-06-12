@@ -1184,6 +1184,9 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
   const [contacto,setContacto]=useState(p['Contacto']||'')
   const [fechaEv,setFechaEv]=useState(p['Fecha Evento']||'')
   const [observaciones,setObservaciones]=useState(p['Observaciones']||'')
+  const [horario,setHorario]=useState(p['Horario']||'')
+  const [ubicacion,setUbicacion]=useState(p['Ubicación']||'')
+  const [contactoLugar,setContactoLugar]=useState(p['Contacto Lugar']||'')
   const [saving,setSaving]=useState(false),[err,setErr]=useState('')
   // Si NO hay campos faltantes, el modal funciona como "Editar"; si hay → como "Completar"
   const faltasCount=[p['PM Interno'],p['Agencia'],p['Cliente'],p['Proyecto'],p['Contacto'],p['Fecha Evento']].filter(v=>!v).length
@@ -1201,6 +1204,9 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
     if(contacto!==(p['Contacto']||''))cambios['Contacto']=contacto
     if(fechaEv!==(p['Fecha Evento']||''))cambios['Fecha Evento']=fechaEv
     if(observaciones!==(p['Observaciones']||''))cambios['Observaciones']=observaciones
+    if(horario!==(p['Horario']||''))cambios['Horario']=horario
+    if(ubicacion!==(p['Ubicación']||''))cambios['Ubicación']=ubicacion
+    if(contactoLugar!==(p['Contacto Lugar']||''))cambios['Contacto Lugar']=contactoLugar
     if(Object.keys(cambios).length===0){
       // Si no hay cambios pero quería generar PDF → directamente abre el PDF
       if (luegoGenerarPDF) { window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1']),'_blank'); onClose(); return }
@@ -1259,9 +1265,27 @@ function CompletarPresupuestoModal({p,data,mail,onClose,onSaved}){
             <datalist id="ed-ct">{cts.map(c=><option key={c} value={c}/>)}</datalist>
           </label>
         </div>
+        {/* Datos operativos del día — van al Calendar al aprobar */}
+        <div style={{padding:'10px 12px',background:'#1543F808',border:'0.5px solid #1543F820',borderRadius:6,marginBottom:10}}>
+          <div style={{fontSize:10,color:'#1543F8',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:600}}>📅 Datos del día (van al Calendar del staff)</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Horario</span>
+              <input style={inp} value={horario} onChange={e=>setHorario(e.target.value)} placeholder="ej: 8:00 a 18:00 hs"/>
+            </label>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Contacto en el lugar</span>
+              <input style={inp} value={contactoLugar} onChange={e=>setContactoLugar(e.target.value)} placeholder="Nombre + tel"/>
+            </label>
+          </div>
+          <label style={{display:'flex',flexDirection:'column',gap:4}}>
+            <span style={lbl}>Ubicación / Dirección</span>
+            <input style={inp} value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="ej: Hotel Sheraton Hudson, Av. Bunge 1234"/>
+          </label>
+        </div>
         <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
           <span style={lbl}>Observaciones (aparecen en el PDF)</span>
-          <textarea style={{...inp,minHeight:55,resize:'vertical',fontFamily:'inherit'}} value={observaciones} onChange={e=>setObservaciones(e.target.value)} placeholder="Notas que querés que vea el cliente en el PDF. Ej: Entrevistas en calle para generar 4 videos."/>
+          <textarea style={{...inp,minHeight:55,resize:'vertical',fontFamily:'inherit'}} value={observaciones} onChange={e=>setObservaciones(e.target.value)} placeholder="Notas que querés que vea el cliente en el PDF"/>
         </label>
         {err&&<div style={{marginTop:10,padding:8,background:'#E24B4A15',border:'0.5px solid #E24B4A',borderRadius:6,fontSize:11,color:'#E24B4A'}}>{err}</div>}
       </div>
@@ -3402,7 +3426,10 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     ajuste:String(Math.abs(ajusteOrig)||'0'),
     motivo:'',
     observaciones: initialData['Observaciones']||'',
-  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:'',observaciones:''})
+    horario: initialData['Horario']||'',
+    ubicacion: initialData['Ubicación']||'',
+    contactoLugar: initialData['Contacto Lugar']||'',
+  } : {fp:new Date().toISOString().slice(0,10),fechaMode:'dia',fe1:'',feIni:'',feFin:'',agencia:'',cliente:'',proyecto:'',contacto:'',pm:'',repr:'',plazo:'0',interes:'0',gan:true,iibb:true,tajuste:'1',ajuste:'0',motivo:'',observaciones:'',horario:'',ubicacion:'',contactoLugar:''})
   const [saving,setSaving]=useState(false),[ok,setOk]=useState(false),[numAsignado,setNumAsignado]=useState(null)
   const [hintAg,setHintAg]=useState(false),[hintCl,setHintCl]=useState(false),[hintCt,setHintCt]=useState(false)
   const [ctData,setCtData]=useState({mail:'',telefono:'',cuit:'',cargo:''})
@@ -3509,6 +3536,9 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Fechas Adicionales':fechasAdicionales,
       'Fee Servicios':feeServicios,
       'Observaciones':form.observaciones||'',
+      'Horario':form.horario||'',
+      'Ubicación':form.ubicacion||'',
+      'Contacto Lugar':form.contactoLugar||'',
     }
     peds.filter(p=>p.svc).forEach((p,i)=>{row['Pedido '+(i+1)]=p.svc;row['Precio '+(i+1)]=p.precio})
     try{
@@ -3635,9 +3665,27 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           </div>
           <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:isRepresupuestar?4:12}}><span style={lbl}>Represupuesto del N°</span><input style={inp} value={form.repr} onChange={e=>setF('repr',e.target.value)} placeholder="Dejar vacio si es presupuesto nuevo" readOnly={isRepresupuestar}/></label>
           {isRepresupuestar&&<label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}><span style={{...lbl,color:'#9635AB'}}>Motivo del represupuesto *</span><input style={{...inp,borderColor:form.motivo?'#333':'#9635AB'}} value={form.motivo||''} onChange={e=>setF('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente..." autoFocus/></label>}
+          {/* Datos operativos del día del evento — van al Calendar al aprobar */}
+          <div style={{padding:'10px 12px',background:'#1543F808',border:'0.5px solid #1543F820',borderRadius:8,marginBottom:12}}>
+            <div style={{fontSize:10,color:'#1543F8',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontWeight:600}}>📅 Datos del día (van al Calendar del staff)</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={lbl}>Horario</span>
+                <input style={inp} value={form.horario||''} onChange={e=>setF('horario',e.target.value)} placeholder="ej: 8:00 a 18:00 hs"/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={lbl}>Contacto en el lugar</span>
+                <input style={inp} value={form.contactoLugar||''} onChange={e=>setF('contactoLugar',e.target.value)} placeholder="Nombre + tel del que los recibe"/>
+              </label>
+            </div>
+            <label style={{display:'flex',flexDirection:'column',gap:4}}>
+              <span style={lbl}>Ubicación / Dirección</span>
+              <input style={inp} value={form.ubicacion||''} onChange={e=>setF('ubicacion',e.target.value)} placeholder="ej: Hotel Sheraton Hudson, Av. Bunge 1234"/>
+            </label>
+          </div>
           <label style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}>
             <span style={lbl}>Observaciones (para el cliente)</span>
-            <textarea style={{...inp,minHeight:50,resize:'vertical',fontFamily:'inherit'}} value={form.observaciones||''} onChange={e=>setF('observaciones',e.target.value)} placeholder="Notas que querés que aparezcan en el PDF: detalles del horario, particularidades del evento, etc."/>
+            <textarea style={{...inp,minHeight:50,resize:'vertical',fontFamily:'inherit'}} value={form.observaciones||''} onChange={e=>setF('observaciones',e.target.value)} placeholder="Notas que querés que aparezcan en el PDF"/>
             <span style={{fontSize:10,color:'#555'}}>Aparece en el PDF debajo de los servicios. Opcional.</span>
           </label>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>

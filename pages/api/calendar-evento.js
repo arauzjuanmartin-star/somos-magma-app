@@ -92,6 +92,9 @@ export default async function handler(req, res) {
     const tipoFechas = get('Tipo Fechas')
     const fechasAd = get('Fechas Adicionales')
     const pm = get('PM Interno')
+    const horario = get('Horario')
+    const ubicacion = get('Ubicación')
+    const contactoLugar = get('Contacto Lugar')
 
     const calAuth = getCalendarAuth()
     const cal = google.calendar({ version: 'v3', auth: calAuth })
@@ -114,44 +117,73 @@ export default async function handler(req, res) {
     // 5 = amarillo (en espera) · 10 = verde (aprobado)
     const colorId = accion === 'aprobar' ? '10' : '5'
 
+    // Parsear horario tipo "8:00 a 18:00 hs" → {h1: "08:00", h2: "18:00"}
+    const parseHorario = (s) => {
+      const m = String(s||'').match(/(\d{1,2})[:.]?(\d{0,2})\s*(?:a|hasta|-)\s*(\d{1,2})[:.]?(\d{0,2})/i)
+      if (!m) return null
+      const pad = n => String(n).padStart(2,'0')
+      return {
+        h1: pad(parseInt(m[1])) + ':' + (m[2]?pad(parseInt(m[2])):'00'),
+        h2: pad(parseInt(m[3])) + ':' + (m[4]?pad(parseInt(m[4])):'00'),
+      }
+    }
+    const horas = parseHorario(horario)
+
     // Generar título y descripción del evento
     const partesNombre = [cliente, agencia && agencia !== cliente ? agencia : null].filter(Boolean).join(' · ')
     const titulo = `#${num} · ${partesNombre || 'Magma'} · ${proyecto || 'Cobertura'}`
-    const descripcion = [
+    const descripcionPartes = [
       `Presupuesto: #${num}`,
       `Cliente: ${cliente || '—'}`,
       `Agencia: ${agencia || '—'}`,
       `Proyecto: ${proyecto || '—'}`,
       `PM: ${pm || '—'}`,
+    ]
+    // Datos operativos del día (lo que pide el equipo)
+    if (horario) descripcionPartes.push(`⏰ Horario: ${horario}`)
+    if (ubicacion) descripcionPartes.push(`📍 Ubicación: ${ubicacion}`)
+    if (contactoLugar) descripcionPartes.push(`👤 Contacto en el lugar: ${contactoLugar}`)
+    descripcionPartes.push(
       `Estado: ${accion === 'aprobar' ? 'APROBADO ✓' : 'EN ESPERA'}`,
       '',
       `Ver presu: https://somos-magma-app.vercel.app/presupuesto?nro=${num}`,
       '',
       tagPresu(num),
-    ].join('\n')
+    )
+    const descripcion = descripcionPartes.join('\n')
 
-    // Construir start/end según tipo de fecha
+    // Construir start/end según tipo de fecha + horario (si hay)
     const fechas = fechasEvento(fechaEv, tipoFechas, fechasAd)
+    const TZ = 'America/Argentina/Buenos_Aires'
     let eventBody = {
       summary: titulo,
       description: descripcion,
       colorId,
     }
+    if (ubicacion) eventBody.location = ubicacion
+
+    // Helper: si hay horario, generar dateTime con TZ AR. Si no, dejar all-day.
+    const setStartEnd = (diaISO, hastaISO) => {
+      if (horas) {
+        eventBody.start = { dateTime: `${diaISO}T${horas.h1}:00`, timeZone: TZ }
+        eventBody.end = { dateTime: `${hastaISO || diaISO}T${horas.h2}:00`, timeZone: TZ }
+      } else {
+        eventBody.start = { date: diaISO }
+        const fin = new Date(hastaISO || diaISO); fin.setDate(fin.getDate()+1)
+        eventBody.end = { date: fin.toISOString().slice(0,10) }
+      }
+    }
+
     if (fechas.type === 'rango') {
+      // Para rango, mejor all-day (varios días) que dateTime
       eventBody.start = { date: fechas.desde }
       const hastaPlus1 = new Date(fechas.hasta); hastaPlus1.setDate(hastaPlus1.getDate()+1)
       eventBody.end = { date: hastaPlus1.toISOString().slice(0,10) }
     } else if (fechas.type === 'multi') {
-      // Para multi: creamos varios eventos (uno por fecha) — pero requiere más lógica.
-      // Por ahora: un evento all-day en la primera fecha + las otras como nota en descripción.
-      eventBody.start = { date: fechas.fechas[0] }
-      const end1 = new Date(fechas.fechas[0]); end1.setDate(end1.getDate()+1)
-      eventBody.end = { date: end1.toISOString().slice(0,10) }
+      setStartEnd(fechas.fechas[0])
       eventBody.description += `\n\nFechas adicionales: ${fechas.fechas.slice(1).join(', ')}`
     } else {
-      eventBody.start = { date: fechas.dia }
-      const fin = new Date(fechas.dia); fin.setDate(fin.getDate()+1)
-      eventBody.end = { date: fin.toISOString().slice(0,10) }
+      setStartEnd(fechas.dia)
     }
 
     let result, accionFinal
