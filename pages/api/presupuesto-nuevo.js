@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       const nuevoNum = await calcularSiguienteNumero(sheets, SHEET_ID)
       numeroAsignado = nuevoNum
 
-      const row = new Array(55).fill('')
+      const row = new Array(57).fill('')
       row[0] = nuevoNum  // ← N° asignado por servidor, ignora lo que vino del cliente
       row[1] = p['Fecha Evento'] || ''
       row[2] = p['PM Interno'] || ''
@@ -118,6 +118,8 @@ export default async function handler(req, res) {
       row[52] = p['Horario'] || ''         // BA: horario del evento (va al Calendar)
       row[53] = p['Ubicación'] || ''       // BB: ubicación (va al Calendar como location)
       row[54] = p['Contacto Lugar'] || ''  // BC: contacto que recibe en el lugar (va al Calendar)
+      row[55] = p['Es Adicional'] || ''    // BD: CSV de 1|0 por slot — qué pedidos son adicionales (opcionales)
+      row[56] = p['Precio Cliente Manual'] || '' // BE: CSV de precios al cliente override por slot (para adicionales con descuento manual)
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({

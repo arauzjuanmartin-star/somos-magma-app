@@ -168,7 +168,7 @@ export default function Presupuesto() {
   const hoy = new Date().toISOString().slice(0,10)
   const [form, setForm] = useState({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
-    servicios:[''], observaciones:'', descripcion:'', precioTotal:'',
+    servicios:[''], adicionales:[], observaciones:'', descripcion:'', precioTotal:'',
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'7',
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
   })
@@ -195,10 +195,36 @@ export default function Presupuesto() {
       const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
       if (!p) { console.warn('Presu no encontrado:', nro); setLoading(false); return null }
       const pedidosRaw = getPedidos(p)
-      const svcs = pedidosRaw.map(prettifySvc)
-      console.log('[Presu '+nro+'] Pedidos raw del sheet:', pedidosRaw, '· prettified:', svcs, '· observaciones:', JSON.stringify(p['Observaciones']||''))
-      setUltimosServiciosDelSheet(svcs)
-      return { p, svcs }
+      // Mapeo precios y flags adicional/precio cliente manual por slot
+      const preciosRaw = []
+      for (const k of Object.keys(p)) {
+        const m = k.match(/^precio\s*(\d+)\s*$/i)
+        if (m) preciosRaw[parseInt(m[1])-1] = p[k]
+      }
+      const esAdicCSV = String(p['Es Adicional']||'').split('|')
+      const preciosClienteManualCSV = String(p['Precio Cliente Manual']||'').split('|')
+      // Calcular factor del presu base para precio cliente automático de adicionales sin manual
+      const parseMontoLocal = v => { const n = parseFloat(String(v||'').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
+      const subtotalBase = pedidosRaw.reduce((s,_,i) => esAdicCSV[i]==='1' ? s : s+parseMontoLocal(preciosRaw[i]), 0)
+      const totalCliente = parseMontoLocal(p['Precio Final'])
+      const factor = subtotalBase>0 ? totalCliente/subtotalBase : 1
+      // Separar base y adicionales
+      const baseSvcs = [], adicionales = []
+      pedidosRaw.forEach((ped, i) => {
+        if (!ped) return
+        const nombre = prettifySvc(ped)
+        if (esAdicCSV[i] === '1') {
+          const costo = parseMontoLocal(preciosRaw[i])
+          const manual = parseMontoLocal(preciosClienteManualCSV[i])
+          const precioCliente = manual > 0 ? manual : Math.round(costo * factor)
+          adicionales.push({nombre, precio: precioCliente})
+        } else {
+          baseSvcs.push(nombre)
+        }
+      })
+      console.log('[Presu '+nro+'] base:', baseSvcs, '· adicionales:', adicionales)
+      setUltimosServiciosDelSheet(baseSvcs)
+      return { p, svcs: baseSvcs, adicionales }
     } catch (e) {
       console.error('Error cargando presu:', e)
       setLoading(false)
@@ -212,7 +238,7 @@ export default function Presupuesto() {
     if (!nro) return
     cargarDelSheet(nro).then(res => {
       if (!res) { setLoading(false); return }
-      const { p, svcs } = res
+      const { p, svcs, adicionales } = res
       const fechaHoy = new Date().toISOString().slice(0,10)
       const fechaEv = (() => {
         const tipo = String(p['Tipo Fechas']||'').trim()
@@ -231,6 +257,7 @@ export default function Presupuesto() {
         fechaEvento: fechaEv,
         precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
         servicios: svcs.length > 0 ? svcs : [''],
+        adicionales: adicionales || [],
         observaciones: p['Observaciones']||'',
         fechaEmision: fechaHoy,
       }))
@@ -416,6 +443,36 @@ export default function Presupuesto() {
       } else {
         // Si no hay servicios → solo deja el espacio en blanco, sin alarmar
         y += 2
+      }
+
+      // ════════════════════════════════════════════════════════════════════
+      // ADICIONALES OPCIONALES — caja celeste con precio por línea
+      // ════════════════════════════════════════════════════════════════════
+      if ((form.adicionales||[]).length > 0) {
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.azul)
+        doc.text('Adicionales opcionales:', M, y); y += 6
+        // Caja azul claro
+        const adH = form.adicionales.length * 5 + 6
+        doc.setFillColor(244,246,255); doc.rect(M, y-3, W-M*2, adH, 'F')
+        doc.setDrawColor(...C.azul); doc.setLineWidth(0.3); doc.rect(M, y-3, W-M*2, adH, 'S')
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+        for (const a of form.adicionales) {
+          const nombre = prettifySvc(a.nombre)
+          const precioTxt = '$' + fmt$(a.precio) + ' + IVA'
+          const precioW = doc.getTextWidth(precioTxt)
+          const maxNombre = W-M*2 - precioW - 12
+          const nombreLines = doc.splitTextToSize(nombre, maxNombre)
+          doc.text(nombreLines[0], M+4, y)
+          doc.setFont('courier','bold'); doc.setTextColor(...C.azul)
+          doc.text(precioTxt, W-M-4, y, {align:'right'})
+          doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
+          y += 5
+        }
+        y += 3
+        doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
+        doc.text('Estos servicios se cotizan aparte. Indicanos cuáles te interesan sumar al proyecto.', M, y)
+        y += 6
+        doc.setFont('helvetica','normal')
       }
 
       // ════════════════════════════════════════════════════════════════════
@@ -779,6 +836,18 @@ function PreviewPDF({form, clausulas}) {
     </> : <div style={{padding:'8px 10px',background:'#FEF3E0',border:'0.5px solid #BA7517',borderRadius:4,fontSize:10,color:'#7A5410',marginTop:12}}>
       Sin servicios cargados. Completalos arriba o usá ↻ Recargar del sheet.
     </div>}
+
+    {/* ADICIONALES (opcionales) */}
+    {(form.adicionales||[]).length > 0 && <>
+      <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5,color:C.azul}}>Adicionales opcionales:</div>
+      <div style={{background:'#F4F6FF',border:'0.5px solid #1543F830',borderRadius:6,padding:'8px 10px'}}>
+        {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0',borderBottom:i<form.adicionales.length-1?'0.5px dashed #1543F820':'none'}}>
+          <span style={{fontSize:10.5,color:C.texto}}>{prettifySvc(a.nombre)}</span>
+          <span style={{...S.mono,fontSize:10.5,color:C.azul,fontWeight:600}}>${fmt$(a.precio)} + IVA</span>
+        </div>)}
+      </div>
+      <div style={{fontSize:9,color:C.gris,marginTop:4,fontStyle:'italic'}}>Estos servicios se cotizan aparte. Indicanos cuáles te interesan sumar al proyecto.</div>
+    </>}
 
     {/* OBSERVACIONES → DETALLE DE SERVICIO */}
     {form.observaciones && form.observaciones.trim() && <div style={{background:C.boxBg,padding:'10px 12px',borderLeft:'2px solid '+C.magma,marginTop:14,whiteSpace:'pre-wrap'}}>

@@ -3440,8 +3440,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   const pedidosIniciales = isRepresupuestar ? readPedidos(initialData) : []
   const [peds,setPeds]=useState(
     isRepresupuestar && pedidosIniciales.length > 0
-      ? pedidosIniciales.map((x,i)=>({id:i+1,svc:x.svc,precio:String(x.precio||''),feeAg:x.fee,manual:false}))
-      : [{id:1,svc:'',precio:'',feeAg:true,manual:false},{id:2,svc:'',precio:'',feeAg:true,manual:false}]
+      ? pedidosIniciales.map((x,i)=>({id:i+1,svc:x.svc,precio:String(x.precio||''),feeAg:x.fee,manual:false,adicional:false,precioCliente:''}))
+      : [{id:1,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}]
   )
   const parseFechaSheet = s => { const parts=String(s||'').split('/'); if(parts.length===3){const yr=parts[2].length===4?parts[2]:'20'+parts[2]; return `${yr}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`}; return '' }
   // Para represupuestar: recuperar tipo de fechas y adicionales (col 47/48 del sheet)
@@ -3519,19 +3519,65 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
   }
   const version=isRepresupuestar ? String(nextNum).match(/v\d+$/i)?.[0] || 'V2' : (form.repr?'V2':'')
   const tieneAg=form.agencia.trim()!==''
+  // Cálculo separado BASE (servicios incluidos) y ADICIONALES (opcionales).
+  // El TOTAL al cliente que ve en la app y en el PDF se calcula solo con BASE.
+  // Los adicionales aparecen en sección aparte con su precio al cliente individual.
   const calcT=()=>{
-    const subtotal=peds.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
-    const feeBase=peds.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
-    const fee=tieneAg?feeBase:0,base=subtotal+fee
-    const gan=form.gan?fee*0.35:0,iibb=form.iibb?fee*0.04:0
-    const intMto=(base+gan+iibb)*((parseFloat(form.interes)||0)/100)
-    const ajMto=(parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
-    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total:base+gan+iibb+intMto+ajMto}
+    const baseList = peds.filter(p => !p.adicional)
+    const adicList = peds.filter(p => p.adicional)
+    const subtotal = baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+    const feeBase = baseList.reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
+    const fee = tieneAg?feeBase:0
+    const base = subtotal+fee
+    const gan = form.gan?fee*0.35:0, iibb = form.iibb?fee*0.04:0
+    const intMto = (base+gan+iibb)*((parseFloat(form.interes)||0)/100)
+    const ajMto = (parseFloat(form.ajuste)||0)*parseInt(form.tajuste)
+    const total = base+gan+iibb+intMto+ajMto
+    // Cálculo de adicionales:
+    // - Si precioCliente manual está cargado → ese es el precio al cliente
+    // - Si no → aplicar el mismo factor del presu base (total/subtotal)
+    const factor = subtotal>0 ? (total/subtotal) : 1
+    const adicCalc = adicList.map(p => {
+      const costo = parseFloat(p.precio)||0
+      const precioClienteManual = parseFloat(p.precioCliente)||0
+      const precioCliente = precioClienteManual>0 ? precioClienteManual : Math.round(costo*factor)
+      const margen = precioCliente - costo
+      const margenPct = precioCliente>0 ? (margen/precioCliente)*100 : 0
+      return {svc:p.svc,costo,precioCliente,margen,margenPct,manual:precioClienteManual>0}
+    })
+    const totalAdicionales = adicCalc.reduce((s,a)=>s+a.precioCliente,0)
+    const costoBase = baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+    const margenBase = total - costoBase
+    const margenBasePct = total>0 ? (margenBase/total)*100 : 0
+    const totalConAdic = total + totalAdicionales
+    const costoTotal = costoBase + adicCalc.reduce((s,a)=>s+a.costo,0)
+    const margenTotal = totalConAdic - costoTotal
+    const margenTotalPct = totalConAdic>0 ? (margenTotal/totalConAdic)*100 : 0
+    return {subtotal,fee,base,gan,iibb,intMto,ajMto,total,adicCalc,totalAdicionales,costoBase,margenBase,margenBasePct,totalConAdic,costoTotal,margenTotal,margenTotalPct}
   }
   const T=calcT()
+  const semaforoMargen = pct => pct >= 50 ? {c:'#1D9E75',l:'sano'} : pct >= 35 ? {c:'#BA7517',l:'aceptable'} : {c:'#E24B4A',l:'bajo'}
   const setSvc=(id,val)=>{const s=SVCS_LIST.find(x=>x.n===val);setPeds(prev=>prev.map(p=>p.id===id?{...p,svc:val,precio:s?.p||'',feeAg:s?.fee??true,manual:false}:p))}
   const setPrecio=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,precio:val,manual:true}:p))
   const setFeeAg=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,feeAg:val}:p))
+  const setAdic=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,adicional:val}:p))
+  const setPrecioCliente=(id,val)=>setPeds(prev=>prev.map(p=>p.id===id?{...p,precioCliente:val}:p))
+  const aplicarDescuento=()=>{
+    const pctStr = prompt('% de descuento sobre el precio al cliente (ej 15)')
+    if(!pctStr) return
+    const pct = parseFloat(pctStr); if(!pct||pct<=0||pct>=100) return
+    // Calcular ajuste necesario para llegar al nuevo total
+    const subtotal = peds.filter(p=>!p.adicional).reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+    const feeBase = peds.filter(p=>!p.adicional).reduce((s,p)=>p.feeAg?(s+(parseFloat(p.precio)||0)):s,0)
+    const fee = tieneAg?feeBase:0
+    const base = subtotal+fee
+    const gan = form.gan?fee*0.35:0, iibb = form.iibb?fee*0.04:0
+    const intMto = (base+gan+iibb)*((parseFloat(form.interes)||0)/100)
+    const totalSinAjuste = base+gan+iibb+intMto
+    const totalNuevo = totalSinAjuste * (1 - pct/100)
+    const ajusteNuevo = totalSinAjuste - totalNuevo
+    setF('tajuste','-1'); setF('ajuste', String(Math.round(ajusteNuevo)))
+  }
   const setF=(k,v)=>setForm(prev=>({...prev,[k]:v}))
   async function guardar(){
     const errs = validar()
@@ -3554,6 +3600,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
     }
     const cantFechas = form.fechaMode==='multi' ? diasMulti.filter(Boolean).length : (form.fechaMode==='rango' && form.feIni && form.feFin ? Math.max(1,Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1) : 1)
     const feeServicios = peds.filter(p=>p.svc).map(p=>p.feeAg?'1':'0').join('|')
+    const esAdicional = peds.filter(p=>p.svc).map(p=>p.adicional?'1':'0').join('|')
+    const precioClienteManual = peds.filter(p=>p.svc).map(p=>p.precioCliente||'').join('|')
     const row={
       'Columna 1':nextNum,
       'Estado':'EN ESPERA',
@@ -3578,6 +3626,8 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
       'Tipo Fechas':tipoFechas,
       'Fechas Adicionales':fechasAdicionales,
       'Fee Servicios':feeServicios,
+      'Es Adicional':esAdicional,
+      'Precio Cliente Manual':precioClienteManual,
       'Observaciones':form.observaciones||'',
       'Horario':form.horario||'',
       'Ubicación':form.ubicacion||'',
@@ -3732,22 +3782,30 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
             <span style={{fontSize:10,color:'#555'}}>Aparece en el PDF debajo de los servicios. Opcional.</span>
           </label>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Servicios</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,marginBottom:4}}>
-            {['Servicio','Precio','Fee ag.',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2?'center':'left'}}>{h}</span>)}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 90px 36px 50px 95px 32px',gap:5,marginBottom:4}}>
+            {['Servicio','Costo','Fee','Adic.','Precio cliente',''].map((h,i)=><span key={i} style={{fontSize:10,color:'#555',textAlign:i===2||i===3?'center':'left'}}>{h}</span>)}
           </div>
-          {peds.map(p=>(
-            <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 36px 32px',gap:5,alignItems:'center',marginBottom:5}}>
+          {peds.map(p=>{
+            // Si es adicional sin precio manual, calculamos sugerido para mostrar placeholder
+            const factor = T.subtotal>0?(T.total/T.subtotal):1
+            const sugerido = p.adicional ? Math.round((parseFloat(p.precio)||0)*factor) : 0
+            return <div key={p.id} style={{display:'grid',gridTemplateColumns:'1fr 90px 36px 50px 95px 32px',gap:5,alignItems:'center',marginBottom:5,padding:p.adicional?'4px 6px':0,background:p.adicional?'#9635AB12':'transparent',borderRadius:p.adicional?5:0,border:p.adicional?'0.5px dashed #9635AB40':'none'}}>
               <select style={inp} value={p.svc} onChange={e=>setSvc(p.id,e.target.value)}>
                 <option value="">— Servicio —</option>
                 {SVCS_LIST.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
               </select>
-              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8'}} type="number" value={p.precio} placeholder="0" onChange={e=>setPrecio(p.id,e.target.value)}/>
-              <input type="checkbox" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block'}}/>
+              <input style={{...inp,color:p.manual?'#BA7517':'#1543F8'}} type="number" value={p.precio} placeholder="costo" onChange={e=>setPrecio(p.id,e.target.value)}/>
+              <input type="checkbox" checked={p.feeAg} onChange={e=>setFeeAg(p.id,e.target.checked)} disabled={p.adicional} style={{width:15,height:15,accentColor:'#1543F8',cursor:'pointer',margin:'0 auto',display:'block',opacity:p.adicional?0.3:1}}/>
+              <input type="checkbox" checked={!!p.adicional} onChange={e=>setAdic(p.id,e.target.checked)} title="Marcar como adicional opcional para el cliente" style={{width:15,height:15,accentColor:'#9635AB',cursor:'pointer',margin:'0 auto',display:'block'}}/>
+              <input style={{...inp,color:'#9635AB',opacity:p.adicional?1:0.3}} type="number" value={p.precioCliente} placeholder={p.adicional?(sugerido?String(sugerido):'auto'):'—'} disabled={!p.adicional} onChange={e=>setPrecioCliente(p.id,e.target.value)}/>
               <button style={{width:28,height:28,borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',fontSize:15}} onClick={()=>setPeds(prev=>prev.filter(x=>x.id!==p.id))}>x</button>
             </div>
-          ))}
-          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false}])}>+ Agregar servicio</button>
-          {tieneAg&&<div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6}}>Servicios con fee marcado se cobran x2. Ganancias e IIBB van sobre el fee.</div>}
+          })}
+          <button style={{width:'100%',padding:6,borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer',marginTop:4}} onClick={()=>setPeds(prev=>[...prev,{id:Date.now(),svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}])}>+ Agregar servicio</button>
+          <div style={{fontSize:10,color:'#555',marginTop:8,padding:'6px 10px',background:'#1A1A1A',borderRadius:6,lineHeight:1.5}}>
+            <strong style={{color:'#9635AB'}}>Adicional (violeta)</strong>: aparece en el PDF en sección separada como opcional. Cargás el costo y la app calcula el precio al cliente con el mismo margen del presu. Si querés ajustarlo manualmente, escribilo en <em>"Precio cliente"</em>.<br/>
+            {tieneAg && <span><strong style={{color:'#1543F8'}}>Fee ag.</strong>: servicios con fee marcado se cobran x2. Ganancias e IIBB van sobre el fee.</span>}
+          </div>
           <div style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'.08em',margin:'16px 0 8px'}}>Condiciones</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <label style={{display:'flex',flexDirection:'column',gap:4}}><span style={lbl}>Plazo de pago</span>
@@ -3791,6 +3849,40 @@ function NuevoPresupuesto({onClose,onGuardado,data,initialData,mail}){
           <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:15,fontWeight:500,borderTop:'0.5px solid #333',marginTop:6}}>
             <span>Precio final</span><span style={{color:'#1543F8',fontFamily:'monospace'}}>{fmt(T.total)}</span>
           </div>
+          {/* Semáforo de margen bruto — visible solo para Juan, no aparece en PDF */}
+          {T.total>0 && T.costoBase>0 && (() => {
+            const sem = semaforoMargen(T.margenBasePct)
+            return <div style={{marginTop:8,padding:'8px 10px',background:sem.c+'12',border:'0.5px solid '+sem.c+'40',borderRadius:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11}}>
+                <span style={{color:'#888'}}>Margen bruto base</span>
+                <span style={{fontFamily:'monospace',color:sem.c,fontWeight:600}}>{fmt(T.margenBase)} · {T.margenBasePct.toFixed(1)}% {sem.l==='sano'?'🟢':sem.l==='aceptable'?'🟡':'🔴'}</span>
+              </div>
+              <div style={{fontSize:9,color:'#666',marginTop:3,lineHeight:1.4}}>Costo directo {fmt(T.costoBase)} · Precio cliente {fmt(T.total)} · {sem.l}</div>
+            </div>
+          })()}
+          {/* Adicionales: bloque separado si hay */}
+          {T.adicCalc.length>0 && <div style={{marginTop:10,padding:10,background:'#9635AB10',border:'0.5px dashed #9635AB60',borderRadius:8}}>
+            <div style={{fontSize:10,color:'#9635AB',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontWeight:600}}>Adicionales (opcionales)</div>
+            {T.adicCalc.map((a,i)=>{
+              const sem = semaforoMargen(a.margenPct)
+              return <div key={i} style={{display:'flex',flexDirection:'column',padding:'4px 0',borderBottom:i<T.adicCalc.length-1?'0.5px solid #9635AB20':'none'}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11}}>
+                  <span style={{color:'#F0F0F0'}}>{a.svc} {a.manual?<span style={{fontSize:9,color:'#BA7517'}}>(manual)</span>:''}</span>
+                  <span style={{fontFamily:'monospace',color:'#9635AB',fontWeight:600}}>{fmt(a.precioCliente)}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'#666',marginTop:1}}>
+                  <span>costo {fmt(a.costo)}</span>
+                  <span style={{color:sem.c}}>margen {a.margenPct.toFixed(0)}% {sem.l==='sano'?'🟢':sem.l==='aceptable'?'🟡':'🔴'}</span>
+                </div>
+              </div>
+            })}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'6px 0 0',marginTop:4,borderTop:'0.5px solid #9635AB30',fontSize:12,fontWeight:600}}>
+              <span style={{color:'#9635AB'}}>Total con todos</span>
+              <span style={{fontFamily:'monospace',color:'#9635AB'}}>{fmt(T.totalConAdic)}</span>
+            </div>
+          </div>}
+          {/* Botón aplicar descuento */}
+          {T.total>0 && <button onClick={aplicarDescuento} style={{width:'100%',marginTop:10,padding:'8px',borderRadius:6,border:'0.5px solid #BA7517',background:'#BA751712',color:'#BA7517',fontSize:11,fontWeight:600,cursor:'pointer'}}>% Aplicar descuento al cliente</button>}
           {/* Si es represupuesto, mostrar el precio del ORIGINAL como referencia + ayuda para igualar */}
           {isRepresupuestar && (()=>{
             const precioOrig = parseMonto(initialData?.['Precio Final'])
