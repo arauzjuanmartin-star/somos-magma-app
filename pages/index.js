@@ -113,7 +113,8 @@ export default function App() {
     setLoading(true);setErr('')
     try {
       // Ya no necesita 'x-user-email' header — el middleware + getServerSession valida del cookie
-      const r=await fetch('/api/data')
+      // Siempre fresh: el cache de 30s del endpoint causaba que represupuestos / nuevos proyectos no aparecieran al refrescar
+      const r=await fetch('/api/data?fresh=1')
       const j=await r.json()
       if(j.ok) setData(j.data)
       else setErr('Error: '+j.error)
@@ -2110,9 +2111,10 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
       </div>
     </div>:<><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:10,flexWrap:'wrap'}}>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-        {[['todas','Todas'],['pendiente','Pendientes'],['parcial','Parciales'],['atrasadas','Atrasadas'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>(
-          <button key={id} style={{...S.fb,...(filtro===id?S.fa:{})}} onClick={()=>setFiltro(id)}>{l}</button>
-        ))}
+        {[['todas','Todas'],['sin-facturar','Sin facturar'],['pendiente','Pendientes'],['parcial','Parciales'],['atrasadas','Atrasadas'],['cobrada','Cobradas'],['SRL','SRL'],['Sofia','Sofia'],['Lulu','Lulu']].map(([id,l])=>{
+          const count = id==='sin-facturar'?kpis.sinFacturar.length:null
+          return <button key={id} style={{...S.fb,...(filtro===id?S.fa:{}),...(id==='sin-facturar'&&count>0?{borderColor:'#9635AB',color:filtro===id?'#fff':'#9635AB'}:{})}} onClick={()=>setFiltro(id)}>{l}{count!=null&&count>0?` (${count})`:''}</button>
+        })}
       </div>
       <div style={{display:'flex',gap:6,alignItems:'center',flex:'1 1 240px',maxWidth:380}}>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder='🔍 Buscar nro, cliente, proyecto, agencia, monto...' style={{flex:1,padding:'7px 10px',borderRadius:6,border:'0.5px solid #333',background:'#1E1E1E',color:'#F0F0F0',fontSize:12,outline:'none'}}/>
