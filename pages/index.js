@@ -1149,6 +1149,15 @@ function Presupuestos({data:initialData,mail,onRefresh,openTarget,clearTarget}){
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <BadgeEstado p={p} mail={mail} data={localData} onUpdate={handleEstadoUpdate} onRefresh={onRefresh} onRepresupuestar={setRepP}/>
                     <button title='Editar datos del presu (cliente, agencia, proyecto, observaciones)' onClick={e=>{e.stopPropagation();setCompletarP(p)}} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>✎</button>
+                    <button title='Agregar opción al cliente (B, C...)' onClick={async e=>{
+                      e.stopPropagation()
+                      const ok=confirm(`¿Crear una opción nueva del presu #${p['Columna 1']} para mostrarle al cliente?\n\nVa a duplicar los datos (cliente, proyecto, fecha, servicios) en una nueva fila con sufijo de letra. Después editás los servicios/precios de la nueva opción.`)
+                      if(!ok)return
+                      const r=await fetch('/api/presupuesto-agregar-opcion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numBase:p['Columna 1']})})
+                      const j=await r.json()
+                      if(j.ok){setToast(`✓ Opción #${j.nuevoNro} creada · Editá los servicios`);setTimeout(()=>setToast(''),4000);if(onRefresh)setTimeout(onRefresh,500)}
+                      else alert('Error: '+(j.error||'?'))
+                    }} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #9635AB40',background:'#9635AB12',color:'#9635AB',fontSize:11,cursor:'pointer',fontWeight:600}}>+ Opc</button>
                     <button title='Generar PDF' onClick={e=>{e.stopPropagation();window.open('/presupuesto?nro='+encodeURIComponent(p['Columna 1']),'_blank')}} style={{padding:'2px 8px',borderRadius:4,border:'0.5px solid #333',background:'transparent',color:'#888',fontSize:11,cursor:'pointer'}}>PDF</button>
                   </div>
                 </td>
