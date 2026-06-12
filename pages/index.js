@@ -2102,7 +2102,28 @@ function Facturacion({data,mail,onRefresh,openTarget,clearTarget}){
                 <td style={{...S.td,fontSize:12,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p['Proyecto']||'—'}</td>
                 <td style={{...S.td,fontFamily:'monospace',fontSize:12}}>{fmtM(parseMonto(p['Total ']||p['Total']))}</td>
                 <td style={{...S.td,fontSize:11,color:'#888'}}>{p['PM']||p['PM Interno']||'—'}</td>
-                <td style={{...S.td}}><button onClick={()=>{const presu=presus.find(x=>String(x['Columna 1'])===String(p['N° presupuesto']));if(presu){setPresuSel({...presu,pendiente:parseMonto(presu['Precio Final'])});setNuevaOpen(true)}else alert('Buscá el presu manual en Pendientes')}} style={{padding:'4px 10px',borderRadius:4,border:'none',background:'#1543F8',color:'#fff',fontSize:11,cursor:'pointer'}}>+ Facturar</button></td>
+                <td style={{...S.td}}><button onClick={()=>{
+                  const nro=String(p['N° presupuesto'])
+                  let presu=presus.find(x=>String(x['Columna 1'])===nro)
+                  if(!presu){
+                    // Proyecto huérfano (sin presu en la app, ej cargado directo al sheet). Construimos un presu mínimo a partir del proyecto.
+                    const total=parseMonto(p['Total ']||p['Total'])
+                    presu={
+                      'Columna 1':nro,
+                      'Cliente':p['Cliente']||'',
+                      'Agencia':p['Agencia']||'',
+                      'Proyecto':p['Proyecto']||'',
+                      'Fecha Evento':p['Fecha Evento']||'',
+                      'PM Interno':p['PM']||'',
+                      'Precio Final':total,
+                      'Total':total,
+                      'Estado':'APROBADO',
+                      '__huerfano':true,
+                    }
+                  }
+                  setPresuSel({...presu,pendiente:parseMonto(presu['Precio Final'])})
+                  setNuevaOpen(true)
+                }} style={{padding:'4px 10px',borderRadius:4,border:'none',background:'#1543F8',color:'#fff',fontSize:11,cursor:'pointer'}}>+ Facturar</button></td>
               </tr>
             })}
           </tbody>
