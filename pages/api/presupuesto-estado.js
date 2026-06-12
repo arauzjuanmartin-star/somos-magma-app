@@ -34,72 +34,6 @@ export default async function handler(req, res) {
       requestBody: { values: [[estado]] }
     })
 
-    // Si se aprueba uno con sufijo letra (1957B) → los hermanos pasan a DESCARTADA
-    // (convención de opciones A/B/C). Si el cliente cambia de idea, se puede destildar después.
-    let hermanosDescartados = []
-    const parseNro = s => { const m = String(s||'').trim().match(/^(\d+)([A-Z])?$/); return m ? { base: m[1], letra: m[2] || '' } : null }
-    if (estado === 'APROBADO') {
-      const parsed = parseNro(num)
-      if (parsed && parsed.letra) {
-        const hermanos = []
-        for (let i = 1; i < rows.length; i++) {
-          if (i + 1 === rowIndex) continue
-          const p = parseNro(rows[i][0])
-          if (p && p.base === parsed.base) hermanos.push({ fila: i+1, nro: rows[i][0], estadoActual: rows[i][3] })
-        }
-        for (const h of hermanos) {
-          if (h.estadoActual === 'APROBADO' || h.estadoActual === 'EN ESPERA') {
-            await sheets.spreadsheets.values.update({
-              spreadsheetId: SHEET_ID,
-              range: `PRESUPUESTOS!D${h.fila}`,
-              valueInputOption: 'USER_ENTERED',
-              requestBody: { values: [['DESCARTADA']] }
-            })
-            hermanosDescartados.push(h.nro)
-            // Si el hermano estaba aprobado y tenía proyecto → borrarlo
-            // (Esto cubre el caso "cliente cambió de idea y aprobaste otra")
-            if (h.estadoActual === 'APROBADO') {
-              try {
-                const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
-                const proySheet = meta.data.sheets.find(s => s.properties.title === 'PROYECTOS')
-                if (proySheet) {
-                  const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:C' })
-                  const pr = rProy.data.values || []
-                  for (let j = 1; j < pr.length; j++) {
-                    if (String(pr[j][2]||'').trim() === String(h.nro).trim()) {
-                      await sheets.spreadsheets.batchUpdate({
-                        spreadsheetId: SHEET_ID,
-                        requestBody: { requests: [{ deleteDimension: { range: { sheetId: proySheet.properties.sheetId, dimension: 'ROWS', startIndex: j, endIndex: j+1 } } }] }
-                      })
-                      break
-                    }
-                  }
-                }
-                // Avisar a Calendar que borre el evento del hermano
-                const cookie = req.headers.cookie || ''
-                const host = req.headers.host
-                const proto = host?.includes('localhost') ? 'http' : 'https'
-                await fetch(`${proto}://${host}/api/calendar-evento`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json', cookie },
-                  body: JSON.stringify({ num: h.nro, accion: 'borrar' }),
-                }).catch(()=>{})
-              } catch(e) { console.warn('Cleanup hermano aprobado:', e.message) }
-            }
-          }
-        }
-        try {
-          if (hermanosDescartados.length) {
-            await sheets.spreadsheets.values.append({
-              spreadsheetId: SHEET_ID,
-              range: 'LOG!A:F',
-              valueInputOption: 'USER_ENTERED',
-              requestBody: { values: [[new Date().toISOString(), mail, 'opciones-cascada-descartar', 'PRESUPUESTOS', String(num), `aprobado #${num} → descartados ${hermanosDescartados.join(', ')}`]] },
-            })
-          }
-        } catch (e) {}
-      }
-    }
-
     // Si el estado NO es APROBADO → eliminar la fila correspondiente en PROYECTOS si existe.
     // Solo APROBADO debe estar en PROYECTOS. Cualquier otro estado (EN ESPERA,
     // REPRESUPUESTADO, DESAPROBADO, etc) significa que ya NO es un trabajo activo.
@@ -297,7 +231,7 @@ export default async function handler(req, res) {
       console.warn('Calendar sync falló (no bloquea):', e.message)
     }
 
-    res.json({ ok: true, calendar: calendarResult, hermanosDescartados })
+    res.json({ ok: true, calendar: calendarResult })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
