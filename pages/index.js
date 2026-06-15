@@ -1025,6 +1025,23 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
     }catch(e){ showToast('Error de conexión','err') }
   }
 
+  function subirPDF(f){
+    const input=document.createElement('input'); input.type='file'; input.accept='application/pdf,image/*'
+    input.onchange=async()=>{
+      const file=input.files?.[0]; if(!file) return
+      const nro=f['Nro de Factura']||'', nl=nro.toLowerCase()
+      const entidad=nl.includes('sofia')?'Sofia':nl.includes('lulu')?'Lulu':(nl.includes('ef-')||nl.includes('efectivo'))?'Efectivo':'SRL'
+      const fe=parseD(f['Fecha emision']), mes=fe?fe.getMonth()+1:hoy.getMonth()+1, anio=fe?fe.getFullYear():hoy.getFullYear()
+      const fd=new FormData()
+      fd.append('file', file, file.name); fd.append('entidad', entidad); fd.append('nroFactura', nro)
+      fd.append('presupuestoNum', f['N° Presupuesto']||''); fd.append('mes', String(mes)); fd.append('anio', String(anio))
+      showToast('Subiendo PDF…')
+      try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return} showToast('PDF subido ✓'); if(onRefresh) onRefresh() }
+      catch(e){ showToast('Error de conexión','err') }
+    }
+    input.click()
+  }
+
   const diffVenc=f=>{ const v=parseD(f['Vencimiento']); return v?Math.floor((v-hoy)/864e5):null }
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
@@ -1059,13 +1076,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
     </div>
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'130px 1.6fr 110px 130px 130px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'130px 1.5fr 100px 120px 165px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Factura</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'130px 1.6fr 110px 130px 130px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'130px 1.5fr 100px 120px 165px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{fontFamily:MONO, fontSize:11.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{f['Nro de Factura']||'s/n'}</span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
@@ -1076,10 +1093,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
             <span style={{width:7,height:7,borderRadius:7,background:info.c}}/>
             <span style={{fontSize:12, color:T.ink2}}>{info.l}{!isCobrada(f)&&d!=null&&d<0?` ${Math.abs(d)}d`:''}</span>
           </span>
-          <span style={{display:'flex', gap:6, justifyContent:'flex-end'}}>
-            {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>Cobrar</button>}
-            <button onClick={()=>mandarMail(f)} style={miniBtn} title="Mandar por mail">✉</button>
-            <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
+          <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
+            {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
+            <button onClick={()=>mandarMail(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar por mail">✉</button>
+            {f['Factura']
+              ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
+              : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
+            <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="PDF del presupuesto">Presu</a>
           </span>
         </div>
       })}

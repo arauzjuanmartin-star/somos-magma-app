@@ -142,7 +142,23 @@ export default async function handler(req, res) {
       })
     } catch (e) {}
 
-    res.json({ ok: true, numero: numeroAsignado })
+    // 🗓 Crear evento "pendiente" (amarillo) en el Calendar — best-effort, no bloquea
+    let calendarResult = null
+    try {
+      const cookie = req.headers.cookie || ''
+      const host = req.headers.host
+      const proto = host?.includes('localhost') ? 'http' : 'https'
+      const calR = await fetch(`${proto}://${host}/api/calendar-evento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ num: numeroAsignado, accion: 'pendiente' }),
+      })
+      calendarResult = await calR.json().catch(() => ({}))
+    } catch (e) {
+      console.warn('Calendar sync (nuevo presu) falló (no bloquea):', e.message)
+    }
+
+    res.json({ ok: true, numero: numeroAsignado, calendar: calendarResult })
   } catch (e) {
     asignandoNumero = false
     console.error(e)
