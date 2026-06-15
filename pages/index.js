@@ -1112,23 +1112,38 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
 function NuevaFactura({pendientes, onClose, onCreada, showToast}){
   const hoy=new Date()
   const [sel,setSel]=useState(null), [q,setQ]=useState('')
-  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(''), [saving,setSaving]=useState(false)
+  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
   const neto = sel ? (parseFloat(montoNeto)||sel.pendiente) : 0
   const iva = conIVA?Math.round(neto*0.21):0
   const total = neto+iva
   const lista = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>normTxt(v).includes(normTxt(q))))
 
-  async function crear(forzar=false){
+  async function crear(forzar=false, conMail=true){
     if(!sel) return
+    const presuNum=sel.p['Columna 1']
     setSaving(true)
     const fechaEmision=`${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`
     const venc=new Date(hoy.getTime()+parseInt(plazo)*864e5); const fechaVenc=`${venc.getDate()}/${venc.getMonth()+1}/${venc.getFullYear()}`
-    const body={ entidad, tipo, nroFactura:nro, fechaEmision, fechaVenc, plazo: plazo==='0'?'Contado':plazo+' días', conIVA, neto:Math.round(neto), iva:Math.round(iva), total:Math.round(total), presupuestoNum:sel.p['Columna 1'], proyecto:sel.p['Proyecto'], agencia:sel.p['Agencia'], cliente:sel.p['Cliente'], forzar }
-    try{ const r=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    const body={ entidad, tipo, nroFactura:nro, fechaEmision, fechaVenc, plazo: plazo==='0'?'Contado':plazo+' días', conIVA, neto:Math.round(neto), iva:Math.round(iva), total:Math.round(total), presupuestoNum:presuNum, proyecto:sel.p['Proyecto'], agencia:sel.p['Agencia'], cliente:sel.p['Cliente'], forzar }
+    try{
+      const r=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const j=await r.json()
-      if(r.status===409){ setSaving(false); if(window.confirm((j.mensaje||'N° de factura duplicado')+'\n\n¿Crear igual?')) return crear(true); return }
+      if(r.status===409){ setSaving(false); if(window.confirm((j.mensaje||'N° de factura duplicado')+'\n\n¿Crear igual?')) return crear(true, conMail); return }
       if(!j.ok){ showToast(j.error||'Error','err'); setSaving(false); return }
-      showToast(`Factura creada para #${sel.p['Columna 1']}`); onCreada()
+      // 1) Subir PDF si se adjuntó (antes del mail, para que el mail incluya el link)
+      if(pdfFile){
+        try{ const fd=new FormData(); fd.append('file',pdfFile,pdfFile.name); fd.append('entidad',entidad); fd.append('nroFactura',nro); fd.append('presupuestoNum',presuNum); fd.append('mes',String(hoy.getMonth()+1)); fd.append('anio',String(hoy.getFullYear()))
+          showToast('Subiendo PDF…'); const ru=await fetch('/api/factura-upload',{method:'POST',body:fd}); const ju=await ru.json(); if(!ju.ok) showToast('Factura creada, pero el PDF falló: '+(ju.error||''),'err')
+        }catch(e){ showToast('Factura creada, el PDF falló','err') }
+      }
+      // 2) Mandar mail al cliente (con destinatarios + cuerpo + link al PDF)
+      if(conMail){
+        try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum})}); const jm=await rm.json()
+          if(jm.ok){ const to=(jm.destinatarios||[]).map(d=>d.mail).join(','); if(!to) showToast('Factura lista — sin email de contacto, revisá el destinatario','err'); window.location.href=`mailto:${to}?subject=${encodeURIComponent(jm.asunto)}&body=${encodeURIComponent(jm.cuerpo)}` }
+          else showToast('Factura creada — no pude armar el mail: '+(jm.error||''),'err')
+        }catch(e){ showToast('Factura creada — el mail falló','err') }
+      }
+      showToast(`Factura #${presuNum} creada ✓`); onCreada()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -1166,14 +1181,22 @@ function NuevaFactura({pendientes, onClose, onCreada, showToast}){
             <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', paddingBottom:9}}><input type="checkbox" checked={conIVA} onChange={e=>setConIVA(e.target.checked)}/> Con IVA 21%</label>
           </div>
+          <div style={{marginBottom:4}}>
+            <label style={lblV2}>PDF de la factura (opcional)</label>
+            <div style={{display:'flex', alignItems:'center', gap:10}}>
+              <input type="file" accept="application/pdf,image/*" onChange={e=>setPdfFile(e.target.files?.[0]||null)} style={{fontSize:12.5, color:T.ink2}}/>
+              {pdfFile && <span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ {pdfFile.name}</span>}
+            </div>
+          </div>
           <div style={{display:'flex', justifyContent:'flex-end', gap:20, padding:'12px 0', borderTop:`1px solid ${T.border}`}}>
             <Mini label="Neto" val={fmt(neto)}/>{conIVA&&<Mini label="IVA" val={fmt(iva)}/>}<Mini label="Total" val={fmt(total)} color={T.brand}/>
           </div>
         </>}
       </div>
-      {sel && <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+      {sel && <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={()=>crear(false)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Creando…':'Crear factura'}</button>
+        <button onClick={()=>crear(false,false)} disabled={saving||neto<=0} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer', opacity:(saving||neto<=0)?0.5:1}}>Solo crear</button>
+        <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
       </div>}
     </div>
   </div>
