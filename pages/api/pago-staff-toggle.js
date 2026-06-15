@@ -3,9 +3,9 @@ import { requireAuth } from '../../lib/auth-helpers'
 
 const colLetra = col => { let s='',c=col+1; while(c>0){c--;s=String.fromCharCode(65+(c%26))+s;c=Math.floor(c/26);} return s }
 
-// Estructura PAGOS_STAFF (fila por trabajo):
-// A Mes | B Persona | C N° Proyecto | D Proyecto | E Pedido | F Monto
-// G Fecha Evento | H Agencia | I Cuenta | J Fecha Pago | K Pagado | L Observación
+// Esquema REAL de PAGOS_STAFF (2026):
+// A Fecha Pago | B Freelancer | C Mes Referencia | D N° Presupuesto | E Proyecto
+// F Servicio | G Monto Adeudado | H Monto Pagado | I Tipo | J Cuenta | K Estado | L Notas
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -21,56 +21,62 @@ export default async function handler(req, res) {
     const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
     const rows = r.data.values || []
     const headers = rows[0] || []
-    // Detectar columnas (con fallback a posiciones 0..11)
-    const find = (...names) => { for (const n of names) { const i = headers.findIndex(h => String(h||'').toLowerCase().trim() === n.toLowerCase()); if (i >= 0) return i }; return -1 }
-    const iMes = find('Mes') >= 0 ? find('Mes') : 0
-    const iPersona = find('Persona','Nombre','Staff') >= 0 ? find('Persona','Nombre','Staff') : 1
-    const iNro = find('N° Proyecto','N° presupuesto','Nro','Proyecto') >= 0 ? find('N° Proyecto','N° presupuesto','Nro') : 2
-    const iProy = find('Proyecto','Descripción') >= 0 ? find('Proyecto') : 3
-    const iPedido = find('Pedido','Servicio') >= 0 ? find('Pedido','Servicio') : 4
-    const iMonto = find('Monto','Total','Precio') >= 0 ? find('Monto','Total','Precio') : 5
-    const iFE = find('Fecha Evento','Fecha') >= 0 ? find('Fecha Evento') : 6
-    const iAg = find('Agencia') >= 0 ? find('Agencia') : 7
-    const iCuenta = find('Cuenta','Cuenta pago') >= 0 ? find('Cuenta','Cuenta pago') : 8
-    const iFechaPago = find('Fecha pago','Fecha Pago') >= 0 ? find('Fecha pago','Fecha Pago') : 9
-    const iPag = find('Pagado') >= 0 ? find('Pagado') : 10
-    const iObs = find('Observación','Notas') >= 0 ? find('Observación','Notas') : 11
+    // Detectar columnas por nombre real (con fallback a posición fija del esquema 2026)
+    const find = (names, def) => { for (const n of names) { const i = headers.findIndex(h => String(h||'').toLowerCase().trim() === n.toLowerCase()); if (i >= 0) return i }; return def }
+    const iFechaPago = find(['Fecha Pago','Fecha pago'], 0)
+    const iPersona   = find(['Freelancer','Persona','Nombre','Staff'], 1)
+    const iMes       = find(['Mes Referencia','Mes'], 2)
+    const iNro       = find(['N° Presupuesto','N° Proyecto','Nro'], 3)
+    const iProy      = find(['Proyecto','Descripción'], 4)
+    const iPedido    = find(['Servicio','Pedido'], 5)
+    const iAdeudado  = find(['Monto Adeudado','Monto','Total'], 6)
+    const iPagado$   = find(['Monto Pagado'], 7)
+    const iTipo      = find(['Tipo'], 8)
+    const iCuenta    = find(['Cuenta','Cuenta pago'], 9)
+    const iEstado    = find(['Estado','Pagado'], 10)
+    const iNotas     = find(['Notas','Observación'], 11)
 
-    // Buscar fila por mes + persona + nro proyecto + pedido (máxima granularidad)
-    const rowIdx = rows.findIndex((r, i) => i > 0 &&
-      String(r[iMes]||'').trim() === String(mes).trim() &&
-      String(r[iPersona]||'').trim() === String(persona).trim() &&
-      (!nroProyecto || String(r[iNro]||'').trim() === String(nroProyecto).trim()) &&
-      (!pedido || String(r[iPedido]||'').trim() === String(pedido).trim())
+    const eq = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase()
+    // Buscar fila existente por Mes + Freelancer + N° + Servicio (máxima granularidad)
+    const rowIdx = rows.findIndex((row, i) => i > 0 &&
+      eq(row[iMes], mes) &&
+      eq(row[iPersona], persona) &&
+      (!nroProyecto || eq(row[iNro], nroProyecto)) &&
+      (!pedido || eq(row[iPedido], pedido))
     )
 
     const now = new Date()
     const fechaStr = fechaPago || (now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear())
+    const montoN = Number(monto) || 0
+    const estado = pagado ? 'Pagado' : 'Pendiente'
 
     if (rowIdx > 0) {
       const sheetRow = rowIdx + 1
       const updates = [
-        { range: `PAGOS_STAFF!${colLetra(iCuenta)}${sheetRow}`, values: [[cuenta||'']] },
-        { range: `PAGOS_STAFF!${colLetra(iFechaPago)}${sheetRow}`, values: [[pagado?fechaStr:'']] },
-        { range: `PAGOS_STAFF!${colLetra(iPag)}${sheetRow}`, values: [[pagado?'SÍ':'NO']] },
+        { range: `PAGOS_STAFF!${colLetra(iFechaPago)}${sheetRow}`, values: [[pagado ? fechaStr : '']] },
+        { range: `PAGOS_STAFF!${colLetra(iPagado$)}${sheetRow}`,   values: [[pagado ? montoN : '']] },
+        { range: `PAGOS_STAFF!${colLetra(iEstado)}${sheetRow}`,    values: [[estado]] },
       ]
-      if (observacion !== undefined) updates.push({ range: `PAGOS_STAFF!${colLetra(iObs)}${sheetRow}`, values: [[observacion||'']] })
+      if (cuenta !== undefined)      updates.push({ range: `PAGOS_STAFF!${colLetra(iCuenta)}${sheetRow}`, values: [[cuenta||'']] })
+      if (observacion !== undefined) updates.push({ range: `PAGOS_STAFF!${colLetra(iNotas)}${sheetRow}`,  values: [[observacion||'']] })
       await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: updates } })
     } else {
-      const maxCol = Math.max(iObs, iPag, iFechaPago, iCuenta, iAg, iFE, iMonto, iPedido, iProy, iNro, iPersona, iMes) + 1
+      // No existe: si se está DESMARCANDO algo inexistente, no escribir nada.
+      if (!pagado) return res.json({ ok: true, noop: true })
+      const maxCol = Math.max(iFechaPago,iPersona,iMes,iNro,iProy,iPedido,iAdeudado,iPagado$,iTipo,iCuenta,iEstado,iNotas) + 1
       const newRow = new Array(maxCol).fill('')
-      newRow[iMes] = mes
-      newRow[iPersona] = persona
+      newRow[iFechaPago] = fechaStr
+      newRow[iPersona]   = persona
+      newRow[iMes]       = mes
       if (nroProyecto) newRow[iNro] = nroProyecto
-      if (proyecto) newRow[iProy] = proyecto
-      if (pedido) newRow[iPedido] = pedido
-      newRow[iMonto] = Number(monto)||0
-      if (fechaEvento) newRow[iFE] = fechaEvento
-      if (agencia) newRow[iAg] = agencia
-      newRow[iCuenta] = cuenta||''
-      newRow[iFechaPago] = pagado?fechaStr:''
-      newRow[iPag] = pagado?'SÍ':'NO'
-      if (observacion) newRow[iObs] = observacion
+      if (proyecto)    newRow[iProy] = proyecto
+      if (pedido)      newRow[iPedido] = pedido
+      newRow[iAdeudado]  = montoN
+      newRow[iPagado$]   = montoN
+      newRow[iTipo]      = 'Total'
+      newRow[iCuenta]    = cuenta || ''
+      newRow[iEstado]    = estado
+      if (observacion)   newRow[iNotas] = observacion
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'PAGOS_STAFF!A:L',
