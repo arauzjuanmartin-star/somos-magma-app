@@ -1556,7 +1556,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       })}
     </div>
     {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
-    {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} showToast={showToast}/>}
+    {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} cuentas={data.cuentas||[]} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} showToast={showToast}/>}
   </>
 }
 
@@ -1915,20 +1915,26 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
 }
 
 // ============================ MAIL A STAFF (facturación) ============================
-function MailStaffModal({persona, datos={}, mesNombre, onClose, showToast}){
+function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, showToast}){
+  // Entidades fiscales (a quién factura el freelancer) con sus datos, desde CUENTAS
+  const entidades={}; cuentas.forEach(c=>{ const ef=c['Entidad fiscal']; if(ef && !entidades[ef]) entidades[ef]={ titular:c['Titular']||'', datos:c['Datos transferencia adicionales']||'' } })
+  const FACTURAR_OPC=Object.keys(entidades).length?Object.keys(entidades):['Somos Magma SRL']
   const [para,setPara]=useState(datos['Mail']||'')
   const [cc,setCc]=useState([]), [ccInput,setCcInput]=useState('')
   const [tipo,setTipo]=useState('factura')
-  const [facturarA,setFacturarA]=useState('Somos Magma SRL')
+  const [facturarA,setFacturarA]=useState(FACTURAR_OPC.find(e=>/somos magma/i.test(e))||FACTURAR_OPC[0])
   const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
-  const FACTURAR_OPC=['Somos Magma SRL','Sofia Grenier','Lucia Grenier']
   const pend=persona.trabajos.filter(t=>!t.pagado)
   const items=pend.map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}`).join('\n')
   const tot=pend.reduce((s,t)=>s+t.precio,0)
   const nombre=String(persona.nombre).split(' ')[0]
+  const ent=entidades[facturarA]||{}
+  const lineasFact=[`Facturá a: ${facturarA}`]
+  if(ent.titular && ent.titular.toLowerCase()!==facturarA.toLowerCase()) lineasFact.push(ent.titular)
+  if(ent.datos) lineasFact.push(ent.datos)
   const cuerpo = tipo==='efectivo'
     ? `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre}:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nEste pago es en EFECTIVO — no hace falta factura.\n\n¡Gracias!`
-    : `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nFacturá a nombre de: ${facturarA}\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
+    : `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\n${lineasFact.join('\n')}\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   const addCc=(v)=>{ const x=String(v||'').trim(); if(x&&!cc.includes(x)) setCc(c=>[...c,x]); setCcInput('') }
   function abrir(){
     if(!para.trim()){ showToast('Falta el mail del freelancer','err'); return }
@@ -1962,8 +1968,8 @@ function MailStaffModal({persona, datos={}, mesNombre, onClose, showToast}){
         </div>
         {tipo==='factura' && <div style={{marginBottom:14}}>
           <label style={lblV2}>Facturar a</label>
-          <input list="fact-opc" value={facturarA} onChange={e=>setFacturarA(e.target.value)} style={inpV2}/>
-          <datalist id="fact-opc">{FACTURAR_OPC.map(o=><option key={o} value={o}/>)}</datalist>
+          <select value={facturarA} onChange={e=>setFacturarA(e.target.value)} style={inpV2}>{FACTURAR_OPC.map(o=><option key={o} value={o}>{o}</option>)}</select>
+          {ent.datos && <div style={{fontSize:11, color:T.ink3, marginTop:5}}>{ent.datos}</div>}
         </div>}
         <label style={lblV2}>Vista previa</label>
         <textarea readOnly value={cuerpo} rows={8} style={{...inpV2,resize:'vertical',fontSize:12,fontFamily:MONO,color:T.ink2}}/>
