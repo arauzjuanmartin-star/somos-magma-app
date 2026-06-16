@@ -56,6 +56,21 @@ const NAV = [
   {id:'historico',label:'Histórico'},
 ]
 
+// Atrapa errores de un módulo para que no se caiga TODA la app (pantalla negra)
+class ErrorBoundary extends React.Component {
+  constructor(p){ super(p); this.state={err:null} }
+  static getDerivedStateFromError(err){ return {err} }
+  componentDidCatch(err,info){ console.error('Error en módulo:', err, info) }
+  render(){
+    if(this.state.err) return <div style={{padding:'40px 20px', textAlign:'center'}}>
+      <div style={{fontSize:16, fontWeight:700, color:T.brand, marginBottom:8}}>Se rompió esta vista</div>
+      <div style={{fontSize:13, color:T.ink2, maxWidth:480, margin:'0 auto 16px', lineHeight:1.5}}>El resto de la app sigue funcionando. Probá actualizar o cambiá de solapa. Detalle: {String(this.state.err?.message||this.state.err)}</div>
+      <button onClick={()=>{ this.setState({err:null}); this.props.onReload&&this.props.onReload() }} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer'}}>↻ Recargar datos</button>
+    </div>
+    return this.props.children
+  }
+}
+
 export default function V2() {
   const { data: session, status } = useSession()
   const mail = session?.user?.email || ''
@@ -143,7 +158,8 @@ export default function V2() {
           {err && <div style={{background:T.brandSoft, color:T.brand, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 16px', fontSize:13, marginBottom:18}}>{err}</div>}
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
-            : mod==='dashboard' ? <Dashboard data={data} goTo={goTo}/>
+            : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
+              mod==='dashboard' ? <Dashboard data={data} goTo={goTo}/>
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -154,7 +170,8 @@ export default function V2() {
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
             : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='historico' ? <Historico data={data}/>
-            : <Placeholder label={NAV.find(n=>n.id===mod)?.label}/>}
+            : <Placeholder label={NAV.find(n=>n.id===mod)?.label}/>
+            }</ErrorBoundary>}
         </div>
       </main>
     </div>

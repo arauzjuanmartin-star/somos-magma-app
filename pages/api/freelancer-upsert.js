@@ -3,6 +3,32 @@ import { requireAuth } from '../../lib/auth-helpers'
 
 const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
 
+// Renombra un freelancer en TODAS sus referencias: Proyectos (Staff) + Pagos Staff (Freelancer)
+async function renombrarEnReferencias(sheets, SHEET_ID, nombreOriginal, nombreNuevo) {
+  const norm = v => String(v||'').trim().toLowerCase()
+  const nuevo = String(nombreNuevo).trim()
+  let total = 0
+  try {
+    const rP = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
+    const pRows = rP.data.values || [], pH = pRows[0] || []
+    const updP = []
+    for (let i = 1; i < pRows.length; i++) pH.forEach((h, c) => {
+      const ht = String(h||'').trim()
+      if ((ht === 'Staff' || /^Staff \d+$/.test(ht)) && norm(pRows[i][c]) === norm(nombreOriginal)) updP.push({ range: `PROYECTOS!${colLetra(c)}${i+1}`, values: [[nuevo]] })
+    })
+    if (updP.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updP } }); total += updP.length }
+  } catch (e) { console.error('rename PROYECTOS:', e.message) }
+  try {
+    const rPS = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
+    const psRows = rPS.data.values || [], psH = psRows[0] || []
+    const iFre = psH.indexOf('Freelancer') !== -1 ? psH.indexOf('Freelancer') : 1
+    const updPS = []
+    for (let i = 1; i < psRows.length; i++) if (norm(psRows[i][iFre]) === norm(nombreOriginal)) updPS.push({ range: `PAGOS_STAFF!${colLetra(iFre)}${i+1}`, values: [[nuevo]] })
+    if (updPS.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updPS } }); total += updPS.length }
+  } catch (e) { console.error('rename PAGOS_STAFF:', e.message) }
+  return total
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const auth = await requireAuth(req, res)
@@ -61,38 +87,10 @@ export default async function handler(req, res) {
         })
       }
 
-      // RENOMBRE GLOBAL: si cambió el nombre, propagar a PROYECTOS (Staff) y PAGOS_STAFF (Freelancer)
+      // RENOMBRE GLOBAL: si cambió el nombre, propagar a Proyectos (Staff) y Pagos Staff (Freelancer)
       let renombrados = 0
       if (nombreOriginal && norm(nombreOriginal) !== norm(nombre)) {
-        const nuevo = String(nombre).trim()
-        // PROYECTOS: columnas Staff / Staff N
-        try {
-          const rP = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
-          const pRows = rP.data.values || []
-          const pH = pRows[0] || []
-          const updP = []
-          for (let i = 1; i < pRows.length; i++) {
-            pH.forEach((h, c) => {
-              const ht = String(h||'').trim()
-              if ((ht === 'Staff' || /^Staff \d+$/.test(ht)) && norm(pRows[i][c]) === norm(nombreOriginal)) {
-                updP.push({ range: `PROYECTOS!${colLetra(c)}${i+1}`, values: [[nuevo]] })
-              }
-            })
-          }
-          if (updP.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updP } }); renombrados += updP.length }
-        } catch (e) { console.error('rename PROYECTOS:', e.message) }
-        // PAGOS_STAFF: columna Freelancer
-        try {
-          const rPS = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
-          const psRows = rPS.data.values || []
-          const psH = psRows[0] || []
-          const iFre = psH.indexOf('Freelancer') !== -1 ? psH.indexOf('Freelancer') : 1
-          const updPS = []
-          for (let i = 1; i < psRows.length; i++) {
-            if (norm(psRows[i][iFre]) === norm(nombreOriginal)) updPS.push({ range: `PAGOS_STAFF!${colLetra(iFre)}${i+1}`, values: [[nuevo]] })
-          }
-          if (updPS.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updPS } }); renombrados += updPS.length }
-        } catch (e) { console.error('rename PAGOS_STAFF:', e.message) }
+        renombrados = await renombrarEnReferencias(sheets, SHEET_ID, nombreOriginal, nombre)
       }
 
       try {
@@ -127,6 +125,11 @@ export default async function handler(req, res) {
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },
     })
+
+    // Si vino de corregir el nombre de un staff ya cargado en trabajos, renombrar sus referencias
+    if (nombreOriginal && norm(nombreOriginal) !== norm(nombre)) {
+      try { await renombrarEnReferencias(sheets, SHEET_ID, nombreOriginal, nombre) } catch (e) {}
+    }
 
     try {
       await sheets.spreadsheets.values.append({
