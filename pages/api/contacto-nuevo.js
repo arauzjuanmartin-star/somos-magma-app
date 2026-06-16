@@ -1,7 +1,10 @@
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
+import { requireAuth } from '../../lib/auth-helpers'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  const auth = await requireAuth(req, res)
+  if (!auth) return
   const { nombre, mail, telefono, cuit, agencia, cargo } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
   try {
