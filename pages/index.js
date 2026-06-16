@@ -501,10 +501,10 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         const camposProy={}; ['Fecha Evento','Cliente','Proyecto','Agencia','PM Interno','Contacto'].forEach(k=>{ if(cambios[k]!==undefined) camposProy[k]=cambios[k] })
         if(Object.keys(camposProy).length) { try{ await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:camposProy, propagarPresupuesto:false})}) }catch(e){} }
       }
-      // 3. Resincronizar el Calendar (fecha/horario/ubicación/contacto/staff)
-      try{ await fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: aprobado?'aprobar':'pendiente'})}) }catch(e){}
-      showToast(`#${id} guardado · sincronizado`)
+      showToast(`#${id} guardado`)
       onSaved(id, cambios)
+      // 3. Resincronizar el Calendar en segundo plano (Google es lento)
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: aprobado?'aprobar':'pendiente'})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -1069,6 +1069,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const [horaIni,setHoraIni]=useState(hOrig.h1), [horaFin,setHoraFin]=useState(hOrig.h2), [ubicacion,setUbicacion]=useState(presu?.['Ubicación']||'')
   const upd=(i,campo,val)=>setItems(it=>it.map((x,j)=>j===i?{...x,[campo]:val}:x))
   const addRow=()=>setItems(it=>[...it,{pedido:'',quien:'',precio:0}])
+  const delRow=i=>setItems(it=>it.length>1?it.filter((_,j)=>j!==i):[{pedido:'',quien:'',precio:0}])
 
   let fl=0,mg=0; items.forEach(s=>{ if(!s.quien)return; const v=Number(s.precio)||0; if(s.quien==='Somos Magma')mg+=v; else fl+=v })
   const fee=total-fl-mg
@@ -1088,12 +1089,13 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       // 2. Staff → PROYECTOS
       const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido}))})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
-      // 3. Resync Calendar (staff + horario + ubicación en el evento)
-      if(presu){ try{ await fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}) }catch(e){} }
-      showToast(`#${num} · staff guardado${presu?' · Calendar actualizado':''}`)
+      // Listo el guardado → liberamos el botón y cerramos enseguida
+      showToast(`#${num} · staff guardado`)
       setSaving(false)
       if(onRefresh) onRefresh()
       if(onClose) onClose()
+      // 3. Resync Calendar en segundo plano (Google es lento, no bloqueamos)
+      if(presu){ fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}).catch(()=>{}) }
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -1115,11 +1117,11 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       </div>
       <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
     </div>}
-    <div style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 120px', gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
-      <span>Servicio</span><span>Quién lo hace</span><span style={{textAlign:'right'}}>Monto</span>
+    <div style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 110px 28px', gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
+      <span>Servicio</span><span>Quién lo hace</span><span style={{textAlign:'right'}}>Monto</span><span/>
     </div>
     {items.map((s,i)=>(
-      <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 120px', gap:10, marginBottom:8, alignItems:'start'}}>
+      <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 110px 28px', gap:10, marginBottom:8, alignItems:'start'}}>
         <div>
           <input list="v2-svcs" value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
           {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
@@ -1129,6 +1131,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+        <button onClick={()=>delRow(i)} title="Quitar línea" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:17, padding:0, alignSelf:'center'}}>×</button>
       </div>
     ))}
     <datalist id="v2-rrhh"><option value="Somos Magma"/>{rrhhNames.map(n=><option key={n} value={n}/>)}</datalist>
