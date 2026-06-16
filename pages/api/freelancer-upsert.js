@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nombre, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad } = req.body
+  const { nombre, nombreOriginal, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
@@ -33,7 +33,9 @@ export default async function handler(req, res) {
     }
 
     const norm = v => String(v||'').trim().toLowerCase()
-    const filaExistente = rows.findIndex((row,i) => i>0 && norm(row[idx.nombre]) === norm(nombre))
+    // Buscamos por el nombre original (si viene de un rename) o por el nombre actual
+    const buscar = nombreOriginal || nombre
+    const filaExistente = rows.findIndex((row,i) => i>0 && norm(row[idx.nombre]) === norm(buscar))
 
     if (filaExistente > 0) {
       const fila = filaExistente + 1
@@ -48,10 +50,14 @@ export default async function handler(req, res) {
         set('dni', dni), set('cuit', cuit), set('banco', banco),
         set('alias', alias), set('cbu', cbu), set('fechaNac', fechaNac), set('nac', nacionalidad),
       ].filter(Boolean)
+      // Renombrar: si cambió el nombre, actualizar la columna Nombre Apellido
+      if (nombreOriginal && norm(nombreOriginal) !== norm(nombre) && idx.nombre !== -1) {
+        updates.push({ range: `RRHH!${colLetra(idx.nombre)}${fila}`, values: [[String(nombre).trim()]] })
+      }
       if (updates.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+          requestBody: { valueInputOption: 'RAW', data: updates }
         })
       }
       try {
@@ -82,7 +88,7 @@ export default async function handler(req, res) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'RRHH!A:K',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },
     })

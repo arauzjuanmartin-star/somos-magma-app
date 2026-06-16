@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SHEET_ID,
-      requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+      requestBody: { valueInputOption: 'RAW', data: updates }
     }))
 
     try {

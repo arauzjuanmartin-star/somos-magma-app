@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       if (updates.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+          requestBody: { valueInputOption: 'RAW', data: updates }
         })
       }
       try {
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'AGENCIAS!A:L',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },
     })

@@ -1405,7 +1405,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const prevMes=new Date(now.getFullYear(), now.getMonth()-1, 1)  // el 15 se paga el mes anterior
   const [mesIdx,setMesIdx]=useState(prevMes.getMonth()+1)  // 1-12
   const [anio,setAnio]=useState(prevMes.getFullYear())
-  const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null)
+  const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null), [mailModal,setMailModal]=useState(null)
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // proyectos del mes/año por Fecha Evento
@@ -1478,13 +1478,6 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     return `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${MESES_LARGO[mesIdx-1]} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   }
   function copiarDesc(persona){ navigator.clipboard?.writeText(mensajeDe(persona)); showToast('Mensaje copiado al portapapeles') }
-  function mailDe(persona){
-    const datos=rrhhByName[persona.nombre.trim()]||{}
-    const email=datos['Mail']||datos['Mail freelancer']||datos['Email']||''
-    if(!email){ showToast('Este freelancer no tiene mail cargado en RRHH','err'); return }
-    const asunto=`Facturación ${MESES_LARGO[mesIdx-1]} ${anio} — Somos Magma`
-    window.location.href=`mailto:${email}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(mensajeDe(persona))}`
-  }
 
   return <>
     <PageHead title="Pagos Staff" sub={`${MESES_LARGO[mesIdx-1]} ${anio} · ${lista.length} freelancers`}/>
@@ -1530,13 +1523,14 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
             ))}
             <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
               <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
-              <button onClick={()=>mailDe(persona)} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
+              <button onClick={()=>setMailModal({persona, datos:rrhhByName[persona.nombre.trim()]||{}})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
             </div>
           </div>}
         </div>
       })}
     </div>
     {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} showToast={showToast}/>}
   </>
 }
 
@@ -1841,6 +1835,7 @@ function Egresos({data, onRefresh, showToast}){
 // ============================ FREELANCER (alta / datos) ============================
 const RUBROS_DEFAULT=['Fotógrafo','Videógrafo','Editor','Filmmaker','Dirección de foto','Sonidista','Drone','Asistente','Productor','Motion','Colorista','Iluminador']
 function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved, showToast}){
+  const [nombreEdit,setNombreEdit]=useState(nombre||'')
   const [rubros,setRubros]=useState(()=>String(datos['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean))
   const [rubroInput,setRubroInput]=useState('')
   const fnInit=()=>{ const v=datos['Fecha de nac']||datos['Fecha de Nac']||''; return v?(String(v).includes('/')?dmyToISO(v):v):'' }
@@ -1851,9 +1846,10 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
   const addRubro=(t)=>{ const v=String(t||'').trim(); if(v&&!rubros.includes(v)) setRubros(rs=>[...rs,v]); setRubroInput('') }
   const campos=[['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['fechaNac','Fecha de nacimiento','date'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
   async function guardar(){
+    if(!String(nombreEdit).trim()){ showToast('El nombre no puede quedar vacío','err'); return }
     setSaving(true)
-    const body={ nombre, rubro:rubros.join(', '), ...form, fechaNac: form.fechaNac?isoToDMY(form.fechaNac):'' }
-    try{ const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');setSaving(false);return} showToast(`${String(nombre).split(' ')[0]} guardado`); onSaved&&onSaved() }
+    const body={ nombre:nombreEdit.trim(), nombreOriginal:nombre, rubro:rubros.join(', '), ...form, fechaNac: form.fechaNac?isoToDMY(form.fechaNac):'' }
+    try{ const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');setSaving(false);return} showToast(`${String(nombreEdit).split(' ')[0]} guardado`); onSaved&&onSaved() }
     catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'48px 20px',overflowY:'auto'}}>
@@ -1863,6 +1859,7 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
         <button onClick={onClose} style={{border:'none',background:'transparent',fontSize:20,color:T.ink3,cursor:'pointer',lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'18px 22px'}}>
+        <div style={{marginBottom:14}}><label style={lblV2}>Nombre y apellido</label><input value={nombreEdit} onChange={e=>setNombreEdit(e.target.value)} style={inpV2}/></div>
         {/* Rubro como etiquetas */}
         <label style={lblV2}>Rubro (etiquetas)</label>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
@@ -1886,6 +1883,68 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
       <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
         <button onClick={guardar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:600,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
+      </div>
+    </div>
+  </div>
+}
+
+// ============================ MAIL A STAFF (facturación) ============================
+function MailStaffModal({persona, datos={}, mesNombre, onClose, showToast}){
+  const [para,setPara]=useState(datos['Mail']||'')
+  const [cc,setCc]=useState([]), [ccInput,setCcInput]=useState('')
+  const [tipo,setTipo]=useState('factura')
+  const [facturarA,setFacturarA]=useState('Somos Magma SRL')
+  const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
+  const FACTURAR_OPC=['Somos Magma SRL','Sofia Grenier','Lucia Grenier']
+  const pend=persona.trabajos.filter(t=>!t.pagado)
+  const items=pend.map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}`).join('\n')
+  const tot=pend.reduce((s,t)=>s+t.precio,0)
+  const nombre=String(persona.nombre).split(' ')[0]
+  const cuerpo = tipo==='efectivo'
+    ? `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre}:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nEste pago es en EFECTIVO — no hace falta factura.\n\n¡Gracias!`
+    : `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nFacturá a nombre de: ${facturarA}\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
+  const addCc=(v)=>{ const x=String(v||'').trim(); if(x&&!cc.includes(x)) setCc(c=>[...c,x]); setCcInput('') }
+  function abrir(){
+    if(!para.trim()){ showToast('Falta el mail del freelancer','err'); return }
+    const asunto=`Facturación ${mesNombre} — Somos Magma`
+    const ccStr=cc.length?`&cc=${encodeURIComponent(cc.join(','))}`:''
+    window.location.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asunto)}${ccStr}&body=${encodeURIComponent(cuerpo)}`
+    onClose()
+  }
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',justifyContent:'center',overflowY:'auto',padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:560,background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 16px 50px rgba(0,0,0,0.18)',height:'fit-content'}}>
+      <div style={{padding:'18px 22px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><div style={{fontSize:16,fontWeight:700,color:T.ink}}>Mail a {persona.nombre}</div><div style={{fontSize:12,color:T.ink3,marginTop:2}}>{pend.length} trabajos · {fmt(tot)}</div></div>
+        <button onClick={onClose} style={{border:'none',background:'transparent',fontSize:20,color:T.ink3,cursor:'pointer',lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <label style={lblV2}>Para</label>
+        <input value={para} onChange={e=>setPara(e.target.value)} placeholder="mail del freelancer" style={{...inpV2,marginBottom:13}}/>
+        <label style={lblV2}>CC (opcional)</label>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:6}}>
+          {cc.map((c,i)=><span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:20,background:T.surfaceAlt,color:T.ink2,fontSize:12}}>{c}<button onClick={()=>setCc(cs=>cs.filter((_,j)=>j!==i))} style={{border:'none',background:'transparent',color:T.ink3,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>×</button></span>)}
+        </div>
+        <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCc(ccInput)}}} placeholder="Agregar mail y Enter" style={{...inpV2,marginBottom:6}}/>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+          {PRECARGADOS.filter(m=>!cc.includes(m)).map(m=><button key={m} onClick={()=>addCc(m)} style={{padding:'3px 9px',borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:11.5,cursor:'pointer'}}>+ {m}</button>)}
+        </div>
+        <label style={lblV2}>Tipo de pago</label>
+        <div style={{display:'flex',gap:8,marginBottom:tipo==='factura'?10:14}}>
+          {[['factura','Por factura'],['efectivo','Efectivo (sin factura)']].map(([k,l])=>(
+            <button key={k} onClick={()=>setTipo(k)} style={{flex:1,padding:'8px',borderRadius:9,fontSize:12.5,fontWeight:600,cursor:'pointer',border:`1px solid ${tipo===k?T.ink:T.border}`,background:tipo===k?T.ink:T.surface,color:tipo===k?'#fff':T.ink2}}>{l}</button>
+          ))}
+        </div>
+        {tipo==='factura' && <div style={{marginBottom:14}}>
+          <label style={lblV2}>Facturar a</label>
+          <input list="fact-opc" value={facturarA} onChange={e=>setFacturarA(e.target.value)} style={inpV2}/>
+          <datalist id="fact-opc">{FACTURAR_OPC.map(o=><option key={o} value={o}/>)}</datalist>
+        </div>}
+        <label style={lblV2}>Vista previa</label>
+        <textarea readOnly value={cuerpo} rows={8} style={{...inpV2,resize:'vertical',fontSize:12,fontFamily:MONO,color:T.ink2}}/>
+      </div>
+      <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={()=>{navigator.clipboard?.writeText(cuerpo);showToast('Mensaje copiado')}} style={{padding:'9px 16px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Copiar</button>
+        <button onClick={abrir} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:600,cursor:'pointer'}}>Abrir mail</button>
       </div>
     </div>
   </div>
