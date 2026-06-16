@@ -152,12 +152,22 @@ export default async function handler(req, res) {
       proyRow[8]  = fee                // Fee Final
       proyRow[9]  = ''                 // Diferencia (vs presu inicial)
       proyRow[10] = fee                // Fee Agencia (mismo que Fee Final inicialmente)
-      // Pedidos: 12 slots de 3 columnas (Pedido / Precio / Staff)
+      // Pedidos: copiar SOLO los base (no los adicionales opcionales).
+      // 'Es Adicional' (col BD, idx 55) es un CSV 1|0 alineado con los slots Pedido.
+      const esAdicArr = String(presuRow[55]||'').split('|')
+      const basePedidos = []
       for (let j = 0; j < 12; j++) {
-        proyRow[11 + j*3]     = presuRow[11 + j*2] || ''  // Pedido
-        proyRow[11 + j*3 + 1] = presuRow[12 + j*2] || ''  // Precio
-        proyRow[11 + j*3 + 2] = ''                         // Staff (se completa después)
+        const ped = presuRow[11 + j*2] || '', prc = presuRow[12 + j*2] || ''
+        if (!ped && !prc) continue
+        if (esAdicArr[j] === '1') continue   // adicional no tomado → no va al proyecto
+        basePedidos.push({ ped, prc })
       }
+      basePedidos.forEach((bp, k) => {
+        if (k >= 12) return
+        proyRow[11 + k*3]     = bp.ped
+        proyRow[11 + k*3 + 1] = bp.prc
+        proyRow[11 + k*3 + 2] = ''
+      })
       // Otros (slot 13)
       proyRow[47] = presuRow[35] || ''  // Otros
       proyRow[48] = presuRow[36] || ''  // Precio
