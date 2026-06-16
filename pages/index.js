@@ -1504,6 +1504,19 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     return `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${MESES_LARGO[mesIdx-1]} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   }
   function copiarDesc(persona){ navigator.clipboard?.writeText(mensajeDe(persona)); showToast('Mensaje copiado al portapapeles') }
+  async function marcarMailEnviado(persona){
+    try{ await fetch('/api/pago-staff-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({persona:persona.nombre, nros:persona.trabajos.map(t=>t.nro)})}); if(onRefresh) onRefresh() }catch(e){}
+  }
+  function subirFactura(persona){
+    const input=document.createElement('input'); input.type='file'; input.accept='application/pdf,image/*'
+    input.onchange=async()=>{ const file=input.files?.[0]; if(!file) return
+      const fd=new FormData(); fd.append('file',file,file.name); fd.append('persona',persona.nombre); fd.append('mes',mesLabel); fd.append('nros',persona.trabajos.map(t=>t.nro).join(','))
+      showToast('Subiendo factura…')
+      try{ const r=await fetch('/api/pago-staff-factura',{method:'POST',body:fd}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return} showToast('Factura guardada ✓'); if(onRefresh) onRefresh() }
+      catch(e){ showToast('Error de conexión','err') }
+    }
+    input.click()
+  }
 
   return <>
     <PageHead title="Pagos Staff" sub={`${MESES_LARGO[mesIdx-1]} ${anio} · ${lista.length} freelancers`}/>
@@ -1524,10 +1537,13 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       {lista.map((persona,i)=>{
         const abierto=open===persona.nombre, datos=rrhhByName[persona.nombre.trim()]||{}
         const estado = persona.totalPendiente===0 ? {c:T.pos,l:'Pagado'} : persona.totalPagado>0 ? {c:T.warn,l:'Parcial'} : {c:T.brand,l:'Pendiente'}
+        const nrosP=new Set(persona.trabajos.map(t=>String(t.nro).trim()))
+        let mailEnv=false, facturaURL=''
+        pagosPersistidos.forEach(r=>{ if(norm(r['Freelancer'])===norm(persona.nombre)&&nrosP.has(String(r['N° Presupuesto']||'').trim())){ if(String(r['Mail Enviado']||'').trim())mailEnv=true; if(String(r['Factura']||'').trim())facturaURL=r['Factura'] } })
         return <div key={i} style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
           <div onClick={()=>setOpen(abierto?null:persona.nombre)} style={{display:'flex', alignItems:'center', gap:14, padding:'14px 18px', cursor:'pointer'}}>
             <span style={{width:7,height:7,borderRadius:7,background:estado.c, flexShrink:0}}/>
-            <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink}}>{persona.nombre}</div><div style={{fontSize:11.5, color:T.ink3}}>{persona.trabajos.length} trabajos · {estado.l}</div></div>
+            <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{persona.trabajos.length} trabajos · {estado.l}</div></div>
             <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}</div></div>
             {persona.totalPendiente>0
               ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer', flexShrink:0}}>Pagar todo</button>
@@ -1547,16 +1563,19 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
                 <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink}}>{fmt(t.precio)}</span>
               </div>
             ))}
-            <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
+            <div style={{display:'flex', justifyContent:'flex-end', gap:6, marginTop:10, flexWrap:'wrap'}}>
               <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
               <button onClick={()=>setMailModal({persona, datos:rrhhByName[persona.nombre.trim()]||{}})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
+              {facturaURL
+                ? <a href={facturaURL} target="_blank" rel="noreferrer" style={{...miniBtn, color:T.pos, borderColor:T.pos}}>📄 Ver factura</a>
+                : <button onClick={()=>subirFactura(persona)} style={miniBtn}>⬆ Subir factura</button>}
             </div>
           </div>}
         </div>
       })}
     </div>
     {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
-    {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} cuentas={data.cuentas||[]} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} showToast={showToast}/>}
+    {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} cuentas={data.cuentas||[]} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} onSent={()=>marcarMailEnviado(mailModal.persona)} showToast={showToast}/>}
   </>
 }
 
@@ -1915,7 +1934,7 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
 }
 
 // ============================ MAIL A STAFF (facturación) ============================
-function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, showToast}){
+function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSent, showToast}){
   // Entidades fiscales (a quién factura el freelancer) con sus datos, desde CUENTAS
   const entidades={}; cuentas.forEach(c=>{ const ef=c['Entidad fiscal']; if(ef && !entidades[ef]) entidades[ef]={ titular:c['Titular']||'', datos:c['Datos transferencia adicionales']||'' } })
   const FACTURAR_OPC=Object.keys(entidades).length?Object.keys(entidades):['Somos Magma SRL']
@@ -1941,6 +1960,7 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, show
     const asunto=`Facturación ${mesNombre} — Somos Magma`
     const ccStr=cc.length?`&cc=${encodeURIComponent(cc.join(','))}`:''
     window.location.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asunto)}${ccStr}&body=${encodeURIComponent(cuerpo)}`
+    if(onSent) onSent()
     onClose()
   }
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',justifyContent:'center',overflowY:'auto',padding:'40px 20px'}}>
