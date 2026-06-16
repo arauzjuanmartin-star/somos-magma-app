@@ -808,15 +808,21 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
 
         {/* Adicionales opcionales */}
         {adicList.length>0 && <>
-          <div style={{fontSize:12.5, fontWeight:600, color:T.ink, margin:'14px 0 8px'}}>Adicionales opcionales <span style={{fontWeight:400, color:T.ink3}}>(no suman al total principal)</span></div>
-          {peds.map((p,i)=> p.adicional && (
-            <div key={p.id} style={{display:'grid', gridTemplateColumns:'1.5fr 110px 110px 36px', gap:8, marginBottom:7, alignItems:'center'}}>
-              <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Adicional" style={inpV2}/>
-              <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="costo" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-              <input type="number" value={p.precioCliente} onChange={e=>updPed(i,{precioCliente:e.target.value})} placeholder="precio cli." style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-              <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+          <div style={{fontSize:12.5, fontWeight:600, color:T.ink, margin:'14px 0 6px'}}>Adicionales opcionales <span style={{fontWeight:400, color:T.ink3}}>(no suman al total principal)</span></div>
+          <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 110px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 5px'}}>
+            <span>Adicional</span><span style={{textAlign:'right'}}>Costo (tuyo)</span><span style={{textAlign:'right'}}>Precio cliente</span><span/>
+          </div>
+          {peds.map((p,i)=> p.adicional && (()=>{ const costo=parseFloat(p.precio)||0, man=parseFloat(p.precioCliente)||0, cli=man>0?man:Math.round(costo*factor); return (
+            <div key={p.id} style={{marginBottom:8}}>
+              <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 110px 36px', gap:8, alignItems:'center'}}>
+                <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Adicional" style={inpV2}/>
+                <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="costo" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+                <input type="number" value={p.precioCliente} onChange={e=>updPed(i,{precioCliente:e.target.value})} placeholder="auto" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+                <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+              </div>
+              <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>En el PDF el cliente ve: <strong style={{color:T.brand}}>{fmt(cli)} + IVA</strong>{man<=0?' (auto, con tu margen — escribí un precio cliente para fijarlo)':''}</div>
             </div>
-          ))}
+          )})())}
         </>}
         <button onClick={()=>addPed(true)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginLeft:adicList.length>0?0:12}}>+ Agregar adicional opcional</button>
 
