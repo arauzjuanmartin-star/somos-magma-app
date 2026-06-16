@@ -1505,7 +1505,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
       {lista.length===0&&<Empty>Sin freelancers con trabajos este mes</Empty>}
       {lista.map((persona,i)=>{
-        const abierto=open===persona.nombre, datos=rrhhByName[persona.nombre.trim()]
+        const abierto=open===persona.nombre, datos=rrhhByName[persona.nombre.trim()]||{}
         const estado = persona.totalPendiente===0 ? {c:T.pos,l:'Pagado'} : persona.totalPagado>0 ? {c:T.warn,l:'Parcial'} : {c:T.brand,l:'Pendiente'}
         return <div key={i} style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
           <div onClick={()=>setOpen(abierto?null:persona.nombre)} style={{display:'flex', alignItems:'center', gap:14, padding:'14px 18px', cursor:'pointer'}}>
