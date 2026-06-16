@@ -895,6 +895,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const proyectos=data.proyectos||[]
   const rrhh=data.rrhh||[]
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
+  const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
   const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null)
   useEffect(()=>{ if(nav?.mod==='proyectos'){ setEstado(nav.filtro); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
@@ -942,14 +943,16 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} onRefresh={onRefresh} showToast={showToast}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} serviciosConocidos={serviciosConocidos} onRefresh={onRefresh} showToast={showToast}/>}
         </div>
       })}
     </div>
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, onRefresh, showToast}){
+function StaffEditor({p, num, rrhhNames, serviciosConocidos=[], onRefresh, showToast}){
+  const svcSet=new Set(serviciosConocidos.map(s=>String(s).toLowerCase().trim()))
+  const esSvcNuevo=v=>v && !svcSet.has(String(v).toLowerCase().trim())
   const total=parseMonto(p['Total ']||p['Total'])
   const init=()=>{ const arr=[]; for(let j=1;j<=20;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
   const [items,setItems]=useState(init)
@@ -979,13 +982,17 @@ function StaffEditor({p, num, rrhhNames, onRefresh, showToast}){
       <span>Servicio</span><span>Quién lo hace</span><span style={{textAlign:'right'}}>Monto</span>
     </div>
     {items.map((s,i)=>(
-      <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 120px', gap:10, marginBottom:8, alignItems:'center'}}>
-        <input value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
+      <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 120px', gap:10, marginBottom:8, alignItems:'start'}}>
+        <div>
+          <input list="v2-svcs" value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
+          {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
+        </div>
         <input list="v2-rrhh" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:T.border}}/>
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
       </div>
     ))}
     <datalist id="v2-rrhh"><option value="Somos Magma"/>{rrhhNames.map(n=><option key={n} value={n}/>)}</datalist>
+    <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
     <div style={{display:'flex', gap:24, marginTop:14, paddingTop:14, borderTop:`1px solid ${T.border}`, flexWrap:'wrap', alignItems:'center'}}>
