@@ -178,7 +178,9 @@ export default async function handler(req, res) {
     if (filasABorrar.length > 0) {
       filasABorrar.sort((a,b) => b - a)
       const metaPS = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
-      const psSheetId = metaPS.data.sheets.find(s => s.properties.title === 'PAGOS_STAFF').properties.sheetId
+      const psSheet = metaPS.data.sheets.find(s => /^pagos_staff$/i.test(s.properties.title))
+      if (!psSheet) throw new Error('No encuentro la solapa PAGOS_STAFF')
+      const psSheetId = psSheet.properties.sheetId
       const requests = filasABorrar.map(f => ({ deleteDimension: { range: { sheetId: psSheetId, dimension: 'ROWS', startIndex: f-1, endIndex: f } } }))
       await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests } })
     }

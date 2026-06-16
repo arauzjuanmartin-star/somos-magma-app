@@ -1033,7 +1033,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)}/>}
         </div>
       })}
     </div>
@@ -1077,8 +1077,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       // 3. Resync Calendar (staff + horario + ubicación en el evento)
       if(presu){ try{ await fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}) }catch(e){} }
       showToast(`#${num} · staff guardado${presu?' · Calendar actualizado':''}`)
-      if(onClose) onClose()
+      setSaving(false)
       if(onRefresh) onRefresh()
+      if(onClose) onClose()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
