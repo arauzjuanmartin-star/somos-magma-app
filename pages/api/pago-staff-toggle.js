@@ -3,6 +3,24 @@ import { requireAuth } from '../../lib/auth-helpers'
 
 const colLetra = col => { let s='',c=col+1; while(c>0){c--;s=String.fromCharCode(65+(c%26))+s;c=Math.floor(c/26);} return s }
 
+// Ajusta el saldo de una cuenta (+/- delta). Best-effort, no bloquea el pago si falla.
+async function ajustarCuenta(sheets, SHEET_ID, nombreCuenta, delta) {
+  if (!nombreCuenta || !delta) return
+  try {
+    const rC = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:H' })
+    const rows = rC.data.values || [], ch = rows[0] || []
+    const iN = ch.indexOf('Nombre'), iS = ch.indexOf('Saldo actual'), iF = ch.indexOf('Última actualización')
+    if (iN === -1 || iS === -1) return
+    const idx = rows.findIndex((r, i) => i > 0 && String(r[iN]||'').trim() === String(nombreCuenta).trim())
+    if (idx <= 0) return
+    const saldo = parseFloat(String(rows[idx][iS]||'0').replace(/[^\d.-]/g,'')) || 0
+    const d = new Date()
+    const data = [{ range: `CUENTAS!${colLetra(iS)}${idx+1}`, values: [[saldo + delta]] }]
+    if (iF !== -1) data.push({ range: `CUENTAS!${colLetra(iF)}${idx+1}`, values: [[`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`]] })
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data } })
+  } catch (e) { console.error('ajustarCuenta:', e.message) }
+}
+
 // Esquema REAL de PAGOS_STAFF (2026):
 // A Fecha Pago | B Freelancer | C Mes Referencia | D N° Presupuesto | E Proyecto
 // F Servicio | G Monto Adeudado | H Monto Pagado | I Tipo | J Cuenta | K Estado | L Notas
@@ -50,6 +68,11 @@ export default async function handler(req, res) {
     const montoN = Number(monto) || 0
     const estado = pagado ? 'Pagado' : 'Pendiente'
 
+    // Estado/cuenta previos (para ajustar el saldo sin descontar dos veces)
+    const PAG = v => ['PAGADO','SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
+    const wasPaid = rowIdx > 0 ? PAG(rows[rowIdx][iEstado]) : false
+    const cuentaPrevia = rowIdx > 0 ? (rows[rowIdx][iCuenta]||'') : ''
+
     if (rowIdx > 0) {
       const sheetRow = rowIdx + 1
       const updates = [
@@ -85,12 +108,16 @@ export default async function handler(req, res) {
       })
     }
 
+    // Ajustar saldo de la cuenta: descontar al pagar (nuevo), devolver al desmarcar
+    if (pagado && !wasPaid && montoN > 0) await ajustarCuenta(sheets, SHEET_ID, cuenta, -montoN)
+    else if (!pagado && wasPaid && montoN > 0) await ajustarCuenta(sheets, SHEET_ID, cuentaPrevia, montoN)
+
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, pagado?'pago-trabajo-pagado':'pago-trabajo-desmarcado', 'PAGOS_STAFF', `${mes} ${persona} #${nroProyecto||'?'} ${pedido||''}`, `cuenta=${cuenta||'-'} monto=${monto||'-'}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, pagado?'pago-trabajo-pagado':'pago-trabajo-desmarcado', 'PAGOS_STAFF', `${mes} ${persona} #${nroProyecto||'?'} ${pedido||''}`, `cuenta=${cuenta||cuentaPrevia||'-'} monto=${monto||'-'}`]] },
       })
     } catch (e) {}
 
