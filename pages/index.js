@@ -1431,7 +1431,9 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const prevMes=new Date(now.getFullYear(), now.getMonth()-1, 1)  // el 15 se paga el mes anterior
   const [mesIdx,setMesIdx]=useState(prevMes.getMonth()+1)  // 1-12
   const [anio,setAnio]=useState(prevMes.getFullYear())
+  const cuentaOpts=[...new Set((data.cuentas||[]).filter(c=>{const a=String(c['Activa']||'').toUpperCase();return a==='SÍ'||a==='SI'||a==='TRUE'||c['Activa']===true}).map(c=>c['Nombre']).filter(Boolean))]
   const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null), [mailModal,setMailModal]=useState(null)
+  const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // proyectos del mes/año por Fecha Evento
@@ -1474,7 +1476,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 
   const rrhhByName={}; rrhh.forEach(r=>{ rrhhByName[String(r['Nombre Apellido']||r['Nombre']||'').trim()]=r })
 
-  const postPago=(persona,t,pagado)=>fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:t.precio, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:'' })}).then(r=>r.json().catch(()=>({})))
+  const postPago=(persona,t,pagado)=>fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:t.precio, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:pagado?cuentaPago:'' })}).then(r=>r.json().catch(()=>({})))
 
   async function togglePago(persona, t, pagado){
     const k=t.key
@@ -1489,7 +1491,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     const pend=persona.trabajos.filter(t=>!t.pagado)
     if(!pend.length) return
     const nombre=persona.nombre.split(' ')[0]
-    if(!window.confirm(`Pagar TODO lo de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${pend.length} trabajos = ${fmt(persona.totalPendiente)}\n\n¿Confirmás?`)) return
+    if(!cuentaPago){ showToast('Elegí desde qué cuenta pagás (arriba)','err'); return }
+    if(!window.confirm(`Pagar TODO lo de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${pend.length} trabajos = ${fmt(persona.totalPendiente)}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
     setOverride(o=>{const n={...o}; pend.forEach(t=>n[t.key]=true); return n})
     try{
       for(const t of pend){ const j=await postPago(persona,t,true); if(j&&j.error) showToast(`Error en ${t.pedido}: ${j.error}`,'err') }
@@ -1530,6 +1533,11 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a) }} style={navBtn}>→</button>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{flex:'1 1 200px', minWidth:160, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
       {[['todos','Todos'],['pend','Pendientes'],['pag','Pagados']].map(([k,l])=><button key={k} onClick={()=>setFiltro(k)} style={{padding:'7px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filtro===k?T.ink:T.border}`, background:filtro===k?T.ink:T.surface, color:filtro===k?'#fff':T.ink2}}>{l}</button>)}
+    </div>
+    <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:14}}>
+      <span style={{fontSize:12.5, color:T.ink2, fontWeight:500}}>Pagás desde:</span>
+      <select value={cuentaPago} onChange={e=>setCuentaPago(e.target.value)} style={{...selectStyle, minWidth:180}}>{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>
+      <span style={{fontSize:11.5, color:T.ink3}}>queda registrado en cada pago</span>
     </div>
 
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
