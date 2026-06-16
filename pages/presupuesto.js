@@ -288,6 +288,9 @@ export default function Presupuesto() {
   const setSvc = (i,v) => { const s=[...form.servicios]; s[i]=v; setF('servicios',s) }
   const addSvc = () => setF('servicios',[...form.servicios,''])
   const delSvc = i => setF('servicios', form.servicios.filter((_,j)=>j!==i))
+  const updAdic = (i,k,v) => setForm(p => ({...p, adicionales:(p.adicionales||[]).map((a,j)=>j===i?{...a,[k]:v}:a)}))
+  const addAdic = () => setForm(p => ({...p, adicionales:[...(p.adicionales||[]),{nombre:'',precio:''}]}))
+  const delAdic = i => setForm(p => ({...p, adicionales:(p.adicionales||[]).filter((_,j)=>j!==i)}))
 
   const S = {
     inp: { background:'#111', border:'0.5px solid #2A2A2A', borderRadius:6, color:'#F0F0F0', fontSize:13, padding:'9px 12px', outline:'none', width:'100%', fontFamily:'inherit', boxSizing:'border-box' },
@@ -493,9 +496,7 @@ export default function Presupuesto() {
           const precioW = doc.getTextWidth(precioTxt)
           const nombreLines = doc.splitTextToSize(nombre, W-M*2 - precioW - 8)
           doc.text(nombreLines[0], M, y)
-          doc.setFont('courier','normal'); doc.setTextColor(...C.azul)
           doc.text(precioTxt, W-M, y, {align:'right'})
-          doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
           y += 5.5
         }
         doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
@@ -668,6 +669,19 @@ export default function Presupuesto() {
           <div style={S.card}>
             <div style={{...S.sec,color:'#555'}}>Observaciones / notas extra</div>
             <textarea style={{...S.inp,minHeight:60,resize:'vertical'}} value={form.observaciones} onChange={e=>setF('observaciones',e.target.value)} placeholder="Ej: Evento de 3 días Hotel AMBA · 1 día 9am a 18hs 21hs a 24hs · 2 día..."/>
+          </div>
+
+          <div style={S.card}>
+            <div style={{...S.sec,color:'#1543F8'}}>Adicionales opcionales</div>
+            <div style={{fontSize:11,color:'#555',marginBottom:8}}>Se cotizan aparte. Aparecen debajo del Valor total en el PDF.</div>
+            {(form.adicionales||[]).map((a,i)=>(
+              <div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
+                <input style={{...S.inp,flex:1}} value={a.nombre} onChange={e=>updAdic(i,'nombre',e.target.value)} placeholder="Ej: Edición video 60s"/>
+                <input style={{...S.inp,width:120,fontFamily:'monospace'}} type="number" value={a.precio} onChange={e=>updAdic(i,'precio',e.target.value)} placeholder="precio"/>
+                <button onClick={()=>delAdic(i)} style={{width:28,height:36,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',borderRadius:6,fontSize:15}}>×</button>
+              </div>
+            ))}
+            <button onClick={addAdic} style={{padding:'7px',borderRadius:6,border:'0.5px dashed #1543F840',background:'transparent',color:'#1543F8',fontSize:11,cursor:'pointer'}}>+ Agregar adicional</button>
           </div>
 
           <div style={S.card}>
@@ -861,9 +875,9 @@ function PreviewPDF({form, clausulas}) {
     {/* ADICIONALES (debajo del total) + total con adicionales */}
     {(form.adicionales||[]).length > 0 && (()=>{ const suma=form.adicionales.reduce((s,a)=>s+(Number(a.precio)||0),0); const totalAdic=(Number(form.precioTotal)||0)+suma; return <>
       <div style={{...S.h2,fontSize:11,marginTop:16,marginBottom:6,color:C.azul}}>Adicionales opcionales</div>
-      {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'2px 0'}}>
-        <span style={{fontSize:11,color:C.texto}}>{prettifySvc(a.nombre)}</span>
-        <span style={{...S.mono,fontSize:11,color:C.azul}}>${fmt$(a.precio)} + IVA</span>
+      {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'3px 0'}}>
+        <span style={{fontSize:11.5,color:C.texto}}>{prettifySvc(a.nombre)}</span>
+        <span style={{fontSize:11.5,color:C.texto,whiteSpace:'nowrap'}}>${fmt$(a.precio)} + IVA</span>
       </div>)}
       <div style={{fontSize:9,color:C.gris,margin:'4px 0 10px',fontStyle:'italic'}}>Estos servicios se cotizan aparte. Indicanos cuáles querés sumar.</div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:4, gap:10}}>
