@@ -1015,16 +1015,19 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} serviciosConocidos={serviciosConocidos} onRefresh={onRefresh} showToast={showToast}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} onRefresh={onRefresh} showToast={showToast}/>}
         </div>
       })}
     </div>
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, serviciosConocidos=[], onRefresh, showToast}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], onRefresh, showToast}){
   const svcSet=new Set(serviciosConocidos.map(s=>String(s).toLowerCase().trim()))
   const esSvcNuevo=v=>v && !svcSet.has(String(v).toLowerCase().trim())
+  const rrhhMap={}; rrhh.forEach(r=>{ const n=normTxt(r['Nombre Apellido']||r['Nombre']); if(n) rrhhMap[n]=r })
+  const esFreelancerNuevo=v=>{ const n=normTxt(v); return n && n!=='somos magma' && !rrhhMap[n] }
+  const [freel,setFreel]=useState(null)  // nombre del freelancer a completar
   const total=parseMonto(p['Total ']||p['Total'])
   const init=()=>{ const arr=[]; for(let j=1;j<=20;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
   const [items,setItems]=useState(init)
@@ -1059,7 +1062,10 @@ function StaffEditor({p, num, rrhhNames, serviciosConocidos=[], onRefresh, showT
           <input list="v2-svcs" value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
           {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
         </div>
-        <input list="v2-rrhh" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:T.border}}/>
+        <div>
+          <input list="v2-rrhh" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
+          {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
+        </div>
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
       </div>
     ))}
@@ -1076,6 +1082,7 @@ function StaffEditor({p, num, rrhhNames, serviciosConocidos=[], onRefresh, showT
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
     </div>
+    {freel && <FreelancerModal nombre={freel} datos={{}} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </div>
 }
 function Mini({label,val,color}){ return <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{label}</div><div style={{fontSize:14, fontFamily:MONO, color:color||T.ink, marginTop:2}}>{val}</div></div> }
@@ -1326,7 +1333,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const prevMes=new Date(now.getFullYear(), now.getMonth()-1, 1)  // el 15 se paga el mes anterior
   const [mesIdx,setMesIdx]=useState(prevMes.getMonth()+1)  // 1-12
   const [anio,setAnio]=useState(prevMes.getFullYear())
-  const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({})
+  const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null)
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // proyectos del mes/año por Fecha Evento
@@ -1436,9 +1443,11 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
               : <span style={{padding:'8px 14px', fontSize:12, color:T.pos, fontWeight:600, flexShrink:0}}>✓ Pagado</span>}
           </div>
           {abierto && <div style={{borderTop:`1px solid ${T.border}`, background:T.surfaceAlt, padding:'12px 18px 16px'}}>
-            {datos && <div style={{display:'flex', gap:20, flexWrap:'wrap', padding:'4px 0 12px', marginBottom:8, borderBottom:`1px solid ${T.border}`}}>
-              {[['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Alias',datos['Alias']],['CBU',datos['CBU']],['Banco',datos['Banco']]].filter(x=>x[1]).map(([k,v])=><div key={k}><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:12, color:T.ink, fontFamily:MONO, marginTop:2}}>{v}</div></div>)}
-            </div>}
+            <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start', padding:'4px 0 12px', marginBottom:8, borderBottom:`1px solid ${T.border}`}}>
+              {[['Rubro',datos['Rubro']],['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=><div key={k}><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:12, color:T.ink, fontFamily:MONO, marginTop:2}}>{v}</div></div>)}
+              <div style={{flex:1}}/>
+              <button onClick={()=>setFreelEdit({nombre:persona.nombre, datos})} style={{...miniBtn, alignSelf:'center'}}>{datos&&Object.keys(datos).length?'✎ Editar datos':'+ Completar datos'}</button>
+            </div>
             {persona.totalPendiente>0 && <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Tildá solo si es un <strong style={{color:T.ink2}}>adelanto</strong> (pagás algunos). Para el pago del mes completo, usá <strong style={{color:T.pos}}>Pagar todo</strong>.</div>}
             {persona.trabajos.map((t,j)=>(
               <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1}}>
@@ -1455,6 +1464,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
         </div>
       })}
     </div>
+    {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
@@ -1754,6 +1764,36 @@ function Egresos({data, onRefresh, showToast}){
     <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):null}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=><Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${p['Cuota nro']}/${p['Cuotas total']}`} monto={parseMonto(p['Monto cuota'])}/>):null}</Sec>
   </>
+}
+
+// ============================ FREELANCER (alta / datos) ============================
+function FreelancerModal({nombre, datos={}, onClose, onSaved, showToast}){
+  const [form,setForm]=useState(()=>({ rubro:datos['Rubro']||'', celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'' }))
+  const [saving,setSaving]=useState(false)
+  const existe = datos && Object.keys(datos).length>0
+  const campos=[['rubro','Rubro'],['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
+  async function guardar(){
+    setSaving(true)
+    try{ const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre, ...form})}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');setSaving(false);return} showToast(`${String(nombre).split(' ')[0]} guardado`); onSaved&&onSaved() }
+    catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'48px 20px',overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 16px 50px rgba(0,0,0,0.15)',height:'fit-content'}}>
+      <div style={{padding:'18px 22px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><div style={{fontSize:16,fontWeight:700,color:T.ink}}>{existe?'Datos del freelancer':'Nuevo freelancer'}</div><div style={{fontSize:12,color:T.ink3,marginTop:2}}>{nombre}</div></div>
+        <button onClick={onClose} style={{border:'none',background:'transparent',fontSize:20,color:T.ink3,cursor:'pointer',lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px',display:'flex',flexWrap:'wrap',gap:12}}>
+        {campos.map(([k,l])=>(
+          <div key={k} style={{flex:'1 1 45%',minWidth:160}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
+        ))}
+      </div>
+      <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:600,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
+      </div>
+    </div>
+  </div>
 }
 
 // ============================ BUSCADOR GLOBAL (⌘K) ============================
