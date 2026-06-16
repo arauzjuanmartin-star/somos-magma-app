@@ -347,7 +347,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
   useEffect(()=>{ if(nav?.mod==='presupuestos'){ setF(nav.filtro); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false)
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null)
 
   async function cambiarEstado(id, nuevo, actual){
     if(String(nuevo).toUpperCase()===String(actual||'').toUpperCase()) return
@@ -423,9 +423,9 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||<em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}</span>
             <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
-            <EstadoSelect value={p['Estado']} onChange={nuevo=>cambiarEstado(id, nuevo, p['Estado'])}/>
+            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
           </div>
-          {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)}/>}
+          {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)}/>}
         </div>
       })}
     </div>
@@ -433,6 +433,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     {editing && <EditarModal p={editing} data={data} onClose={()=>setEditing(null)} showToast={showToast}
       onSaved={(id,cambios)=>{ setRows(rs=>rs.map(r=>String(r['Columna 1'])===String(id)?{...r,...cambios}:r)); setEditing(null); if(onRefresh) onRefresh() }}/>}
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
+    {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
   </>
 }
 
@@ -511,7 +512,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   </div>
 }
 
-function DetallePresupuesto({p, id, onEdit}){
+function DetallePresupuesto({p, id, onEdit, onRepresupuestar}){
   const servicios=[]
   for(let j=1;j<=12;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
@@ -548,6 +549,7 @@ function DetallePresupuesto({p, id, onEdit}){
         </div>
         <div style={{display:'flex', gap:8, marginTop:14}}>
           <button onClick={onEdit} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Editar datos</button>
+          <button onClick={onRepresupuestar} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Represupuestar</button>
           <a href={`/presupuesto?nro=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer" style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:500, textDecoration:'none'}}>Ver PDF →</a>
         </div>
       </div>
@@ -573,12 +575,54 @@ const SVCS_LIST=[
   {n:'Model',p:0,fee:false},{n:'Catering',p:0,fee:false},{n:'Otros',p:0,fee:false},
 ]
 const isoToDMY = iso => { if(!iso) return ''; const [y,m,d]=String(iso).split('-'); return d&&m&&y?`${d}/${m}/${y}`:'' }
+const dmyToISO = s => { const p=String(s||'').split('/'); if(p.length!==3) return ''; const y=p[2].length===4?p[2]:'20'+p[2]; return `${y}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` }
+const parseHorarioStr = s => { const m=String(s||'').match(/(\d{1,2})[:.]?(\d{0,2})\s*(?:a|hasta|-)\s*(\d{1,2})[:.]?(\d{0,2})/i); if(!m) return {h1:'',h2:''}; const pad=n=>String(n).padStart(2,'0'); return {h1:pad(parseInt(m[1]))+':'+(m[2]?pad(parseInt(m[2])):'00'), h2:pad(parseInt(m[3]))+':'+(m[4]?pad(parseInt(m[4])):'00')} }
+// Lee los servicios del presupuesto original (para represupuestar) preservando fee/adicional/precio cliente
+const readPedidosOrig = p => {
+  if(!p) return []
+  const feeFlags=String(p['Fee Servicios']||'').split('|')
+  const adicFlags=String(p['Es Adicional']||'').split('|')
+  const precioCli=String(p['Precio Cliente Manual']||'').split('|')
+  const out=[]; let idx=0
+  for(let i=1;i<=12;i++){
+    const svc=p['Pedido '+i]||(i===1?p['Pedido']:'')||''
+    const precio=parseMonto(p['Precio '+i]||(i===1?p['Precio']:''))
+    if(svc||precio>0){
+      const fl=feeFlags[idx]
+      const feeAg=fl==='0'?false:fl==='1'?true:(SVCS_LIST.find(s=>s.n===svc)?.fee ?? true)
+      const adicional=adicFlags[idx]==='1'
+      out.push({id:idx+1, svc, precio:String(precio||''), feeAg, manual:false, adicional, precioCliente:adicional?(precioCli[idx]||''):''})
+      idx++
+    }
+  }
+  return out
+}
 const semaforo = pct => pct>=50?{c:T.pos,l:'sano'}:pct>=35?{c:T.warn,l:'aceptable'}:{c:T.brand,l:'bajo'}
 
-function NuevoPresupuesto({data, onClose, onGuardado, showToast}){
+function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const hoyISO = new Date().toISOString().slice(0,10)
-  const [form,setForm]=useState({ fp:hoyISO, fechaMode:'dia', fe1:'', feIni:'', feFin:'', feMulti:'', agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'' })
-  const [peds,setPeds]=useState([{id:1,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}])
+  const isRep = !!initialData
+  const tipoOrig = String(initialData?.['Tipo Fechas']||'').toLowerCase().trim() || 'dia'
+  const adicOrig = String(initialData?.['Fechas Adicionales']||'').trim()
+  const horasOrig = parseHorarioStr(initialData?.['Horario'])
+  const ajusteOrig = parseMonto(initialData?.['Ajuste'])
+  const [form,setForm]=useState(isRep ? {
+    fp:hoyISO,
+    fechaMode:(tipoOrig==='rango'||tipoOrig==='multi')?tipoOrig:'dia',
+    fe1:dmyToISO(initialData['Fecha Evento']),
+    feIni: tipoOrig==='rango'?dmyToISO(initialData['Fecha Evento']):'',
+    feFin: tipoOrig==='rango'&&adicOrig?dmyToISO(adicOrig):'',
+    feMulti: tipoOrig==='multi'?adicOrig.split('|').filter(Boolean).join(', '):'',
+    agencia:initialData['Agencia']||'', cliente:initialData['Cliente']||'', proyecto:initialData['Proyecto']||'',
+    contacto:initialData['Contacto']||'', pm:initialData['PM Interno']||'',
+    plazo:String(initialData['Plazo']||'0').replace(/[^\d]/g,'')||'0',
+    interes:String(initialData['Interes %']||'0').replace(/[^\d.]/g,'')||'0',
+    gan:parseMonto(initialData['Impuesto a las ganancias'])>0, iibb:parseMonto(initialData['IIBB'])>0,
+    tajuste:ajusteOrig<0?'-1':'1', ajuste:String(Math.abs(ajusteOrig)||'0'),
+    observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
+    ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
+  } : { fp:hoyISO, fechaMode:'dia', fe1:'', feIni:'', feFin:'', feMulti:'', agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
+  const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
 
@@ -618,6 +662,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast}){
   const falta=[]; if(!form.cliente.trim())falta.push('Cliente'); if(!form.proyecto.trim())falta.push('Proyecto'); if(!form.pm.trim())falta.push('PM'); if(!baseList.some(p=>p.svc.trim()))falta.push('un servicio')
   const fechaOK = form.fechaMode==='dia'?form.fe1:form.fechaMode==='rango'?(form.feIni&&form.feFin):form.fe1
   if(!fechaOK)falta.push('Fecha evento')
+  if(isRep && !String(form.motivo||'').trim())falta.push('motivo')
   const puedeGuardar = falta.length===0 && !saving
 
   async function guardar(){
@@ -652,7 +697,12 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast}){
       const r=await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j=await r.json()
       if(!j.ok){ showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
-      showToast(`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
+      // Represupuestar: marcar el original como REPRESUPUESTADO (con motivo)
+      if(isRep){
+        try{ await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'], estado:'REPRESUPUESTADO', motivo:form.motivo})}) }
+        catch(e){ showToast('Nuevo creado, pero no pude marcar el original — revisá','err') }
+      }
+      showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -661,11 +711,16 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast}){
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'32px 20px'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:900, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'18px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, background:T.surface, borderRadius:'16px 16px 0 0', zIndex:2}}>
-        <div style={{fontSize:17, fontWeight:700, color:T.ink}}>Nuevo presupuesto</div>
+        <div style={{fontSize:17, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'}</div>
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
 
       <div style={{padding:'20px 24px'}}>
+        {isRep && <div style={{background:T.brandSoft, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 14px', marginBottom:16}}>
+          <div style={{fontSize:12, color:T.ink2, marginBottom:8}}>Se crea una <strong>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
+          <label style={{...lblV2, color:T.brand}}>Motivo del represupuesto *</label>
+          <input value={form.motivo||''} onChange={e=>upd('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente…" style={{...inpV2, borderColor:form.motivo?T.border:T.brand}} autoFocus/>
+        </div>}
         {/* Datos */}
         <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
           {colP('Agencia (quién paga)','agencia',{list:'np-ag', ph:'Directo si no hay', datalist:<datalist id="np-ag">{ags.map(a=><option key={a} value={a}/>)}</datalist>})}
@@ -763,7 +818,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast}){
           <div style={{flex:1}}/>
           {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
           <button onClick={onClose} style={{padding:'10px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-          <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.ink3, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':'Crear presupuesto'}</button>
+          <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.ink3, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
         </div>
       </div>
     </div>
