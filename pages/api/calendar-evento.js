@@ -143,6 +143,27 @@ export default async function handler(req, res) {
     if (horario) descripcionPartes.push(`⏰ Horario: ${horario}`)
     if (ubicacion) descripcionPartes.push(`📍 Ubicación: ${ubicacion}`)
     if (contactoLugar) descripcionPartes.push(`👤 Contacto en el lugar: ${contactoLugar}`)
+
+    // Staff asignado (desde PROYECTOS) — para que en el Calendar se vea quién va
+    if (accion === 'aprobar') {
+      try {
+        const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
+        const pHeaders = rProy.data.values?.[0] || []
+        const pCol = pHeaders.indexOf('N° presupuesto')
+        const pFila = (rProy.data.values || []).slice(1).find(r => String(r[pCol]||'').trim() === String(num).trim())
+        if (pFila) {
+          const staffList = []
+          pHeaders.forEach((h, i) => {
+            const ht = String(h||'').trim()
+            if ((ht === 'Staff' || /^Staff \d+$/.test(ht)) && pFila[i]) {
+              const nombre = String(pFila[i]).trim()
+              if (nombre && nombre !== 'Somos Magma') staffList.push(nombre)
+            }
+          })
+          if (staffList.length) descripcionPartes.push(`🎥 Staff: ${[...new Set(staffList)].join(', ')}`)
+        }
+      } catch (e) { /* no bloquea */ }
+    }
     descripcionPartes.push(
       `Estado: ${accion === 'aprobar' ? 'APROBADO ✓' : 'EN ESPERA'}`,
       '',

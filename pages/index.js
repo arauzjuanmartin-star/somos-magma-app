@@ -855,12 +855,19 @@ const dayKey = d => d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
 const normTxt = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
 
 function Calendario({data, onRefresh, showToast}){
-  const proyectos=data.proyectos||[], presus=data.presupuestos||[]
+  const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]
   const now=new Date()
   const [ref,setRef]=useState({a:now.getFullYear(), m:now.getMonth()})
   const [diaSel,setDiaSel]=useState(null)
+  const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
+  const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
+  const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
+  const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
   const presusByNum={}; presus.forEach(p=>{presusByNum[String(p['Columna 1']||'').trim()]=p})
+  const proyByNum={}; proyectos.forEach(p=>{proyByNum[String(p['N° presupuesto']||'').trim()]=p})
+  // Abrir el cargador de staff apenas el proyecto exista (después de aprobar)
+  useEffect(()=>{ if(pendingStaff){ const proy=proyByNum[String(pendingStaff).trim()]; if(proy){ setStaffModal({proy, presu:presusByNum[String(pendingStaff).trim()]}); setPendingStaff(null) } } /* eslint-disable-next-line */ },[data.proyectos, pendingStaff])
   const aprobadosPorDia={}, enEsperaPorDia={}
   proyectos.forEach(p=>{ const presu=presusByNum[String(p['N° presupuesto']||'').trim()]; fechasDelEvento(p['Fecha Evento'], presu?.['Tipo Fechas'], presu?.['Fechas Adicionales']).forEach(f=>{ const k=dayKey(f); (aprobadosPorDia[k]=aprobadosPorDia[k]||[]).push(p) }) })
   presus.forEach(p=>{ if(String(p['Estado']||'').toUpperCase()!=='EN ESPERA') return; fechasDelEvento(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales']).forEach(f=>{ const k=dayKey(f); (enEsperaPorDia[k]=enEsperaPorDia[k]||[]).push(p) }) })
@@ -883,7 +890,7 @@ function Calendario({data, onRefresh, showToast}){
 
   async function setEstado(num, estado){
     if(estado!=='APROBADO' && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
-    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(onRefresh) onRefresh() }catch(e){showToast('Error de conexión','err')}
+    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh() }catch(e){showToast('Error de conexión','err')}
   }
   const staffDe=p=>{ const out=[]; for(let j=1;j<=20;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; if(s) out.push({persona:s, pedido:ped}) } return out }
   const esHoy=d=>d&&dayKey(d)===dayKey(now)
@@ -935,7 +942,8 @@ function Calendario({data, onRefresh, showToast}){
               {staff.length===0
                 ? <div style={{fontSize:11.5, color:T.warn, marginTop:6, fontWeight:500}}>⚠ Sin staff cargado todavía</div>
                 : <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}><span style={{color:T.ink3}}>Staff:</span> {staff.map(s=>s.persona).join(', ')}</div>}
-              <div style={{display:'flex', gap:7, marginTop:9}}>
+              <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
+                <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
               </div>
@@ -959,6 +967,15 @@ function Calendario({data, onRefresh, showToast}){
         </>}
       </div>
     </div>
+    {staffModal && <div onClick={()=>setStaffModal(null)} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:680, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content', overflow:'hidden'}}>
+        <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Cargar staff · #{staffModal.proy['N° presupuesto']}</div>
+          <button onClick={()=>setStaffModal(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        </div>
+        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
+      </div>
+    </div>}
   </>
 }
 
@@ -968,6 +985,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const rrhh=data.rrhh||[]
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
+  const presuByNum={}; (data.presupuestos||[]).forEach(p=>{presuByNum[String(p['Columna 1']||'').trim()]=p})
   const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null)
   useEffect(()=>{ if(nav?.mod==='proyectos'){ if(nav.filtro)setEstado(nav.filtro); if(nav.q){setQ(nav.q); setEstado('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
@@ -1015,14 +1033,14 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} onRefresh={onRefresh} showToast={showToast}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast}/>}
         </div>
       })}
     </div>
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], onRefresh, showToast}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, onRefresh, showToast, onClose}){
   const svcSet=new Set(serviciosConocidos.map(s=>String(s).toLowerCase().trim()))
   const esSvcNuevo=v=>v && !svcSet.has(String(v).toLowerCase().trim())
   const rrhhMap={}; rrhh.forEach(r=>{ const n=normTxt(r['Nombre Apellido']||r['Nombre']); if(n) rrhhMap[n]=r })
@@ -1032,6 +1050,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], onRefre
   const init=()=>{ const arr=[]; for(let j=1;j<=20;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
   const [items,setItems]=useState(init)
   const [saving,setSaving]=useState(false)
+  // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
+  const hOrig=parseHorarioStr(presu?.['Horario'])
+  const [horaIni,setHoraIni]=useState(hOrig.h1), [horaFin,setHoraFin]=useState(hOrig.h2), [ubicacion,setUbicacion]=useState(presu?.['Ubicación']||'')
   const upd=(i,campo,val)=>setItems(it=>it.map((x,j)=>j===i?{...x,[campo]:val}:x))
   const addRow=()=>setItems(it=>[...it,{pedido:'',quien:'',precio:0}])
 
@@ -1041,9 +1062,23 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], onRefre
 
   async function guardar(){
     setSaving(true)
-    try{ const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido}))})})
+    try{
+      // 1. Horario/ubicación → al presupuesto (el Calendar los lee de ahí)
+      if(presu){
+        const horario=(horaIni&&horaFin)?`${horaIni} a ${horaFin} hs`:''
+        const cambios={}
+        if(horario!==(presu['Horario']||'')) cambios['Horario']=horario
+        if(ubicacion!==(presu['Ubicación']||'')) cambios['Ubicación']=ubicacion
+        if(Object.keys(cambios).length) await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, cambios})})
+      }
+      // 2. Staff → PROYECTOS
+      const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido}))})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
-      showToast(`#${num} · staff guardado`); if(onRefresh) onRefresh()
+      // 3. Resync Calendar (staff + horario + ubicación en el evento)
+      if(presu){ try{ await fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}) }catch(e){} }
+      showToast(`#${num} · staff guardado${presu?' · Calendar actualizado':''}`)
+      if(onClose) onClose()
+      if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -1053,6 +1088,16 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], onRefre
         <div key={k}><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:2}}>{v}</div></div>
       ))}
     </div>
+    {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
+      <div><label style={lblV2}>Horario (va al Calendar)</label>
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          <input type="time" value={horaIni} onChange={e=>setHoraIni(e.target.value)} style={{...inpV2, width:'auto'}}/>
+          <span style={{fontSize:13, color:T.ink3}}>a</span>
+          <input type="time" value={horaFin} onChange={e=>setHoraFin(e.target.value)} style={{...inpV2, width:'auto'}}/>
+        </div>
+      </div>
+      <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
+    </div>}
     <div style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 120px', gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
       <span>Servicio</span><span>Quién lo hace</span><span style={{textAlign:'right'}}>Monto</span>
     </div>
