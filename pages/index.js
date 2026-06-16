@@ -1154,7 +1154,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
     </div>
-    {freel && <FreelancerModal nombre={freel} datos={{}} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {freel && <FreelancerModal nombre={freel} datos={{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </div>
 }
 function Mini({label,val,color}){ return <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{label}</div><div style={{fontSize:14, fontFamily:MONO, color:color||T.ink, marginTop:2}}>{val}</div></div> }
@@ -1536,7 +1536,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
         </div>
       })}
     </div>
-    {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
@@ -1839,26 +1839,49 @@ function Egresos({data, onRefresh, showToast}){
 }
 
 // ============================ FREELANCER (alta / datos) ============================
-function FreelancerModal({nombre, datos={}, onClose, onSaved, showToast}){
-  const [form,setForm]=useState(()=>({ rubro:datos['Rubro']||'', celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'' }))
+const RUBROS_DEFAULT=['Fotógrafo','Videógrafo','Editor','Filmmaker','Dirección de foto','Sonidista','Drone','Asistente','Productor','Motion','Colorista','Iluminador']
+function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved, showToast}){
+  const [rubros,setRubros]=useState(()=>String(datos['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean))
+  const [rubroInput,setRubroInput]=useState('')
+  const fnInit=()=>{ const v=datos['Fecha de nac']||datos['Fecha de Nac']||''; return v?(String(v).includes('/')?dmyToISO(v):v):'' }
+  const [form,setForm]=useState(()=>({ celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', fechaNac:fnInit(), cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'' }))
   const [saving,setSaving]=useState(false)
   const existe = datos && Object.keys(datos).length>0
-  const campos=[['rubro','Rubro'],['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
+  const sugeridos=[...new Set([...RUBROS_DEFAULT, ...rubrosConocidos])].filter(r=>r&&!rubros.includes(r)).sort()
+  const addRubro=(t)=>{ const v=String(t||'').trim(); if(v&&!rubros.includes(v)) setRubros(rs=>[...rs,v]); setRubroInput('') }
+  const campos=[['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['fechaNac','Fecha de nacimiento','date'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
   async function guardar(){
     setSaving(true)
-    try{ const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre, ...form})}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');setSaving(false);return} showToast(`${String(nombre).split(' ')[0]} guardado`); onSaved&&onSaved() }
+    const body={ nombre, rubro:rubros.join(', '), ...form, fechaNac: form.fechaNac?isoToDMY(form.fechaNac):'' }
+    try{ const r=await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');setSaving(false);return} showToast(`${String(nombre).split(' ')[0]} guardado`); onSaved&&onSaved() }
     catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'48px 20px',overflowY:'auto'}}>
-    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 16px 50px rgba(0,0,0,0.15)',height:'fit-content'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:500,background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 16px 50px rgba(0,0,0,0.15)',height:'fit-content'}}>
       <div style={{padding:'18px 22px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <div><div style={{fontSize:16,fontWeight:700,color:T.ink}}>{existe?'Datos del freelancer':'Nuevo freelancer'}</div><div style={{fontSize:12,color:T.ink3,marginTop:2}}>{nombre}</div></div>
         <button onClick={onClose} style={{border:'none',background:'transparent',fontSize:20,color:T.ink3,cursor:'pointer',lineHeight:1}}>×</button>
       </div>
-      <div style={{padding:'18px 22px',display:'flex',flexWrap:'wrap',gap:12}}>
-        {campos.map(([k,l])=>(
-          <div key={k} style={{flex:'1 1 45%',minWidth:160}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
-        ))}
+      <div style={{padding:'18px 22px'}}>
+        {/* Rubro como etiquetas */}
+        <label style={lblV2}>Rubro (etiquetas)</label>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+          {rubros.map((r,i)=>(
+            <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:20,background:T.brandSoft,color:T.brand,fontSize:12,fontWeight:600}}>{r}<button onClick={()=>setRubros(rs=>rs.filter((_,j)=>j!==i))} style={{border:'none',background:'transparent',color:T.brand,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>×</button></span>
+          ))}
+          {rubros.length===0 && <span style={{fontSize:12,color:T.ink3}}>Sin rubros todavía</span>}
+        </div>
+        <input list="fl-rubros" value={rubroInput} onChange={e=>{ const v=e.target.value; if(v.includes(',')){addRubro(v.replace(',',''))}else setRubroInput(v) }} onKeyDown={e=>{ if(e.key==='Enter'){e.preventDefault();addRubro(rubroInput)} }} placeholder="Escribí y Enter (ej: Fotógrafo, Editor…)" style={{...inpV2,marginBottom:6}}/>
+        <datalist id="fl-rubros">{sugeridos.map(r=><option key={r} value={r}/>)}</datalist>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16}}>
+          {sugeridos.slice(0,8).map(r=><button key={r} onClick={()=>addRubro(r)} style={{padding:'3px 9px',borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:11.5,cursor:'pointer'}}>+ {r}</button>)}
+        </div>
+        {/* Resto de campos */}
+        <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
+          {campos.map(([k,l,tipo])=>(
+            <div key={k} style={{flex:'1 1 45%',minWidth:160}}><label style={lblV2}>{l}</label><input type={tipo||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
+          ))}
+        </div>
       </div>
       <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
