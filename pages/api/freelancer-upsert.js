@@ -60,12 +60,47 @@ export default async function handler(req, res) {
           requestBody: { valueInputOption: 'RAW', data: updates }
         })
       }
+
+      // RENOMBRE GLOBAL: si cambió el nombre, propagar a PROYECTOS (Staff) y PAGOS_STAFF (Freelancer)
+      let renombrados = 0
+      if (nombreOriginal && norm(nombreOriginal) !== norm(nombre)) {
+        const nuevo = String(nombre).trim()
+        // PROYECTOS: columnas Staff / Staff N
+        try {
+          const rP = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
+          const pRows = rP.data.values || []
+          const pH = pRows[0] || []
+          const updP = []
+          for (let i = 1; i < pRows.length; i++) {
+            pH.forEach((h, c) => {
+              const ht = String(h||'').trim()
+              if ((ht === 'Staff' || /^Staff \d+$/.test(ht)) && norm(pRows[i][c]) === norm(nombreOriginal)) {
+                updP.push({ range: `PROYECTOS!${colLetra(c)}${i+1}`, values: [[nuevo]] })
+              }
+            })
+          }
+          if (updP.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updP } }); renombrados += updP.length }
+        } catch (e) { console.error('rename PROYECTOS:', e.message) }
+        // PAGOS_STAFF: columna Freelancer
+        try {
+          const rPS = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
+          const psRows = rPS.data.values || []
+          const psH = psRows[0] || []
+          const iFre = psH.indexOf('Freelancer') !== -1 ? psH.indexOf('Freelancer') : 1
+          const updPS = []
+          for (let i = 1; i < psRows.length; i++) {
+            if (norm(psRows[i][iFre]) === norm(nombreOriginal)) updPS.push({ range: `PAGOS_STAFF!${colLetra(iFre)}${i+1}`, values: [[nuevo]] })
+          }
+          if (updPS.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updPS } }); renombrados += updPS.length }
+        } catch (e) { console.error('rename PAGOS_STAFF:', e.message) }
+      }
+
       try {
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: 'LOG!A:F',
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[new Date().toISOString(), mail, 'freelancer-update', 'RRHH', nombre, `campos=${updates.length}`]] },
+          requestBody: { values: [[new Date().toISOString(), mail, 'freelancer-update', 'RRHH', nombre, `campos=${updates.length}${renombrados?` rename=${renombrados}`:''}`]] },
         })
       } catch (e) {}
       return res.json({ ok: true, accion: 'actualizado', fila })

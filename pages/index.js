@@ -1011,46 +1011,55 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
 
   const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
+  const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) facByNum[n]=f })
+  const facDe=p=>facByNum[String(p['N° presupuesto']||'').trim()]
   const filtrados=proyectos.filter(p=>{
     const fecha=p['Fecha Evento']||''
     const mMes=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
     const mAnio=anio==='todos'||fecha.includes(anio)
-    const mEst=estado==='todos'||(estado==='ok'&&tieneStaff(p))||(estado==='pendiente'&&!tieneStaff(p))
+    const mEst=estado==='todos'||(estado==='ok'&&tieneStaff(p))||(estado==='pendiente'&&!tieneStaff(p))||(estado==='sinfact'&&!facDe(p))
     const mq=!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mMes&&mAnio&&mEst&&mq
   }).sort((a,b)=>{ const fa=parseD(a['Fecha Evento'])?.getTime()||0, fb=parseD(b['Fecha Evento'])?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
 
   const pendientes=proyectos.filter(p=>!tieneStaff(p)).length
+  const sinFacturar=proyectos.filter(p=>!facDe(p)).length
 
   return <>
-    <PageHead title="Proyectos" sub={`${filtrados.length} de ${proyectos.length}${pendientes?` · ${pendientes} sin staff`:''}`}/>
+    <PageHead title="Proyectos" sub={`${filtrados.length} de ${proyectos.length}${pendientes?` · ${pendientes} sin staff`:''}${sinFacturar?` · ${sinFacturar} sin facturar`:''}`}/>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar N°, proyecto, cliente, agencia…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
       <select value={anio} onChange={e=>setAnio(e.target.value)} style={selectStyle}><option value="todos">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
       <select value={mes} onChange={e=>setMes(e.target.value)} style={selectStyle}><option value="todos">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
     </div>
     <div style={{display:'flex', gap:7, marginBottom:14}}>
-      {[['todos','Todos'],['pendiente','Sin staff'],['ok','Con staff']].map(([k,l])=>(
+      {[['todos','Todos'],['pendiente','Sin staff'],['ok','Con staff'],['sinfact','Sin facturar']].map(([k,l])=>(
         <button key={k} onClick={()=>setEstado(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${estado===k?T.ink:T.border}`, background:estado===k?T.ink:T.surface, color:estado===k?'#fff':T.ink2}}>{l}</button>
       ))}
     </div>
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'90px 1.8fr 1.1fr 110px 90px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span>
+      <div style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span><span style={{textAlign:'right'}}>Factura</span>
       </div>
       {filtrados.length===0&&<Empty>Sin resultados</Empty>}
       {filtrados.slice(0,200).map((p,i)=>{
         const num=p['N° presupuesto'], abierto=open===num, ok=tieneStaff(p)
+        const fac=facDe(p), cobrada=fac&&isCobrada(fac)
+        const facInfo = cobrada?{c:T.pos,l:'Cobrada'}:fac?{c:T.warn,l:'Facturada'}:{c:T.brand,l:'Sin fact.'}
         return <div key={num+'_'+i}>
-          <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'90px 1.8fr 1.1fr 110px 90px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
+          <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
             onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
             <span style={{fontSize:12, color:T.ink2}}>{p['Fecha Evento']||'—'}</span>
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||'—'}</span>
             <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
-            <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6}}>
+            <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
               <span style={{width:7,height:7,borderRadius:7,background:ok?T.pos:T.warn}}/>
-              <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
+              <span style={{fontSize:11.5, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
+            </span>
+            <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
+              <span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/>
+              <span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span>
             </span>
           </div>
           {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
