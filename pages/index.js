@@ -478,7 +478,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   ]
   const [form,setForm]=useState(()=>{ const o={}; campos.forEach(([k])=>o[k]=p[k]||''); return o })
   const [saving,setSaving]=useState(false)
-  const id = p['Columna 1']
+  const id = p['Columna 1'] || p['N° presupuesto']
   const ags=[...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
   const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
   const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
@@ -491,10 +491,19 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
     if(Object.keys(cambios).length===0){ showToast('No hay cambios','err'); return }
     setSaving(true)
     try{
+      // 1. Fuente de verdad: el presupuesto
       const r=await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios})})
       const j=await r.json()
       if(!j.ok){ showToast(j.error||'Error','err'); setSaving(false); return }
-      showToast(`#${id} guardado`)
+      // 2. Si está aprobado (tiene proyecto), espejar los campos compartidos al proyecto
+      const aprobado = (data?.proyectos||[]).some(pr=>String(pr['N° presupuesto']||'').trim()===String(id).trim())
+      if(aprobado){
+        const camposProy={}; ['Fecha Evento','Cliente','Proyecto','Agencia','PM Interno','Contacto'].forEach(k=>{ if(cambios[k]!==undefined) camposProy[k]=cambios[k] })
+        if(Object.keys(camposProy).length) { try{ await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:camposProy, propagarPresupuesto:false})}) }catch(e){} }
+      }
+      // 3. Resincronizar el Calendar (fecha/horario/ubicación/contacto/staff)
+      try{ await fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: aprobado?'aprobar':'pendiente'})}) }catch(e){}
+      showToast(`#${id} guardado · sincronizado`)
       onSaved(id, cambios)
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
@@ -861,6 +870,7 @@ function Calendario({data, onRefresh, showToast}){
   const [diaSel,setDiaSel]=useState(null)
   const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
+  const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
@@ -944,6 +954,7 @@ function Calendario({data, onRefresh, showToast}){
                 : <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}><span style={{color:T.ink3}}>Staff:</span> {staff.map(s=>s.persona).join(', ')}</div>}
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
                 <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>
+                {presusByNum[String(num).trim()] && <button onClick={()=>setEditando(presusByNum[String(num).trim()])} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
               </div>
@@ -957,8 +968,9 @@ function Calendario({data, onRefresh, showToast}){
               </div>
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
               <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
-              <div style={{display:'flex', gap:7, marginTop:9}}>
+              <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
                 <button onClick={()=>setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>
+                <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
               </div>
@@ -976,6 +988,7 @@ function Calendario({data, onRefresh, showToast}){
         <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
       </div>
     </div>}
+    {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
   </>
 }
 
@@ -986,7 +999,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
   const presuByNum={}; (data.presupuestos||[]).forEach(p=>{presuByNum[String(p['Columna 1']||'').trim()]=p})
-  const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null)
+  const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [editando,setEditando]=useState(null)
   useEffect(()=>{ if(nav?.mod==='proyectos'){ if(nav.filtro)setEstado(nav.filtro); if(nav.q){setQ(nav.q); setEstado('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
 
@@ -1033,14 +1046,15 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:12, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
         </div>
       })}
     </div>
+    {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, onRefresh, showToast, onClose}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, onRefresh, showToast, onClose, onEditarDatos}){
   const svcSet=new Set(serviciosConocidos.map(s=>String(s).toLowerCase().trim()))
   const esSvcNuevo=v=>v && !svcSet.has(String(v).toLowerCase().trim())
   const rrhhMap={}; rrhh.forEach(r=>{ const n=normTxt(r['Nombre Apellido']||r['Nombre']); if(n) rrhhMap[n]=r })
@@ -1084,10 +1098,12 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   }
 
   return <div style={{padding:'14px 18px 18px', background:T.surfaceAlt, borderTop:`1px solid ${T.border}`}}>
-    <div style={{display:'flex', gap:20, flexWrap:'wrap', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
+    <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       {[['N°',num],['Agencia',p['Agencia']],['Cliente',p['Cliente']],['Evento',p['Fecha Evento']]].filter(x=>x[1]).map(([k,v])=>(
         <div key={k}><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:2}}>{v}</div></div>
       ))}
+      <div style={{flex:1}}/>
+      {onEditarDatos && <button onClick={onEditarDatos} style={{...miniBtn, alignSelf:'center'}}>Editar datos (fecha, etc)</button>}
     </div>
     {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       <div><label style={lblV2}>Horario (va al Calendar)</label>
