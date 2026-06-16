@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 
@@ -64,11 +64,19 @@ export default function V2() {
   const [refreshing,setRefreshing] = useState(false)
   const [err,setErr] = useState('')
   const [mod,setMod] = useState('dashboard')
-  const [nav,setNav] = useState(null)  // {mod, filtro} → al navegar desde el dashboard, deja el destino filtrado
+  const [nav,setNav] = useState(null)  // {mod, filtro?, q?} → al navegar, deja el destino filtrado/buscado
   const goTo = (m, filtro) => { setMod(m); setNav(filtro?{mod:m,filtro}:null) }
+  const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)
+  const [showSearch,setShowSearch] = useState(false)
   const [toast,setToast] = useState(null)  // {msg, tipo:'ok'|'err'}
   const showToast = (msg,tipo='ok') => { setToast({msg,tipo}); setTimeout(()=>setToast(null), 3200) }
+
+  // Atajo Cmd/Ctrl+K → buscador · Esc cierra
+  useEffect(()=>{
+    const h=(e)=>{ if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); setShowSearch(s=>!s) } if(e.key==='Escape') setShowSearch(false) }
+    window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h)
+  },[])
 
   useEffect(()=>{ if(status==='authenticated' && mail && !data && !loading) load() // eslint-disable-next-line
   },[status,mail])
@@ -123,7 +131,15 @@ export default function V2() {
 
       {/* Main */}
       <main style={{flex:1, overflowY:'auto', background:T.bg}}>
-        <div style={{maxWidth:1180, margin:'0 auto', padding:'30px 36px 80px'}}>
+        <div style={{position:'sticky', top:0, zIndex:50, background:T.bg}}>
+          <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
+            <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
+              <span style={{fontSize:13}}>🔍</span><span>Buscar</span>
+              <span style={{fontSize:10.5, fontFamily:MONO, padding:'1px 6px', borderRadius:4, background:T.surfaceAlt, color:T.ink3}}>⌘K</span>
+            </button>
+          </div>
+        </div>
+        <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 80px'}}>
           {err && <div style={{background:T.brandSoft, color:T.brand, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 16px', fontSize:13, marginBottom:18}}>{err}</div>}
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
@@ -132,16 +148,17 @@ export default function V2() {
             : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast}/>
+            : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
-            : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast}/>
-            : mod==='clientes' ? <Clientes data={data}/>
-            : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
+            : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
+            : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
+            : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='historico' ? <Historico data={data}/>
             : <Placeholder label={NAV.find(n=>n.id===mod)?.label}/>}
         </div>
       </main>
     </div>
+    {showSearch && <GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(m,q)=>{ goSearch(m,q); setShowSearch(false) }}/>}
     {toast && <div style={{position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:1000, padding:'11px 20px', borderRadius:10, fontSize:13, fontWeight:500, color:'#fff', background: toast.tipo==='err'?T.brand:T.ink, boxShadow:'0 8px 24px rgba(0,0,0,0.18)'}}>{toast.msg}</div>}
   </Shell>
 }
@@ -345,7 +362,7 @@ const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:
 function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   const [rows,setRows]=useState(data.presupuestos||[])
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
-  useEffect(()=>{ if(nav?.mod==='presupuestos'){ setF(nav.filtro); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro)setF(nav.filtro); if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null)
 
@@ -952,7 +969,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
   const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null)
-  useEffect(()=>{ if(nav?.mod==='proyectos'){ setEstado(nav.filtro); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='proyectos'){ if(nav.filtro)setEstado(nav.filtro); if(nav.q){setQ(nav.q); setEstado('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
 
   const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
@@ -1069,7 +1086,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
   const hoy=new Date()
   const presus=data.presupuestos||[]
   const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false)
-  useEffect(()=>{ if(nav?.mod==='facturacion'){ setFilt(nav.filtro); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
   const pendientes=presus.filter(isAprobado).map(p=>{
@@ -1303,13 +1320,14 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
 }
 
 // ============================ PAGOS STAFF ============================
-function PagosStaff({data, onRefresh, showToast}){
+function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagosPersistidos=data.pagosStaff||[]
   const now=new Date()
   const prevMes=new Date(now.getFullYear(), now.getMonth()-1, 1)  // el 15 se paga el mes anterior
   const [mesIdx,setMesIdx]=useState(prevMes.getMonth()+1)  // 1-12
   const [anio,setAnio]=useState(prevMes.getFullYear())
   const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({})
+  useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // proyectos del mes/año por Fecha Evento
   const proyMes=proyectos.filter(p=>esDelMes(p['Fecha Evento'], mesIdx, anio))
@@ -1441,10 +1459,11 @@ function PagosStaff({data, onRefresh, showToast}){
 }
 
 // ============================ CONTACTOS ============================
-function Contactos({data, onRefresh, showToast}){
+function Contactos({data, onRefresh, showToast, nav, clearNav}){
   const [rows,setRows]=useState(data.contactos||[])
   useEffect(()=>{ setRows(data.contactos||[]) },[data.contactos])
   const [q,setQ]=useState(''), [ag,setAg]=useState('todas'), [edit,setEdit]=useState(null), [form,setForm]=useState({})
+  useEffect(()=>{ if(nav?.mod==='contactos'&&nav.q){ setQ(nav.q); setAg('todas'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const agencias=[...new Set(rows.map(c=>c['Agencia']).filter(Boolean))].sort()
   const filtrados=rows.filter(c=>{
     const mq=!q||['Nombre','Mail','Agencia','Cargo','Teléfono','Cuit'].some(k=>normTxt(c[k]).includes(normTxt(q)))
@@ -1493,11 +1512,12 @@ function Contactos({data, onRefresh, showToast}){
 }
 
 // ============================ AGENCIAS ============================
-function Agencias({data, onRefresh, showToast}){
+function Agencias({data, onRefresh, showToast, nav, clearNav}){
   const presus=data.presupuestos||[], fc=data.facturacion||[], contactos=data.contactos||[]
   const [rows,setRows]=useState(data.agencias||[])
   useEffect(()=>{ setRows(data.agencias||[]) },[data.agencias])
   const [q,setQ]=useState(''), [sel,setSel]=useState(null), [edit,setEdit]=useState(false), [form,setForm]=useState({})
+  useEffect(()=>{ if(nav?.mod==='agencias'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Agencia'])===n); const fcs=fc.filter(f=>normTxt(f['Agencia'])===n); return {presus:ps.length, aprob:ps.filter(isAprobado).length, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
   const filtrados=rows.filter(a=>!q||normTxt(a['Nombre']).includes(normTxt(q))||normTxt(a['CUIT']).includes(normTxt(q)))
   const agSel = sel ? rows.find(a=>a['Nombre']===sel) : null
@@ -1562,10 +1582,11 @@ function Agencias({data, onRefresh, showToast}){
 }
 
 // ============================ CLIENTES ============================
-function Clientes({data}){
+function Clientes({data, nav, clearNav}){
   const presus=data.presupuestos||[], fc=data.facturacion||[]
   const rows=data.clientes||[]
   const [q,setQ]=useState(''), [sel,setSel]=useState(null)
+  useEffect(()=>{ if(nav?.mod==='clientes'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Cliente'])===n); const fcs=fc.filter(f=>normTxt(f['Cliente'])===n); return {presus:ps.length, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
   const filtrados=rows.filter(c=>!q||normTxt(c['Nombre']).includes(normTxt(q)))
   const cliSel = sel?rows.find(c=>c['Nombre']===sel):null
@@ -1733,6 +1754,59 @@ function Egresos({data, onRefresh, showToast}){
     <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):null}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=><Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${p['Cuota nro']}/${p['Cuotas total']}`} monto={parseMonto(p['Monto cuota'])}/>):null}</Sec>
   </>
+}
+
+// ============================ BUSCADOR GLOBAL (⌘K) ============================
+function GlobalSearch({data, onClose, onNavegar}){
+  const [q,setQ]=useState(''), [idx,setIdx]=useState(0)
+  const inputRef=useRef(null)
+  useEffect(()=>{ inputRef.current?.focus() },[])
+  const [recientes,setRecientes]=useState(()=>{try{return JSON.parse(localStorage.getItem('magma_search_recent')||'[]')}catch(e){return []}})
+  const guardarReciente=(r)=>{ const item={tipo:r.tipo,icon:r.icon,mod:r.mod,titulo:r.titulo,sub:r.sub,color:r.color,q:r.q}; const nueva=[item,...recientes.filter(x=>x.titulo!==r.titulo||x.tipo!==r.tipo)].slice(0,6); setRecientes(nueva); try{localStorage.setItem('magma_search_recent',JSON.stringify(nueva))}catch(e){} }
+  const nq=normTxt(q.trim())
+
+  const res=[]
+  if(nq.length>=1){
+    ;(data?.presupuestos||[]).forEach(p=>{ const num=String(p['Columna 1']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Presupuesto',icon:'📋',mod:'presupuestos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Estado']||'',color:T.brand,q:num}) })
+    ;(data?.proyectos||[]).forEach(p=>{ const num=String(p['N° presupuesto']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Proyecto',icon:'🎬',mod:'proyectos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Fecha Evento']||'',color:T.pos,q:num}) })
+    ;(data?.facturacion||[]).forEach(f=>{ const num=String(f['N° Presupuesto']||''),cli=String(f['Cliente']||''),ag=String(f['Agencia']||''),pr=String(f['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Factura',icon:'💵',mod:'facturacion',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:isCobrada(f)?'Cobrada':'Pendiente',color:T.warn,q:num}) })
+    ;(data?.rrhh||[]).forEach(r=>{ const nombre=String(r['Nombre Apellido']||r['Nombre']||''),rubro=String(r['Rubro']||''),mail=String(r['Mail']||''); if(nombre.trim()&&normTxt(nombre+' '+rubro+' '+mail).includes(nq)) res.push({tipo:'Freelancer',icon:'👤',mod:'pagos',titulo:nombre,sub:rubro,meta:'',color:T.ink2,q:nombre}) })
+    ;(data?.agencias||[]).forEach(a=>{ const nombre=String(a['Nombre']||''); if(nombre.trim()&&normTxt(nombre).includes(nq)) res.push({tipo:'Agencia',icon:'🏢',mod:'agencias',titulo:nombre,sub:a['Condicion IVA']||'',meta:'',color:T.ink2,q:nombre}) })
+    ;(data?.clientes||[]).forEach(c=>{ const nombre=String(c['Nombre']||''); if(nombre.trim()&&normTxt(nombre).includes(nq)) res.push({tipo:'Cliente',icon:'🎯',mod:'clientes',titulo:nombre,sub:c['Industria']||'',meta:'',color:T.ink2,q:nombre}) })
+    ;(data?.contactos||[]).forEach(c=>{ const nombre=String(c['Nombre']||''),agencia=String(c['Agencia']||''),tel=String(c['Teléfono']||''),mail=String(c['Mail']||''); if(nombre.trim()&&normTxt(nombre+' '+agencia+' '+tel+' '+mail).includes(nq)) res.push({tipo:'Contacto',icon:'☎',mod:'contactos',titulo:nombre,sub:agencia,meta:c['Cargo']||'',color:T.ink2,q:nombre}) })
+  }
+  const visibles=res.slice(0,30)
+  useEffect(()=>{ setIdx(0) },[q])
+  const elegir=(r)=>{ guardarReciente(r); onNavegar(r.mod, r.q) }
+  const onKey=(e)=>{ if(e.key==='ArrowDown'){e.preventDefault();setIdx(i=>Math.min(visibles.length-1,i+1))} if(e.key==='ArrowUp'){e.preventDefault();setIdx(i=>Math.max(0,i-1))} if(e.key==='Enter'&&visibles[idx]){e.preventDefault();elegir(visibles[idx])} }
+
+  const Row=({r,activo})=> <div onClick={()=>elegir(r)} onMouseEnter={()=>{}} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 18px',cursor:'pointer',background:activo?T.surfaceAlt:'transparent',borderLeft:`2px solid ${activo?T.brand:'transparent'}`}}>
+    <span style={{fontSize:15,width:20,textAlign:'center'}}>{r.icon}</span>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:T.ink,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.titulo}</div>{r.sub&&<div style={{fontSize:11.5,color:T.ink3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.sub}</div>}</div>
+    <span style={{fontSize:10.5,color:T.ink3,textTransform:'uppercase',letterSpacing:0.3}}>{r.tipo}</span>
+    {r.meta&&<span style={{fontSize:11,color:T.ink2}}>{r.meta}</span>}
+  </div>
+
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:90}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'90%',maxWidth:600,background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 18px',borderBottom:`1px solid ${T.border}`}}>
+        <span style={{fontSize:15}}>🔍</span>
+        <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={onKey} placeholder="Buscar presupuesto, proyecto, factura, freelancer, cliente…" style={{flex:1,border:'none',outline:'none',background:'transparent',fontSize:15,color:T.ink}}/>
+        <span style={{fontSize:10.5,fontFamily:MONO,padding:'2px 6px',borderRadius:4,background:T.surfaceAlt,color:T.ink3}}>esc</span>
+      </div>
+      <div style={{maxHeight:'56vh',overflowY:'auto'}}>
+        {nq.length===0
+          ? (recientes.length>0 ? <>
+              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',color:T.ink3,padding:'10px 18px 4px'}}>Recientes</div>
+              {recientes.map((r,i)=><Row key={i} r={r} activo={false}/>)}
+            </> : <div style={{padding:'28px 18px',textAlign:'center',fontSize:13,color:T.ink3}}>Escribí para buscar en toda la app</div>)
+          : visibles.length===0
+            ? <div style={{padding:'28px 18px',textAlign:'center',fontSize:13,color:T.ink3}}>Sin resultados para “{q}”</div>
+            : visibles.map((r,i)=><Row key={r.mod+i} r={r} activo={i===idx}/>)}
+      </div>
+      {visibles.length>0 && <div style={{padding:'8px 18px',borderTop:`1px solid ${T.border}`,fontSize:11,color:T.ink3,display:'flex',gap:14}}><span>↑↓ moverse</span><span>↵ abrir</span><span>{res.length} resultado{res.length!==1?'s':''}</span></div>}
+    </div>
+  </div>
 }
 
 // ============================ PIEZAS UI ============================
