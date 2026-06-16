@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res)
   if (!auth) return
   const mail = auth.mail
-  const { num, estado, motivo } = req.body
+  const { num, estado, motivo, noCalendar } = req.body
   try {
     const { sheets, SHEET_ID } = await getSheets()
 
@@ -212,8 +212,9 @@ export default async function handler(req, res) {
     }
 
     // 🗓 SINCRONIZAR CON CALENDAR MAGMA (best-effort, no bloquea el flujo si falla)
+    // Si noCalendar=true, el front lo hace en segundo plano para que el cambio de estado sea rápido.
     let calendarResult = null
-    try {
+    if (!noCalendar) try {
       // Hacemos el call HTTP al endpoint interno con la sesión actual (forward la cookie)
       const cookie = req.headers.cookie || ''
       const host = req.headers.host

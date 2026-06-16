@@ -374,10 +374,14 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     }
     setRows(rs=>rs.map(r=> (String(r['Columna 1'])===String(id) ? {...r, Estado:nuevo} : r)))
     try{
-      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo, noCalendar:true})})
       const j=await r.json()
       if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))); return }
       showToast(`#${id} → ${estadoInfo(nuevo).l}`)
+      if(onRefresh) onRefresh()  // refresca datos globales: Proyectos/Facturación/Calendar quedan sincronizados
+      // Calendar en segundo plano
+      const accion = nuevo==='APROBADO'?'aprobar':(nuevo==='DESAPROBADO'||nuevo==='REPRESUPUESTADO')?'borrar':'pendiente'
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))) }
   }
 
@@ -900,7 +904,10 @@ function Calendario({data, onRefresh, showToast}){
 
   async function setEstado(num, estado){
     if(estado!=='APROBADO' && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
-    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh() }catch(e){showToast('Error de conexión','err')}
+    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,noCalendar:true})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh()
+      const accion = estado==='APROBADO'?'aprobar':(estado==='DESAPROBADO'||estado==='REPRESUPUESTADO')?'borrar':'pendiente'
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion})}).catch(()=>{})
+    }catch(e){showToast('Error de conexión','err')}
   }
   const staffDe=p=>{ const out=[]; for(let j=1;j<=20;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; if(s) out.push({persona:s, pedido:ped}) } return out }
   const esHoy=d=>d&&dayKey(d)===dayKey(now)
