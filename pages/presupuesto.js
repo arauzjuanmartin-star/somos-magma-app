@@ -446,36 +446,6 @@ export default function Presupuesto() {
       }
 
       // ════════════════════════════════════════════════════════════════════
-      // ADICIONALES OPCIONALES — caja celeste con precio por línea
-      // ════════════════════════════════════════════════════════════════════
-      if ((form.adicionales||[]).length > 0) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.azul)
-        doc.text('Adicionales opcionales:', M, y); y += 6
-        // Caja azul claro
-        const adH = form.adicionales.length * 5 + 6
-        doc.setFillColor(244,246,255); doc.rect(M, y-3, W-M*2, adH, 'F')
-        doc.setDrawColor(...C.azul); doc.setLineWidth(0.3); doc.rect(M, y-3, W-M*2, adH, 'S')
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
-        for (const a of form.adicionales) {
-          const nombre = prettifySvc(a.nombre)
-          const precioTxt = '$' + fmt$(a.precio) + ' + IVA'
-          const precioW = doc.getTextWidth(precioTxt)
-          const maxNombre = W-M*2 - precioW - 12
-          const nombreLines = doc.splitTextToSize(nombre, maxNombre)
-          doc.text(nombreLines[0], M+4, y)
-          doc.setFont('courier','bold'); doc.setTextColor(...C.azul)
-          doc.text(precioTxt, W-M-4, y, {align:'right'})
-          doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
-          y += 5
-        }
-        y += 3
-        doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
-        doc.text('Estos servicios se cotizan aparte. Indicanos cuáles te interesan sumar al proyecto.', M, y)
-        y += 6
-        doc.setFont('helvetica','normal')
-      }
-
-      // ════════════════════════════════════════════════════════════════════
       // OBSERVACIONES — caja sutil con borde izq color magma
       // ════════════════════════════════════════════════════════════════════
       if (form.observaciones && form.observaciones.trim()) {
@@ -507,6 +477,43 @@ export default function Presupuesto() {
       y += 5
       if (lineaTotal) { try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 4.5) } catch(e) {} }
       y += 11
+
+      // ════════════════════════════════════════════════════════════════════
+      // ADICIONALES OPCIONALES — debajo del total, misma tipografía + total con adicionales
+      // ════════════════════════════════════════════════════════════════════
+      if ((form.adicionales||[]).length > 0) {
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.azul)
+        doc.text('Adicionales opcionales', M, y); y += 5
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+        let sumaAdic = 0
+        for (const a of form.adicionales) {
+          const nombre = prettifySvc(a.nombre)
+          sumaAdic += Number(a.precio) || 0
+          const precioTxt = '$' + fmt$(a.precio) + ' + IVA'
+          const precioW = doc.getTextWidth(precioTxt)
+          const nombreLines = doc.splitTextToSize(nombre, W-M*2 - precioW - 8)
+          doc.text(nombreLines[0], M, y)
+          doc.setFont('courier','normal'); doc.setTextColor(...C.azul)
+          doc.text(precioTxt, W-M, y, {align:'right'})
+          doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
+          y += 5.5
+        }
+        doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
+        doc.text('Estos servicios se cotizan aparte. Indicanos cuáles querés sumar.', M, y); y += 7
+        // Valor total CON adicionales — misma jerarquía que el total
+        const totalConAdic = (Number(form.precioTotal)||0) + sumaAdic
+        doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...C.black)
+        doc.text('Valor total con adicionales', M, y)
+        const lblW = doc.getTextWidth('Valor total con adicionales')
+        const pStr = '$' + fmt$(totalConAdic) + ' + IVA'
+        const pW = doc.getTextWidth(pStr)
+        doc.setLineWidth(0.5); doc.setDrawColor(...C.black)
+        doc.line(M+lblW+4, y-0.5, W-M-pW-3, y-0.5)
+        doc.text(pStr, W-M, y, {align:'right'})
+        y += 5
+        if (lineaTotal) { try { doc.addImage(lineaTotal, 'PNG', M, y, W-M*2, 4.5) } catch(e) {} }
+        y += 11
+      }
 
       // ════════════════════════════════════════════════════════════════════
       // TÉRMINOS Y CONDICIONES — manual jerarquía: subtítulo + cuerpo + destacado(mono)
@@ -837,18 +844,6 @@ function PreviewPDF({form, clausulas}) {
       Sin servicios cargados. Completalos arriba o usá ↻ Recargar del sheet.
     </div>}
 
-    {/* ADICIONALES (opcionales) */}
-    {(form.adicionales||[]).length > 0 && <>
-      <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5,color:C.azul}}>Adicionales opcionales:</div>
-      <div style={{background:'#F4F6FF',border:'0.5px solid #1543F830',borderRadius:6,padding:'8px 10px'}}>
-        {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0',borderBottom:i<form.adicionales.length-1?'0.5px dashed #1543F820':'none'}}>
-          <span style={{fontSize:10.5,color:C.texto}}>{prettifySvc(a.nombre)}</span>
-          <span style={{...S.mono,fontSize:10.5,color:C.azul,fontWeight:600}}>${fmt$(a.precio)} + IVA</span>
-        </div>)}
-      </div>
-      <div style={{fontSize:9,color:C.gris,marginTop:4,fontStyle:'italic'}}>Estos servicios se cotizan aparte. Indicanos cuáles te interesan sumar al proyecto.</div>
-    </>}
-
     {/* OBSERVACIONES → DETALLE DE SERVICIO */}
     {form.observaciones && form.observaciones.trim() && <div style={{background:C.boxBg,padding:'10px 12px',borderLeft:'2px solid '+C.magma,marginTop:14,whiteSpace:'pre-wrap'}}>
       <div style={S.label}>DETALLE DE SERVICIO</div>
@@ -862,6 +857,22 @@ function PreviewPDF({form, clausulas}) {
       <div style={{fontWeight:700, fontSize:14, color:C.black, whiteSpace:'nowrap'}}>${fmt$(form.precioTotal)} + IVA</div>
     </div>
     <img src="/branding/linea-total.png" alt="" style={{width:'100%',height:10,objectFit:'fill',display:'block',marginTop:4}} onError={e=>e.target.style.display='none'}/>
+
+    {/* ADICIONALES (debajo del total) + total con adicionales */}
+    {(form.adicionales||[]).length > 0 && (()=>{ const suma=form.adicionales.reduce((s,a)=>s+(Number(a.precio)||0),0); const totalAdic=(Number(form.precioTotal)||0)+suma; return <>
+      <div style={{...S.h2,fontSize:11,marginTop:16,marginBottom:6,color:C.azul}}>Adicionales opcionales</div>
+      {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'2px 0'}}>
+        <span style={{fontSize:11,color:C.texto}}>{prettifySvc(a.nombre)}</span>
+        <span style={{...S.mono,fontSize:11,color:C.azul}}>${fmt$(a.precio)} + IVA</span>
+      </div>)}
+      <div style={{fontSize:9,color:C.gris,margin:'4px 0 10px',fontStyle:'italic'}}>Estos servicios se cotizan aparte. Indicanos cuáles querés sumar.</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:4, gap:10}}>
+        <div style={{fontWeight:700, fontSize:14, color:C.black}}>Valor total con adicionales</div>
+        <div style={{flex:1, borderTop:'1px solid '+C.black, transform:'translateY(-4px)'}}/>
+        <div style={{fontWeight:700, fontSize:14, color:C.black, whiteSpace:'nowrap'}}>${fmt$(totalAdic)} + IVA</div>
+      </div>
+      <img src="/branding/linea-total.png" alt="" style={{width:'100%',height:10,objectFit:'fill',display:'block',marginTop:4}} onError={e=>e.target.style.display='none'}/>
+    </> })()}
 
     {/* T&C compactos */}
     <div style={{...S.sec, marginTop:18}}>CONDICIONES GENERALES</div>
