@@ -1579,7 +1579,13 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     if(!pagado) return false
     const rnro=String(r['N° Presupuesto']||r['N° Proyecto']||r['Nro']||'').trim()
     const tnro=String(t.nro).trim()
-    if(rnro&&tnro) return rnro===tnro
+    if(rnro&&tnro){
+      if(rnro!==tnro) return false
+      // mismo proyecto: si ambos tienen servicio, exigir que coincida (pago por trabajo, no por proyecto)
+      const rsvc=norm(r['Servicio']), tsvc=norm(t.pedido)
+      if(rsvc&&tsvc) return rsvc===tsvc
+      return true
+    }
     return norm(r['Proyecto'])===norm(t.proyecto)  // fallback: filas migradas sin N°
   })
 
