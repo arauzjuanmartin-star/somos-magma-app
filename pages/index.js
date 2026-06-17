@@ -702,6 +702,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const agNueva=form.agencia.trim() && !/^(sin agencia|directo)/i.test(form.agencia.trim()) && !agSet.has(nrm(form.agencia))
   const clNuevo=form.cliente.trim() && !clSet.has(nrm(form.cliente))
   const ctNuevo=form.contacto.trim() && !ctSet.has(nrm(form.contacto))
+  const ctExist=(data?.contactos||[]).find(c=>nrm(c['Nombre'])===nrm(form.contacto))
+  const ctIncompleto=!!ctExist && (!String(ctExist['Mail']||'').trim() || !String(ctExist['Teléfono']||'').trim())
+  const ctMostrar=ctNuevo||ctIncompleto
+  // precargar datos del contacto existente para completar lo que falte
+  useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:c['Mail']||'',telefono:c['Teléfono']||'',cargo:c['Cargo']||'',cuit:c['Cuit']||''}) /* eslint-disable-next-line */ },[form.contacto])
 
   const updPed=(i,ch)=>setPeds(ps=>ps.map((p,j)=>j===i?{...p,...ch}:p))
   const selSvc=(i,nombre)=>{ const m=SVCS_LIST.find(s=>s.n===nombre); if(m) updPed(i,{svc:nombre, precio:peds[i].manual&&peds[i].precio?peds[i].precio:(m.p||''), feeAg:m.fee}); else updPed(i,{svc:nombre}) }
@@ -774,7 +779,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         catch(e){ showToast('Nuevo creado, pero no pude marcar el original — revisá','err') }
       }
       // Guardar entidades nuevas (contacto / agencia / cliente) en sus solapas
-      if(ctNuevo){ try{ await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto, mail:ctNew.mail, telefono:ctNew.telefono, cuit:ctNew.cuit, agencia:form.agencia, cargo:ctNew.cargo})}) }catch(e){} }
+      if(ctNuevo || ctIncompleto){ try{ await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto, mail:ctNew.mail, telefono:ctNew.telefono, cuit:ctNew.cuit, agencia:form.agencia, cargo:ctNew.cargo})}) }catch(e){} }
       if(agNueva){ try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.agencia, cuit:agNew.cuit, condIVA:agNew.condIVA, mailFact:agNew.mailFact, telefono:agNew.telefono})}) }catch(e){} }
       if(clNuevo){ try{ await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.cliente})}) }catch(e){} }
       showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
@@ -816,8 +821,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
             <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={agNew.telefono} onChange={e=>setAgNew(a=>({...a,telefono:e.target.value}))} style={inpV2}/></div>
           </div>
         </div>}
-        {ctNuevo && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px', marginBottom:12}}>
-          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>☎ Contacto nuevo: "{form.contacto}" — completá sus datos (se guarda)</div>
+        {ctMostrar && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px', marginBottom:12}}>
+          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>☎ {ctNuevo?`Contacto nuevo: "${form.contacto}" — completá sus datos`:`A "${form.contacto}" le faltan datos — completalos`} (se guarda)</div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
             <div style={{flex:'1 1 160px'}}><label style={lblV2}>Mail</label><input value={ctNew.mail} onChange={e=>setCtNew(c=>({...c,mail:e.target.value}))} style={inpV2}/></div>
             <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={ctNew.telefono} onChange={e=>setCtNew(c=>({...c,telefono:e.target.value}))} style={inpV2}/></div>
@@ -1758,12 +1763,16 @@ function Contactos({data, onRefresh, showToast, nav, clearNav}){
       {filtrados.length===0&&<Empty>Sin resultados</Empty>}
       {filtrados.slice(0,300).map((c,i)=>{
         const editando=edit===(c['Nombre']+'|'+(c['Agencia']||''))
-        if(editando) return <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1fr 1.4fr 1fr 90px', gap:8, padding:'8px 18px', borderTop:`1px solid ${T.border}`, alignItems:'center', background:T.surfaceAlt}}>
-          <input value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))} style={inpV2}/>
-          <input value={form.agencia} onChange={e=>setForm(f=>({...f,agencia:e.target.value}))} style={inpV2}/>
-          <input value={form.mail} onChange={e=>setForm(f=>({...f,mail:e.target.value}))} style={inpV2}/>
-          <input value={form.telefono} onChange={e=>setForm(f=>({...f,telefono:e.target.value}))} style={inpV2}/>
-          <div style={{display:'flex', gap:4}}><button onClick={()=>guardar(c)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓</button><button onClick={()=>setEdit(null)} style={miniBtn}>×</button></div>
+        if(editando) return <div key={i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`, background:T.surfaceAlt}}>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+            {[['nombre','Nombre'],['agencia','Agencia'],['mail','Mail'],['telefono','Teléfono'],['cargo','Cargo'],['cuit','CUIT']].map(([k,l])=>(
+              <div key={k} style={{flex:'1 1 150px', minWidth:130}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
+            ))}
+          </div>
+          <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:10}}>
+            <button onClick={()=>setEdit(null)} style={miniBtn}>Cancelar</button>
+            <button onClick={()=>guardar(c)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Guardar</button>
+          </div>
         </div>
         return <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1fr 1.4fr 1fr 90px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{color:T.ink, fontWeight:500}}>{c['Nombre']||'—'}{c['Cargo']?<span style={{color:T.ink3, fontWeight:400}}> · {c['Cargo']}</span>:''}</span>
