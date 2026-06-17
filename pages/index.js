@@ -1600,7 +1600,16 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       personas[staff].total+=precio
     }
   })
-  Object.values(personas).forEach(p=>{ p.trabajos.forEach(t=>{ t.pagado=(t.key in override)?override[t.key]:isPagado(p.nombre,t); if(t.pagado)p.totalPagado+=t.precio; else p.totalPendiente+=t.precio }) })
+  // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
+  const esPagRow=r=>{ const e=String(r['Estado']||r['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
+  const paidCount={}
+  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  Object.values(personas).forEach(p=>{ const used={}; p.trabajos.forEach(t=>{
+    let pag
+    if(t.key in override) pag=override[t.key]
+    else { const k=norm(p.nombre)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
+    t.pagado=pag; if(pag)p.totalPagado+=t.precio; else p.totalPendiente+=t.precio
+  }) })
 
   let lista=Object.values(personas).sort((a,b)=>b.total-a.total)
   lista=lista.filter(p=>{ const mq=!q||norm(p.nombre).includes(norm(q)); const mf=filtro==='todos'||(filtro==='pend'&&p.totalPendiente>0)||(filtro==='pag'&&p.totalPendiente===0); return mq&&mf })

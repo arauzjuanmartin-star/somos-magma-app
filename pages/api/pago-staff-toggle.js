@@ -55,13 +55,15 @@ export default async function handler(req, res) {
     const iNotas     = find(['Notas','Observación'], 11)
 
     const eq = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase()
-    // Buscar fila existente por Mes + Freelancer + N° + Servicio (máxima granularidad)
-    const rowIdx = rows.findIndex((row, i) => i > 0 &&
-      eq(row[iMes], mes) &&
-      eq(row[iPersona], persona) &&
-      (!nroProyecto || eq(row[iNro], nroProyecto)) &&
-      (!pedido || eq(row[iPedido], pedido))
+    const PAG = v => ['PAGADO','SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
+    // Filas que matchean este trabajo (puede haber varias idénticas: 2 motions iguales, etc.)
+    const matches = rows.map((row,i)=>({row,i})).filter(({row,i}) => i > 0 &&
+      eq(row[iMes], mes) && eq(row[iPersona], persona) &&
+      (!nroProyecto || eq(row[iNro], nroProyecto)) && (!pedido || eq(row[iPedido], pedido))
     )
+    // Al pagar: tomar una PENDIENTE (si no hay, se crea otra). Al desmarcar: tomar una PAGADA.
+    const target = pagado ? (matches.find(m=>!PAG(m.row[iEstado])) || null) : (matches.find(m=>PAG(m.row[iEstado])) || null)
+    const rowIdx = target ? target.i : -1
 
     const now = new Date()
     const fechaStr = fechaPago || (now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear())
@@ -69,7 +71,6 @@ export default async function handler(req, res) {
     const estado = pagado ? 'Pagado' : 'Pendiente'
 
     // Estado/cuenta previos (para ajustar el saldo sin descontar dos veces)
-    const PAG = v => ['PAGADO','SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
     const wasPaid = rowIdx > 0 ? PAG(rows[rowIdx][iEstado]) : false
     const cuentaPrevia = rowIdx > 0 ? (rows[rowIdx][iCuenta]||'') : ''
 
