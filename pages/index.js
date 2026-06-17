@@ -381,7 +381,21 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
   useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro)setF(nav.filtro); if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null)
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
+
+  async function aprobarConAdic({nuevoEsAdic, nuevoTotal}){
+    const p=aprobAdic; if(!p) return
+    const id=p['Columna 1']
+    setAprobSaving(true)
+    try{
+      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal)}})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
+      const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
+      showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false)
+      if(onRefresh) onRefresh()
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion:'aprobar'})}).catch(()=>{})
+    }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
+  }
 
   async function cambiarEstado(id, nuevo, actual){
     if(String(nuevo).toUpperCase()===String(actual||'').toUpperCase()) return
@@ -461,7 +475,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||<em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}</span>
             <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
-            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
+            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : (nuevo==='APROBADO' && presuTieneAdicionales(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
           </div>
           {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)}/>}
         </div>
@@ -472,6 +486,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
       onSaved={(id,cambios)=>{ setRows(rs=>rs.map(r=>String(r['Columna 1'])===String(id)?{...r,...cambios}:r)); setEditing(null); if(onRefresh) onRefresh() }}/>}
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
     {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
+    {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
   </>
 }
 
@@ -878,6 +893,60 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   </div>
 }
 
+// ============================ APROBAR CON ADICIONALES ============================
+// Parsea los pedidos de un presupuesto (en orden) con sus flags adicional + precio cliente
+function parsePedidosPresu(presu){
+  const esAdicCSV = String(presu['Es Adicional']||'').split('|')
+  const precioCliCSV = String(presu['Precio Cliente Manual']||'').split('|')
+  const peds=[]; let k=0
+  for(let i=1;i<=12;i++){ const svc=presu['Pedido '+i]||(i===1?presu['Pedido']:'')||''; const prc=parseMonto(presu['Precio '+i]||(i===1?presu['Precio']:'')); if(svc||prc>0){ peds.push({k, svc, costo:prc, esAdic:esAdicCSV[k]==='1', precioCliManual:parseMonto(precioCliCSV[k])}); k++ } }
+  return peds
+}
+function presuTieneAdicionales(presu){ return String(presu?.['Es Adicional']||'').split('|').includes('1') }
+
+function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
+  const peds=parsePedidosPresu(presu)
+  const baseSubtotal=peds.filter(p=>!p.esAdic).reduce((s,p)=>s+p.costo,0)
+  const total=parseMonto(presu['Precio Final'])
+  const factor=baseSubtotal>0?total/baseSubtotal:1
+  const adic=peds.filter(p=>p.esAdic).map(p=>({...p, cli:p.precioCliManual>0?p.precioCliManual:Math.round(p.costo*factor)}))
+  const [tom,setTom]=useState({})
+  const tomados=adic.filter(a=>tom[a.k])
+  const sumaTom=tomados.reduce((s,a)=>s+a.cli,0)
+  const totalFinal=total+sumaTom
+  function confirmar(){
+    const nuevoEsAdic=peds.map(p=> (p.esAdic && tom[p.k]) ? '0' : (p.esAdic?'1':'0')).join('|')
+    onConfirm({ nuevoEsAdic, nuevoTotal:totalFinal })
+  }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:920, display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'60px 20px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:460, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Aprobar #{presu['Columna 1']}</div>
+        <div style={{fontSize:12, color:T.ink3, marginTop:2}}>{presu['Proyecto']||presu['Cliente']||''}</div>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>¿El cliente tomó algún adicional? Tildá los que aceptó — se suman al total y al proyecto.</div>
+        {adic.map(a=>(
+          <label key={a.k} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:`1px solid ${tom[a.k]?T.brand:T.border}`, borderRadius:10, marginBottom:8, cursor:'pointer'}}>
+            <input type="checkbox" checked={!!tom[a.k]} onChange={e=>setTom(t=>({...t,[a.k]:e.target.checked}))}/>
+            <span style={{flex:1, fontSize:13, color:T.ink}}>{a.svc}</span>
+            <span style={{fontSize:13, fontFamily:MONO, color:T.ink}}>{fmt(a.cli)}</span>
+          </label>
+        ))}
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
+          <span style={{fontSize:12.5, color:T.ink2}}>Total a aprobar</span>
+          <span style={{fontSize:20, fontWeight:700, fontFamily:MONO, color:T.pos}}>{fmt(totalFinal)}</span>
+        </div>
+        {sumaTom>0 && <div style={{fontSize:11.5, color:T.ink3, textAlign:'right', marginTop:2}}>base {fmt(total)} + adicionales {fmt(sumaTom)}</div>}
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={confirmar} disabled={saving} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Aprobando…':'Aprobar'}</button>
+      </div>
+    </div>
+  </div>
+}
+
 // ============================ CALENDARIO ============================
 function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
   const out=[]; const f0=parseD(fechaPrincipal); if(!f0) return out
@@ -898,6 +967,19 @@ function Calendario({data, onRefresh, showToast}){
   const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
   const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
+  const [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
+  async function aprobarConAdic({nuevoEsAdic, nuevoTotal}){
+    const p=aprobAdic; if(!p) return; const id=p['Columna 1']
+    setAprobSaving(true)
+    try{
+      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal)}})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
+      const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
+      showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false); setPendingStaff(id)
+      if(onRefresh) onRefresh()
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion:'aprobar'})}).catch(()=>{})
+    }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
+  }
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
@@ -999,7 +1081,7 @@ function Calendario({data, onRefresh, showToast}){
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
               <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                <button onClick={()=>setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>
+                <button onClick={()=> presuTieneAdicionales(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>
                 <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
@@ -1019,6 +1101,7 @@ function Calendario({data, onRefresh, showToast}){
       </div>
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
+    {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
   </>
 }
 
