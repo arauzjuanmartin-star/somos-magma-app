@@ -223,9 +223,14 @@ function Dashboard({data, goTo}){
   const ingresosMes = facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
   // Facturado: todas las facturas emitidas este mes (neto), cobradas o no.
   const facMesTotales = facMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
-  // Pagos staff: lo que efectivamente PAGAMOS este mes (por Fecha Pago, no lo adeudado).
-  const pagosStaffMes = pagosStaff.filter(p=>esDelMes(p['Fecha Pago'],mesActual,anioActual)).reduce((s,p)=>s+parseMonto(p['Monto Pagado']||p['Monto Adeudado']),0)
-  const rentabilidadMes = ingresosMes - pagosStaffMes  // caja neta del mes
+  // Eventos APROBADOS cuyo evento cae este mes (los laburos que hago en junio).
+  const proyMesEvento = proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
+  // Pagos staff: lo que voy gastando en staff por los eventos del mes.
+  // NO cuenta "Somos Magma" (esa línea es ganancia de la empresa, no un gasto).
+  const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
+  // Ganancia Magma del mes = fee + líneas "Somos Magma" + diferencia de los eventos del mes.
+  const ganMagmaMes = proyMesEvento.reduce((s,p)=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma'){ const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(pr2>0) sm+=pr2 } } return s+fee+sm+parseMonto(p['Diferencia']) },0)
+  const rentabilidadMes = ganMagmaMes
 
   // --- Conversión + ticket ---
   const presusMes = pr.filter(p=>esDelMes(p['Fecha Presupuesto'],mesActual,anioActual))
@@ -234,9 +239,10 @@ function Dashboard({data, goTo}){
   const desMes = presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
   const denom = apMes+espMes+desMes
   const tasaConversion = denom>0?Math.round(apMes/denom*100):0
-  // Ticket promedio: promedio de los proyectos APROBADOS (lo que vale un trabajo tipo).
-  const aprobVig = pr.filter(isAprobado)
-  const ticketPromedio = aprobVig.length>0?Math.round(aprobVig.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)/aprobVig.length):0
+  // Ticket promedio del MES: promedio de los eventos aprobados cuyo evento es este mes.
+  const aprobMesEvento = pr.filter(isAprobado).filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
+  const eventosMes = aprobMesEvento.length
+  const ticketPromedio = eventosMes>0?Math.round(aprobMesEvento.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)/eventosMes):0
 
   // --- Pipeline próximos 3 meses ---
   const proyByNro={}; proyectos.forEach(prj=>{proyByNro[String(prj['N° presupuesto'])]=prj})
@@ -320,10 +326,10 @@ function Dashboard({data, goTo}){
     <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
       <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
       <Stat label="Facturado (neto)" value={fmt(facMesTotales)} sub="facturas emitidas este mes"/>
-      <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="lo pagado a freelancers este mes"/>
-      <Stat label="Resultado" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="cobrado − pagos staff"/>
+      <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
+      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="fee + Somos Magma + diferencia del mes"/>
       <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
-      <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub="promedio por proyecto aprobado"/>
+      <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub={`${eventosMes} ${eventosMes===1?'evento aprobado':'eventos aprobados'} este mes`}/>
     </div>
 
     {/* PIPELINE */}
