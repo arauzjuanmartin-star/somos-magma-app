@@ -514,12 +514,19 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   ]
   const [form,setForm]=useState(()=>{ const o={}; campos.forEach(([k])=>o[k]=p[k]||''); return o })
   const [saving,setSaving]=useState(false)
+  const [agNew,setAgNew]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
+  const [ctNew,setCtNew]=useState({mail:'',telefono:'',cargo:'',cuit:''})
   const id = p['Columna 1'] || p['N° presupuesto']
   const ags=[...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
   const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
   const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
   const pms=[...new Set((data?.presupuestos||[]).map(x=>x['PM Interno']).filter(Boolean))].sort()
   const dl = tipo => tipo==='ag'?ags:tipo==='cl'?clis:tipo==='ct'?cts:null
+  const nrm=v=>String(v||'').trim().toLowerCase()
+  const agSet=new Set(ags.map(nrm)), clSet=new Set(clis.map(nrm)), ctSet=new Set(cts.map(nrm))
+  const agNueva=(form['Agencia']||'').trim() && !/^(sin agencia|directo)/i.test((form['Agencia']||'').trim()) && !agSet.has(nrm(form['Agencia']))
+  const clNuevo=(form['Cliente']||'').trim() && !clSet.has(nrm(form['Cliente']))
+  const ctNuevo=(form['Contacto']||'').trim() && !ctSet.has(nrm(form['Contacto']))
 
   async function guardar(){
     const cambios={}
@@ -537,6 +544,10 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         const camposProy={}; ['Fecha Evento','Cliente','Proyecto','Agencia','PM Interno','Contacto'].forEach(k=>{ if(cambios[k]!==undefined) camposProy[k]=cambios[k] })
         if(Object.keys(camposProy).length) { try{ await fetch('/api/proyecto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:camposProy, propagarPresupuesto:false})}) }catch(e){} }
       }
+      // Guardar entidades nuevas (agencia/contacto/cliente) en sus solapas
+      if(ctNuevo){ try{ await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form['Contacto'], mail:ctNew.mail, telefono:ctNew.telefono, cuit:ctNew.cuit, agencia:form['Agencia'], cargo:ctNew.cargo})}) }catch(e){} }
+      if(agNueva){ try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form['Agencia'], cuit:agNew.cuit, condIVA:agNew.condIVA, mailFact:agNew.mailFact, telefono:agNew.telefono})}) }catch(e){} }
+      if(clNuevo){ try{ await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form['Cliente']})}) }catch(e){} }
       showToast(`#${id} guardado`)
       onSaved(id, cambios)
       // 3. Resincronizar el Calendar en segundo plano (Google es lento)
@@ -565,6 +576,25 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         <datalist id="v2-ag">{ags.map(x=><option key={x} value={x}/>)}</datalist>
         <datalist id="v2-cl">{clis.map(x=><option key={x} value={x}/>)}</datalist>
         <datalist id="v2-ct">{cts.map(x=><option key={x} value={x}/>)}</datalist>
+        {agNueva && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px'}}>
+          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>🏢 Agencia nueva: "{form['Agencia']}" — completá sus datos (se guarda)</div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 130px'}}><label style={lblV2}>CUIT</label><input value={agNew.cuit} onChange={e=>setAgNew(a=>({...a,cuit:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 150px'}}><label style={lblV2}>Cond. IVA</label><input value={agNew.condIVA} onChange={e=>setAgNew(a=>({...a,condIVA:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 160px'}}><label style={lblV2}>Mail facturación</label><input value={agNew.mailFact} onChange={e=>setAgNew(a=>({...a,mailFact:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={agNew.telefono} onChange={e=>setAgNew(a=>({...a,telefono:e.target.value}))} style={inpV2}/></div>
+          </div>
+        </div>}
+        {ctNuevo && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px'}}>
+          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>☎ Contacto nuevo: "{form['Contacto']}" — completá sus datos (se guarda)</div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 160px'}}><label style={lblV2}>Mail</label><input value={ctNew.mail} onChange={e=>setCtNew(c=>({...c,mail:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={ctNew.telefono} onChange={e=>setCtNew(c=>({...c,telefono:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Cargo</label><input value={ctNew.cargo} onChange={e=>setCtNew(c=>({...c,cargo:e.target.value}))} style={inpV2}/></div>
+            <div style={{flex:'1 1 130px'}}><label style={lblV2}>CUIT</label><input value={ctNew.cuit} onChange={e=>setCtNew(c=>({...c,cuit:e.target.value}))} style={inpV2}/></div>
+          </div>
+        </div>}
+        {clNuevo && <div style={{fontSize:11.5, color:T.warn, fontWeight:600}}>🎯 Cliente nuevo: "{form['Cliente']}" — se guarda automáticamente.</div>}
       </div>
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
