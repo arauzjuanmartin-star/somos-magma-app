@@ -221,10 +221,11 @@ function Dashboard({data, goTo}){
   const facMes = fc.filter(f=>esDelMes(f['Fecha emision'],mesActual,anioActual))
   const facMesCobradas = facMes.filter(isCobrada)
   const ingresosMes = facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
-  // Facturado: todas las facturas emitidas este mes (neto), cobradas o no.
-  const facMesTotales = facMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
   // Eventos APROBADOS cuyo evento cae este mes (los laburos que hago en junio).
   const proyMesEvento = proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
+  // Facturado (eventos del mes): valor total de los trabajos cuyo evento es este mes.
+  // NO es "lo emitido este mes" — eso arrastraba facturas viejas (ej: Minecraft de mayo).
+  const facMesTotales = proyMesEvento.reduce((s,p)=>s+parseMonto(p['Total ']||p['Total']),0)
   // Pagos staff: lo que voy gastando en staff por los eventos del mes.
   // NO cuenta "Somos Magma" (esa línea es ganancia de la empresa, no un gasto).
   const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
@@ -325,7 +326,7 @@ function Dashboard({data, goTo}){
     <SectionTitle>{MESES_LARGO[mesActual-1]} · este mes</SectionTitle>
     <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
       <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
-      <Stat label="Facturado (neto)" value={fmt(facMesTotales)} sub="facturas emitidas este mes"/>
+      <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
       <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
       <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="fee + Somos Magma + diferencia del mes"/>
       <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
@@ -864,6 +865,14 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
           <div style={{fontSize:12, color:T.ink2, marginBottom:8}}>Se crea una <strong>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
           <label style={{...lblV2, color:T.brand}}>Motivo del represupuesto *</label>
           <input value={form.motivo||''} onChange={e=>upd('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente…" style={{...inpV2, borderColor:form.motivo?T.border:T.brand}} autoFocus/>
+          <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
+            <button onClick={async()=>{
+              if(!form.motivo||!form.motivo.trim()){ showToast('Poné el motivo primero (ej: duplicado)','err'); return }
+              if(!window.confirm(`Marcar #${initialData['Columna 1']} como REPRESUPUESTADO sin crear uno nuevo.\nUsalo si la versión nueva ya está cargada aparte.\n\n¿Confirmás?`)) return
+              try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'], estado:'REPRESUPUESTADO', motivo:form.motivo})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${initialData['Columna 1']} marcado como represupuestado`); onGuardado&&onGuardado() }
+              catch(e){ showToast('Error de conexión','err') }
+            }} style={{padding:'7px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontWeight:500, cursor:'pointer'}}>Ya lo cargué aparte — marcar este sin crear uno nuevo →</button>
+          </div>
         </div>}
         {/* Datos */}
         <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
