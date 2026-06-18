@@ -216,13 +216,16 @@ function Dashboard({data, goTo}){
   })
   const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total']),0)
 
-  // --- Rentabilidad del mes ---
+  // --- Plata del mes ---
+  // Cobrado: facturas que efectivamente cobramos este mes (plata que entró).
   const facMes = fc.filter(f=>esDelMes(f['Fecha emision'],mesActual,anioActual))
   const facMesCobradas = facMes.filter(isCobrada)
   const ingresosMes = facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  // Facturado: todas las facturas emitidas este mes (neto), cobradas o no.
   const facMesTotales = facMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
-  const egresosStaffMes = pagosStaff.filter(p=>{const m=String(p['Mes Referencia']||p['Mes']||'').toLowerCase();return m.includes(String(mesActual).padStart(2,'0'))||m.includes(MESES[mesActual-1])}).reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total']),0)
-  const rentabilidadMes = ingresosMes - egresosStaffMes
+  // Pagos staff: lo que efectivamente PAGAMOS este mes (por Fecha Pago, no lo adeudado).
+  const pagosStaffMes = pagosStaff.filter(p=>esDelMes(p['Fecha Pago'],mesActual,anioActual)).reduce((s,p)=>s+parseMonto(p['Monto Pagado']||p['Monto Adeudado']),0)
+  const rentabilidadMes = ingresosMes - pagosStaffMes  // caja neta del mes
 
   // --- Conversión + ticket ---
   const presusMes = pr.filter(p=>esDelMes(p['Fecha Presupuesto'],mesActual,anioActual))
@@ -231,7 +234,9 @@ function Dashboard({data, goTo}){
   const desMes = presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
   const denom = apMes+espMes+desMes
   const tasaConversion = denom>0?Math.round(apMes/denom*100):0
-  const ticketPromedio = facMesCobradas.length>0?Math.round(ingresosMes/facMesCobradas.length):0
+  // Ticket promedio: promedio de los proyectos APROBADOS (lo que vale un trabajo tipo).
+  const aprobVig = pr.filter(isAprobado)
+  const ticketPromedio = aprobVig.length>0?Math.round(aprobVig.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)/aprobVig.length):0
 
   // --- Pipeline próximos 3 meses ---
   const proyByNro={}; proyectos.forEach(prj=>{proyByNro[String(prj['N° presupuesto'])]=prj})
@@ -244,12 +249,13 @@ function Dashboard({data, goTo}){
     const diferencia = parseMonto(proy['Diferencia'])
     return fee+somosMagma+diferencia
   }
-  const proxMeses = [0,1,2].map(i=>{ const idx=mesActual-1+i; return {m:(idx%12)+1, a:anioActual+Math.floor(idx/12)} })
+  // Mes anterior + este + 2 siguientes (ej: mayo, junio, julio, agosto)
+  const proxMeses = [-1,0,1,2].map(i=>{ const idx=mesActual-1+i+12; return {m:(idx%12)+1, a:anioActual+Math.floor((mesActual-1+i)/12)} })
   const pipeline = proxMeses.map(({m,a})=>{
     const ps = pr.filter(p=>esDelMes(p['Fecha Evento'],m,a)).filter(isAprobado)
     const fact = ps.reduce((s,p)=>s+parseMonto(p['Precio Final']),0)
     const gan = ps.reduce((s,p)=>s+calcGanReal(p),0)
-    return {m,a,cant:ps.length,fact,gan}
+    return {m,a,cant:ps.length,fact,gan,esActual:m===mesActual&&a===anioActual,esPasado:(a<anioActual)||(a===anioActual&&m<mesActual)}
   })
 
   // --- Alertas (subconjunto, las accionables) ---
@@ -310,27 +316,27 @@ function Dashboard({data, goTo}){
     </div>}
 
     {/* ESTE MES */}
-    <SectionTitle>Este mes</SectionTitle>
+    <SectionTitle>{MESES_LARGO[mesActual-1]} · este mes</SectionTitle>
     <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-      <Stat label="Ingresos cobrados" value={fmt(ingresosMes)} color={T.pos}/>
-      <Stat label="Facturado (neto)" value={fmt(facMesTotales)}/>
-      <Stat label="Pagos staff" value={fmt(egresosStaffMes)}/>
-      <Stat label="Resultado" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand}/>
-      <Stat label="Conversión" value={tasaConversion+'%'}/>
-      <Stat label="Ticket prom." value={fmt(ticketPromedio)}/>
+      <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
+      <Stat label="Facturado (neto)" value={fmt(facMesTotales)} sub="facturas emitidas este mes"/>
+      <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="lo pagado a freelancers este mes"/>
+      <Stat label="Resultado" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="cobrado − pagos staff"/>
+      <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
+      <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub="promedio por proyecto aprobado"/>
     </div>
 
     {/* PIPELINE */}
-    <SectionTitle>Forecast · próximos 3 meses</SectionTitle>
+    <SectionTitle>El mes pasado, este, y lo que viene</SectionTitle>
     <div style={{display:'flex', gap:12}}>
       {pipeline.map((p,i)=>(
-        <div key={i} style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'16px 18px'}}>
+        <div key={i} style={{flex:1, background:p.esActual?T.brandSoft:T.surface, border:`1px solid ${p.esActual?T.brand:T.border}`, borderRadius:12, padding:'16px 18px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
-            <span style={{fontSize:12.5, fontWeight:600, color:T.ink}}>{MESES_LARGO[p.m-1]}</span>
+            <span style={{fontSize:12.5, fontWeight:p.esActual?700:600, color:p.esActual?T.brand:T.ink}}>{MESES_LARGO[p.m-1]}{p.esActual?' · hoy':''}</span>
             <span style={{fontSize:11, color:T.ink3}}>{p.cant} aprob.</span>
           </div>
           <div style={{fontSize:22, fontWeight:600, fontFamily:MONO, color:T.ink, marginTop:10}}>{fmtM(p.fact)}</div>
-          <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>facturación esperada</div>
+          <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>{p.esPasado?'facturado':'facturación esperada'}</div>
           <div style={{fontSize:13, fontWeight:600, fontFamily:MONO, color:T.pos, marginTop:10}}>{fmtM(p.gan)} <span style={{fontSize:11, fontWeight:400, color:T.ink3, fontFamily:'inherit'}}>ganancia neta</span></div>
         </div>
       ))}
@@ -2331,10 +2337,11 @@ function Hero({label, value, sub, subStrong, subStrongColor, accent}){
     <div style={{fontSize:12.5, color:T.ink2, marginTop:9}}>{sub}{subStrong && <span style={{color:subStrongColor||T.ink, fontWeight:600}}>{subStrong}</span>}</div>
   </div>
 }
-function Stat({label, value, color}){
+function Stat({label, value, color, sub}){
   return <div style={{flex:'1 1 130px', minWidth:120, padding:'14px 16px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:11}}>
     <div style={{fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>{label}</div>
     <div style={{fontSize:19, fontWeight:600, fontFamily:MONO, color:color||T.ink, marginTop:7}}>{value}</div>
+    {sub&&<div style={{fontSize:10.5, color:T.ink3, marginTop:4, lineHeight:1.3}}>{sub}</div>}
   </div>
 }
 function SectionTitle({children}){ return <div style={{fontSize:12.5, fontWeight:600, color:T.ink2, letterSpacing:0.3, textTransform:'uppercase', margin:'30px 0 13px'}}>{children}</div> }
