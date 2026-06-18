@@ -1616,7 +1616,9 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null), [mailModal,setMailModal]=useState(null)
   const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   const [staffModalPS,setStaffModalPS]=useState(null)
+  const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ setSelPay({}) },[mesIdx,anio])  // cambiar de mes limpia la selección
 
   // proyectos del mes/año por Fecha Evento
   const proyMes=proyectos.filter(p=>esDelMes(p['Fecha Evento'], mesIdx, anio))
@@ -1701,6 +1703,22 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       if(onRefresh){ await onRefresh(); setOverride(o=>{const n={...o}; pend.forEach(t=>delete n[t.key]); return n}) }
     }catch(e){ showToast('Error de conexión','err') }
   }
+  const selList=Object.values(selPay)
+  const selTotal=selList.reduce((s,x)=>s+x.t.precio,0)
+  const toggleSel=(persona,t)=>setSelPay(s=>{ const n={...s}; if(n[t.key]) delete n[t.key]; else n[t.key]={persona,t}; return n })
+  async function pagarSeleccion(){
+    if(!selList.length) return
+    if(!cuentaPago){ showToast('Elegí desde qué cuenta pagás','err'); return }
+    if(!window.confirm(`Pagar ${selList.length} trabajos = ${fmt(selTotal)}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
+    const keys=selList.map(x=>x.t.key)
+    setOverride(o=>{const n={...o}; keys.forEach(k=>n[k]=true); return n})
+    setSelPay({})
+    try{
+      for(const {persona,t} of selList){ const j=await postPago(persona,t,true); if(j&&j.error) showToast(`Error en ${t.pedido}: ${j.error}`,'err') }
+      showToast(`${keys.length} trabajos pagados desde ${cuentaPago}`)
+      if(onRefresh){ await onRefresh(); setOverride(o=>{const n={...o}; keys.forEach(k=>delete n[k]); return n}) }
+    }catch(e){ showToast('Error de conexión','err') }
+  }
   function mensajeDe(persona){
     const nombre=persona.nombre.split(' ')[0]
     const items=persona.trabajos.filter(t=>!t.pagado).map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}`).join('\n')
@@ -1764,15 +1782,15 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
               <div style={{flex:1}}/>
               <button onClick={()=>setFreelEdit({nombre:persona.nombre, datos})} style={{...miniBtn, alignSelf:'center'}}>{datos&&Object.keys(datos).length?'✎ Editar datos':'+ Completar datos'}</button>
             </div>
-            {persona.totalPendiente>0 && <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Tildá solo si es un <strong style={{color:T.ink2}}>adelanto</strong> (pagás algunos). Para el pago del mes completo, usá <strong style={{color:T.pos}}>Pagar todo</strong>.</div>}
-            {persona.trabajos.map((t,j)=>(
-              <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1}}>
-                <input type="checkbox" checked={!!t.pagado} onChange={e=>togglePago(persona,t,e.target.checked)} style={{cursor:'pointer'}}/>
-                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span></div>
+            {persona.totalPendiente>0 && <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Tildá los trabajos que vas a pagar (podés mezclar varias personas) y dale <strong style={{color:T.pos}}>Pagar seleccionados</strong> abajo. Cada tanda puede ir a una cuenta distinta.</div>}
+            {persona.trabajos.map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
+              <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
+                <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
+                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}</div>
                 <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink}}>{fmt(t.precio)}</span>
                 <button onClick={()=>{ const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Editar montos / agregar viáticos en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
               </div>
-            ))}
+            )})}
             <div style={{display:'flex', justifyContent:'flex-end', gap:6, marginTop:10, flexWrap:'wrap'}}>
               <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
               <button onClick={()=>setMailModal({persona, datos:rrhhByName[persona.nombre.trim()]||{}})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
@@ -1793,6 +1811,16 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
           <button onClick={()=>setStaffModalPS(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
         <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
+      </div>
+    </div>}
+    {selList.length>0 && <div style={{position:'fixed', left:0, right:0, bottom:0, zIndex:850, padding:'0 16px 14px', pointerEvents:'none'}}>
+      <div style={{maxWidth:760, margin:'0 auto', background:T.ink, color:'#fff', borderRadius:14, padding:'12px 16px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', boxShadow:'0 -6px 30px rgba(0,0,0,0.25)', pointerEvents:'auto'}}>
+        <div style={{fontSize:13.5}}><strong style={{fontSize:15}}>{selList.length}</strong> {selList.length===1?'trabajo':'trabajos'} · <span style={{fontFamily:MONO, fontWeight:600}}>{fmt(selTotal)}</span></div>
+        <div style={{flex:1}}/>
+        <span style={{fontSize:12, opacity:0.7}}>Desde:</span>
+        <select value={cuentaPago} onChange={e=>setCuentaPago(e.target.value)} style={{padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#fff', fontSize:12.5, outline:'none'}}>{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c} style={{color:T.ink}}>{c}</option>)}</select>
+        <button onClick={()=>setSelPay({})} style={{padding:'8px 12px', borderRadius:8, border:'1px solid rgba(255,255,255,0.25)', background:'transparent', color:'#fff', fontSize:12.5, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={pagarSeleccion} style={{padding:'9px 18px', borderRadius:8, border:'none', background:T.pos, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>Pagar seleccionados</button>
       </div>
     </div>}
   </>
