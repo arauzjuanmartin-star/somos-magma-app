@@ -1350,15 +1350,17 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
+    {(()=>{ const margenPct=total>0?Math.round((fee/total)*100):0; const sem=semaforo(margenPct); return (
     <div style={{display:'flex', gap:24, marginTop:14, paddingTop:14, borderTop:`1px solid ${T.border}`, flexWrap:'wrap', alignItems:'center'}}>
       <Mini label="Presupuestado" val={fmt(total)}/>
       <Mini label="Freelance" val={fmt(fl)}/>
       <Mini label="Somos Magma" val={fmt(mg)} color={T.pos}/>
       <Mini label="Fee Magma" val={fmt(fee)} color={fee<0?T.brand:T.ink}/>
+      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div></div>
       <div style={{flex:1}}/>
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
-    </div>
+    </div> )})()}
     {freel && <FreelancerModal nombre={freel} datos={{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </div>
 }
@@ -1910,12 +1912,13 @@ function Agencias({data, onRefresh, showToast, nav, clearNav}){
               <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
             ))}
             <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
-            {st.psList.slice(-8).reverse().map((p,i)=>(
-              <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-                <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p['Proyecto']||p['Cliente']||'—'}</span>
+            {st.psList.slice(-10).reverse().map((p,i)=>{ const si=estadoInfo(p['Estado']); return (
+              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
+                <span style={{width:6,height:6,borderRadius:6,background:si.c,flexShrink:0}} title={si.l}/>
+                <span style={{flex:1, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Proyecto']||p['Cliente']||'—'}</span>
                 <span style={{fontFamily:MONO, color:T.ink2}}>{fmtM(parseMonto(p['Precio Final']))}</span>
               </div>
-            ))}
+            )})}
           </>}
         </div>
       </div>}
@@ -1929,7 +1932,11 @@ function Clientes({data, nav, clearNav}){
   const rows=data.clientes||[]
   const [q,setQ]=useState(''), [sel,setSel]=useState(null)
   useEffect(()=>{ if(nav?.mod==='clientes'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
-  const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Cliente'])===n); const fcs=fc.filter(f=>normTxt(f['Cliente'])===n); return {presus:ps.length, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
+  const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Cliente'])===n); const fcs=fc.filter(f=>normTxt(f['Cliente'])===n)
+    const aprob=ps.filter(isAprobado).length
+    const espera=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA').length
+    const desaprob=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
+    return {presus:ps.length, aprob, espera, desaprob, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
   const filtrados=rows.filter(c=>!q||normTxt(c['Nombre']).includes(normTxt(q)))
   const cliSel = sel?rows.find(c=>c['Nombre']===sel):null
   const st = cliSel?stats(cliSel['Nombre']):null
@@ -1953,19 +1960,25 @@ function Clientes({data, nav, clearNav}){
       {cliSel && <div style={{flex:'0 0 340px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
         <CardHead>{cliSel['Nombre']}</CardHead>
         <div style={{padding:'0 18px 16px'}}>
-          <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:12}}>
+          <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:10}}>
             <Mini label="Presupuestos" val={st.presus}/><Mini label="Facturas" val={st.fact}/><Mini label="Cobrado" val={fmtM(st.cobrado)} color={T.pos}/>
+          </div>
+          <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
+            <span style={{fontSize:11.5, color:T.pos, background:T.posSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.aprob} aprobados</span>
+            <span style={{fontSize:11.5, color:T.warn, background:T.warnSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.espera} en espera</span>
+            <span style={{fontSize:11.5, color:T.brand, background:T.brandSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.desaprob} desaprob.</span>
           </div>
           {[['Agencia habitual',cliSel['Agencia habitual']],['Industria',cliSel['Industria']],['Última vez',cliSel['Ultima vez']]].filter(x=>x[1]).map(([k,v])=>(
             <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
           ))}
           <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
-          {st.psList.slice(-8).reverse().map((p,i)=>(
-            <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-              <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p['Proyecto']||'—'}</span>
+          {st.psList.slice(-10).reverse().map((p,i)=>{ const si=estadoInfo(p['Estado']); return (
+            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
+              <span style={{width:6,height:6,borderRadius:6,background:si.c,flexShrink:0}} title={si.l}/>
+              <span style={{flex:1, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Proyecto']||'—'}</span>
               <span style={{fontFamily:MONO, color:T.ink2}}>{fmtM(parseMonto(p['Precio Final']))}</span>
             </div>
-          ))}
+          )})}
         </div>
       </div>}
     </div>
@@ -1976,34 +1989,40 @@ function Clientes({data, nav, clearNav}){
 function Historico({data}){
   const proyectos=data.proyectos||[], fc=data.facturacion||[]
   const [anio,setAnio]=useState('2026')
+  const [mesF,setMesF]=useState('todos')
   const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
   const magma2026=p=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=20;j++){ if(String(p['Staff '+j]||'').trim()==='Somos Magma') sm+=parseMonto(p['Precio '+j]) } return fee+sm+parseMonto(p['Diferencia']) }
 
-  let filas=[]
+  let filasAll=[]
   if(anio==='2026'){
-    filas=proyectos.filter(p=>String(p['Fecha Evento']||'').includes('2026')).map(p=>{ const f=fcByNro[String(p['N° presupuesto'])]
-      return {mes:(p['Fecha Evento']||'').split('/')[1]||'', fecha:p['Fecha Evento'], nro:p['N° presupuesto'], cliente:p['Cliente'], agencia:p['Agencia'], proyecto:p['Proyecto'], total:parseMonto(p['Total ']||p['Total']), magma:magma2026(p), cobrado:f?isCobrada(f):false} })
+    filasAll=proyectos.filter(p=>String(p['Fecha Evento']||'').includes('2026')).map(p=>{ const f=fcByNro[String(p['N° presupuesto'])]
+      return {mesNum:parseInt((p['Fecha Evento']||'').split('/')[1])||0, fecha:p['Fecha Evento'], nro:p['N° presupuesto'], cliente:p['Cliente'], agencia:p['Agencia'], proyecto:p['Proyecto'], total:parseMonto(p['Total ']||p['Total']), magma:magma2026(p), cobrado:f?isCobrada(f):false} })
   } else {
     const src={'2023':data.historico2023,'2024':data.historico2024,'2025':data.historico2025}[anio]||[]
-    filas=src.map(r=>({ mes:r['Mes'], fecha:r['Fecha Evento'], nro:r['Nro Presupuesto'], cliente:r['Cliente'], agencia:r['Agencia'], proyecto:r['Proyecto'], total:parseMonto(r['Total']), magma:parseMonto(r['Viaticos'])+parseMonto(r['Magma'])+parseMonto(r['Impuestos'])+parseMonto(r['Extra M']), cobrado:String(r['Cobrado']||'').toUpperCase()==='SÍ'||String(r['Cobrado']||'').toUpperCase()==='SI'||String(r['Cobrado']||'').toUpperCase()==='TRUE' }))
+    filasAll=src.map(r=>({ mesNum:parseInt(String(r['Fecha Evento']||'').split('/')[1])||parseInt(String(r['Mes']||''))||0, fecha:r['Fecha Evento'], nro:r['Nro Presupuesto'], cliente:r['Cliente'], agencia:r['Agencia'], proyecto:r['Proyecto'], total:parseMonto(r['Total']), magma:parseMonto(r['Viaticos'])+parseMonto(r['Magma'])+parseMonto(r['Impuestos'])+parseMonto(r['Extra M']), cobrado:String(r['Cobrado']||'').toUpperCase()==='SÍ'||String(r['Cobrado']||'').toUpperCase()==='SI'||String(r['Cobrado']||'').toUpperCase()==='TRUE' }))
   }
+  const filas = mesF==='todos' ? filasAll : filasAll.filter(r=>r.mesNum===parseInt(mesF))
   const facturado=filas.reduce((s,r)=>s+r.total,0)
   const ganancia=filas.reduce((s,r)=>s+r.magma,0)
   const margenPct=facturado>0?(ganancia/facturado)*100:0
+  const semMargen=semaforo(margenPct)
+  const mesesPresentes=[...new Set(filasAll.map(r=>r.mesNum).filter(Boolean))].sort((a,b)=>a-b)
 
-  // top clientes del año
+  // top clientes del período
   const porCli={}; filas.forEach(r=>{ const c=r.cliente||'—'; porCli[c]=(porCli[c]||0)+r.total }); const topCli=Object.entries(porCli).sort((a,b)=>b[1]-a[1]).slice(0,8)
 
   return <>
-    <PageHead title="Histórico" sub={`${filas.length} proyectos en ${anio}`}/>
-    <div style={{display:'flex', gap:8, marginBottom:18}}>
-      {['2023','2024','2025','2026'].map(a=><button key={a} onClick={()=>setAnio(a)} style={{padding:'7px 16px', borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', border:`1px solid ${anio===a?T.ink:T.border}`, background:anio===a?T.ink:T.surface, color:anio===a?'#fff':T.ink2}}>{a}</button>)}
+    <PageHead title="Histórico" sub={`${filas.length} proyectos${mesF==='todos'?` en ${anio}`:` en ${MESES_LARGO[parseInt(mesF)-1]} ${anio}`}`}/>
+    <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center'}}>
+      {['2023','2024','2025','2026'].map(a=><button key={a} onClick={()=>{setAnio(a);setMesF('todos')}} style={{padding:'7px 16px', borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', border:`1px solid ${anio===a?T.ink:T.border}`, background:anio===a?T.ink:T.surface, color:anio===a?'#fff':T.ink2}}>{a}</button>)}
+      <div style={{flex:1}}/>
+      <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selectStyle}><option value="todos">Todo el año</option>{mesesPresentes.map(m=><option key={m} value={m}>{MESES_LARGO[m-1]}</option>)}</select>
     </div>
     <div style={{display:'flex', gap:12, marginBottom:20, flexWrap:'wrap'}}>
       <Stat label="Proyectos" value={filas.length}/>
       <Stat label="Facturado" value={fmt(facturado)}/>
       <Stat label="Ganancia Magma" value={fmt(ganancia)} color={T.pos}/>
-      <Stat label="Margen" value={Math.round(margenPct)+'%'}/>
+      <Stat label={`Margen · ${semMargen.l}`} value={Math.round(margenPct)+'%'} color={semMargen.c}/>
     </div>
     {filas.length===0
       ? <Empty>Sin datos para {anio}. Los históricos viejos se cargan desde Admin → Backfill en la app actual.</Empty>
