@@ -182,6 +182,7 @@ export default function V2() {
 
 // ============================ DASHBOARD ============================
 function Dashboard({data, goTo}){
+  const [verCuentas,setVerCuentas]=useState(false)
   const hoy = new Date()
   const mesActual = hoy.getMonth()+1, anioActual = hoy.getFullYear()
   const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[], reservas=data.reservas||[]
@@ -207,20 +208,20 @@ function Dashboard({data, goTo}){
   const diaHoy=hoy.getDate()
   const mesACobrar = diaHoy>=15 ? mesActual : mesActual-1
   const proxPagoFecha = new Date(anioActual, diaHoy>=15?mesActual-1:mesActual-2, 15)
+  const esPagada = p => { const e=String(p['Estado']||p['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(p['Monto Pagado'])>0 }
   const staffAPagar = pagosStaff.filter(p=>{
-    const m=String(p['Mes']||'').toLowerCase()
+    const m=String(p['Mes Referencia']||p['Mes']||'').toLowerCase()
     const esMes = m.includes(String(mesACobrar).padStart(2,'0'))||m.includes(MESES[(mesACobrar+11)%12])
-    const yaPagado = String(p['Pagado']||'').toUpperCase()==='TRUE'||p['Pagado']===true
-    return esMes && !yaPagado
+    return esMes && !esPagada(p)
   })
-  const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto']||p['Total']),0)
+  const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total']),0)
 
   // --- Rentabilidad del mes ---
   const facMes = fc.filter(f=>esDelMes(f['Fecha emision'],mesActual,anioActual))
   const facMesCobradas = facMes.filter(isCobrada)
   const ingresosMes = facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
   const facMesTotales = facMes.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
-  const egresosStaffMes = pagosStaff.filter(p=>{const m=String(p['Mes']||'').toLowerCase();return m.includes(String(mesActual).padStart(2,'0'))||m.includes(MESES[mesActual-1])}).reduce((s,p)=>s+parseMonto(p['Monto']||p['Total']),0)
+  const egresosStaffMes = pagosStaff.filter(p=>{const m=String(p['Mes Referencia']||p['Mes']||'').toLowerCase();return m.includes(String(mesActual).padStart(2,'0'))||m.includes(MESES[mesActual-1])}).reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total']),0)
   const rentabilidadMes = ingresosMes - egresosStaffMes
 
   // --- Conversión + ticket ---
@@ -271,21 +272,42 @@ function Dashboard({data, goTo}){
   return <>
     <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
 
-    {/* HERO — los 3 números que mirás todos los días */}
+    {/* HERO — los 3 números que mirás todos los días (clickeables) */}
     <div style={{display:'flex', gap:14}}>
-      <Hero label="Disponible real"
-        value={fmt(totalDisponible)}
-        sub={`En caja ${fmt(totalCaja)} · reservado ${fmt(totalReservado)}`}/>
-      <Hero label="Por cobrar"
-        value={fmt(totalPorCobrar)}
-        accent={atrasadas30.length>0?T.brand:T.ink}
-        sub={`${porCobrar.length} facturas · `}
-        subStrong={atrasadas30.length>0?`${atrasadas30.length} atrasadas +30d`:'al día'}
-        subStrongColor={atrasadas30.length>0?T.brand:T.pos}/>
-      <Hero label={`A pagar staff · ${proxPagoFecha.getDate()}/${proxPagoFecha.getMonth()+1}`}
-        value={fmt(totalAPagar)}
-        sub={`${staffAPagar.length} freelancers · mes ${MESES_LARGO[(mesACobrar+11)%12]}`}/>
+      <div style={{flex:1, cursor:'pointer'}} onClick={()=>setVerCuentas(v=>!v)} title="Ver detalle por cuenta">
+        <Hero label="Disponible real"
+          value={fmt(totalDisponible)}
+          sub={`En caja ${fmt(totalCaja)} · reservado ${fmt(totalReservado)} · `} subStrong={verCuentas?'ocultar ▲':'ver cuentas ▼'} subStrongColor={T.ink3}/>
+      </div>
+      <div style={{flex:1, cursor:'pointer'}} onClick={()=>goTo&&goTo('facturacion', atrasadas30.length>0?'atrasadas':undefined)}>
+        <Hero label="Por cobrar"
+          value={fmt(totalPorCobrar)}
+          accent={atrasadas30.length>0?T.brand:T.ink}
+          sub={`${porCobrar.length} facturas · `}
+          subStrong={atrasadas30.length>0?`${atrasadas30.length} atrasadas +30d →`:'al día →'}
+          subStrongColor={atrasadas30.length>0?T.brand:T.pos}/>
+      </div>
+      <div style={{flex:1, cursor:'pointer'}} onClick={()=>goTo&&goTo('pagos')}>
+        <Hero label={`A pagar staff · ${proxPagoFecha.getDate()}/${proxPagoFecha.getMonth()+1}`}
+          value={fmt(totalAPagar)}
+          sub={`${staffAPagar.length} freelancers · `} subStrong="ver →" subStrongColor={T.ink3}/>
+      </div>
     </div>
+    {verCuentas && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'14px 18px', marginTop:12}}>
+      <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, marginBottom:10}}>Plata por cuenta</div>
+      {cuentasActivas.map((c,i)=>{ const saldo=parseMonto(c['Saldo actual']); const usd=parseMonto(c['Saldo USD']); return (
+        <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
+          <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div>{c['Banco']&&<div style={{fontSize:11, color:T.ink3}}>{c['Banco']}</div>}</div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:13.5, fontFamily:MONO, color:T.ink}}>{fmt(saldo)}</div>{usd>0&&<div style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>USD {fmt(usd)}</div>}</div>
+        </div>
+      )})}
+      <div style={{display:'flex', justifyContent:'space-between', padding:'10px 0 0', marginTop:6, borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:12.5, color:T.ink2}}>En caja</span><span style={{fontSize:13.5, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmt(totalCaja)}</span>
+      </div>
+      {totalReservado>0 && <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.warn}}>Reservado (IVA/imp.)</span><span style={{fontSize:13, fontFamily:MONO, color:T.warn}}>-{fmt(totalReservado)}</span></div>}
+      <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.ink2, fontWeight:600}}>Disponible real</span><span style={{fontSize:14, fontFamily:MONO, fontWeight:700, color:T.pos}}>{fmt(totalDisponible)}</span></div>
+      <div style={{fontSize:11, color:T.ink3, marginTop:8}}>Los saldos se cargan manual en la solapa CUENTAS del sheet. Mañana los actualizás.</div>
+    </div>}
 
     {/* ESTE MES */}
     <SectionTitle>Este mes</SectionTitle>
