@@ -1585,10 +1585,15 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], onClose, onCreada,
             <div style={{width:90}}><label style={lblV2}>Tipo</label><select value={tipo} onChange={e=>setTipo(e.target.value)} style={inpV2}>{['A','B','C'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
             <div style={{flex:1, minWidth:140}}><label style={lblV2}>N° de factura</label><input value={nro} onChange={e=>setNro(e.target.value)} placeholder="ej 0001-00001234" style={inpV2}/></div>
           </div>
-          <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:12}}>
-            <div style={{width:140}}><label style={lblV2}>Monto neto (sin IVA)</label><input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/></div>
+          <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:8}}>
+            <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label><input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/></div>
             <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', paddingBottom:9}}><input type="checkbox" checked={conIVA} onChange={e=>setConIVA(e.target.checked)}/> Con IVA 21%</label>
+          </div>
+          <div style={{display:'flex', gap:7, alignItems:'center', marginBottom:12, flexWrap:'wrap'}}>
+            <span style={{fontSize:11.5, color:T.ink3}}>Facturar:</span>
+            {[['50%',0.5],['Total',1]].map(([l,f])=><button key={l} onClick={()=>setMontoNeto(String(Math.round(sel.pendiente*f)))} style={{padding:'5px 12px', borderRadius:20, fontSize:11.5, fontWeight:600, cursor:'pointer', border:`1px solid ${Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.border}`, background:Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.surface, color:Math.round(neto)===Math.round(sel.pendiente*f)?'#fff':T.ink2}}>{l}</button>)}
+            {(()=>{ const restante=Math.max(0, Math.round(sel.pendiente)-Math.round(neto)); return restante>0 ? <span style={{fontSize:11.5, color:T.warn, fontWeight:600, marginLeft:4}}>↳ queda pendiente {fmt(restante)} para facturar después</span> : <span style={{fontSize:11.5, color:T.pos, fontWeight:600, marginLeft:4}}>↳ factura el total, no queda saldo</span> })()}
           </div>
           <div style={{marginBottom:4}}>
             <label style={lblV2}>PDF de la factura (opcional)</label>
