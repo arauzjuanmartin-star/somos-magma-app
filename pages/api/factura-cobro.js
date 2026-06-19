@@ -15,6 +15,7 @@ export default async function handler(req, res) {
     nroPresupuesto, tipoCobro = 'total', monto, cuentaDestino, formaPago,
     retGanancias = 0, retIIBB = 0, retIVA = 0, comision = 0,
     fechaCobro, reservarIVA, alicuotaIVA = 0.21, porcentajeAdelanto, notas = '',
+    historico = false,  // reconciliación: marca cobrada SIN tocar saldo de cuenta ni reservar IVA
   } = req.body
 
   if (!nroPresupuesto) return res.status(400).json({ error: 'Falta nroPresupuesto' })
@@ -87,9 +88,10 @@ export default async function handler(req, res) {
       if (idx.fechaCobro !== -1) updates.push({ range: `FACTURACION!${colLetra(idx.fechaCobro)}${rowIndex}`, values: [[fechaParaCobrado]] })
     }
 
-    // Update de CUENTAS (en el mismo batchUpdate)
+    // Update de CUENTAS (en el mismo batchUpdate). En modo histórico NO se toca el saldo
+    // (la plata entró hace meses; solo estamos reconciliando el estado de cobrada).
     let nuevoSaldo = null
-    if (cuentaDestino && llegoACuenta > 0) {
+    if (!historico && cuentaDestino && llegoACuenta > 0) {
       const cuentasRows = cuentasR.data.values || []
       const ch = cuentasRows[0] || []
       const iNombre = ch.indexOf('Nombre')
@@ -116,7 +118,7 @@ export default async function handler(req, res) {
     // Reserva IVA si corresponde
     let reservaCreada = null
     const tipoFactura = String(facturaRow[idx.tipoFactura] || '').toUpperCase()
-    if (reservarIVA && tipoFactura === 'A' && cuentaDestino && montoEvento > 0) {
+    if (!historico && reservarIVA && tipoFactura === 'A' && cuentaDestino && montoEvento > 0) {
       const ivaFactura = num(facturaRow[idx.iva])
       const proporcion = precioFinal > 0 ? (montoEvento / precioFinal) : 1
       const montoIVAReserva = Math.round(ivaFactura * proporcion) - num(retIVA)

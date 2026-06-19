@@ -1508,22 +1508,21 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     </div>
     ) : (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'108px 1.15fr 95px 155px 165px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Factura</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
+      <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 180px 215px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'108px 1.15fr 95px 155px 165px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
-          <span style={{fontFamily:MONO, fontSize:11.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{f['Nro de Factura']||'s/n'}</span>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'1.5fr 110px 180px 215px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}</span>
+            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:' · s/n'}</span>
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
             <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
-            {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:10, color:info.c, fontWeight:d!=null&&d<0?700:400}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
+            {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:11, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
@@ -1668,14 +1667,18 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   const [cuenta,setCuenta]=useState(cuentaOpts[0]||'')
   const [forma,setForma]=useState('Transferencia')
   const [reservarIVA,setReservarIVA]=useState(String(f['Tipo de Factura']||'').toUpperCase()==='A')
+  const [historico,setHistorico]=useState(false)  // ya cobrada hace tiempo: marcar sin tocar saldo
   const [saving,setSaving]=useState(false)
   const num=f['N° Presupuesto']
 
   async function cobrar(){
-    if(!cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
-    if(!window.confirm(`Marcar #${num} como COBRADA por ${fmt(total)} en ${cuenta}. Esto suma el saldo a la cuenta${reservarIVA?' y reserva el IVA':''}. ¿Confirmás?`)) return
+    if(!historico && !cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
+    const msg = historico
+      ? `Marcar #${num} como COBRADA (cobro histórico).\nNO suma saldo a ninguna cuenta ni reserva IVA — solo deja la factura como cobrada.\n\n¿Confirmás?`
+      : `Marcar #${num} como COBRADA por ${fmt(total)} en ${cuenta}. Esto suma el saldo a la cuenta${reservarIVA?' y reserva el IVA':''}. ¿Confirmás?`
+    if(!window.confirm(msg)) return
     setSaving(true)
-    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:'total', monto:total, cuentaDestino:cuenta, formaPago:forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA })})
+    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:'total', monto:total, cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA:historico?false:reservarIVA, historico })})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       showToast(`#${num} cobrada ✓`); onClose(); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
@@ -1686,11 +1689,17 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
       <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Registrar cobro</div><div style={{fontSize:12, color:T.ink3, marginTop:2, fontFamily:MONO}}>#{num} · {f['Proyecto']||f['Cliente']||''}</div></div>
       <div style={{padding:'20px 22px'}}>
         <div style={{textAlign:'center', marginBottom:18}}><div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>Monto a cobrar</div><div style={{fontSize:30, fontWeight:700, fontFamily:MONO, color:T.pos, marginTop:4}}>{fmt(total)}</div></div>
+        <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:historico?T.warnSoft:T.surfaceAlt, border:`1px solid ${historico?T.warn:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
+          <input type="checkbox" checked={historico} onChange={e=>setHistorico(e.target.checked)} style={{marginTop:2}}/>
+          <span><strong style={{color:T.ink}}>Cobro histórico</strong> — ya la cobraste hace tiempo. Solo la marca como cobrada, <strong>no suma a ninguna cuenta</strong> ni reserva IVA. (Para reconciliar facturas viejas.)</span>
+        </label>
+        {!historico && <>
         <label style={lblV2}>Entra en la cuenta</label>
         <select value={cuenta} onChange={e=>setCuenta(e.target.value)} style={{...inpV2, marginBottom:13}}>{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <label style={lblV2}>Forma de pago</label>
         <select value={forma} onChange={e=>setForma(e.target.value)} style={{...inpV2, marginBottom:13}}>{['Transferencia','eCheq','Efectivo'].map(x=><option key={x} value={x}>{x}</option>)}</select>
         <label style={{display:'flex', gap:9, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer'}}><input type="checkbox" checked={reservarIVA} onChange={e=>setReservarIVA(e.target.checked)}/> Reservar IVA (factura A)</label>
+        </>}
       </div>
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
