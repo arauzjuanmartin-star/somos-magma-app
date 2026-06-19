@@ -1491,13 +1491,21 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
       })}
     </div>
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
-    {nuevaF && <NuevaFactura pendientes={pendientes} onClose={()=>setNuevaF(false)} onCreada={()=>{ setNuevaF(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} onClose={()=>setNuevaF(false)} onCreada={()=>{ setNuevaF(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
-function NuevaFactura({pendientes, onClose, onCreada, showToast}){
+function NuevaFactura({pendientes, agencias=[], contactos=[], onClose, onCreada, showToast}){
   const hoy=new Date()
   const [sel,setSel]=useState(null), [q,setQ]=useState('')
+  // Datos fiscales de a quién se le factura (la agencia que paga, o el cliente si es directo)
+  const facturarA = sel ? ((sel.p['Agencia']&&!/sin agencia|directo/i.test(sel.p['Agencia']))?sel.p['Agencia']:sel.p['Cliente']) : ''
+  const agRow = sel ? agencias.find(a=>normTxt(a['Nombre'])===normTxt(facturarA)) : null
+  const ctRow = (sel && !agRow?.['CUIT']) ? contactos.find(c=>normTxt(c['Agencia'])===normTxt(facturarA)||normTxt(c['Nombre'])===normTxt(facturarA)) : null
+  const cuitFact = (agRow?.['CUIT'] || ctRow?.['Cuit'] || '').toString().trim()
+  const condIVAFact = (agRow?.['Condicion IVA'] || '').toString().trim()
+  // Semáforo de fecha del evento: verde = ya pasó (facturable), ámbar = a futuro (todavía no pasó)
+  const fechaInfo = p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return {c:T.ink3,l:'sin fecha',fecha:'s/f'}; const d=Math.floor((hoy-fe)/864e5); const fecha=`${fe.getDate()}/${fe.getMonth()+1}`; return d<0?{c:T.warn,l:`evento en ${-d}d`,fecha,futuro:true}:{c:T.pos,l:d===0?'es hoy':'ya pasó',fecha,futuro:false} }
   const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
   const neto = sel ? (parseFloat(montoNeto)||sel.pendiente) : 0
   const iva = conIVA?Math.round(neto*0.21):0
@@ -1545,17 +1553,32 @@ function NuevaFactura({pendientes, onClose, onCreada, showToast}){
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar proyecto, cliente, N°…" style={{...inpV2, marginBottom:10}}/>
           <div style={{maxHeight:300, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:10}}>
             {lista.length===0 && <Empty>Nada pendiente de facturar</Empty>}
-            {lista.map((x,i)=>(
-              <div key={i} onClick={()=>{setSel(x); setMontoNeto(String(Math.round(x.pendiente)))}} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            {lista.map((x,i)=>{ const fi=fechaInfo(x.p); return (
+              <div key={i} onClick={()=>{setSel(x); setMontoNeto(String(Math.round(x.pendiente)))}} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div style={{minWidth:0}}><div style={{fontSize:13, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||'—'}</div><div style={{fontSize:11.5, color:T.ink3}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</div></div>
-                <span style={{fontSize:12.5, fontFamily:MONO, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
+                <div style={{textAlign:'right', flexShrink:0}}>
+                  <span style={{fontSize:12.5, fontFamily:MONO, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
+                  <div style={{display:'flex', alignItems:'center', gap:5, justifyContent:'flex-end', marginTop:3}} title={fi.l}><span style={{width:6,height:6,borderRadius:6,background:fi.c}}/><span style={{fontSize:10.5, color:fi.c, fontWeight:fi.futuro?600:400}}>{fi.futuro?`📅 ${fi.fecha} (futuro)`:fi.fecha}</span></div>
+                </div>
               </div>
-            ))}
+            )})}
           </div>
         </> : <>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:T.surfaceAlt, borderRadius:10, padding:'10px 14px', marginBottom:16}}>
-            <div><div style={{fontSize:13, color:T.ink, fontWeight:600}}>{sel.p['Proyecto']||'—'}</div><div style={{fontSize:11.5, color:T.ink3}}>#{sel.p['Columna 1']} · {[sel.p['Cliente'],sel.p['Agencia']].filter(Boolean).join(' · ')} · pendiente {fmt(sel.pendiente)}</div></div>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:T.surfaceAlt, borderRadius:10, padding:'10px 14px', marginBottom:10}}>
+            <div style={{minWidth:0}}><div style={{fontSize:13, color:T.ink, fontWeight:600}}>{sel.p['Proyecto']||'—'}</div><div style={{fontSize:11.5, color:T.ink3}}>#{sel.p['Columna 1']} · {[sel.p['Cliente'],sel.p['Agencia']].filter(Boolean).join(' · ')} · pendiente {fmt(sel.pendiente)}</div>
+              {(()=>{ const fi=fechaInfo(sel.p); return <div style={{display:'flex', alignItems:'center', gap:6, marginTop:5}}><span style={{width:7,height:7,borderRadius:7,background:fi.c}}/><span style={{fontSize:11.5, color:fi.c, fontWeight:600}}>Evento {sel.p['Fecha Evento']||'s/f'} · {fi.futuro?'todavía no pasó':fi.l}</span></div> })()}
+            </div>
             <button onClick={()=>setSel(null)} style={miniBtn}>cambiar</button>
+          </div>
+          <div style={{background:cuitFact?T.surface:T.brandSoft, border:`1px solid ${cuitFact?T.border:T.brand}`, borderRadius:10, padding:'10px 14px', marginBottom:16}}>
+            <div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:4}}>Facturar a</div>
+            <div style={{fontSize:13, color:T.ink, fontWeight:600}}>{facturarA||'—'}</div>
+            {cuitFact
+              ? <div style={{display:'flex', alignItems:'center', gap:10, marginTop:5, flexWrap:'wrap'}}>
+                  <span onClick={()=>{navigator.clipboard?.writeText(cuitFact); showToast('CUIT copiado')}} title="Copiar CUIT" style={{fontSize:14, fontFamily:MONO, color:T.ink, fontWeight:600, cursor:'pointer', background:T.surfaceAlt, padding:'3px 9px', borderRadius:7, border:`1px solid ${T.border}`}}>{cuitFact} ⧉</span>
+                  {condIVAFact && <span style={{fontSize:11.5, color:T.ink2}}>{condIVAFact}</span>}
+                </div>
+              : <div style={{fontSize:11.5, color:T.brand, marginTop:5, fontWeight:500}}>⚠ Sin CUIT cargado para «{facturarA}». Cargalo en Agencias.</div>}
           </div>
           <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
             <div style={{flex:1, minWidth:120}}><label style={lblV2}>Entidad</label><select value={entidad} onChange={e=>setEntidad(e.target.value)} style={inpV2}>{['SRL','Sofia','Lulu','Efectivo'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
