@@ -1388,6 +1388,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
 function Mini({label,val,color}){ return <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{label}</div><div style={{fontSize:14, fontFamily:MONO, color:color||T.ink, marginTop:2}}>{val}</div></div> }
 
 // ============================ FACTURACIÓN ============================
+// Una factura es REAL si tiene número de factura o fecha de emisión. Si no tiene ninguno,
+// es un registro fantasma (proyecto migrado del sheet, nunca facturado de verdad).
+const esFacturaReal = f => !!(String(f['Nro de Factura']||'').trim() || String(f['Fecha emision']||'').trim())
+
 // Semáforo de fecha de evento para "sin facturar": futuro (no se puede aún), recién pasó (verde),
 // pasó hace rato sin facturar (ámbar→rojo). Escala para priorizar lo más atrasado.
 function semEvento(fechaEvento){
@@ -1404,6 +1408,7 @@ function semEvento(fechaEvento){
 
 function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fc=data.facturacion||[], cuentas=data.cuentas||[]
+  const fcReal=fc.filter(esFacturaReal)  // cobranza solo sobre facturas reales (con número/emisión)
   const hoy=new Date()
   const presus=data.presupuestos||[]
   const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null)
@@ -1411,7 +1416,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   // presupuestos aprobados con saldo pendiente de facturar
   const pendientes=presus.filter(isAprobado).map(p=>{
-    const facturado=fc.filter(f=>String(f['N° Presupuesto']||'').trim()===String(p['Columna 1']||'').trim() && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')).reduce((s,f)=>s+(parseMonto(f['Precio SIN IVA'])||parseMonto(f['Precio FINAL'])),0)
+    const facturado=fc.filter(f=>esFacturaReal(f) && String(f['N° Presupuesto']||'').trim()===String(p['Columna 1']||'').trim() && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')).reduce((s,f)=>s+(parseMonto(f['Precio SIN IVA'])||parseMonto(f['Precio FINAL'])),0)
     const neto=parseMonto(p['Precio Final'])
     return {p, facturado, neto, pendiente:Math.max(0,neto-facturado)}
   }).filter(x=>x.neto>0 && x.pendiente>x.neto*0.05)
@@ -1450,11 +1455,11 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
 
   // por cobrar
-  const pcTotal=fc.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
-  const cbTotal=fc.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
-  const vencidasMonto=fc.filter(f=>!isCobrada(f)&&(diffVenc(f)??99)<0).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const pcTotal=fcReal.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const porFacturarTotal=pendientes.reduce((s,x)=>s+x.pendiente,0)
+  const vencidasMonto=fcReal.filter(f=>!isCobrada(f)&&(diffVenc(f)??99)<0).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
 
-  const filtrada=fc.filter(f=>{
+  const filtrada=fcReal.filter(f=>{
     const e=estF(f)
     const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || (filt==='pendiente'&&['pendiente','por-vencer'].includes(e)) || (filt==='atrasadas'&&['vencida','reclamar'].includes(e)) || (filt==='parcial'&&e==='parcial')
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
@@ -1473,8 +1478,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
     </div>
     <div style={{display:'flex', gap:14, marginBottom:20}}>
-      <Hero label="Por cobrar" value={fmt(pcTotal)} accent={vencidasMonto>0?T.brand:T.ink} sub="Vencido: " subStrong={fmt(vencidasMonto)} subStrongColor={vencidasMonto>0?T.brand:T.pos}/>
-      <Hero label="Cobrado (total histórico)" value={fmt(cbTotal)} sub="suma de facturas marcadas cobradas"/>
+      <Hero label="Por cobrar" value={fmt(pcTotal)} accent={vencidasMonto>0?T.brand:T.ink} sub="facturado y sin cobrar · vencido " subStrong={fmt(vencidasMonto)} subStrongColor={vencidasMonto>0?T.brand:T.pos}/>
+      <Hero label="Por facturar" value={fmt(porFacturarTotal)} accent={T.warn} sub={`${pendientes.length} proyectos aprobados sin factura`}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar factura, presu, cliente, proyecto…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
@@ -1517,7 +1522,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
         return <div key={i} style={{display:'grid', gridTemplateColumns:'1.5fr 110px 180px 215px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:' · s/n'}</span>
+            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{(()=>{const ev=parseD(f['Fecha Evento']); return ev?`📅 ${ev.getDate()}/${ev.getMonth()+1} · `:''})()}{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
