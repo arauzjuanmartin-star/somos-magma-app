@@ -1411,7 +1411,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fcReal=fc.filter(esFacturaReal)  // cobranza solo sobre facturas reales (con número/emisión)
   const hoy=new Date()
   const presus=data.presupuestos||[]
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null)
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
@@ -1452,14 +1452,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fechaRef=f=>{ const v=parseD(f['Vencimiento']); if(v) return {d:v,src:'vence'}; const e=parseD(f['Fecha Evento']); if(e) return {d:e,src:'evento'}; const em=parseD(f['Fecha emision']); if(em) return {d:em,src:'emitida'}; return null }
   const diffVenc=f=>{ const r=fechaRef(f); return r?Math.floor((r.d-hoy)/864e5):null }
 
-  // "Ya está ✓" en Sin facturar: la facturaste y cobraste en su momento. La marca como
-  // factura real + cobrada SIN tocar saldos (reconciliación histórica). Sale de Sin facturar.
-  async function yaCobrada(x){
+  // "Ya está ✓" en Sin facturar: abre mini-modal para confirmar el monto REAL cobrado
+  // (sugiere el del presupuesto, lo podés cambiar). Marca factura real + cobrada SIN tocar saldos.
+  async function confirmarYaCobrada(x, montoReal){
     const num=x.p['Columna 1']
-    if(!window.confirm(`Marcar #${num} "${x.p['Proyecto']||''}" como YA FACTURADA Y COBRADA.\nMonto: ${fmt(x.pendiente)}\nNo toca el saldo de ninguna cuenta (es histórico). Sale de "Sin facturar".\n\n¿Confirmás?`)) return
-    try{ const r=await fetch('/api/factura-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), cobrada:true})})
+    try{ const r=await fetch('/api/factura-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), cobrada:true, monto:montoReal})})
       const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
-      showToast(`#${num} marcada facturada y cobrada ✓`); if(onRefresh) onRefresh()
+      showToast(`#${num} facturada y cobrada por ${fmt(montoReal)} ✓`); setYaModal(null); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
   }
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
@@ -1518,7 +1517,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
           <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
             <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title="Crear factura real (con número y mail)">Facturar</button>
-            <button onClick={()=>yaCobrada(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
+            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
           </span>
         </div>
       )})}
@@ -1555,6 +1554,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     </div>
     )}
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
+    {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
@@ -1675,6 +1675,32 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
         <button onClick={()=>crear(false,false)} disabled={saving||neto<=0} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer', opacity:(saving||neto<=0)?0.5:1}}>Solo crear</button>
         <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
       </div>}
+    </div>
+  </div>
+}
+
+function YaCobradaModal({x, onClose, onConfirm}){
+  const presupuestado=Math.round(x.pendiente)
+  const [monto,setMonto]=useState(String(presupuestado))
+  const [saving,setSaving]=useState(false)
+  const real=parseFloat(monto)||0
+  const dif=real-presupuestado
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'70px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:430, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Marcar como ya facturada y cobrada</div>
+        <div style={{fontSize:12, color:T.ink3, marginTop:2}}>#{x.p['Columna 1']} · {x.p['Proyecto']||x.p['Cliente']||''}</div>
+      </div>
+      <div style={{padding:'20px 22px'}}>
+        <label style={lblV2}>¿Cuánto cobraste en realidad? (neto sin IVA)</label>
+        <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} autoFocus style={{...inpV2, textAlign:'right', fontFamily:MONO, fontSize:16, marginBottom:8}}/>
+        <div style={{fontSize:11.5, color:T.ink3}}>Presupuestado: <span style={{fontFamily:MONO}}>{fmt(presupuestado)}</span>{dif!==0 && <span style={{color:dif>0?T.pos:T.brand, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif>0?'de más':'de menos'}</span>}</div>
+        <div style={{fontSize:11.5, color:T.ink3, marginTop:10, background:T.surfaceAlt, borderRadius:8, padding:'9px 11px'}}>No toca el saldo de ninguna cuenta (es histórico). El presupuesto y el staff quedan intactos — esto solo registra la factura.</div>
+      </div>
+      <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real))}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.ink3:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
+      </div>
     </div>
   </div>
 }

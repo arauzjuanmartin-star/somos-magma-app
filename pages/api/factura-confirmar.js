@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nroPresupuesto, cobrada = true } = req.body || {}
+  const { nroPresupuesto, cobrada = true, monto } = req.body || {}
   if (!nroPresupuesto) return res.status(400).json({ error: 'Falta nroPresupuesto' })
 
   try {
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     const P = n => ph.indexOf(n)
     const presu = pr.slice(1).find(r => String(r[P('Columna 1')] || '').trim() === String(nroPresupuesto).trim())
     if (!presu) return res.status(404).json({ error: 'Presupuesto no encontrado' })
-    const neto = num(presu[P('Precio Final')])
+    const neto = num(monto) > 0 ? num(monto) : num(presu[P('Precio Final')])  // monto real cobrado si se pasó
     const fechaEvento = presu[P('Fecha Evento')] || ''
     const cliente = presu[P('Cliente')] || ''
     const agencia = presu[P('Agencia')] || ''
