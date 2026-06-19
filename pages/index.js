@@ -1451,6 +1451,17 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // sin vencimiento), usamos la fecha del evento, o la de emisión como último recurso.
   const fechaRef=f=>{ const v=parseD(f['Vencimiento']); if(v) return {d:v,src:'vence'}; const e=parseD(f['Fecha Evento']); if(e) return {d:e,src:'evento'}; const em=parseD(f['Fecha emision']); if(em) return {d:em,src:'emitida'}; return null }
   const diffVenc=f=>{ const r=fechaRef(f); return r?Math.floor((r.d-hoy)/864e5):null }
+
+  // "Ya está ✓" en Sin facturar: la facturaste y cobraste en su momento. La marca como
+  // factura real + cobrada SIN tocar saldos (reconciliación histórica). Sale de Sin facturar.
+  async function yaCobrada(x){
+    const num=x.p['Columna 1']
+    if(!window.confirm(`Marcar #${num} "${x.p['Proyecto']||''}" como YA FACTURADA Y COBRADA.\nMonto: ${fmt(x.pendiente)}\nNo toca el saldo de ninguna cuenta (es histórico). Sale de "Sin facturar".\n\n¿Confirmás?`)) return
+    try{ const r=await fetch('/api/factura-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), cobrada:true})})
+      const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
+      showToast(`#${num} marcada facturada y cobrada ✓`); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err') }
+  }
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
 
@@ -1490,39 +1501,41 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     {filt==='sinfacturar' ? (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       {sinFactAtrasados>0 && <div style={{background:T.brandSoft, color:T.brand, padding:'9px 18px', fontSize:12, fontWeight:600, borderBottom:`1px solid ${T.border}`}}>⚠ {sinFactAtrasados} {sinFactAtrasados===1?'proyecto con evento pasado hace +30 días sin facturar':'proyectos con evento pasado hace +30 días sin facturar'}</div>}
-      <div style={{display:'grid', gridTemplateColumns:'1.6fr 120px 175px 100px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Evento</span><span style={{textAlign:'right'}}>Acción</span>
+      <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {pendOrdenados.length===0 && <Empty>Nada sin facturar 🎉</Empty>}
       {pendOrdenados.slice(0,200).map((x,i)=>{ const fi=semEvento(x.p['Fecha Evento']); return (
-        <div key={i} style={{display:'grid', gridTemplateColumns:'1.6fr 120px 175px 100px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        <div key={i} style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+          <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
+            <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:fi.c, flexShrink:0}}/><span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:fi.dias>30?700:500}}>{fi.fecha}</span></span>
+            <span style={{fontSize:9.5, color:fi.c, fontWeight:fi.dias>30?700:500}}>{fi.l}</span>
+          </span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
             <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
-          <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6}}>
-            <span style={{width:7,height:7,borderRadius:7,background:fi.c, flexShrink:0}}/>
-            <span style={{fontSize:11.5, color:fi.c, fontWeight:fi.dias>30?700:500, textAlign:'right'}}>{fi.fecha} · {fi.l}</span>
-          </span>
-          <span style={{display:'flex', justifyContent:'flex-end'}}>
-            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 12px'}}>Facturar</button>
+          <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
+            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title="Crear factura real (con número y mail)">Facturar</button>
+            <button onClick={()=>yaCobrada(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
           </span>
         </div>
       )})}
     </div>
     ) : (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 180px 215px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
+      <div style={{display:'grid', gridTemplateColumns:'85px 1.3fr 100px 170px 200px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'1.5fr 110px 180px 215px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'85px 1.3fr 100px 170px 200px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+          <span style={{fontSize:12, fontFamily:MONO, color:T.ink2}}>{(()=>{const ev=parseD(f['Fecha Evento']); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{(()=>{const ev=parseD(f['Fecha Evento']); return ev?`📅 ${ev.getDate()}/${ev.getMonth()+1} · `:''})()}{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
+            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
