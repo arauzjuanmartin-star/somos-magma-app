@@ -1388,11 +1388,25 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
 function Mini({label,val,color}){ return <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{label}</div><div style={{fontSize:14, fontFamily:MONO, color:color||T.ink, marginTop:2}}>{val}</div></div> }
 
 // ============================ FACTURACIÓN ============================
+// Semáforo de fecha de evento para "sin facturar": futuro (no se puede aún), recién pasó (verde),
+// pasó hace rato sin facturar (ámbar→rojo). Escala para priorizar lo más atrasado.
+function semEvento(fechaEvento){
+  const fe=parseD(fechaEvento)
+  if(!fe) return {c:T.ink3, l:'sin fecha', fecha:'s/f', dias:-99999, futuro:false}
+  const d=Math.floor((new Date()-fe)/864e5)
+  const fecha=`${fe.getDate()}/${fe.getMonth()+1}`
+  if(d<0)  return {c:T.ink3, l:`evento en ${-d}d (futuro)`, fecha, dias:d, futuro:true}
+  if(d===0)return {c:T.pos,  l:'el evento es hoy', fecha, dias:d, futuro:false}
+  if(d<=15)return {c:T.pos,  l:'listo para facturar', fecha, dias:d, futuro:false}
+  if(d<=30)return {c:T.warn, l:`facturá pronto · ${d}d`, fecha, dias:d, futuro:false}
+  return     {c:T.brand,l:`atrasado ${d}d`, fecha, dias:d, futuro:false}
+}
+
 function Facturacion({data, onRefresh, showToast, nav, clearNav}){
   const fc=data.facturacion||[], cuentas=data.cuentas||[]
   const hoy=new Date()
   const presus=data.presupuestos||[]
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null)
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
@@ -1444,7 +1458,11 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
     return mf&&mq
   }).sort((a,b)=>(diffVenc(a)??99)-(diffVenc(b)??99))
 
-  const FILTROS=[['todas','Todas'],['pendiente','Pendientes'],['atrasadas','Atrasadas'],['parcial','Parciales'],['cobrada','Cobradas']]
+  // Proyectos aprobados sin facturar (o con saldo), ordenados por evento más atrasado arriba
+  const pendOrdenados = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
+  const sinFactAtrasados = pendientes.filter(x=>{const s=semEvento(x.p['Fecha Evento']);return !s.futuro&&s.dias>30}).length
+
+  const FILTROS=[['todas','Todas'],['pendiente','Pendientes'],['atrasadas','Atrasadas'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`]]
 
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
@@ -1461,6 +1479,31 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
     <div style={{display:'flex', gap:7, marginBottom:14}}>
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
     </div>
+    {filt==='sinfacturar' ? (
+    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
+      {sinFactAtrasados>0 && <div style={{background:T.brandSoft, color:T.brand, padding:'9px 18px', fontSize:12, fontWeight:600, borderBottom:`1px solid ${T.border}`}}>⚠ {sinFactAtrasados} {sinFactAtrasados===1?'proyecto con evento pasado hace +30 días sin facturar':'proyectos con evento pasado hace +30 días sin facturar'}</div>}
+      <div style={{display:'grid', gridTemplateColumns:'1.6fr 120px 175px 100px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Evento</span><span style={{textAlign:'right'}}>Acción</span>
+      </div>
+      {pendOrdenados.length===0 && <Empty>Nada sin facturar 🎉</Empty>}
+      {pendOrdenados.slice(0,200).map((x,i)=>{ const fi=semEvento(x.p['Fecha Evento']); return (
+        <div key={i} style={{display:'grid', gridTemplateColumns:'1.6fr 120px 175px 100px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+          <span style={{minWidth:0, paddingRight:10}}>
+            <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
+            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
+          </span>
+          <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
+          <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6}}>
+            <span style={{width:7,height:7,borderRadius:7,background:fi.c, flexShrink:0}}/>
+            <span style={{fontSize:11.5, color:fi.c, fontWeight:fi.dias>30?700:500, textAlign:'right'}}>{fi.fecha} · {fi.l}</span>
+          </span>
+          <span style={{display:'flex', justifyContent:'flex-end'}}>
+            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 12px'}}>Facturar</button>
+          </span>
+        </div>
+      )})}
+    </div>
+    ) : (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{display:'grid', gridTemplateColumns:'130px 1.5fr 100px 120px 165px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Factura</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
@@ -1490,27 +1533,27 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
         </div>
       })}
     </div>
+    )}
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
-    {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} onClose={()=>setNuevaF(false)} onCreada={()=>{ setNuevaF(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
-function NuevaFactura({pendientes, agencias=[], contactos=[], onClose, onCreada, showToast}){
+function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, onClose, onCreada, showToast}){
   const hoy=new Date()
-  const [sel,setSel]=useState(null), [q,setQ]=useState('')
+  const [sel,setSel]=useState(initialSel), [q,setQ]=useState('')
   // Datos fiscales de a quién se le factura (la agencia que paga, o el cliente si es directo)
   const facturarA = sel ? ((sel.p['Agencia']&&!/sin agencia|directo/i.test(sel.p['Agencia']))?sel.p['Agencia']:sel.p['Cliente']) : ''
   const agRow = sel ? agencias.find(a=>normTxt(a['Nombre'])===normTxt(facturarA)) : null
   const ctRow = (sel && !agRow?.['CUIT']) ? contactos.find(c=>normTxt(c['Agencia'])===normTxt(facturarA)||normTxt(c['Nombre'])===normTxt(facturarA)) : null
   const cuitFact = (agRow?.['CUIT'] || ctRow?.['Cuit'] || '').toString().trim()
   const condIVAFact = (agRow?.['Condicion IVA'] || '').toString().trim()
-  // Semáforo de fecha del evento: verde = ya pasó (facturable), ámbar = a futuro (todavía no pasó)
-  const fechaInfo = p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return {c:T.ink3,l:'sin fecha',fecha:'s/f'}; const d=Math.floor((hoy-fe)/864e5); const fecha=`${fe.getDate()}/${fe.getMonth()+1}`; return d<0?{c:T.warn,l:`evento en ${-d}d`,fecha,futuro:true}:{c:T.pos,l:d===0?'es hoy':'ya pasó',fecha,futuro:false} }
-  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
+  const fechaInfo = p=>semEvento(p['Fecha Evento'])
+  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(initialSel?String(Math.round(initialSel.pendiente)):''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
   const neto = sel ? (parseFloat(montoNeto)||sel.pendiente) : 0
   const iva = conIVA?Math.round(neto*0.21):0
   const total = neto+iva
-  const lista = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>normTxt(v).includes(normTxt(q))))
+  const lista = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>normTxt(v).includes(normTxt(q)))).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
 
   async function crear(forzar=false, conMail=true){
     if(!sel) return
