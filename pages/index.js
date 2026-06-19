@@ -80,7 +80,7 @@ export default function V2() {
   const [err,setErr] = useState('')
   const [mod,setMod] = useState('dashboard')
   const [nav,setNav] = useState(null)  // {mod, filtro?, q?} → al navegar, deja el destino filtrado/buscado
-  const goTo = (m, filtro) => { setMod(m); setNav(filtro?{mod:m,filtro}:null) }
+  const goTo = (m, opts) => { setMod(m); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
   const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)
   const [showSearch,setShowSearch] = useState(false)
@@ -163,7 +163,7 @@ export default function V2() {
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
+            : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -1402,7 +1402,7 @@ function semEvento(fechaEvento){
   return     {c:T.brand,l:`atrasado ${d}d`, fecha, dias:d, futuro:false}
 }
 
-function Facturacion({data, onRefresh, showToast, nav, clearNav}){
+function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fc=data.facturacion||[], cuentas=data.cuentas||[]
   const hoy=new Date()
   const presus=data.presupuestos||[]
@@ -1442,7 +1442,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
     input.click()
   }
 
-  const diffVenc=f=>{ const v=parseD(f['Vencimiento']); return v?Math.floor((v-hoy)/864e5):null }
+  // Fecha de referencia de la deuda: vencimiento si hay; si no (filas viejas migradas
+  // sin vencimiento), usamos la fecha del evento, o la de emisión como último recurso.
+  const fechaRef=f=>{ const v=parseD(f['Vencimiento']); if(v) return {d:v,src:'vence'}; const e=parseD(f['Fecha Evento']); if(e) return {d:e,src:'evento'}; const em=parseD(f['Fecha emision']); if(em) return {d:em,src:'emitida'}; return null }
+  const diffVenc=f=>{ const r=fechaRef(f); return r?Math.floor((r.d-hoy)/864e5):null }
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
 
@@ -1520,7 +1523,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
             <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
-            {!isCobrada(f) && (()=>{ const venc=parseD(f['Vencimiento']); const vtxt=venc?`vence ${venc.getDate()}/${venc.getMonth()+1}`:''; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'vence hoy':`en ${d}d`):''; const t=[vtxt,dtxt].filter(Boolean).join(' · '); return t?<span style={{fontSize:10, color:info.c, fontWeight:d!=null&&d<0?700:400}}>{t}</span>:null })()}
+            {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:10, color:info.c, fontWeight:d!=null&&d<0?700:400}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
@@ -1528,7 +1531,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
             {f['Factura']
               ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
               : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
-            <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="PDF del presupuesto">Presu</a>
+            <button onClick={()=>goTo&&goTo('proyectos',{q:String(num)})} style={{...miniBtn, padding:'6px 9px'}} title="Abrir el proyecto">Proyecto</button>
           </span>
         </div>
       })}
