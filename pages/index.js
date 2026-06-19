@@ -1518,9 +1518,9 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav}){
             <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}</span>
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
-          <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6}}>
-            <span style={{width:7,height:7,borderRadius:7,background:info.c}}/>
-            <span style={{fontSize:12, color:T.ink2}}>{info.l}{!isCobrada(f)&&d!=null&&d<0?` ${Math.abs(d)}d`:''}</span>
+          <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
+            <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
+            {!isCobrada(f) && (()=>{ const venc=parseD(f['Vencimiento']); const vtxt=venc?`vence ${venc.getDate()}/${venc.getMonth()+1}`:''; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'vence hoy':`en ${d}d`):''; const t=[vtxt,dtxt].filter(Boolean).join(' · '); return t?<span style={{fontSize:10, color:info.c, fontWeight:d!=null&&d<0?700:400}}>{t}</span>:null })()}
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
