@@ -39,6 +39,9 @@ const isCobrada = f => { const v=f['Cobrado']; return v===true||String(v).toUppe
 const esActiva = v => { const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
 const parseD = s => { if(!s) return null; const p=String(s).split('/'); if(p.length<3) return null; const d=parseInt(p[0]),m=parseInt(p[1]),y=parseInt(p[2]); if(!d||!m||!y) return null; return new Date(y,m-1,d) }
 const esDelMes = (s,m,a) => { const d=parseD(s); return !!d && d.getMonth()+1===m && d.getFullYear()===a }
+// Dedup case-insensitive: une variantes ("No soup media" / "No Soup Media") en una sola,
+// quedándose con la de mejor escritura (más mayúsculas). Para datalists de agencias/clientes.
+const dedupCI = arr => { const m=new Map(); arr.map(v=>String(v||'').trim()).filter(Boolean).forEach(v=>{ const k=v.toLowerCase(); const caps=s=>(s.match(/[A-ZÁÉÍÓÚÑ]/g)||[]).length; const cur=m.get(k); if(!cur||caps(v)>caps(cur)) m.set(k,v) }); return [...m.values()].sort((a,b)=>a.localeCompare(b,'es')) }
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -552,7 +555,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   const [agNew,setAgNew]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
   const [ctNew,setCtNew]=useState({mail:'',telefono:'',cargo:'',cuit:''})
   const id = p['Columna 1'] || p['N° presupuesto']
-  const ags=[...new Set([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))].filter(Boolean))].sort()
+  const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
   const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
   const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
   const pms=[...new Set((data?.presupuestos||[]).map(x=>x['PM Interno']).filter(Boolean))].sort()
@@ -757,9 +760,9 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const [agNew,setAgNew]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
 
   // autocompletes desde el sheet
-  const ags=[...new Set([...(data?.agencias||[]).map(a=>a['Nombre']),...(data?.listado?.agencias||[]),...((data?.presupuestos||[]).map(p=>p['Agencia']))].map(v=>String(v||'').trim()).filter(Boolean))].sort()
-  const clis=[...new Set([...(data?.listado?.clientes||[]),...(data?.clientes||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Cliente']))].map(v=>String(v||'').trim()).filter(Boolean))].sort()
-  const cts=[...new Set([...(data?.contactos||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Contacto']))].map(v=>String(v||'').trim()).filter(Boolean))].sort()
+  const ags=dedupCI([...(data?.agencias||[]).map(a=>a['Nombre']),...(data?.listado?.agencias||[]),...((data?.presupuestos||[]).map(p=>p['Agencia']))])
+  const clis=dedupCI([...(data?.listado?.clientes||[]),...(data?.clientes||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Cliente']))])
+  const cts=dedupCI([...(data?.contactos||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Contacto']))])
   const pms=[...new Set([...['Juan','Sofi','Lulu','Tomi'],...((data?.presupuestos||[]).map(p=>p['PM Interno']))].filter(Boolean))]
   // detección de nuevos (no están en la lista)
   const nrm=v=>String(v||'').trim().toLowerCase()
@@ -1806,12 +1809,14 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   })
   // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
   const esPagRow=r=>{ const e=String(r['Estado']||r['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
+  // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
+  // (Antes ignoraba el mes → mostraba pagado pero el botón desmarcar, que sí filtra por mes, no lo encontraba.)
   const paidCount={}
-  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
   Object.values(personas).forEach(p=>{ const used={}; p.trabajos.forEach(t=>{
     let pag
     if(t.key in override) pag=override[t.key]
-    else { const k=norm(p.nombre)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
+    else { const k=norm(p.nombre)+'|'+norm(mesLabel)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
     t.pagado=pag; if(pag)p.totalPagado+=t.precio; else p.totalPendiente+=t.precio
   }) })
 
