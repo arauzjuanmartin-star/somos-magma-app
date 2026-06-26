@@ -1836,6 +1836,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 
   async function togglePago(persona, t, pagado){
     const k=t.key
+    // Volver atrás un pago: pedir confirmación (devuelve la plata a la cuenta).
+    if(!pagado){ if(!window.confirm(`¿Volver atrás el pago de "${t.pedido||'este trabajo'}" de ${persona.nombre.split(' ')[0]} por ${fmt(t.precio)}?\n\nVuelve a PENDIENTE y devuelve la plata a la cuenta. ¿Seguro?`)) return }
     setOverride(o=>({...o,[k]:pagado}))  // optimista: se tilda al instante
     try{ const j=await postPago(persona,t,pagado); if(j&&j.error){showToast(j.error,'err'); setOverride(o=>{const n={...o};delete n[k];return n}); return}
       showToast(pagado?`Pagado: ${t.pedido||''}`:'Desmarcado')
