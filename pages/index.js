@@ -1858,6 +1858,18 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       if(onRefresh){ await onRefresh(); setOverride(o=>{const n={...o}; pend.forEach(t=>delete n[t.key]); return n}) }
     }catch(e){ showToast('Error de conexión','err') }
   }
+  async function deshacerTodo(persona){
+    const pagados=persona.trabajos.filter(t=>t.pagado)
+    if(!pagados.length) return
+    const nombre=persona.nombre.split(' ')[0]
+    if(!window.confirm(`Volver atrás TODOS los pagos de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${pagados.length} trabajos = ${fmt(persona.totalPagado)}\n\nVuelven a PENDIENTE y se devuelve la plata a la cuenta. ¿Seguro?`)) return
+    setOverride(o=>{const n={...o}; pagados.forEach(t=>n[t.key]=false); return n})
+    try{
+      for(const t of pagados){ const j=await postPago(persona,t,false); if(j&&j.error) showToast(`Error en ${t.pedido}: ${j.error}`,'err') }
+      showToast(`${nombre}: ${pagados.length} pagos deshechos`)
+      if(onRefresh){ await onRefresh(); setOverride(o=>{const n={...o}; pagados.forEach(t=>delete n[t.key]); return n}) }
+    }catch(e){ showToast('Error de conexión','err') }
+  }
   const selList=Object.values(selPay)
   const selTotal=selList.reduce((s,x)=>s+x.t.precio,0)
   const toggleSel=(persona,t)=>setSelPay(s=>{ const n={...s}; if(n[t.key]) delete n[t.key]; else n[t.key]={persona,t}; return n })
@@ -1927,9 +1939,12 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
             <span style={{width:7,height:7,borderRadius:7,background:estado.c, flexShrink:0}}/>
             <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{persona.trabajos.length} trabajos · {estado.l}</div></div>
             <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}</div></div>
-            {persona.totalPendiente>0
-              ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer', flexShrink:0}}>Pagar todo</button>
-              : <span style={{padding:'8px 14px', fontSize:12, color:T.pos, fontWeight:600, flexShrink:0}}>✓ Pagado</span>}
+            <div style={{display:'flex', gap:7, alignItems:'center', flexShrink:0}}>
+              {persona.totalPendiente>0
+                ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Pagar todo</button>
+                : <span style={{padding:'8px 8px', fontSize:12, color:T.pos, fontWeight:600}}>✓ Pagado</span>}
+              {persona.totalPagado>0 && <button onClick={e=>{e.stopPropagation();deshacerTodo(persona)}} title="Volver atrás todos los pagos de esta persona este mes" style={{padding:'8px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, fontWeight:500, cursor:'pointer'}}>↩ Deshacer</button>}
+            </div>
           </div>
           {abierto && <div style={{borderTop:`1px solid ${T.border}`, background:T.surfaceAlt, padding:'12px 18px 16px'}}>
             <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start', padding:'4px 0 12px', marginBottom:8, borderBottom:`1px solid ${T.border}`}}>
