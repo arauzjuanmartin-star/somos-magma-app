@@ -1454,6 +1454,18 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     input.click()
   }
 
+  // Anular/borrar una factura (errores, nota de crédito, duplicados)
+  async function borrarFactura(f){
+    const numF=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
+    if(!window.confirm(`Anular/borrar esta factura?\n#${numF} · ${f['Proyecto']||f['Cliente']||''} · ${fmt(total)}\n\nÚsalo para errores, notas de crédito o duplicados. ¿Seguro?`)) return
+    const post=forzar=>fetch('/api/factura-borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(numF), monto:total, forzar})}).then(r=>r.json())
+    try{ let j=await post(false)
+      if(j.requiereForzar){ if(!window.confirm(j.error+'\n\n¿Borrar igual?')) return; j=await post(true) }
+      if(!j.ok){ showToast(j.error||'Error','err'); return }
+      showToast('Factura anulada ✓'); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err') }
+  }
+
   // Fecha de referencia de la deuda: vencimiento si hay; si no (filas viejas migradas
   // sin vencimiento), usamos la fecha del evento, o la de emisión como último recurso.
   const fechaRef=f=>{ const v=parseD(f['Vencimiento']); if(v) return {d:v,src:'vence'}; const e=parseD(f['Fecha Evento']); if(e) return {d:e,src:'evento'}; const em=parseD(f['Fecha emision']); if(em) return {d:em,src:'emitida'}; return null }
@@ -1537,13 +1549,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     </div>
     ) : (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'95px 1.3fr 95px 165px 195px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 235px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'95px 1.3fr 95px 165px 195px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 235px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(evDe(f)); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
             <span style={{fontSize:9.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
@@ -1564,6 +1576,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
               ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
               : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
             <button onClick={()=>goTo&&goTo('proyectos',{q:String(num)})} style={{...miniBtn, padding:'6px 9px'}} title="Abrir el proyecto">Proyecto</button>
+            <button onClick={()=>borrarFactura(f)} style={{...miniBtn, padding:'6px 9px', color:T.brand, borderColor:`${T.brand}55`}} title="Anular/borrar esta factura (error, nota de crédito, duplicado)">✕</button>
           </span>
         </div>
       })}

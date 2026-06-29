@@ -68,6 +68,30 @@ export default async function handler(req, res) {
           }
         }
       } catch (e) { console.error('Error eliminando proyecto al represupuestar:', e) }
+
+      // También eliminar facturas NO cobradas de ese presupuesto (quedaron huérfanas al
+      // represupuestar/desaprobar — ej: error + nota de crédito). Las cobradas se respetan.
+      try {
+        const meta2 = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
+        const factSheet = meta2.data.sheets.find(s => /facturacion/i.test(s.properties.title))
+        if (factSheet) {
+          const rFact = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
+          const fRows = rFact.data.values || [], fh = fRows[0] || []
+          const iNum = fh.indexOf('N° Presupuesto'), iCob = fh.findIndex(x => /^cobrado$/i.test(x))
+          const esCob = row => ['true','sí','si'].includes(String(row[iCob]||'').toLowerCase().trim())
+          const aBorrar = []
+          for (let i = 1; i < fRows.length; i++) {
+            if (String(fRows[i][iNum]||'').trim() === String(num).trim() && !esCob(fRows[i])) aBorrar.push(i)
+          }
+          if (aBorrar.length) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId: SHEET_ID,
+              requestBody: { requests: aBorrar.sort((a,b)=>b-a).map(i => ({ deleteDimension: { range: { sheetId: factSheet.properties.sheetId, dimension: 'ROWS', startIndex: i, endIndex: i+1 } } })) }
+            })
+            try { await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'facturas-borradas-por-cambio-estado', 'FACTURACION', String(num), `${aBorrar.length} factura(s) no cobradas eliminadas por estado=${estado}`]] } }) } catch (e) {}
+          }
+        }
+      } catch (e) { console.error('Error eliminando facturas al represupuestar:', e) }
     }
 
     // Escribir el motivo en col AY (Motivo Desaprobado, índice 50).
