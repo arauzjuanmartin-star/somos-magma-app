@@ -1419,7 +1419,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
   const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null)
   const matchMes=fechaStr=>{ if(mesF==='todos')return true; const d=parseD(fechaStr); return d?`${d.getMonth()+1}-${d.getFullYear()}`===mesF:false }
-  useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
   const pendientes=presus.filter(isAprobado).map(p=>{
@@ -1478,7 +1478,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   const filtrada=fcReal.filter(f=>{
     const e=estF(f)
-    const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || (filt==='pendiente'&&['pendiente','por-vencer'].includes(e)) || (filt==='atrasadas'&&['vencida','reclamar'].includes(e)) || (filt==='parcial'&&e==='parcial')
+    const owed=['pendiente','por-vencer','vencida','reclamar']
+    const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || ((filt==='porcobrar'||filt==='pendiente'||filt==='atrasadas')&&owed.includes(e)) || (filt==='parcial'&&e==='parcial')
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mf&&mq&&matchMes(evDe(f))
   }).sort((a,b)=>(diffVenc(a)??99)-(diffVenc(b)??99))
@@ -1491,7 +1492,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const mesesSet={}; ;[...fcReal.map(evDe), ...pendientes.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
   const monthOpts=Object.entries(mesesSet).sort((a,b)=>{ const [ma,ya]=a[0].split('-').map(Number),[mb,yb]=b[0].split('-').map(Number); return yb-ya||mb-ma })
 
-  const FILTROS=[['todas','Todas'],['pendiente','Pendientes'],['atrasadas','Atrasadas'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`]]
+  const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`]]
 
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
