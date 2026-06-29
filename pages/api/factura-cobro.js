@@ -45,11 +45,24 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'FACTURACION sin columnas requeridas. Falta correr setup-cobros.' })
     }
 
-    let rowIndex = -1, facturaRow = null
+    // Puede haber varias filas con el mismo N° (ej: una ya cobrada + otra pendiente).
+    // Elegimos la que NO esté cobrada; si se pasó un monto, preferimos la que coincide.
+    const candidatos = []
     for (let i = 1; i < rows.length; i++) {
-      if (String(rows[i][idx.presu]) === String(nroPresupuesto)) { rowIndex = i + 1; facturaRow = rows[i]; break }
+      if (String(rows[i][idx.presu]) === String(nroPresupuesto)) candidatos.push(i)
     }
-    if (rowIndex === -1) return res.status(404).json({ error: 'Factura no encontrada' })
+    const noCobrada = candidatos.filter(i => String(rows[i][idx.cobrado] || '').toUpperCase() !== 'TRUE')
+    const montoTarget = num(monto)
+    let pick = null
+    if (montoTarget > 0) pick = noCobrada.find(i => Math.abs(num(rows[i][idx.precioFinal]) - montoTarget) < 1 || Math.abs(num(rows[i][idx.neto]) - montoTarget) < 1)
+    if (pick == null) pick = noCobrada[0]
+    if (pick == null) pick = candidatos[0]
+    if (pick == null) return res.status(404).json({ error: 'Factura no encontrada' })
+    let rowIndex = pick + 1, facturaRow = rows[pick]
+
+    if (String(facturaRow[idx.cobrado] || '').toUpperCase() === 'TRUE') {
+      return res.status(409).json({ error: 'Esta factura ya está marcada como cobrada. Si necesitás corregir, editá manualmente.' })
+    }
 
     if (String(facturaRow[idx.cobrado] || '').toUpperCase() === 'TRUE') {
       return res.status(409).json({ error: 'Esta factura ya está marcada como cobrada. Si necesitás corregir, editá manualmente.' })
