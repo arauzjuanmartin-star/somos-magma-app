@@ -1414,7 +1414,11 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fcReal=fc.filter(esFacturaReal)  // cobranza solo sobre facturas reales (con número/emisión)
   const hoy=new Date()
   const presus=data.presupuestos||[]
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null)
+  // Fecha del evento por N° de presupuesto (las facturas reales a veces no la tienen en su fila)
+  const eventoByNum={}; ;[...(data.proyectos||[]),...presus].forEach(p=>{ const n=String(p['N° presupuesto']||p['Columna 1']||'').trim(); const fe=p['Fecha Evento']; if(n&&fe&&!eventoByNum[n]) eventoByNum[n]=fe })
+  const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null)
+  const matchMes=fechaStr=>{ if(mesF==='todos')return true; const d=parseD(fechaStr); return d?`${d.getMonth()+1}-${d.getFullYear()}`===mesF:false }
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
@@ -1476,12 +1480,16 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     const e=estF(f)
     const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || (filt==='pendiente'&&['pendiente','por-vencer'].includes(e)) || (filt==='atrasadas'&&['vencida','reclamar'].includes(e)) || (filt==='parcial'&&e==='parcial')
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    return mf&&mq
+    return mf&&mq&&matchMes(evDe(f))
   }).sort((a,b)=>(diffVenc(a)??99)-(diffVenc(b)??99))
 
   // Proyectos aprobados sin facturar (o con saldo), ordenados por evento más atrasado arriba
-  const pendOrdenados = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
+  const pendOrdenados = pendientes.filter(x=>(!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))&&matchMes(x.p['Fecha Evento'])).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
   const sinFactAtrasados = pendientes.filter(x=>{const s=semEvento(x.p['Fecha Evento']);return !s.futuro&&s.dias>30}).length
+
+  // Opciones de mes (por fecha de evento) para el filtro
+  const mesesSet={}; ;[...fcReal.map(evDe), ...pendientes.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
+  const monthOpts=Object.entries(mesesSet).sort((a,b)=>{ const [ma,ya]=a[0].split('-').map(Number),[mb,yb]=b[0].split('-').map(Number); return yb-ya||mb-ma })
 
   const FILTROS=[['todas','Todas'],['pendiente','Pendientes'],['atrasadas','Atrasadas'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`]]
 
@@ -1496,6 +1504,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar factura, presu, cliente, proyecto…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
+      <select value={mesF} onChange={e=>setMesF(e.target.value)} title="Filtrar por mes del evento" style={{...selectStyle, minWidth:160}}><option value="todos">Todos los meses</option>{monthOpts.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
     </div>
     <div style={{display:'flex', gap:7, marginBottom:14}}>
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
@@ -1535,7 +1544,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
         return <div key={i} style={{display:'grid', gridTemplateColumns:'95px 1.3fr 95px 165px 195px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
-            <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(f['Fecha Evento']); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
+            <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(evDe(f)); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
             <span style={{fontSize:9.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
           </span>
           <span style={{minWidth:0, paddingRight:10}}>
