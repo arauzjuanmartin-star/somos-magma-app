@@ -1417,7 +1417,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Fecha del evento por N° de presupuesto (las facturas reales a veces no la tienen en su fila)
   const eventoByNum={}; ;[...(data.proyectos||[]),...presus].forEach(p=>{ const n=String(p['N° presupuesto']||p['Columna 1']||'').trim(); const fe=p['Fecha Evento']; if(n&&fe&&!eventoByNum[n]) eventoByNum[n]=fe })
   const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null)
   const matchMes=fechaStr=>{ if(mesF==='todos')return true; const d=parseD(fechaStr); return d?`${d.getMonth()+1}-${d.getFullYear()}`===mesF:false }
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -1559,7 +1559,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
-            <button onClick={()=>mandarMail(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar por mail">✉</button>
+            <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar factura por mail (desde la app)">✉</button>
             {f['Factura']
               ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
               : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
@@ -1571,6 +1571,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     )}
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
+    {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
@@ -1691,6 +1692,72 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
         <button onClick={()=>crear(false,false)} disabled={saving||neto<=0} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer', opacity:(saving||neto<=0)?0.5:1}}>Solo crear</button>
         <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
       </div>}
+    </div>
+  </div>
+}
+
+function MailFacturaModal({ f, onClose, onSent, showToast }){
+  const num=f['N° Presupuesto']
+  const [loading,setLoading]=useState(true)
+  const [dests,setDests]=useState([])   // {mail, nombre, match, sel}
+  const [nuevo,setNuevo]=useState('')
+  const [asunto,setAsunto]=useState('')
+  const [cuerpo,setCuerpo]=useState('')
+  const [saving,setSaving]=useState(false)
+  useEffect(()=>{ let vivo=true; (async()=>{
+    try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num})}); const j=await r.json()
+      if(!vivo) return
+      if(!j.ok){ showToast(j.error||'Error preparando el mail','err'); onClose(); return }
+      setDests((j.destinatarios||[]).map(d=>({...d, sel:true})))
+      setAsunto(j.asunto||''); setCuerpo(j.cuerpo||''); setLoading(false)
+    }catch(e){ if(vivo){ showToast('Error de conexión','err'); onClose() } }
+  })(); return ()=>{vivo=false} },[])  // eslint-disable-line
+  const toggle=i=>setDests(d=>d.map((x,j)=>j===i?{...x,sel:!x.sel}:x))
+  const agregar=()=>{ const m=nuevo.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){ showToast('Mail inválido','err'); return } if(dests.find(d=>d.mail.toLowerCase()===m.toLowerCase())){ setNuevo(''); return } setDests(d=>[...d,{mail:m,nombre:'agregado',match:'agregado a mano',sel:true}]); setNuevo('') }
+  const seleccionados=dests.filter(d=>d.sel).map(d=>d.mail)
+  async function enviar(){
+    if(!seleccionados.length){ showToast('Elegí al menos un destinatario','err'); return }
+    setSaving(true)
+    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num})}); const j=await r.json()
+      if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
+      showToast(`Mail enviado a ${seleccionados.length} ${seleccionados.length===1?'destinatario':'destinatarios'} ✓`); onSent&&onSent(); onClose()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:560, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Mandar factura por mail</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>#{num} · {f['Proyecto']||f['Cliente']||''} · sale de admin@somosmagma.com</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      {loading ? <div style={{padding:'40px', textAlign:'center', color:T.ink3, fontSize:13}}>Preparando…</div> : <>
+      <div style={{padding:'16px 22px'}}>
+        <label style={lblV2}>Para</label>
+        <div style={{display:'flex', flexDirection:'column', gap:6, marginBottom:8}}>
+          {dests.length===0 && <div style={{fontSize:12, color:T.ink3}}>No hay contactos sugeridos para esta agencia. Agregá un mail abajo.</div>}
+          {dests.map((d,i)=>(
+            <label key={i} style={{display:'flex', alignItems:'center', gap:9, fontSize:13, color:T.ink, cursor:'pointer', padding:'7px 10px', borderRadius:8, border:`1px solid ${d.sel?T.ink:T.border}`, background:d.sel?T.surfaceAlt:T.surface}}>
+              <input type="checkbox" checked={d.sel} onChange={()=>toggle(i)}/>
+              <span style={{flex:1, minWidth:0}}><span style={{fontFamily:MONO, fontSize:12.5}}>{d.mail}</span> <span style={{fontSize:10.5, color:T.ink3}}>· {d.match||d.nombre}</span></span>
+            </label>
+          ))}
+        </div>
+        <div style={{display:'flex', gap:8, marginBottom:16}}>
+          <input value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();agregar()}}} placeholder="Agregar otro mail…" style={{...inpV2, flex:1}}/>
+          <button onClick={agregar} style={{...miniBtn, padding:'8px 14px'}}>+ Agregar</button>
+        </div>
+        <label style={lblV2}>Asunto</label>
+        <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{...inpV2, marginBottom:12}}/>
+        <label style={lblV2}>Mensaje</label>
+        <textarea value={cuerpo} onChange={e=>setCuerpo(e.target.value)} rows={11} style={{...inpV2, fontFamily:'inherit', lineHeight:1.5, resize:'vertical'}}/>
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'space-between', alignItems:'center'}}>
+        <span style={{fontSize:11.5, color:T.ink3}}>{seleccionados.length} destinatario{seleccionados.length!==1?'s':''}</span>
+        <div style={{display:'flex', gap:10}}>
+          <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+          <button onClick={enviar} disabled={saving||!seleccionados.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||!seleccionados.length)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!seleccionados.length)?'default':'pointer'}}>{saving?'Enviando…':'✉ Enviar'}</button>
+        </div>
+      </div>
+      </>}
     </div>
   </div>
 }
