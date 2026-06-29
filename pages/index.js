@@ -1727,17 +1727,21 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   const [forma,setForma]=useState('Transferencia')
   const [reservarIVA,setReservarIVA]=useState(String(f['Tipo de Factura']||'').toUpperCase()==='A')
   const [historico,setHistorico]=useState(false)  // ya cobrada hace tiempo: marcar sin tocar saldo
+  const [montoCobrado,setMontoCobrado]=useState(String(Math.round(total)))  // lo que REALMENTE entró (editable)
   const [saving,setSaving]=useState(false)
   const num=f['N° Presupuesto']
+  const real=Math.round(parseFloat(montoCobrado)||0)
+  const dif=real-Math.round(total)
 
   async function cobrar(){
     if(!historico && !cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
+    if(real<=0){ showToast('Poné el monto cobrado','err'); return }
     const msg = historico
-      ? `Marcar #${num} como COBRADA (cobro histórico).\nNO suma saldo a ninguna cuenta ni reserva IVA — solo deja la factura como cobrada.\n\n¿Confirmás?`
-      : `Marcar #${num} como COBRADA por ${fmt(total)} en ${cuenta}. Esto suma el saldo a la cuenta${reservarIVA?' y reserva el IVA':''}. ¿Confirmás?`
+      ? `Marcar #${num} como COBRADA (cobro histórico) por ${fmt(real)}.\nNO suma saldo a ninguna cuenta ni reserva IVA — solo deja la factura como cobrada.\n\n¿Confirmás?`
+      : `Marcar #${num} como COBRADA por ${fmt(real)} en ${cuenta}. Esto suma ese monto a la cuenta${reservarIVA?' y reserva el IVA':''}. ¿Confirmás?`
     if(!window.confirm(msg)) return
     setSaving(true)
-    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:'total', monto:total, cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA:historico?false:reservarIVA, historico })})
+    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:'total', monto:real, cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA:historico?false:reservarIVA, historico })})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       showToast(`#${num} cobrada ✓`); onClose(); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
@@ -1747,7 +1751,11 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:440, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
       <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Registrar cobro</div><div style={{fontSize:12, color:T.ink3, marginTop:2, fontFamily:MONO}}>#{num} · {f['Proyecto']||f['Cliente']||''}</div></div>
       <div style={{padding:'20px 22px'}}>
-        <div style={{textAlign:'center', marginBottom:18}}><div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>Monto a cobrar</div><div style={{fontSize:30, fontWeight:700, fontFamily:MONO, color:T.pos, marginTop:4}}>{fmt(total)}</div></div>
+        <div style={{textAlign:'center', marginBottom:18}}>
+          <div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6}}>Monto cobrado (lo que realmente entró)</div>
+          <input type="number" value={montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
+          <div style={{fontSize:11, color:T.ink3, marginTop:5}}>Facturado: {fmt(total)}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
+        </div>
         <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:historico?T.warnSoft:T.surfaceAlt, border:`1px solid ${historico?T.warn:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
           <input type="checkbox" checked={historico} onChange={e=>setHistorico(e.target.checked)} style={{marginTop:2}}/>
           <span><strong style={{color:T.ink}}>Cobro histórico</strong> — ya la cobraste hace tiempo. Solo la marca como cobrada, <strong>no suma a ninguna cuenta</strong> ni reserva IVA. (Para reconciliar facturas viejas.)</span>
