@@ -1494,11 +1494,15 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || ((filt==='porcobrar'||filt==='pendiente'||filt==='atrasadas')&&owed.includes(e)) || (filt==='parcial'&&e==='parcial')
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mf&&mq&&matchMes(evDe(f))
-  }).sort((a,b)=>(diffVenc(a)??99)-(diffVenc(b)??99))
+  }).sort((a,b)=> filt==='todas'
+      ? ((parseD(evDe(b)||b['Fecha emision'])?.getTime()||0)-(parseD(evDe(a)||a['Fecha emision'])?.getTime()||0))  // Todas: más nuevo primero
+      : ((diffVenc(a)??99)-(diffVenc(b)??99)))  // resto: más atrasado primero
 
   // Proyectos aprobados sin facturar (o con saldo), ordenados por evento más atrasado arriba
   const pendOrdenados = pendientes.filter(x=>(!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))&&matchMes(x.p['Fecha Evento'])).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
   const sinFactAtrasados = pendientes.filter(x=>{const s=semEvento(x.p['Fecha Evento']);return !s.futuro&&s.dias>30}).length
+  const sumFiltrada = filtrada.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const sumPend = pendOrdenados.reduce((s,x)=>s+x.pendiente,0)
 
   // Opciones de mes (por fecha de evento) para el filtro
   const mesesSet={}; ;[...fcReal.map(evDe), ...pendientes.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
@@ -1521,6 +1525,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     </div>
     <div style={{display:'flex', gap:7, marginBottom:14}}>
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
+    </div>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, padding:'9px 15px', background:T.surfaceAlt, borderRadius:9}}>
+      <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
+      <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:sumFiltrada)}</span>
     </div>
     {filt==='sinfacturar' ? (
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
