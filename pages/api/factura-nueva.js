@@ -19,8 +19,8 @@ export default async function handler(req, res) {
     const hoy = new Date()
     const mesStr = String(hoy.getMonth()+1).padStart(2,'0') + ' - ' + MESES[hoy.getMonth()]
 
-    // Validar duplicado SOLO si nroFactura está cargado Y no se forzó
-    if (nroFactura && !forzar) {
+    // Validar duplicados si no se forzó
+    if (!forzar) {
       try {
         const check = await withRetry(() => sheets.spreadsheets.values.get({
           spreadsheetId: SHEET_ID,
@@ -30,21 +30,20 @@ export default async function handler(req, res) {
         const idxN = headers.indexOf('Nro de Factura')
         const idxPresu = 0  // col B = N° Presupuesto (porque empezamos desde B)
         const idxCliente = headers.indexOf('Cliente')
-        if (idxN !== -1) {
-          const dup = check.data.values.slice(1).find(row =>
-            String(row[idxN]||'').trim() === String(nroFactura).trim() &&
-            !String(row[idxN]||'').toUpperCase().startsWith('ANULADA')
-          )
-          if (dup) {
-            return res.status(409).json({
-              error: 'N° de factura ya existe',
-              duplicado: { nroFactura, presupuesto: dup[idxPresu], cliente: dup[idxCliente] },
-              mensaje: `Ya hay una factura con N° "${nroFactura}" cargada (presupuesto #${dup[idxPresu]} — ${dup[idxCliente]}). Confirmá si querés crearla igual.`,
-            })
-          }
+        const idxFinal = headers.indexOf('Precio FINAL')
+        const num = v => parseFloat(String(v||'').replace(/[^\d.-]/g,'')) || 0
+        const datos = check.data.values.slice(1)
+        // a) mismo N° de factura ya cargado
+        if (nroFactura && idxN !== -1) {
+          const dup = datos.find(row => String(row[idxN]||'').trim() === String(nroFactura).trim() && !String(row[idxN]||'').toUpperCase().startsWith('ANULADA'))
+          if (dup) return res.status(409).json({ error: 'N° de factura ya existe', mensaje: `Ya hay una factura con N° "${nroFactura}" cargada (presupuesto #${dup[idxPresu]} — ${dup[idxCliente]}). ¿Crear igual?` })
+        }
+        // b) MISMO proyecto + MISMO monto (atrapa duplicados sin número)
+        if (idxFinal !== -1) {
+          const dup2 = datos.find(row => String(row[idxPresu]||'').trim() === String(presupuestoNum).trim() && Math.abs(num(row[idxFinal]) - num(total)) < 1)
+          if (dup2) return res.status(409).json({ error: 'Posible duplicado', mensaje: `Ya hay una factura de este proyecto (#${presupuestoNum}) por ${'$'+Math.round(num(total)).toLocaleString('es-AR')}. Parece un duplicado. ¿Crear igual?` })
         }
       } catch (e) {
-        // Si el check de duplicado falla por rate limit, NO bloquea — seguimos con el append
         console.warn('Validación de duplicado falló (sigo igual):', e.message)
       }
     }

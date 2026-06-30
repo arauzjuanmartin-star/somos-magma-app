@@ -40,13 +40,16 @@ export default async function handler(req, res) {
     const iCob = headers.findIndex(x => /^cobrado$/i.test(x)), iFechaCob = H('Fecha cobro'), iMontoCob = H('Monto cobrado')
     const iCli = H('Cliente'), iAg = H('Agencia'), iProy = H('Proyecto'), iEv = H('Fecha Evento')
 
-    // Buscar registro fantasma existente (mismo N°, sin número y sin emisión)
-    let rowIdx = -1
+    // Buscar fila existente del mismo N°: preferir el registro fantasma (sin número y sin emisión),
+    // pero si no hay, usar CUALQUIER fila del N° (para no crear duplicados).
+    let rowIdx = -1, rowIdxAny = -1
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][iPresu] || '').trim() !== String(nroPresupuesto).trim()) continue
+      if (rowIdxAny === -1) rowIdxAny = i
       const sinNro = !String(rows[i][iNro] || '').trim(), sinEmi = !String(rows[i][iEmi] || '').trim()
       if (sinNro && sinEmi) { rowIdx = i; break }
     }
+    if (rowIdx === -1) rowIdx = rowIdxAny
 
     const emi = fechaEvento || hoyStr()
     if (rowIdx > 0) {
