@@ -2122,7 +2122,14 @@ function Freelancers({data, nav, clearNav}){
     stats[k].trabajos++; stats[k].ganado+=pr
     stats[k].items.push({fecha:p['Fecha Evento']||'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, nro:p['N° presupuesto']||''})
   }})
-  // Pagado desde PAGOS_STAFF
+  // Años anteriores (HISTORICO 2023/2024/2025): Staff N / Pago N — ya saldados
+  const addHist=(rows,anio)=>{ (rows||[]).forEach(p=>{ for(let j=1;j<=6;j++){ const st=String(p['Staff '+j]||'').trim(); const pr=parseMonto(p['Pago '+j]); if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
+    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, pagado:0, items:[]}
+    stats[k].trabajos++; stats[k].ganado+=pr; stats[k].pagado+=pr
+    stats[k].items.push({fecha:p['Fecha']||`${anio}`, proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr})
+  }}) }
+  addHist(data.historico2023,'2023'); addHist(data.historico2024,'2024'); addHist(data.historico2025,'2025')
+  // Pagado 2026 desde PAGOS_STAFF
   const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   pagos.forEach(r=>{ if(!esPag(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre']); if(stats[k]) stats[k].pagado+=parseMonto(r['Monto Pagado'])||parseMonto(r['Monto Adeudado']) })
   // RRHH (datos fiscales) + incluir roster que no tenga trabajos
