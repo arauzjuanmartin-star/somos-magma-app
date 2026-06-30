@@ -2114,32 +2114,36 @@ function Freelancers({data, nav, clearNav}){
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
-  // Stats por persona desde PROYECTOS (lo que hizo + lo que vale)
-  const stats={}
+  // "Se le debe" se calcula IGUAL que en Pagos Staff (por persona+mes+N°+servicio),
+  // para que coincida exacto y no se duplique con los pagos de años anteriores.
+  const mesLab=fe=>{ const d=parseD(fe); return d?`${String(d.getMonth()+1).padStart(2,'0')} - ${MESES_LARGO[d.getMonth()].toLowerCase()}`:'' }
+  const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
+  const paidCount={}
+  pagos.forEach(r=>{ if(!esPag(r))return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  const stats={}, usedG={}
   proyectos.forEach(p=>{ for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
     if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
-    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, pagado:0, items:[]}
+    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, debe:0, items:[]}
     stats[k].trabajos++; stats[k].ganado+=pr
-    stats[k].items.push({fecha:p['Fecha Evento']||'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, nro:p['N° presupuesto']||''})
+    const pk=norm(st)+'|'+norm(mesLab(p['Fecha Evento']))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
+    const cnt=paidCount[pk]||0, u=usedG[pk]||0; const pagado=u<cnt; if(pagado)usedG[pk]=u+1; else stats[k].debe+=pr
+    stats[k].items.push({fecha:p['Fecha Evento']||'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, nro:p['N° presupuesto']||''})
   }})
-  // Años anteriores (HISTORICO 2023/2024/2025): Staff N / Pago N — ya saldados
+  // Años anteriores (HISTORICO 2023/2024/2025): ya saldados — suman a "total", NO a "se le debe"
   const addHist=(rows,anio)=>{ (rows||[]).forEach(p=>{ for(let j=1;j<=6;j++){ const st=String(p['Staff '+j]||'').trim(); const pr=parseMonto(p['Pago '+j]); if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
-    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, pagado:0, items:[]}
-    stats[k].trabajos++; stats[k].ganado+=pr; stats[k].pagado+=pr
-    stats[k].items.push({fecha:p['Fecha']||`${anio}`, proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr})
+    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, debe:0, items:[]}
+    stats[k].trabajos++; stats[k].ganado+=pr
+    stats[k].items.push({fecha:p['Fecha']||`${anio}`, proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr, pagado:true})
   }}) }
   addHist(data.historico2023,'2023'); addHist(data.historico2024,'2024'); addHist(data.historico2025,'2025')
-  // Pagado 2026 desde PAGOS_STAFF
-  const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
-  pagos.forEach(r=>{ if(!esPag(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre']); if(stats[k]) stats[k].pagado+=parseMonto(r['Monto Pagado'])||parseMonto(r['Monto Adeudado']) })
   // RRHH (datos fiscales) + incluir roster que no tenga trabajos
-  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ rrhhByName[norm(n)]=r; if(!stats[norm(n)]) stats[norm(n)]={nombre:n, trabajos:0, ganado:0, pagado:0, items:[]} } })
+  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ rrhhByName[norm(n)]=r; if(!stats[norm(n)]) stats[norm(n)]={nombre:n, trabajos:0, ganado:0, debe:0, items:[]} } })
 
   const lista=Object.values(stats).sort((a,b)=>b.ganado-a.ganado)
   const filtrados=lista.filter(p=>!q||norm(p.nombre).includes(norm(q)))
   const selP = sel ? stats[norm(sel)] : null
   const datos = selP ? (rrhhByName[norm(selP.nombre)]||{}) : {}
-  const pend = selP ? Math.max(0, selP.ganado-selP.pagado) : 0
+  const pend = selP ? selP.debe : 0
 
   return <>
     <PageHead title="Freelancers" sub={`${filtrados.length} de ${lista.length}`}/>
@@ -2147,10 +2151,10 @@ function Freelancers({data, nav, clearNav}){
     <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
       <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
         <div style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Le pagamos</span><span style={{textAlign:'right'}}>Se le debe</span>
+          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Se le debe</span>
         </div>
         {filtrados.length===0&&<Empty>Sin resultados</Empty>}
-        {filtrados.slice(0,300).map((p,i)=>{ const d=Math.max(0,p.ganado-p.pagado); return (
+        {filtrados.slice(0,300).map((p,i)=>{ const d=p.debe; return (
           <div key={i} onClick={()=>setSel(p.nombre)} style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p.nombre}</span>
             <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{p.trabajos}</span>
@@ -2167,7 +2171,7 @@ function Freelancers({data, nav, clearNav}){
         <div style={{padding:'14px 18px'}}>
           <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
             <Mini label="Trabajos" val={selP.trabajos}/>
-            <Mini label="Le pagamos (total)" val={fmtM(selP.ganado)}/>
+            <Mini label="Total (le sale a Magma)" val={fmtM(selP.ganado)}/>
             <Mini label="Promedio x trabajo" val={fmtM(selP.trabajos?selP.ganado/selP.trabajos:0)}/>
             <Mini label="Se le debe" val={pend>0?fmtM(pend):'—'} color={pend>0?T.brand:T.pos}/>
           </div>
@@ -2180,7 +2184,7 @@ function Freelancers({data, nav, clearNav}){
           {selP.items.slice().reverse().slice(0,15).map((it,i)=>(
             <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
               <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?it.fecha.slice(0,5)+' · ':''}{it.ped} <span style={{color:T.ink3}}>· {it.proy}</span></span>
-              <span style={{fontFamily:MONO, color:T.ink2, flexShrink:0}}>{fmtM(it.monto)}</span>
+              <span style={{fontFamily:MONO, color:it.pagado?T.ink3:T.brand, fontWeight:it.pagado?400:600, flexShrink:0}} title={it.pagado?'pagado':'se le debe'}>{fmtM(it.monto)}{it.pagado?'':' •'}</span>
             </div>
           ))}
         </div>
