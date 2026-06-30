@@ -122,9 +122,8 @@ const cleanSvc = prettifySvc
 const CLAUSULAS_PROD = {
   validez: 'Este presupuesto es válido por un plazo de 5 días hábiles a partir de la fecha de emisión. Una vez transcurrido este período, los costos y la disponibilidad para el proyecto podrían variar y requerirán una reevaluación.',
   pago: [
-    {titulo:'Anticipo 50%', texto:'Se abona a la aceptación del presupuesto para iniciar el trabajo y reservar el tiempo en nuestra agenda.'},
-    {titulo:'Pago Intermedio 30%', texto:'Se abona al completar la fase de diseño o animación y antes de comenzar la etapa de correcciones provistas por el cliente.'},
-    {titulo:'Pago Final 20%', texto:'Se abona contra entrega del material final y antes de la transferencia de los derechos de uso o archivos fuente.'},
+    {titulo:'Adelanto 30%', texto:'Se abona el 30% del valor total a la aceptación del presupuesto, en concepto de seña, para iniciar el trabajo y reservar el tiempo en nuestra agenda.'},
+    {titulo:'Pago Final 70%', texto:'El 70% restante se abona contra la entrega del material final, en un plazo máximo de 15 días, y antes de la transferencia de los derechos de uso o archivos fuente.'},
   ],
   clausulas: [
     {titulo:'1. Cláusula de Retraso en el Pago (Morosidad)', texto:'El incumplimiento en las fechas de pago acordadas puede generar un cargo por mora del 15% mensual sobre el monto pendiente, calculado a partir del día siguiente a la fecha de vencimiento. Además, cualquier retraso en el pago de una fase detendrá automáticamente el avance del proyecto hasta que el pago se regularice.'},
