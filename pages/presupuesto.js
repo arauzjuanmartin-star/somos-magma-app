@@ -137,8 +137,8 @@ const CLAUSULAS_PROD = {
 const CLAUSULAS_COBERTURA = {
   validez: 'Este presupuesto es válido por 20 días desde la fecha de emisión.',
   pago: [
-    {titulo:'Reserva 50%', texto:'Para confirmar la reserva de la fecha se deberá abonar el 50% del valor total del servicio.'},
-    {titulo:'Pago Final 50%', texto:'El 50% restante deberá abonarse hasta 7 días antes del evento.'},
+    {titulo:'Seña 30%', texto:'Para confirmar la reserva de la fecha se deberá abonar el 30% del valor total del servicio en concepto de seña.'},
+    {titulo:'Pago Final 70%', texto:'El 70% restante deberá abonarse hasta 7 días antes del evento.'},
   ],
   clausulas: [
     {titulo:'1. Entrega del material', texto:'Incluye fotografías editadas en alta resolución y/o video resumen según servicio contratado. Todo el material se entrega de manera digital. No incluye archivos crudos ni editables salvo acuerdo expreso por escrito.'},
