@@ -52,6 +52,7 @@ const NAV = [
   {id:'proyectos',label:'Proyectos'},
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
+  {id:'freelancers',label:'Freelancers'},
   {id:'egresos',label:'Egresos'},
   {id:'agencias',label:'Agencias'},
   {id:'clientes',label:'Clientes'},
@@ -168,6 +169,7 @@ export default function V2() {
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
+            : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav}/>
             : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
@@ -2102,6 +2104,81 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
         <button onClick={pagarSeleccion} style={{padding:'9px 18px', borderRadius:8, border:'none', background:T.pos, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>Pagar seleccionados</button>
       </div>
     </div>}
+  </>
+}
+
+// ============================ FREELANCERS ============================
+function Freelancers({data, nav, clearNav}){
+  const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
+  const [q,setQ]=useState(''), [sel,setSel]=useState(null)
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
+  useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+
+  // Stats por persona desde PROYECTOS (lo que hizo + lo que vale)
+  const stats={}
+  proyectos.forEach(p=>{ for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
+    if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
+    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, pagado:0, items:[]}
+    stats[k].trabajos++; stats[k].ganado+=pr
+    stats[k].items.push({fecha:p['Fecha Evento']||'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, nro:p['N° presupuesto']||''})
+  }})
+  // Pagado desde PAGOS_STAFF
+  const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
+  pagos.forEach(r=>{ if(!esPag(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre']); if(stats[k]) stats[k].pagado+=parseMonto(r['Monto Pagado'])||parseMonto(r['Monto Adeudado']) })
+  // RRHH (datos fiscales) + incluir roster que no tenga trabajos
+  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ rrhhByName[norm(n)]=r; if(!stats[norm(n)]) stats[norm(n)]={nombre:n, trabajos:0, ganado:0, pagado:0, items:[]} } })
+
+  const lista=Object.values(stats).sort((a,b)=>b.ganado-a.ganado)
+  const filtrados=lista.filter(p=>!q||norm(p.nombre).includes(norm(q)))
+  const selP = sel ? stats[norm(sel)] : null
+  const datos = selP ? (rrhhByName[norm(selP.nombre)]||{}) : {}
+  const pend = selP ? Math.max(0, selP.ganado-selP.pagado) : 0
+
+  return <>
+    <PageHead title="Freelancers" sub={`${filtrados.length} de ${lista.length}`}/>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{width:'100%', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none', marginBottom:14}}/>
+    <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
+      <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
+        <div style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
+          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Le pagamos</span><span style={{textAlign:'right'}}>Se le debe</span>
+        </div>
+        {filtrados.length===0&&<Empty>Sin resultados</Empty>}
+        {filtrados.slice(0,300).map((p,i)=>{ const d=Math.max(0,p.ganado-p.pagado); return (
+          <div key={i} onClick={()=>setSel(p.nombre)} style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
+            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p.nombre}</span>
+            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{p.trabajos}</span>
+            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(p.ganado)}</span>
+            <span style={{textAlign:'right', color:d>0?T.brand:T.ink3, fontFamily:MONO, fontSize:12, fontWeight:d>0?600:400}}>{d>0?fmtM(d):'—'}</span>
+          </div>
+        )})}
+      </div>
+      {selP && <div style={{flex:'0 0 360px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
+        <div style={{padding:'14px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+          <span style={{fontSize:15, fontWeight:700, color:T.ink, flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{selP.nombre}</span>
+          <button onClick={()=>setSel(null)} title="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        </div>
+        <div style={{padding:'14px 18px'}}>
+          <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
+            <Mini label="Trabajos" val={selP.trabajos}/>
+            <Mini label="Le pagamos (total)" val={fmtM(selP.ganado)}/>
+            <Mini label="Promedio x trabajo" val={fmtM(selP.trabajos?selP.ganado/selP.trabajos:0)}/>
+            <Mini label="Se le debe" val={pend>0?fmtM(pend):'—'} color={pend>0?T.brand:T.pos}/>
+          </div>
+          {datos['Rubro'] && <div style={{fontSize:11.5, color:T.ink2, marginBottom:10}}>{datos['Rubro']}</div>}
+          {[['Mail',datos['Mail']],['Tel',datos['Celular']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=>(
+            <div key={k} style={{display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink, fontFamily:MONO, fontSize:11.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span></div>
+          ))}
+          {!Object.keys(datos).length && <div style={{fontSize:11.5, color:T.warn}}>⚠ Sin datos fiscales en RRHH</div>}
+          <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos trabajos</div>
+          {selP.items.slice().reverse().slice(0,15).map((it,i)=>(
+            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
+              <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?it.fecha.slice(0,5)+' · ':''}{it.ped} <span style={{color:T.ink3}}>· {it.proy}</span></span>
+              <span style={{fontFamily:MONO, color:T.ink2, flexShrink:0}}>{fmtM(it.monto)}</span>
+            </div>
+          ))}
+        </div>
+      </div>}
+    </div>
   </>
 }
 
