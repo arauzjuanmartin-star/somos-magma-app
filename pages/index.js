@@ -47,8 +47,8 @@ const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
 
 const NAV = [
   {id:'dashboard',label:'Dashboard'},
-  {id:'presupuestos',label:'Presupuestos'},
   {id:'calendario',label:'Calendario'},
+  {id:'presupuestos',label:'Presupuestos'},
   {id:'proyectos',label:'Proyectos'},
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
