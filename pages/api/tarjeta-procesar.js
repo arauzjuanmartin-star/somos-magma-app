@@ -52,12 +52,22 @@ Devolvé SOLAMENTE un JSON válido (sin texto extra, sin backticks):
   "titular": "string",
   "periodo": "MM/YYYY",
   "vencimiento": "DD/MM/YYYY",
+  "total_a_pagar_ars": número,
+  "total_a_pagar_usd": número,
+  "total_consumos_ars": número,
   "total_ars": número,
   "total_usd": número,
   "movimientos": [
     {"fecha": "DD/MM/YYYY", "descripcion": "...", "comercio": "...", "moneda": "ARS|USD", "monto": number, "categoria": "..."}
   ]
-}`
+}
+
+CRÍTICO sobre los totales (NO los calcules sumando movimientos, LEÉ el número impreso):
+- "total_a_pagar_ars" = el "SALDO ACTUAL" / "TOTAL A PAGAR" / "PAGO TOTAL" en pesos que el banco DEBITA. Copialo EXACTO del resumen.
+- "total_a_pagar_usd" = el "SALDO ACTUAL" en USD (0 si no hay).
+- "total_consumos_ars" = la suma de "consumos del mes" impresa (en BBVA es TOTAL CONSUMOS de cada titular sumados; en otras el subtotal de consumos del período). Si no figura clara, poné 0.
+- NO incluyas en los totales: saldo anterior, pagos del período, ni cuotas futuras a vencer.
+- Extraé TODOS los movimientos del período (no cortes la lista aunque sean muchos).`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -75,7 +85,7 @@ export default async function handler(req, res) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',

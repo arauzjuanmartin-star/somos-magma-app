@@ -2617,15 +2617,20 @@ function SubirResumen({onClose, onDone, showToast}){
   }
   const movs=data?.movimientos||[]
   const sum=arr=>arr.reduce((s,m)=>s+(Number(m.monto)||0),0)
+  const totalPagar=Number(data?.total_a_pagar_ars ?? data?.total_ars ?? 0)
+  const totalPagarUsd=Number(data?.total_a_pagar_usd ?? data?.total_usd ?? 0)
+  const consumos=Number(data?.total_consumos_ars ?? 0)
   const arsMovs=movs.filter(m=>(m.moneda||'ARS')==='ARS'&&!EXCL.includes(m.categoria))
   const empresa=sum(arsMovs.filter(m=>EMP.includes(m.categoria)))
   const personal=sum(arsMovs.filter(m=>!EMP.includes(m.categoria)))
   const usdEmp=sum(movs.filter(m=>m.moneda==='USD'&&EMP.includes(m.categoria)))
+  const movsArs=sum(movs.filter(m=>(m.moneda||'ARS')==='ARS'))
+  const lecturaOk = consumos>0 ? Math.abs(movsArs-consumos)/consumos < 0.15 : movs.length>0
   async function confirmar(){
     setSaving(true)
     try{
-      const nota=`Empresa ${Math.round(empresa).toLocaleString('es-AR')} · Personal ${Math.round(personal).toLocaleString('es-AR')}${usdEmp?` · USD emp ${usdEmp.toFixed(2)}`:''}`
-      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,totalArs:data.total_ars,totalUsd:data.total_usd,vencimiento:data.vencimiento,resumenNota:nota})})
+      const nota=lecturaOk?`Empresa ${Math.round(empresa).toLocaleString('es-AR')} · Personal ${Math.round(personal).toLocaleString('es-AR')}${usdEmp?` · USD emp ${usdEmp.toFixed(2)}`:''}`:'Total cargado del resumen (clasificación pendiente)'
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
       showToast(`Cargado ✓ (${j.guardados} movimientos)`); onDone&&onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
@@ -2648,15 +2653,17 @@ function SubirResumen({onClose, onDone, showToast}){
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
-          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · {MESES_LARGO[mes-1]} {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
-          <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(data.total_ars||0)}{data.total_usd?`  + US$${data.total_usd}`:''}</div>
-          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>{movs.length} movimientos · total a pagar</div>
+          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen {MESES_LARGO[mes-1]} {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
+          <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
+          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''} · {movs.length} mov.</div>
         </div>
+        {lecturaOk ? <>
         <div style={{display:'flex', gap:10, marginBottom:14}}>
           <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Empresa (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}{usdEmp?` +US$${usdEmp.toFixed(0)}`:''}</div></div>
           <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>👤 Personal (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(personal)}</div></div>
         </div>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>La división Empresa/Personal es una estimación de la IA por rubro — el detalle queda guardado para ajustarlo después.</div>
+        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>La división Empresa/Personal es una estimación por rubro — el detalle queda guardado para ajustarlo después.</div>
+        </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ La IA no llegó a leer todos los movimientos, así que no divido Empresa/Personal para no pifiarle. Igual cargo el <b>total a pagar</b> correcto — la división la hacemos aparte.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
