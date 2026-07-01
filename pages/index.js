@@ -2606,6 +2606,9 @@ function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
   const esItem=m=>['Personal','Reclasificado (Magma)'].includes(String(m['Subcategoria']||''))
   const indiv=items.filter(esItem)
   const agg=items.filter(m=>!esItem(m)&&String(m['Categoria']||'').toLowerCase()==='empresa')
+  const itemsSum=items.filter(m=>String(m['Moneda']||'').toUpperCase()!=='USD').reduce((s,m)=>s+parseMonto(m['Monto']),0)
+  const totalCard=parseMonto(t['Monto'])
+  const deuda=totalCard-itemsSum
   const porPersona={}; indiv.forEach(m=>{ const p=/juan/i.test(m['Descripcion'])?'👨 Juan':/sof/i.test(m['Descripcion'])?'👩 Sofi':(m['Descripcion']||'Otros'); (porPersona[p]=porPersona[p]||[]).push(m) })
   async function flip(m){ if(busy) return; const nueva=String(m['Categoria']||'').toLowerCase()==='empresa'?'Personal':'Empresa'; setBusy(m.__row)
     try{ const r=await fetch('/api/movimiento-clasificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:m.__row,categoria:nueva})}); const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setBusy(''); return } showToast(nueva==='Empresa'?'→ Empresa 🏢':'→ Personal 👤'); if(onRefresh) await onRefresh() }
@@ -2626,6 +2629,8 @@ function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
         </div> })}
       </div>)}
       {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Empresa (automático, por rubro)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
+      {deuda>1000?<div style={{marginTop:8, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{display:'flex', justifyContent:'space-between', fontSize:12.5, color:T.ink2, fontWeight:600}}><span>💳 Deuda del mes pasado (financiada)</span><span style={{fontFamily:MONO}}>{fmt(deuda)}</span></div><div style={{fontSize:10.5, color:T.ink3, marginTop:2}}>No es gasto de este mes — es deuda que se arrastra. Seguimiento en la solapa DEUDA_TARJETAS.</div></div>:null}
+      <div style={{marginTop:10, paddingTop:10, borderTop:`2px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, color:T.ink}}><span>Total del resumen (a pagar)</span><span style={{fontFamily:MONO}}>{fmt(totalCard)}</span></div>
     </div>
   </div>
 }
