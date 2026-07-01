@@ -2520,6 +2520,7 @@ function Egresos({data, onRefresh, showToast}){
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
   const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({})
   const [editM,setEditM]=useState({})  // key -> true (editando monto)
+  const [subir,setSubir]=useState(false)
   const esPagado=v=>{ const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
   const vencTxt=(hoja,it)=>{ if(hoja==='GASTOS_FIJOS'){ const d=it['Dia pago']; return d?`vence día ${d}`:'' } const v=it['Vencimiento']; const d=parseD(v); return d?`vence ${d.getDate()}/${d.getMonth()+1}`:(v?String(v):'') }
   async function saveMonto(hoja,it,val){ const k=hoja+':'+it.__row, n=parseMonto(val)
@@ -2580,9 +2581,87 @@ function Egresos({data, onRefresh, showToast}){
     {Object.entries(porCat).map(([cat,items])=>(
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):null}</Sec>
+    <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
+    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas cargadas este mes. Subí el resumen ⬆</div>}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
+}
+
+// Subir PDF de resumen de tarjeta → IA lo lee → preview → carga total + movimientos
+function SubirResumen({onClose, onDone, showToast}){
+  const now=new Date()
+  const [tarjeta,setTarjeta]=useState('BBVA Visa')
+  const [mes,setMes]=useState(now.getMonth()+1)
+  const [anio,setAnio]=useState(now.getFullYear())
+  const [file,setFile]=useState(null)
+  const [loading,setLoading]=useState(false)
+  const [data,setData]=useState(null)
+  const [saving,setSaving]=useState(false)
+  const EMP=['Transporte','Suscripciones','Viajes','Producción audiovisual','Profesional/Servicios','Cargos bancarios','Equipos/Tecnología']
+  const EXCL=['Pagos/Transferencias']
+  const TARJS=['BBVA Visa','Master Galicia','Santander Visa','Santander Amex']
+  async function procesar(){
+    if(!file){ showToast('Elegí el PDF','err'); return }
+    setLoading(true)
+    try{
+      const b64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
+      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b64,fileName:file.name})})
+      const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
+      setData(j.data)
+      if(j.data?.vencimiento){ const d=parseD(j.data.vencimiento); if(d){ setMes(d.getMonth()+1); setAnio(d.getFullYear()) } }
+    }catch(e){ showToast('Error de conexión','err') }
+    setLoading(false)
+  }
+  const movs=data?.movimientos||[]
+  const sum=arr=>arr.reduce((s,m)=>s+(Number(m.monto)||0),0)
+  const arsMovs=movs.filter(m=>(m.moneda||'ARS')==='ARS'&&!EXCL.includes(m.categoria))
+  const empresa=sum(arsMovs.filter(m=>EMP.includes(m.categoria)))
+  const personal=sum(arsMovs.filter(m=>!EMP.includes(m.categoria)))
+  const usdEmp=sum(movs.filter(m=>m.moneda==='USD'&&EMP.includes(m.categoria)))
+  async function confirmar(){
+    setSaving(true)
+    try{
+      const nota=`Empresa ${Math.round(empresa).toLocaleString('es-AR')} · Personal ${Math.round(personal).toLocaleString('es-AR')}${usdEmp?` · USD emp ${usdEmp.toFixed(2)}`:''}`
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,totalArs:data.total_ars,totalUsd:data.total_usd,vencimiento:data.vencimiento,resumenNota:nota})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
+      showToast(`Cargado ✓ (${j.guardados} movimientos)`); onDone&&onDone()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:22, width:500, maxWidth:'100%', maxHeight:'90vh', overflow:'auto', border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+        <h3 style={{margin:0, fontSize:17, fontWeight:700, color:T.ink}}>Subir resumen de tarjeta</h3>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      {!data ? <>
+        <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap'}}>
+          <select value={tarjeta} onChange={e=>setTarjeta(e.target.value)} style={{...inp, flex:'1 1 160px'}}>{TARJS.map(t=><option key={t} value={t}>{t}</option>)}</select>
+          <select value={mes} onChange={e=>setMes(parseInt(e.target.value))} style={{...inp, width:120}}>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+          <select value={anio} onChange={e=>setAnio(parseInt(e.target.value))} style={{...inp, width:90}}>{[2025,2026].map(a=><option key={a} value={a}>{a}</option>)}</select>
+        </div>
+        <input type="file" accept="application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)} style={{marginBottom:16, fontSize:13, color:T.ink2}}/>
+        <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.ink3:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA…':'Leer PDF'}</button>
+        <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
+      </> : <>
+        <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
+          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · {MESES_LARGO[mes-1]} {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
+          <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(data.total_ars||0)}{data.total_usd?`  + US$${data.total_usd}`:''}</div>
+          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>{movs.length} movimientos · total a pagar</div>
+        </div>
+        <div style={{display:'flex', gap:10, marginBottom:14}}>
+          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Empresa (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}{usdEmp?` +US$${usdEmp.toFixed(0)}`:''}</div></div>
+          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>👤 Personal (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(personal)}</div></div>
+        </div>
+        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>La división Empresa/Personal es una estimación de la IA por rubro — el detalle queda guardado para ajustarlo después.</div>
+        <div style={{display:'flex', gap:8}}>
+          <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
+          <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
+        </div>
+      </>}
+    </div>
+  </div>
 }
 
 // ============================ FREELANCER (alta / datos) ============================
