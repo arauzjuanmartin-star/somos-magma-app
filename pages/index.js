@@ -1532,7 +1532,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
       <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:sumFiltrada)}</span>
     </div>
-    {filt==='sinfacturar' ? (
+    {(filt==='sinfacturar'||filt==='todas') && (<>
+    {filt==='todas' && <div style={{margin:'4px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Sin facturar · {pendOrdenados.length} · {fmt(sumPend)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       {sinFactAtrasados>0 && <div style={{background:T.brandSoft, color:T.brand, padding:'9px 18px', fontSize:12, fontWeight:600, borderBottom:`1px solid ${T.border}`}}>⚠ {sinFactAtrasados} {sinFactAtrasados===1?'proyecto con evento pasado hace +30 días sin facturar':'proyectos con evento pasado hace +30 días sin facturar'}</div>}
       <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
@@ -1557,7 +1558,9 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
         </div>
       )})}
     </div>
-    ) : (
+    </>)}
+    {filt!=='sinfacturar' && (<>
+    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 235px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
@@ -1591,7 +1594,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
         </div>
       })}
     </div>
-    )}
+    </>)}
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
