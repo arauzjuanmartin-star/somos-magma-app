@@ -2116,7 +2116,7 @@ const canonStaff=name=>{ const k=canonKey(name); return STAFF_CANON_MAP[k]||Stri
 
 function Freelancers({data, nav, clearNav}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
-  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState('')
+  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState(''), [lAnio,setLAnio]=useState(''), [lMes,setLMes]=useState('')
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -2147,26 +2147,44 @@ function Freelancers({data, nav, clearNav}){
   // RRHH (datos fiscales) + incluir roster que no tenga trabajos
   const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ const cn=canonStaff(n), k=canonKey(cn); rrhhByName[k]=r; if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]} } })
 
-  const lista=Object.values(stats).sort((a,b)=>b.ganado-a.ganado)
+  // Vista por período (año/mes) a nivel de toda la lista
+  const aniosAll=[...new Set(Object.values(stats).flatMap(p=>p.items.map(it=>it.anio)).filter(Boolean))].sort((a,b)=>b-a)
+  const per=it=>(!lAnio||String(it.anio)===String(lAnio))&&(!lMes||String(it.mes)===String(lMes))
+  const view=p=>{ const its=p.items.filter(per); const total=its.reduce((s,it)=>s+it.monto,0); const debe=its.filter(it=>!it.pagado).reduce((s,it)=>s+it.monto,0); return {trab:its.length, total, debe, prom:its.length?total/its.length:0} }
+  const filtroActivo=!!(lAnio||lMes)
+  const lista=Object.values(stats).map(p=>({...p, v:view(p)})).filter(p=>!filtroActivo||p.v.trab>0).sort((a,b)=>b.v.total-a.v.total)
   const filtrados=lista.filter(p=>!q||norm(p.nombre).includes(norm(q)))
   const selP = sel ? stats[canonKey(canonStaff(sel))] : null
   const datos = selP ? (rrhhByName[canonKey(canonStaff(selP.nombre))]||{}) : {}
   const pend = selP ? selP.debe : 0
+  const totPeriodo=filtrados.reduce((s,p)=>s+p.v.total,0), trabPeriodo=filtrados.reduce((s,p)=>s+p.v.trab,0)
+  const periodoLbl=(lMes?MESES_LARGO[lMes-1]+' ':'')+(lAnio||(filtroActivo?'':'histórico'))
 
   return <>
     <PageHead title="Freelancers" sub={`${filtrados.length} de ${lista.length}`}/>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{width:'100%', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none', marginBottom:14}}/>
+    <div style={{display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center'}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{flex:'1 1 240px', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
+      <select value={lAnio} onChange={e=>setLAnio(e.target.value)} style={selectStyle}><option value="">Todos los años</option>{aniosAll.map(a=><option key={a} value={a}>{a}</option>)}</select>
+      <select value={lMes} onChange={e=>setLMes(e.target.value)} style={selectStyle}><option value="">Todo el año</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+    </div>
+    <div style={{display:'flex', gap:24, flexWrap:'wrap', padding:'11px 18px', marginBottom:14, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10}}>
+      <Mini label={`Freelancers · ${periodoLbl}`} val={filtrados.length}/>
+      <Mini label="Total pagado a staff" val={fmtM(totPeriodo)}/>
+      <Mini label="Trabajos" val={trabPeriodo}/>
+      <Mini label="Promedio x trabajo" val={fmtM(trabPeriodo?totPeriodo/trabPeriodo:0)}/>
+    </div>
     <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
       <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Se le debe</span>
+        <div style={{display:'grid', gridTemplateColumns:'1.5fr 55px 110px 105px 110px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
+          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Prom.</span><span style={{textAlign:'right'}}>Se le debe</span>
         </div>
         {filtrados.length===0&&<Empty>Sin resultados</Empty>}
-        {filtrados.slice(0,300).map((p,i)=>{ const d=p.debe; return (
-          <div key={i} onClick={()=>setSel(p.nombre)} style={{display:'grid', gridTemplateColumns:'1.5fr 60px 120px 120px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
+        {filtrados.slice(0,300).map((p,i)=>{ const d=p.v.debe; return (
+          <div key={i} onClick={()=>setSel(p.nombre)} style={{display:'grid', gridTemplateColumns:'1.5fr 55px 110px 105px 110px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p.nombre}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{p.trabajos}</span>
-            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(p.ganado)}</span>
+            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{p.v.trab}</span>
+            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(p.v.total)}</span>
+            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{fmtM(p.v.prom)}</span>
             <span style={{textAlign:'right', color:d>0?T.brand:T.ink3, fontFamily:MONO, fontSize:12, fontWeight:d>0?600:400}}>{d>0?fmtM(d):'—'}</span>
           </div>
         )})}
