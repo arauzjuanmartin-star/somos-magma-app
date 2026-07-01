@@ -10,40 +10,34 @@ export default async function handler(req, res) {
   const mail = auth.mail
 
   const { tarjeta, mes, anio, movimientos, totalArs, totalUsd, vencimiento, resumenNota } = req.body
-  if (!tarjeta || !mes || !anio || !Array.isArray(movimientos)) return res.status(400).json({ error: 'Faltan campos' })
+  if (!tarjeta || !mes || !anio) return res.status(400).json({ error: 'Faltan campos' })
+  const movs = Array.isArray(movimientos) ? movimientos : []
   const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const filas = movimientos.map(m => [
+    const filas = movs.map(m => [
       tarjeta, mes, anio,
-      m.fecha || '',
-      m.descripcion || '',
-      m.comercio || '',
-      m.moneda || 'ARS',
-      Number(m.monto) || 0,
-      m.categoria || 'Otros',
-      m.subcategoria || '',
-      mail,
-      m.notas || '',
+      m.fecha || '', m.descripcion || '', m.comercio || '', m.moneda || 'ARS',
+      Number(m.monto) || 0, m.categoria || 'Otros', m.subcategoria || '', mail, m.notas || '',
     ])
 
-    if (filas.length === 0) return res.status(400).json({ error: 'Sin movimientos para guardar' })
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: 'MOVIMIENTOS_TARJETA!A:L',
-      valueInputOption: 'USER_ENTERED',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: filas },
-    })
+    if (filas.length > 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'MOVIMIENTOS_TARJETA!A:L',
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: filas },
+      })
+    }
 
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'tarjeta-guardar', 'MOVIMIENTOS_TARJETA', tarjeta, `${filas.length} movs · ${mes}/${anio}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'tarjeta-guardar', 'TARJETAS', tarjeta, `${mes}/${anio} · ${resumenNota||''}`]] },
       })
     } catch (e) {}
 

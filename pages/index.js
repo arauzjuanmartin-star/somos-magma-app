@@ -2635,31 +2635,27 @@ function SubirResumen({onClose, onDone, showToast}){
     }catch(e){ showToast('Error de conexión','err') }
     setLoading(false)
   }
-  const movs=data?.movimientos||[]
-  const sum=arr=>arr.reduce((s,m)=>s+(Number(m.monto)||0),0)
-  const totalPagar=Number(data?.total_a_pagar_ars ?? data?.total_ars ?? 0)
-  const totalPagarUsd=Number(data?.total_a_pagar_usd ?? data?.total_usd ?? 0)
-  const consumos=Number(data?.total_consumos_ars ?? 0)
-  const arsMovs=movs.filter(m=>(m.moneda||'ARS')==='ARS'&&!EXCL.includes(m.categoria))
-  const empMov=m=>rubroTarjeta(m).emp
-  const empresa=sum(arsMovs.filter(empMov))
-  const personal=sum(arsMovs.filter(m=>!empMov(m)))
-  const usdEmp=sum(movs.filter(m=>m.moneda==='USD'&&empMov(m)))
-  const grupos={}
-  arsMovs.forEach(m=>{ const {r,emp}=rubroTarjeta(m); const g=grupos[r]=grupos[r]||{r,emp,count:0,total:0}; g.count++; g.total+=Number(m.monto)||0 })
-  const gEmp=Object.values(grupos).filter(g=>g.emp).sort((a,b)=>b.total-a.total)
-  const gPer=Object.values(grupos).filter(g=>!g.emp).sort((a,b)=>b.total-a.total)
-  const perJuan=sum(arsMovs.filter(m=>!empMov(m)&&/juan/i.test(m.titular||'')))
-  const perSofi=sum(arsMovs.filter(m=>!empMov(m)&&/sof/i.test(m.titular||'')))
-  const movsArs=sum(movs.filter(m=>(m.moneda||'ARS')==='ARS'))
-  const lecturaOk = consumos>0 ? Math.abs(movsArs-consumos)/consumos < 0.15 : movs.length>0
+  const titulares=Array.isArray(data?.titulares)?data.titulares:[]
+  const totalPagar=Number(data?.total_a_pagar_ars ?? 0)
+  const totalPagarUsd=Number(data?.total_a_pagar_usd ?? 0)
+  const empresa=titulares.reduce((s,t)=>s+(Number(t.empresa_ars)||0),0)
+  const empresaUsd=titulares.reduce((s,t)=>s+(Number(t.empresa_usd)||0),0)
+  const consumos=titulares.reduce((s,t)=>s+(Number(t.total_consumos_ars)||0),0)
+  const personalTot=titulares.reduce((s,t)=>s+(Number(t.personal_ars)||0),0)
+  const titBy=re=>titulares.find(t=>new RegExp(re,'i').test(t.nombre||''))
+  const juanPers=Number(titBy('juan')?.personal_ars)||0
+  const sofiPers=Number(titBy('sof')?.personal_ars)||0
+  const otrosPers=Math.max(0,personalTot-juanPers-sofiPers)
+  const rubEmp={}; titulares.forEach(t=>Object.entries(t.rubros_empresa||{}).forEach(([k,v])=>{ const n=Number(v)||0; if(n) rubEmp[k]=(rubEmp[k]||0)+n }))
+  const rubEmpArr=Object.entries(rubEmp).sort((a,b)=>b[1]-a[1])
+  const lecturaOk=titulares.length>0 && (empresa+personalTot)>0
   async function confirmar(){
     setSaving(true)
     try{
-      const nota=lecturaOk?`Empresa ${Math.round(empresa).toLocaleString('es-AR')} · Personal ${Math.round(personal).toLocaleString('es-AR')}${usdEmp?` · USD emp ${usdEmp.toFixed(2)}`:''}`:'Total cargado del resumen (clasificación pendiente)'
-      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota})})
+      const nota=lecturaOk?`Empresa ${Math.round(empresa).toLocaleString('es-AR')}${empresaUsd?` (+US$${empresaUsd.toFixed(0)})`:''} · Juan ${Math.round(juanPers).toLocaleString('es-AR')} · Sofi ${Math.round(sofiPers).toLocaleString('es-AR')}`:'Total cargado (clasificación pendiente)'
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:[],totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
-      showToast(`Cargado ✓ (${j.guardados} movimientos)`); onDone&&onDone()
+      showToast('Cargado ✓'); onDone&&onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
@@ -2682,16 +2678,19 @@ function SubirResumen({onClose, onDone, showToast}){
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
           <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen {MESES_LARGO[mes-1]} {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
           <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
-          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''} · {movs.length} mov.</div>
+          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''}</div>
         </div>
-        {lecturaOk ? <div style={{background:T.surfaceAlt, borderRadius:10, padding:'12px 14px', marginBottom:14}}>
-          <div style={{fontSize:12.5, fontWeight:700, color:T.pos, marginBottom:4}}>🏢 EMPRESA · {fmt(empresa)}{usdEmp?` +US$${usdEmp.toFixed(0)}`:''}</div>
-          {gEmp.map(g=><div key={g.r} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 4px', color:T.ink2}}><span>{g.r} · {g.count}</span><span style={{fontFamily:MONO}}>{fmt(g.total)}</span></div>)}
-          <div style={{fontSize:12.5, fontWeight:700, color:T.brand, margin:'12px 0 4px'}}>👤 PERSONAL · {fmt(personal)}</div>
-          {gPer.map(g=><div key={g.r} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 4px', color:T.ink2}}><span>{g.r} · {g.count}</span><span style={{fontFamily:MONO}}>{fmt(g.total)}</span></div>)}
-          {(perJuan||perSofi)?<div style={{fontSize:11.5, color:T.ink3, marginTop:6, paddingTop:6, borderTop:`1px solid ${T.border}`}}>De lo personal: 👨 Juan {fmt(perJuan)} · 👩 Sofi {fmt(perSofi)}</div>:null}
-          <div style={{fontSize:10.5, color:T.ink3, marginTop:8}}>Clasificación automática por rubro (reglas Magma). El detalle queda guardado para ajustar.</div>
-        </div> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ La IA no llegó a leer todos los movimientos, así que no divido por rubro para no pifiarle. Igual cargo el <b>total a pagar</b> correcto — la división la hacemos aparte.</div>}
+        {lecturaOk ? <>
+        <div style={{fontSize:11.5, color:T.ink3, marginBottom:6, fontWeight:600}}>¿A quién corresponde el gasto?</div>
+        <div style={{display:'flex', gap:8, marginBottom:12}}>
+          <div style={{flex:1, background:T.posSoft, borderRadius:10, padding:'10px 12px'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Empresa</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}</div>{empresaUsd?<div style={{fontSize:10.5, color:T.ink3, fontFamily:MONO}}>+US${empresaUsd.toFixed(0)}</div>:null}</div>
+          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 12px'}}><div style={{fontSize:11, color:T.ink3}}>👨 Juan</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(juanPers)}</div></div>
+          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 12px'}}><div style={{fontSize:11, color:T.ink3}}>👩 Sofi</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(sofiPers)}</div></div>
+        </div>
+        {rubEmpArr.length?<div style={{background:T.surfaceAlt, borderRadius:10, padding:'10px 14px', marginBottom:12}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, marginBottom:4, textTransform:'uppercase', letterSpacing:0.4}}>Qué hay en Empresa</div>{rubEmpArr.map(([k,v])=><div key={k} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 0', color:T.ink2}}><span>{k}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}</div>:null}
+        {otrosPers>0?<div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Otros titulares (personal): {fmt(otrosPers)}</div>:null}
+        <div style={{fontSize:10.5, color:T.ink3, marginBottom:12}}>Clasificado con las reglas de Magma. Se guarda el total a pagar + este desglose.</div>
+        </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ No pude clasificar bien este resumen. Igual cargo el <b>total a pagar</b> correcto — la división Empresa/Juan/Sofi la hacemos aparte.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
