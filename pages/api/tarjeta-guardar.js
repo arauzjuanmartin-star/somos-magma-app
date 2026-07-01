@@ -53,17 +53,17 @@ export default async function handler(req, res) {
       } catch (e) { console.error('drive upload', e.message) }
     }
 
-    // 2) Desglose por tarjeta/titular/rubro → MOVIMIENTOS_TARJETA (para estadísticas). Dedup por tarjeta+mes+año.
+    // 2) → MOVIMIENTOS_TARJETA: rubros de empresa (agregado) + cada gasto personal con la marca final del usuario. Dedup por tarjeta+mes+año.
+    const norm = v => String(v||'').trim().toLowerCase()
     const filas = []
-    if (tits.length) {
-      const norm = v => String(v||'').trim().toLowerCase()
-      for (const t of tits) {
-        const quien = t.nombre || ''
-        for (const [rubro, monto] of Object.entries(t.rubros_empresa || {})) { if (Number(monto)>0) filas.push([tarjeta, mes, anio, '', rubro, quien, 'ARS', Number(monto), 'Empresa', rubro, mail, '']) }
-        for (const [rubro, monto] of Object.entries(t.rubros_personal || {})) { if (Number(monto)>0) filas.push([tarjeta, mes, anio, '', rubro, quien, 'ARS', Number(monto), 'Personal', rubro, mail, '']) }
-        if (Number(t.empresa_usd)>0) filas.push([tarjeta, mes, anio, '', 'Software USD', quien, 'USD', Number(t.empresa_usd), 'Empresa', 'Software', mail, ''])
-      }
-      // borrar filas previas de esa tarjeta+mes+año (para no duplicar al re-subir)
+    for (const t of tits) {
+      const quien = t.nombre || ''
+      for (const [rubro, monto] of Object.entries(t.rubros_empresa || {})) { if (Number(monto)>0) filas.push([tarjeta, mes, anio, '', quien, rubro, 'ARS', Number(monto), 'Empresa', rubro, mail, '']) }
+      if (Number(t.empresa_usd)>0) filas.push([tarjeta, mes, anio, '', quien, 'Software', 'USD', Number(t.empresa_usd), 'Empresa', 'Software', mail, ''])
+    }
+    // cada gasto personal, con la marca final: Personal o (si lo pasaste) Empresa
+    movs.forEach(m => filas.push([tarjeta, mes, anio, m.fecha||'', m.titular||'', m.comercio||'', m.moneda||'ARS', Number(m.monto)||0, m.categoria||'Personal', m.subcategoria||'', mail, '']))
+    if (filas.length) {
       try {
         const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties(title,sheetId))' })
         const sid = meta.data.sheets.find(s => s.properties.title === 'MOVIMIENTOS_TARJETA')?.properties.sheetId
@@ -71,10 +71,6 @@ export default async function handler(req, res) {
         const del = cur.map((r,i)=>({r,i})).filter(({r},i)=> i>0 && norm(r[0])===norm(tarjeta) && String(r[1]).trim()===String(mes).trim() && String(r[2]).includes(String(anio))).map(x=>x.i)
         if (sid!=null && del.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: del.sort((a,b)=>b-a).map(i=>({ deleteDimension: { range: { sheetId: sid, dimension:'ROWS', startIndex:i, endIndex:i+1 } } })) } })
       } catch (e) { console.error('dedup movs', e.message) }
-    }
-    // movimientos crudos (si vinieran) también van
-    movs.forEach(m => filas.push([tarjeta, mes, anio, m.fecha||'', m.descripcion||'', m.comercio||'', m.moneda||'ARS', Number(m.monto)||0, m.categoria||'Otros', m.subcategoria||'', mail, m.notas||'']))
-    if (filas.length) {
       await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:L', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filas } })
     }
 

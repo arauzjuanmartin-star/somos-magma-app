@@ -2665,11 +2665,11 @@ function SubirResumen({onClose, onDone, showToast}){
   async function confirmar(){
     setSaving(true)
     try{
-      const scale=(rub,oldT,newT)=>{ if(!oldT||oldT<=0||oldT===newT)return rub||{}; const f=newT/oldT,o={}; Object.entries(rub||{}).forEach(([k,v])=>{ const x=Math.round(Number(v)*f); if(x)o[k]=x }); return o }
-      const adj=titulares.map((t,ti)=>{ const mv=movedSum(ti), pOld=Number(t.personal_ars)||0, pNew=Math.max(0,pOld-mv)
-        return {...t, empresa_ars:(Number(t.empresa_ars)||0)+mv, personal_ars:pNew, rubros_empresa:{...(t.rubros_empresa||{}), ...(mv?{'Reclasificado manual':mv}:{})}, rubros_personal:scale(t.rubros_personal,pOld,pNew)} })
+      // guardamos cada gasto personal con la marca final (personal o pasado a Magma) → queda grabado ítem por ítem
+      const movs=[]
+      titulares.forEach((t,ti)=>{ (t.personales||[]).forEach((it,j)=>{ const moved=!!movedEmp[ti+':'+j]; movs.push({ fecha:it.fecha||'', titular:t.nombre||'', comercio:it.comercio||'', monto:Number(it.monto)||0, categoria:moved?'Empresa':'Personal', subcategoria:moved?'Reclasificado (Magma)':'Personal' }) }) })
       const nota=lecturaOk?`Empresa ${Math.round(empresa).toLocaleString('es-AR')}${empresaUsd?` (+US$${empresaUsd.toFixed(0)})`:''} · Juan ${Math.round(juanPers).toLocaleString('es-AR')} · Sofi ${Math.round(sofiPers).toLocaleString('es-AR')}`:'Total cargado (clasificación pendiente)'
-      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:[],titulares:adj,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota,pdfBase64:b64,fileName:file?.name})})
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,titulares,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota,pdfBase64:b64,fileName:file?.name})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
       showToast(j.pdfLink?'Cargado ✓ · PDF en Drive':'Cargado ✓'); onDone&&onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
