@@ -2585,7 +2585,10 @@ function Egresos({data, onRefresh, showToast}){
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; return <Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${t['Persona']?` · ${t['Persona']}`:''}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
+    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const tieneSplit=nota&&/empresa/i.test(nota); return <div key={i}>
+      <Fila hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/>
+      {tieneSplit?<div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div>:null}
+    </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
@@ -2634,7 +2637,6 @@ function SubirResumen({onClose, onDone, showToast}){
       const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b,fileName:file.name})})
       const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
       setData(j.data)
-      if(j.data?.vencimiento){ const d=parseD(j.data.vencimiento); if(d){ setMes(d.getMonth()+1); setAnio(d.getFullYear()) } }
     }catch(e){ showToast('Error de conexión','err') }
     setLoading(false)
   }
