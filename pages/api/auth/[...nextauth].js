@@ -12,6 +12,11 @@ export const ALLOWED_MAILS = [
   'arauzjuanmartin@gmail.com',
 ]
 
+// Invitados en modo LECTURA: pueden entrar y ver todo, pero no modificar nada. Ej: coach.
+export const READONLY_MAILS = [
+  'info@marianatardito.com',
+]
+
 export const authOptions = {
   providers: [
     GoogleProvider({
@@ -23,8 +28,8 @@ export const authOptions = {
   callbacks: {
     async signIn({ user }) {
       const mail = (user?.email || '').toLowerCase().trim()
-      if (!ALLOWED_MAILS.includes(mail)) {
-        // Rechaza el login si el mail no está en la whitelist
+      if (!ALLOWED_MAILS.includes(mail) && !READONLY_MAILS.includes(mail)) {
+        // Rechaza el login si el mail no está en ninguna lista
         return false
       }
       return true
@@ -33,6 +38,7 @@ export const authOptions = {
       // Asegurarse que email viene normalizado
       if (session?.user?.email) {
         session.user.email = session.user.email.toLowerCase().trim()
+        session.user.readOnly = READONLY_MAILS.includes(session.user.email)
       }
       return session
     },

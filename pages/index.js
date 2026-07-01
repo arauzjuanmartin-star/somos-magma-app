@@ -78,6 +78,7 @@ class ErrorBoundary extends React.Component {
 export default function V2() {
   const { data: session, status } = useSession()
   const mail = session?.user?.email || ''
+  const readOnly = !!session?.user?.readOnly
   const [data,setData] = useState(null)
   const [loading,setLoading] = useState(false)
   const [refreshing,setRefreshing] = useState(false)
@@ -100,6 +101,20 @@ export default function V2() {
   useEffect(()=>{ if(status==='authenticated' && mail && !data && !loading) load() // eslint-disable-next-line
   },[status,mail])
 
+  // Modo lectura (invitado): bloquear toda escritura (POST/PUT/DELETE a /api/*) del lado cliente.
+  // El backend igual la rechaza (defensa en profundidad).
+  useEffect(()=>{
+    if(!readOnly) return
+    const orig=window.fetch
+    window.fetch=(url,opts={})=>{ const u=String(url||''), m=(opts?.method||'GET').toUpperCase()
+      if(m!=='GET' && u.includes('/api/') && !u.includes('/api/auth')){
+        return Promise.resolve(new Response(JSON.stringify({ok:false,error:'👁 Modo lectura: no podés modificar'}),{status:200,headers:{'Content-Type':'application/json'}}))
+      }
+      return orig(url,opts) }
+    return ()=>{ window.fetch=orig }
+  // eslint-disable-next-line
+  },[readOnly])
+
   async function load(silencioso=false){
     if(silencioso) setRefreshing(true); else setLoading(true)
     setErr('')
@@ -121,6 +136,7 @@ export default function V2() {
             <span style={{fontSize:13, fontWeight:700, letterSpacing:1.5, color:T.ink}}>SOMOS MAGMA</span>
           </div>
           <div style={{fontSize:10, color:T.ink3, marginTop:5, letterSpacing:0.3, fontFamily:MONO}}>productora audiovisual</div>
+          {readOnly && <div style={{marginTop:9, fontSize:10, fontWeight:700, color:T.brand, background:T.brandSoft, padding:'5px 8px', borderRadius:6, letterSpacing:0.4, textAlign:'center'}}>👁 MODO LECTURA</div>}
         </div>
         <nav style={{flex:1, padding:'4px 12px'}}>
           {NAV.map(n=>{
