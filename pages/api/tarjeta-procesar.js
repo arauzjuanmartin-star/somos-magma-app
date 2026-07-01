@@ -24,24 +24,21 @@ NO cuentes en los consumos: el saldo anterior, los pagos del período ("SU PAGO 
 === TITULARES ===
 El resumen separa los consumos por titular ("Consumos Juan Martin Arauz", "Consumos Sofia Maria Grenier", etc.). Clasificá y sumá por CADA titular por separado. Verificá que, para cada titular, empresa_ars + personal_ars = el TOTAL CONSUMOS impreso de ese titular (en pesos).
 
-=== SALIDA (SOLO este JSON, sin backticks ni texto extra) ===
+=== SALIDA ===
+Respondé ÚNICAMENTE con un objeto JSON válido, sin ningún texto antes ni después, sin comentarios (nada de //), sin backticks. Estructura exacta:
 {
-  "total_a_pagar_ars": número,   // el SALDO ACTUAL / TOTAL A PAGAR en pesos que debita el banco — copialo EXACTO del resumen, NO lo calcules
-  "total_a_pagar_usd": número,   // saldo actual en USD (0 si no hay)
+  "total_a_pagar_ars": 0,
+  "total_a_pagar_usd": 0,
   "vencimiento": "DD/MM/YYYY",
   "titulares": [
-    {
-      "nombre": "Juan|Sofi|<nombre>",
-      "total_consumos_ars": número,   // el TOTAL CONSUMOS impreso de ese titular
-      "empresa_ars": número,
-      "personal_ars": número,
-      "empresa_usd": número,
-      "rubros_empresa": {"Combustible": n, "Movilidad": n, "Software": n, "Insumos Dia 317": n, "Viajes": n, "Seguros": n, "Mercado Libre": n, "ABL": n, "Cargos bancarios": n, "Otros empresa": n},
-      "rubros_personal": {"Comida y super": n, "Ropa": n, "Otros personales": n}
-    }
+    {"nombre": "Juan", "total_consumos_ars": 0, "empresa_ars": 0, "personal_ars": 0, "empresa_usd": 0, "rubros_empresa": {"Combustible": 0, "Movilidad": 0, "Software": 0, "Insumos Dia 317": 0, "Viajes": 0, "Seguros": 0, "Mercado Libre": 0, "ABL": 0, "Cargos bancarios": 0, "Otros empresa": 0}, "rubros_personal": {"Comida y super": 0, "Ropa": 0, "Otros personales": 0}}
   ]
 }
-Omití los rubros que den 0. Para cada titular, empresa_ars + personal_ars DEBE ser igual a total_consumos_ars (tolerancia mínima por redondeo). Los montos en USD del software van en empresa_usd, no en empresa_ars.`
+Reglas de los valores:
+- "total_a_pagar_ars"/"total_a_pagar_usd" = el SALDO ACTUAL / TOTAL A PAGAR impreso que debita el banco. Copialo EXACTO del resumen, NO lo calcules.
+- "total_consumos_ars" = el TOTAL CONSUMOS impreso de ese titular. Para cada titular: empresa_ars + personal_ars = total_consumos_ars.
+- Los consumos en dólares (software) van en empresa_usd, no en empresa_ars.
+- Omití del JSON los rubros que den 0. Números sin separador de miles ni símbolo $, con punto como decimal.`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -58,7 +55,7 @@ export default async function handler(req, res) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
@@ -72,10 +69,14 @@ export default async function handler(req, res) {
     const txt = resp.content?.[0]?.text || ''
     let parsed
     try {
-      parsed = JSON.parse(txt.replace(/^```json\s*/,'').replace(/```\s*$/,'').trim())
+      let s = txt.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim()
+      const i = s.indexOf('{'), j = s.lastIndexOf('}')
+      if (i >= 0 && j > i) s = s.slice(i, j + 1)  // extrae el objeto JSON aunque venga con texto alrededor
+      s = s.replace(/\/\/[^\n"]*/g, '')            // saca comentarios // si los hubiera
+      parsed = JSON.parse(s)
     } catch (e) {
-      console.error('Parse error:', e.message, '\nTexto:', txt.slice(0,500))
-      return res.status(500).json({ error: 'Claude devolvió texto que no es JSON', raw: txt.slice(0,500) })
+      console.error('Parse error:', e.message, '\nTexto:', txt.slice(0,800))
+      return res.status(500).json({ error: 'Claude devolvió texto que no es JSON', raw: txt.slice(0,800) })
     }
 
     res.json({ ok: true, data: parsed })
