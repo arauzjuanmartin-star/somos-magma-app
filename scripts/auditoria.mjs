@@ -54,9 +54,11 @@ const pr=await g('PRESUPUESTOS!A:K')
 const ph=pr[0], pN=0, pEst=ph.findIndex(x=>/estado/i.test(String(x||'')))
 H('PRESUPUESTOS · N° duplicado')
 const pByNum={}
-pr.forEach((r,i)=>{if(i===0)return;const n=String(r[pN]||'').trim();if(!n)return;(pByNum[n]=pByNum[n]||[]).push(i+1)})
+pr.forEach((r,i)=>{if(i===0)return;const n=String(r[pN]||'').trim();if(!n)return;(pByNum[n]=pByNum[n]||[]).push(r)})
 const dupP=Object.entries(pByNum).filter(([k,v])=>v.length>1)
-if(dupP.length) dupP.forEach(([n,v])=>warn(`Presupuesto #${n} en ${v.length} filas (${v.join(',')})`)); else ok('Sin N° de presupuesto duplicado')
+let colision=0
+dupP.forEach(([n,v])=>{const ap=v.filter(r=>String(r[pEst]||'').trim().toUpperCase()==='APROBADO').length; if(ap>1){colision++;warn(`Presupuesto #${n}: ${ap} APROBADOS con el mismo N° (colisión REAL — renumerar)`)}})
+if(!colision) ok(`Sin colisiones (hay ${dupP.length} N° repetidos pero con ≤1 aprobado c/u = cotizaciones alternativas, OK)`)
 
 H('PRESUPUESTOS · aprobados con mismo evento+cliente+proyecto (posible doble carga)')
 const aprob=pr.map((r,i)=>({i:i+1,r})).filter(({r},idx)=>idx>0&&String(r[pEst]||'').trim().toUpperCase()==='APROBADO')
