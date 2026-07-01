@@ -2555,11 +2555,12 @@ function Egresos({data, onRefresh, showToast}){
     }catch(e){ showToast('Error de conexión','err'); setOverride(o=>{const n={...o};delete n[k];return n}) }
   }
 
-  const Fila=({hoja, it, label, monto})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row, venc=vencTxt(hoja,it), editing=!!editM[k]
+  const Fila=({hoja, it, label, monto, extra})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row, venc=vencTxt(hoja,it), editing=!!editM[k]
     return <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
       <span style={{flex:1, minWidth:0}}>
         <span style={{fontSize:13, color:T.ink}}>{label}</span>
         {venc && <span style={{fontSize:10.5, color:T.ink3, marginLeft:8}}>· {venc}</span>}
+        {extra}
       </span>
       {!pagado && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:11.5}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:'none', cursor:'pointer', background:pagado?T.posSoft:T.warnSoft, color:pagado?T.pos:T.warn, fontWeight:600}}>{pagado?'Pagado ✓':'Pendiente'}</button>
@@ -2584,7 +2585,7 @@ function Egresos({data, onRefresh, showToast}){
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; return <Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${t['Persona']?` · ${t['Persona']}`:''}${res}`} monto={parseMonto(t['Monto'])}/> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
+    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; return <Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${t['Persona']?` · ${t['Persona']}`:''}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
@@ -2617,6 +2618,7 @@ function SubirResumen({onClose, onDone, showToast}){
   const [mes,setMes]=useState(now.getMonth()+1)
   const [anio,setAnio]=useState(now.getFullYear())
   const [file,setFile]=useState(null)
+  const [b64,setB64]=useState('')
   const [loading,setLoading]=useState(false)
   const [data,setData]=useState(null)
   const [saving,setSaving]=useState(false)
@@ -2627,8 +2629,9 @@ function SubirResumen({onClose, onDone, showToast}){
     if(!file){ showToast('Elegí el PDF','err'); return }
     setLoading(true)
     try{
-      const b64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
-      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b64,fileName:file.name})})
+      const b=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
+      setB64(b)
+      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b,fileName:file.name})})
       const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
       setData(j.data)
       if(j.data?.vencimiento){ const d=parseD(j.data.vencimiento); if(d){ setMes(d.getMonth()+1); setAnio(d.getFullYear()) } }
@@ -2653,9 +2656,9 @@ function SubirResumen({onClose, onDone, showToast}){
     setSaving(true)
     try{
       const nota=lecturaOk?`Empresa ${Math.round(empresa).toLocaleString('es-AR')}${empresaUsd?` (+US$${empresaUsd.toFixed(0)})`:''} · Juan ${Math.round(juanPers).toLocaleString('es-AR')} · Sofi ${Math.round(sofiPers).toLocaleString('es-AR')}`:'Total cargado (clasificación pendiente)'
-      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:[],totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota})})
+      const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:[],titulares,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota,pdfBase64:b64,fileName:file?.name})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
-      showToast('Cargado ✓'); onDone&&onDone()
+      showToast(j.pdfLink?'Cargado ✓ · PDF en Drive':'Cargado ✓'); onDone&&onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
