@@ -1911,11 +1911,12 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const personas={}
   proyMes.forEach(proy=>{
     const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', agencia=proy['Agencia']||'', fechaEvento=proy['Fecha Evento']||''
-    for(let j=1;j<=20;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staff=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
-      if(!staff||staff==='Somos Magma'||!pedido||precio<=0) continue
-      if(!personas[staff]) personas[staff]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0}
-      personas[staff].trabajos.push({nro,proyecto,agencia,pedido,precio,fechaEvento, key:nro+'|'+pedido+'|'+j})
-      personas[staff].total+=precio
+    for(let j=1;j<=20;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
+      if(!staffRaw||staffRaw==='Somos Magma'||!pedido||precio<=0) continue
+      const staff=canonStaff(staffRaw), gk=canonKey(staff)
+      if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0}
+      personas[gk].trabajos.push({nro,proyecto,agencia,pedido,precio,fechaEvento, key:nro+'|'+pedido+'|'+j})
+      personas[gk].total+=precio
     }
   })
   // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
@@ -1923,11 +1924,11 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
   // (Antes ignoraba el mes → mostraba pagado pero el botón desmarcar, que sí filtra por mes, no lo encontraba.)
   const paidCount={}
-  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
   Object.values(personas).forEach(p=>{ const used={}; p.trabajos.forEach(t=>{
     let pag
     if(t.key in override) pag=override[t.key]
-    else { const k=norm(p.nombre)+'|'+norm(mesLabel)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
+    else { const k=canonKey(p.nombre)+'|'+norm(mesLabel)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
     t.pagado=pag; if(pag)p.totalPagado+=t.precio; else p.totalPendiente+=t.precio
   }) })
 
@@ -2108,9 +2109,14 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 }
 
 // ============================ FREELANCERS ============================
+// Unifica nombres de staff repetidos (misma persona, distintas grafías). Solo UI, no toca datos.
+const STAFF_CANON_MAP={juan:'Juan Martin Arauz','juan martin':'Juan Martin Arauz',sofi:'Sofia Maria Grenier Basavilbaso',sofia:'Sofia Maria Grenier Basavilbaso',lulu:'Lucía María Grenier Basavilbaso',lucia:'Lucía María Grenier Basavilbaso',luli:'Lucía María Grenier Basavilbaso',dani:'Daniela Viviana Ayala',tom:'Tomás Halbach',santino:'Santino D’ Angelo','santino d angelo':'Santino D’ Angelo',gaspar:'Gaspar Peñalba',felipe:'Felipe Martinez',felip:'Felipe Martinez',ivan:'Ivan Aranda',pablo:'Pablo Leonel Molanes Araujo',lucas:'Lucas Ignacio Godoy',julian:'Julián Exequiel Pérez',blas:'Blas Lafontaine',mailen:'Mailen Santana',pedro:'Pedro Maddonni',nahuel:'Nahuel David Aguilar'}
+const canonKey=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/['’´`]/g,'').replace(/\s+/g,' ').trim()
+const canonStaff=name=>{ const k=canonKey(name); return STAFF_CANON_MAP[k]||String(name||'').trim() }
+
 function Freelancers({data, nav, clearNav}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
-  const [q,setQ]=useState(''), [sel,setSel]=useState(null)
+  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState('')
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -2119,30 +2125,32 @@ function Freelancers({data, nav, clearNav}){
   const mesLab=fe=>{ const d=parseD(fe); return d?`${String(d.getMonth()+1).padStart(2,'0')} - ${MESES_LARGO[d.getMonth()].toLowerCase()}`:'' }
   const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   const paidCount={}
-  pagos.forEach(r=>{ if(!esPag(r))return; const k=norm(r['Freelancer']||r['Persona']||r['Nombre'])+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  pagos.forEach(r=>{ if(!esPag(r))return; const k=canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
   const stats={}, usedG={}
   proyectos.forEach(p=>{ for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
     if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
-    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, debe:0, items:[]}
+    const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
     stats[k].trabajos++; stats[k].ganado+=pr
-    const pk=norm(st)+'|'+norm(mesLab(p['Fecha Evento']))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
+    const pk=k+'|'+norm(mesLab(p['Fecha Evento']))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
     const cnt=paidCount[pk]||0, u=usedG[pk]||0; const pagado=u<cnt; if(pagado)usedG[pk]=u+1; else stats[k].debe+=pr
-    stats[k].items.push({fecha:p['Fecha Evento']||'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, nro:p['N° presupuesto']||''})
+    const _d=parseD(p['Fecha Evento'])
+    stats[k].items.push({fecha:p['Fecha Evento']||'', anio:_d?_d.getFullYear():'', mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, nro:p['N° presupuesto']||''})
   }})
   // Años anteriores (HISTORICO 2023/2024/2025): ya saldados — suman a "total", NO a "se le debe"
   const addHist=(rows,anio)=>{ (rows||[]).forEach(p=>{ for(let j=1;j<=6;j++){ const st=String(p['Staff '+j]||'').trim(); const pr=parseMonto(p['Pago '+j]); if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
-    const k=norm(st); if(!stats[k]) stats[k]={nombre:st, trabajos:0, ganado:0, debe:0, items:[]}
+    const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
     stats[k].trabajos++; stats[k].ganado+=pr
-    stats[k].items.push({fecha:p['Fecha']||`${anio}`, proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr, pagado:true})
+    const _d=parseD(p['Fecha'])
+    stats[k].items.push({fecha:p['Fecha']||`${anio}`, anio:_d?_d.getFullYear():Number(anio), mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr, pagado:true})
   }}) }
   addHist(data.historico2023,'2023'); addHist(data.historico2024,'2024'); addHist(data.historico2025,'2025')
   // RRHH (datos fiscales) + incluir roster que no tenga trabajos
-  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ rrhhByName[norm(n)]=r; if(!stats[norm(n)]) stats[norm(n)]={nombre:n, trabajos:0, ganado:0, debe:0, items:[]} } })
+  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ const cn=canonStaff(n), k=canonKey(cn); rrhhByName[k]=r; if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]} } })
 
   const lista=Object.values(stats).sort((a,b)=>b.ganado-a.ganado)
   const filtrados=lista.filter(p=>!q||norm(p.nombre).includes(norm(q)))
-  const selP = sel ? stats[norm(sel)] : null
-  const datos = selP ? (rrhhByName[norm(selP.nombre)]||{}) : {}
+  const selP = sel ? stats[canonKey(canonStaff(sel))] : null
+  const datos = selP ? (rrhhByName[canonKey(canonStaff(selP.nombre))]||{}) : {}
   const pend = selP ? selP.debe : 0
 
   return <>
@@ -2180,13 +2188,29 @@ function Freelancers({data, nav, clearNav}){
             <div key={k} style={{display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink, fontFamily:MONO, fontSize:11.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span></div>
           ))}
           {!Object.keys(datos).length && <div style={{fontSize:11.5, color:T.warn}}>⚠ Sin datos fiscales en RRHH</div>}
-          <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos trabajos</div>
-          {selP.items.slice().reverse().slice(0,15).map((it,i)=>(
-            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-              <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?it.fecha.slice(0,5)+' · ':''}{it.ped} <span style={{color:T.ink3}}>· {it.proy}</span></span>
-              <span style={{fontFamily:MONO, color:it.pagado?T.ink3:T.brand, fontWeight:it.pagado?400:600, flexShrink:0}} title={it.pagado?'pagado':'se le debe'}>{fmtM(it.monto)}{it.pagado?'':' •'}</span>
-            </div>
-          ))}
+          {(()=>{
+            const anios=[...new Set(selP.items.map(it=>it.anio).filter(Boolean))].sort((a,b)=>b-a)
+            const its=selP.items.filter(it=>(!fAnio||String(it.anio)===String(fAnio))&&(!fMes||String(it.mes)===String(fMes)))
+            const totF=its.reduce((s,it)=>s+it.monto,0), debeF=its.filter(it=>!it.pagado).reduce((s,it)=>s+it.monto,0)
+            return <>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, margin:'16px 0 8px'}}>
+                <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>Histórico</span>
+                <div style={{display:'flex', gap:6}}>
+                  <select value={fAnio} onChange={e=>setFAnio(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
+                  <select value={fMes} onChange={e=>setFMes(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+                </div>
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.ink2, marginBottom:4}}><span>{its.length} trabajo{its.length===1?'':'s'}</span><span style={{fontFamily:MONO}}>{fmtM(totF)}</span></div>
+              {debeF>0 && <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.brand, fontWeight:600, marginBottom:6}}><span>Se le debe</span><span style={{fontFamily:MONO}}>{fmtM(debeF)}</span></div>}
+              {its.slice().reverse().map((it,i)=>(
+                <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
+                  <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?String(it.fecha).slice(0,10)+' · ':''}{it.ped||it.proy} <span style={{color:T.ink3}}>· {it.proy}</span></span>
+                  <span style={{fontFamily:MONO, color:it.pagado?T.ink3:T.brand, fontWeight:it.pagado?400:600, flexShrink:0}} title={it.pagado?'pagado':'se le debe'}>{fmtM(it.monto)}{it.pagado?'':' •'}</span>
+                </div>
+              ))}
+              {!its.length && <div style={{fontSize:11.5, color:T.ink3, padding:'8px 0'}}>Sin trabajos en ese período</div>}
+            </>
+          })()}
         </div>
       </div>}
     </div>
