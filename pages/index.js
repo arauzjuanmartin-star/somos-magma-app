@@ -2515,12 +2515,15 @@ function Historico({data}){
 
 // ============================ EGRESOS (lectura) ============================
 function Egresos({data, onRefresh, showToast}){
-  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[]
+  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[]
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
   const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({})
   const [editM,setEditM]=useState({})  // key -> true (editando monto)
   const [subir,setSubir]=useState(false)
+  const [detalle,setDetalle]=useState(null)
+  const itemsDe=t=>movTarj.filter(m=>normTxt(m['Tarjeta'])===normTxt(t['Tarjeta'])&&String(m['Mes']).trim()===String(t['Mes']).trim()&&String(m['Año']).includes(String(t['Año'])))
+  const splitDe=t=>{ const its=itemsDe(t); let emp=0,juan=0,sofi=0,eusd=0; its.forEach(m=>{ const mo=parseMonto(m['Monto']); const cat=String(m['Categoria']||'').toLowerCase(); if(String(m['Moneda']||'').toUpperCase()==='USD'){ if(cat==='empresa')eusd+=mo; return } if(cat==='empresa')emp+=mo; else if(/juan/i.test(m['Descripcion']))juan+=mo; else if(/sof/i.test(m['Descripcion']))sofi+=mo }); return {emp,juan,sofi,eusd,n:its.length} }
   const esPagado=v=>{ const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
   const vencTxt=(hoja,it)=>{ if(hoja==='GASTOS_FIJOS'){ const d=it['Dia pago']; return d?`vence día ${d}`:'' } const v=it['Vencimiento']; const d=parseD(v); return d?`vence ${d.getDate()}/${d.getMonth()+1}`:(v?String(v):'') }
   async function saveMonto(hoja,it,val){ const k=hoja+':'+it.__row, n=parseMonto(val)
@@ -2585,13 +2588,46 @@ function Egresos({data, onRefresh, showToast}){
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const tieneSplit=nota&&/empresa/i.test(nota); return <div key={i}>
+    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const sp=splitDe(t); return <div key={i}>
       <Fila hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/>
-      {tieneSplit?<div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div>:null}
+      {sp.n>0
+        ? <div style={{padding:'0 18px 9px 18px', display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', fontSize:11.5, color:T.ink3}}><span>🏢 Empresa {fmt(sp.emp)}{sp.eusd?` +US$${Math.round(sp.eusd)}`:''}</span><span>👨 Juan {fmt(sp.juan)}</span><span>👩 Sofi {fmt(sp.sofi)}</span><button onClick={()=>setDetalle(t)} style={{fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>Ver detalle ›</button></div>
+        : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
     </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
+}
+
+// Ver detalle de una tarjeta: gastos ya guardados, con toggle Personal <-> Empresa (guarda al instante)
+function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
+  const [busy,setBusy]=useState('')
+  const esItem=m=>['Personal','Reclasificado (Magma)'].includes(String(m['Subcategoria']||''))
+  const indiv=items.filter(esItem)
+  const agg=items.filter(m=>!esItem(m)&&String(m['Categoria']||'').toLowerCase()==='empresa')
+  const porPersona={}; indiv.forEach(m=>{ const p=/juan/i.test(m['Descripcion'])?'👨 Juan':/sof/i.test(m['Descripcion'])?'👩 Sofi':(m['Descripcion']||'Otros'); (porPersona[p]=porPersona[p]||[]).push(m) })
+  async function flip(m){ if(busy) return; const nueva=String(m['Categoria']||'').toLowerCase()==='empresa'?'Personal':'Empresa'; setBusy(m.__row)
+    try{ const r=await fetch('/api/movimiento-clasificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:m.__row,categoria:nueva})}); const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setBusy(''); return } showToast(nueva==='Empresa'?'→ Empresa 🏢':'→ Personal 👤'); if(onRefresh) await onRefresh() }
+    catch(e){ showToast('Error de conexión','err') } setBusy('') }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:20, width:540, maxWidth:'100%', maxHeight:'88vh', overflow:'auto', border:`1px solid ${T.border}`}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+        <h3 style={{margin:0, fontSize:16, fontWeight:700, color:T.ink}}>{t['Tarjeta']} · {MESES_LARGO[(parseInt(t['Mes'])||1)-1]} {t['Año']}</h3>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>Tocá un gasto para pasarlo de Personal 👤 a Empresa 🏢 (o al revés). Se guarda al instante.</div>
+      {indiv.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'10px 0'}}>Este resumen no tiene el detalle guardado (cargalo por “Subir resumen” para poder editarlo acá).</div>}
+      {Object.entries(porPersona).map(([p,arr])=><div key={p} style={{marginBottom:14}}>
+        <div style={{fontSize:12, fontWeight:700, color:T.ink2, marginBottom:2}}>{p} · {arr.length}</div>
+        {arr.map((m,i)=>{ const emp=String(m['Categoria']||'').toLowerCase()==='empresa'; return <div key={i} onClick={()=>flip(m)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 4px', cursor:'pointer', borderTop:i?`1px solid ${T.border}`:'none', opacity:busy===m.__row?0.4:1}}>
+          <span style={{fontSize:12.5, color:emp?T.pos:T.ink2, fontWeight:emp?600:400}}>{emp?'🏢':'👤'} {m['Comercio']} <span style={{color:T.ink3, fontSize:11}}>{m['Fecha']}</span></span>
+          <span style={{fontFamily:MONO, fontSize:12.5, color:emp?T.pos:T.ink2}}>{fmt(parseMonto(m['Monto']))}</span>
+        </div> })}
+      </div>)}
+      {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Empresa (automático, por rubro)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
+    </div>
+  </div>
 }
 
 // Clasifica un movimiento de tarjeta en un rubro + si es empresa, según las reglas de Magma.
