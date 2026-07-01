@@ -59,7 +59,7 @@ const dupP=Object.entries(pByNum).filter(([k,v])=>v.length>1)
 if(dupP.length) dupP.forEach(([n,v])=>warn(`Presupuesto #${n} en ${v.length} filas (${v.join(',')})`)); else ok('Sin N° de presupuesto duplicado')
 
 H('PRESUPUESTOS · aprobados con mismo evento+cliente+proyecto (posible doble carga)')
-const aprob=pr.map((r,i)=>({i:i+1,r})).filter(({r},idx)=>idx>0&&/aprobado/i.test(String(r[pEst]||'')))
+const aprob=pr.map((r,i)=>({i:i+1,r})).filter(({r},idx)=>idx>0&&String(r[pEst]||'').trim().toUpperCase()==='APROBADO')
 const kEv={}
 aprob.forEach(({i,r})=>{const k=norm(r[1])+'|'+norm(r[4])+'|'+norm(r[6]);(kEv[k]=kEv[k]||[]).push({i,n:r[pN]})})
 let dupEv=0
