@@ -2533,7 +2533,9 @@ function Egresos({data, onRefresh, showToast}){
   const gfActivos=gf.filter(g=>esPagado(g['Activo'])||String(g['Activo']||'').trim()==='')
   const porCat={}; gfActivos.forEach(g=>{ const c=g['Categoria']||'Otros'; (porCat[c]=porCat[c]||[]).push(g) })
   const totalGF=gfActivos.reduce((s,g)=>s+parseMonto(g['Monto']),0)
-  const tarjMes=tarj.filter(t=>parseInt(t['Mes'])===mesIdx && String(t['Año']).includes(String(anio)))
+  // Las tarjetas se ubican por VENCIMIENTO (cuándo se pagan), no por el mes del resumen.
+  // Ej: resumen de mayo con vto en junio → aparece en junio. Fallback al mes del resumen si no hay vencimiento.
+  const tarjMes=tarj.filter(t=>{ const v=parseD(t['Vencimiento']); if(v) return v.getMonth()+1===mesIdx && v.getFullYear()===anio; return parseInt(t['Mes'])===mesIdx && String(t['Año']).includes(String(anio)) })
   const totalTarj=tarjMes.reduce((s,t)=>s+parseMonto(t['Monto']),0)
   const prestMes=prest.filter(p=>{ const v=parseD(p['Vencimiento']); return v && v.getMonth()+1===mesIdx && v.getFullYear()===anio })
   const totalPrest=prestMes.reduce((s,p)=>s+parseMonto(p['Monto cuota']),0)
@@ -2582,8 +2584,8 @@ function Egresos({data, onRefresh, showToast}){
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas cargadas este mes. Subí el resumen ⬆</div>}</Sec>
-    <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; return <Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${t['Persona']?` · ${t['Persona']}`:''}${res}`} monto={parseMonto(t['Monto'])}/> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
+    <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
