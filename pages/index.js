@@ -2519,7 +2519,14 @@ function Egresos({data, onRefresh, showToast}){
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
   const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({})
+  const [editM,setEditM]=useState({})  // key -> true (editando monto)
   const esPagado=v=>{ const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
+  const vencTxt=(hoja,it)=>{ if(hoja==='GASTOS_FIJOS'){ const d=it['Dia pago']; return d?`vence día ${d}`:'' } const v=it['Vencimiento']; const d=parseD(v); return d?`vence ${d.getDate()}/${d.getMonth()+1}`:(v?String(v):'') }
+  async function saveMonto(hoja,it,val){ const k=hoja+':'+it.__row, n=parseMonto(val)
+    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja,fila:it.__row,monto:n})})
+      const j=await r.json(); if(j&&j.error){showToast(j.error,'err');return}
+      showToast('Monto actualizado ✓'); setEditM(e=>{const x={...e};delete x[k];return x}); if(onRefresh) await onRefresh()
+    }catch(e){ showToast('Error de conexión','err') } }
   const cuentaOpts=[...new Set(cuentas.filter(c=>{const a=String(c['Activa']||'').toUpperCase();return a==='SÍ'||a==='SI'||a==='TRUE'||c['Activa']===true}).map(c=>c['Nombre']).filter(Boolean))]
 
   const gfActivos=gf.filter(g=>esPagado(g['Activo'])||String(g['Activo']||'').trim()==='')
@@ -2545,12 +2552,17 @@ function Egresos({data, onRefresh, showToast}){
     }catch(e){ showToast('Error de conexión','err'); setOverride(o=>{const n={...o};delete n[k];return n}) }
   }
 
-  const Fila=({hoja, it, label, monto})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row
+  const Fila=({hoja, it, label, monto})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row, venc=vencTxt(hoja,it), editing=!!editM[k]
     return <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
-      <span style={{fontSize:13, color:T.ink, flex:1, minWidth:0}}>{label}</span>
+      <span style={{flex:1, minWidth:0}}>
+        <span style={{fontSize:13, color:T.ink}}>{label}</span>
+        {venc && <span style={{fontSize:10.5, color:T.ink3, marginLeft:8}}>· {venc}</span>}
+      </span>
       {!pagado && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:11.5}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:'none', cursor:'pointer', background:pagado?T.posSoft:T.warnSoft, color:pagado?T.pos:T.warn, fontWeight:600}}>{pagado?'Pagado ✓':'Pendiente'}</button>
-      <span style={{fontSize:13, fontFamily:MONO, color:T.ink, minWidth:90, textAlign:'right'}}>{fmt(monto)}</span>
+      {editing
+        ? <input autoFocus defaultValue={monto} onBlur={e=>saveMonto(hoja,it,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); if(e.key==='Escape') setEditM(x=>{const n={...x};delete n[k];return n}) }} style={{width:100, padding:'4px 7px', borderRadius:6, border:`1px solid ${T.brand}`, fontSize:13, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
+        : <span onClick={()=>setEditM(x=>({...x,[k]:true}))} title="Tocá para editar el monto" style={{fontSize:13, fontFamily:MONO, color:T.ink, minWidth:90, textAlign:'right', cursor:'pointer', borderBottom:`1px dashed ${T.border}`}}>{fmt(monto)}</span>}
     </div>
   }
   const Sec=({titulo, children})=> children && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}><CardHead>{titulo}</CardHead>{children}</div>
@@ -2569,7 +2581,7 @@ function Egresos({data, onRefresh, showToast}){
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=><Fila key={i} hoja="TARJETAS" it={t} label={`${t['Tarjeta']} ${t['Persona']?`· ${t['Persona']}`:''}`} monto={parseMonto(t['Monto'])}/>):null}</Sec>
-    <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=><Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${p['Cuota nro']}/${p['Cuotas total']}`} monto={parseMonto(p['Monto cuota'])}/>):null}</Sec>
+    <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
   </>
 }
 

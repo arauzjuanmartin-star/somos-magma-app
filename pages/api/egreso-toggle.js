@@ -49,7 +49,10 @@ export default async function handler(req, res) {
     if (nuevoPagadoFlag !== undefined && H('Pagado') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Pagado'))}${fila}`, values: [[nuevoPagadoFlag ? 'SI' : 'NO']] })
     if (fechaPago !== undefined && H('Fecha pago') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Fecha pago'))}${fila}`, values: [[fechaPago]] })
     if (cuentaPago !== undefined && H('Cuenta pago') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Cuenta pago'))}${fila}`, values: [[cuentaPago]] })
-    if (monto !== undefined && tipoPago !== 'parcial' && H('Monto') !== -1 && hoja !== 'TARJETAS' && hoja !== 'PRESTAMOS') updates.push({ range: `${hoja}!${colLetra(H('Monto'))}${fila}`, values: [[monto]] })
+    if (monto !== undefined && tipoPago !== 'parcial') {
+      const idxM = H('Monto') !== -1 ? H('Monto') : H('Monto cuota')
+      if (idxM !== -1) updates.push({ range: `${hoja}!${colLetra(idxM)}${fila}`, values: [[monto]] })
+    }
     if (nuevoMontoPagadoAcum !== null && H('Monto pagado') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Monto pagado'))}${fila}`, values: [[nuevoMontoPagadoAcum]] })
     if (notas !== undefined) {
       const idxN = H('Notas') !== -1 ? H('Notas') : H('Observacion')
