@@ -58,9 +58,11 @@ Devolvé SOLAMENTE un JSON válido (sin texto extra, sin backticks):
   "total_ars": número,
   "total_usd": número,
   "movimientos": [
-    {"fecha": "DD/MM/YYYY", "descripcion": "...", "comercio": "...", "moneda": "ARS|USD", "monto": number, "categoria": "..."}
+    {"fecha": "DD/MM/YYYY", "descripcion": "...", "comercio": "...", "moneda": "ARS|USD", "monto": number, "categoria": "...", "titular": "Juan|Sofi|"}
   ]
 }
+
+- "titular": quién hizo el consumo según la sección del resumen ("Consumos Juan Martin Arauz" → "Juan"; "Consumos Sofia Maria Grenier" → "Sofi"). Si el resumen no separa por titular, dejá "".
 
 CRÍTICO sobre los totales (NO los calcules sumando movimientos, LEÉ el número impreso):
 - "total_a_pagar_ars" = el "SALDO ACTUAL" / "TOTAL A PAGAR" / "PAGO TOTAL" en pesos que el banco DEBITA. Copialo EXACTO del resumen.

@@ -2590,7 +2590,27 @@ function Egresos({data, onRefresh, showToast}){
   </>
 }
 
-// Subir PDF de resumen de tarjeta → IA lo lee → preview → carga total + movimientos
+// Clasifica un movimiento de tarjeta en un rubro + si es empresa, según las reglas de Magma.
+function rubroTarjeta(m){
+  const txt=`${m.comercio||''} ${m.descripcion||''}`, cat=m.categoria||''
+  const has=re=>new RegExp(re,'i').test(txt)
+  if(has('ypf|axion|shell|puma|appypf|\\baca\\b|combust|nafta')) return {r:'⛽ Combustible', emp:true}
+  if(cat==='Transporte'||has('cabify|didi|uber|subte|emova|peaje|autopista|parking|valet|estacion')) return {r:'🚗 Movilidad', emp:true}
+  if(cat==='Suscripciones'||has('adobe|canva|openai|anthropic|claude|artlist|notion|google|higgsfield|motionarray|\\bsirv\\b|wetransfer|workspace')) return {r:'💻 Software', emp:true}
+  if(cat==='Viajes'||has('hotel|hilton|posada de los poetas|airbnb|hosped')) return {r:'🏨 Viajes', emp:true}
+  if(has('segur|la segunda')) return {r:'🛡️ Seguros', emp:true}
+  if(has('dia tienda 317|dia 317')) return {r:'🛒 Insumos (Dia 317)', emp:true}
+  if(has('mercadolibre|mercado libre')) return {r:'📦 Mercado Libre', emp:true}
+  if(has('\\babl\\b')) return {r:'🏛️ ABL', emp:true}
+  if(has('dandy|gangahome|la roble|laroble|mecubrocom')) return {r:'🏢 Varios empresa', emp:true}
+  if(cat==='Producción audiovisual') return {r:'🎬 Producción', emp:true}
+  if(cat==='Profesional/Servicios') return {r:'🧑‍💼 Servicios', emp:true}
+  if(cat==='Cargos bancarios') return {r:'🏦 Cargos bancarios', emp:true}
+  if(cat==='Comida y bebida'||has('rappi|coto|carrefour|jumbo|super|resto|cafe|mostaza|grido|helad|pizz|parrilla')) return {r:'🍔 Comida y súper', emp:false}
+  return {r:'🛍️ Otros personales', emp:false}
+}
+
+// Subir PDF de resumen de tarjeta → IA lo lee → preview agrupado → carga total + movimientos
 function SubirResumen({onClose, onDone, showToast}){
   const now=new Date()
   const [tarjeta,setTarjeta]=useState('BBVA Visa')
@@ -2621,9 +2641,16 @@ function SubirResumen({onClose, onDone, showToast}){
   const totalPagarUsd=Number(data?.total_a_pagar_usd ?? data?.total_usd ?? 0)
   const consumos=Number(data?.total_consumos_ars ?? 0)
   const arsMovs=movs.filter(m=>(m.moneda||'ARS')==='ARS'&&!EXCL.includes(m.categoria))
-  const empresa=sum(arsMovs.filter(m=>EMP.includes(m.categoria)))
-  const personal=sum(arsMovs.filter(m=>!EMP.includes(m.categoria)))
-  const usdEmp=sum(movs.filter(m=>m.moneda==='USD'&&EMP.includes(m.categoria)))
+  const empMov=m=>rubroTarjeta(m).emp
+  const empresa=sum(arsMovs.filter(empMov))
+  const personal=sum(arsMovs.filter(m=>!empMov(m)))
+  const usdEmp=sum(movs.filter(m=>m.moneda==='USD'&&empMov(m)))
+  const grupos={}
+  arsMovs.forEach(m=>{ const {r,emp}=rubroTarjeta(m); const g=grupos[r]=grupos[r]||{r,emp,count:0,total:0}; g.count++; g.total+=Number(m.monto)||0 })
+  const gEmp=Object.values(grupos).filter(g=>g.emp).sort((a,b)=>b.total-a.total)
+  const gPer=Object.values(grupos).filter(g=>!g.emp).sort((a,b)=>b.total-a.total)
+  const perJuan=sum(arsMovs.filter(m=>!empMov(m)&&/juan/i.test(m.titular||'')))
+  const perSofi=sum(arsMovs.filter(m=>!empMov(m)&&/sof/i.test(m.titular||'')))
   const movsArs=sum(movs.filter(m=>(m.moneda||'ARS')==='ARS'))
   const lecturaOk = consumos>0 ? Math.abs(movsArs-consumos)/consumos < 0.15 : movs.length>0
   async function confirmar(){
@@ -2657,13 +2684,14 @@ function SubirResumen({onClose, onDone, showToast}){
           <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
           <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''} · {movs.length} mov.</div>
         </div>
-        {lecturaOk ? <>
-        <div style={{display:'flex', gap:10, marginBottom:14}}>
-          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Empresa (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}{usdEmp?` +US$${usdEmp.toFixed(0)}`:''}</div></div>
-          <div style={{flex:1, background:T.surfaceAlt, borderRadius:10, padding:'10px 14px'}}><div style={{fontSize:11, color:T.ink3}}>👤 Personal (est.)</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(personal)}</div></div>
-        </div>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>La división Empresa/Personal es una estimación por rubro — el detalle queda guardado para ajustarlo después.</div>
-        </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ La IA no llegó a leer todos los movimientos, así que no divido Empresa/Personal para no pifiarle. Igual cargo el <b>total a pagar</b> correcto — la división la hacemos aparte.</div>}
+        {lecturaOk ? <div style={{background:T.surfaceAlt, borderRadius:10, padding:'12px 14px', marginBottom:14}}>
+          <div style={{fontSize:12.5, fontWeight:700, color:T.pos, marginBottom:4}}>🏢 EMPRESA · {fmt(empresa)}{usdEmp?` +US$${usdEmp.toFixed(0)}`:''}</div>
+          {gEmp.map(g=><div key={g.r} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 4px', color:T.ink2}}><span>{g.r} · {g.count}</span><span style={{fontFamily:MONO}}>{fmt(g.total)}</span></div>)}
+          <div style={{fontSize:12.5, fontWeight:700, color:T.brand, margin:'12px 0 4px'}}>👤 PERSONAL · {fmt(personal)}</div>
+          {gPer.map(g=><div key={g.r} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 4px', color:T.ink2}}><span>{g.r} · {g.count}</span><span style={{fontFamily:MONO}}>{fmt(g.total)}</span></div>)}
+          {(perJuan||perSofi)?<div style={{fontSize:11.5, color:T.ink3, marginTop:6, paddingTop:6, borderTop:`1px solid ${T.border}`}}>De lo personal: 👨 Juan {fmt(perJuan)} · 👩 Sofi {fmt(perSofi)}</div>:null}
+          <div style={{fontSize:10.5, color:T.ink3, marginTop:8}}>Clasificación automática por rubro (reglas Magma). El detalle queda guardado para ajustar.</div>
+        </div> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ La IA no llegó a leer todos los movimientos, así que no divido por rubro para no pifiarle. Igual cargo el <b>total a pagar</b> correcto — la división la hacemos aparte.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
