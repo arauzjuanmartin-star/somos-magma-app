@@ -34,11 +34,11 @@ El resumen separa los consumos por titular ("Consumos Juan Martin Arauz", "Consu
 === SALIDA ===
 Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen. Campos:
 - total_a_pagar_ars (number), total_a_pagar_usd (number), vencimiento (string "DD/MM/YYYY")
-- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por rubro), rubros_personal (objeto monto por rubro).
+- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por rubro), rubros_personal (objeto monto por rubro), y "personales" (array de los consumos PERSONALES de ese titular —los que NO son de empresa—, hasta 40, ordenados de mayor a menor monto, cada uno {comercio, monto, fecha}). Sirve para revisarlos a mano.
 Reglas: para cada titular empresa_ars + personal_ars = total_consumos_ars. El software en dólares va en empresa_usd. Omití los rubros que den 0. Números sin separador de miles ni símbolo $, punto decimal.
 
 EJEMPLO DE FORMATO (los números son inventados de muestra — NO los copies, poné los del resumen real):
-{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Combustible":200000,"Movilidad":100000},"rubros_personal":{"Comida y super":500000}},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Movilidad":150000},"rubros_personal":{"Comida y super":450000}}]}`
+{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Combustible":200000,"Movilidad":100000},"rubros_personal":{"Comida y super":500000},"personales":[{"comercio":"Carrefour","monto":300000,"fecha":"12/05"},{"comercio":"Rappi","monto":200000,"fecha":"09/05"}]},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Movilidad":150000},"rubros_personal":{"Comida y super":450000},"personales":[{"comercio":"Zara","monto":250000,"fecha":"08/05"},{"comercio":"Coto","monto":200000,"fecha":"15/05"}]}]}`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
