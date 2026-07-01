@@ -11,7 +11,7 @@ Todo consumo es PERSONAL del titular que lo hizo, SALVO estos rubros que son de 
 - Movilidad de trabajo: Cabify, Didi, Uber, Subte (EMOVA), peajes/autopistas (ej. SantoniAutopista), estacionamiento/valet parking
 - Software de producción: Adobe, Canva, OpenAI, Anthropic, Claude, Artlist, Notion, Google (Workspace y One), Higgsfield, Motionarray, Sirv, WeTransfer
 - Dia Tienda 317 (SOLO la 317; las otras Dia Tienda 480/522/581/1100 = personal)
-- Dandy Saavedra, GangaHome, La Roble (LAROBLE), Mecubrocom
+- Dandy Saavedra, GangaHome, La Roble (LAROBLE), Mecubrocom, Total Pollo (comida para el equipo → rubro "Comida equipo")
 - Seguros (La Segunda, seguros del resumen), ABL
 - Viajes/hoteles: hoteles, Hilton, Posada de los Poetas, hospedajes
 - Mercado Libre (todo MERPAGO*MERCADOLIBRE)
@@ -23,6 +23,8 @@ NO cuentes en los consumos: el saldo anterior, los pagos del período ("SU PAGO 
 
 === TITULARES ===
 El resumen separa los consumos por titular ("Consumos Juan Martin Arauz", "Consumos Sofia Maria Grenier", etc.). Clasificá y sumá por CADA titular por separado. Verificá que, para cada titular, empresa_ars + personal_ars = el TOTAL CONSUMOS impreso de ese titular (en pesos).
+
+CRÍTICO — cada consumo pertenece a UN SOLO titular: la sección "Consumos <Nombre>" donde figura. NUNCA repitas el mismo consumo en dos titulares (ni en los subtotales ni en el array "personales"). Ejemplo: si "Florian" aparece en la sección de Sofia, va SOLO en Sofi, jamás en Juan. No inventes consumos en un titular que están en la sección del otro.
 
 === QUÉ LEER DEL RESUMEN (buscá estas líneas y copiá los números REALES) ===
 - "SALDO ACTUAL $" o "TOTAL A PAGAR" en pesos → total_a_pagar_ars.
