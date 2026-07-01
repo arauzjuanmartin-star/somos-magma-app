@@ -24,21 +24,21 @@ NO cuentes en los consumos: el saldo anterior, los pagos del período ("SU PAGO 
 === TITULARES ===
 El resumen separa los consumos por titular ("Consumos Juan Martin Arauz", "Consumos Sofia Maria Grenier", etc.). Clasificá y sumá por CADA titular por separado. Verificá que, para cada titular, empresa_ars + personal_ars = el TOTAL CONSUMOS impreso de ese titular (en pesos).
 
+=== QUÉ LEER DEL RESUMEN (buscá estas líneas y copiá los números REALES) ===
+- "SALDO ACTUAL $" o "TOTAL A PAGAR" en pesos → total_a_pagar_ars.
+- "SALDO ACTUAL U$S" en dólares → total_a_pagar_usd (0 si no hay).
+- "VENCIMIENTO ACTUAL" → vencimiento (formato DD/MM/YYYY).
+- Por cada bloque "Consumos <Nombre>" / "TOTAL CONSUMOS DE <NOMBRE>" → un titular con ese total en pesos (y en USD si hay).
+  Nombre: si dice Juan o Arauz → "Juan"; si dice Sofia o Grenier → "Sofi"; si no, el nombre tal cual.
+
 === SALIDA ===
-Respondé ÚNICAMENTE con un objeto JSON válido, sin ningún texto antes ni después, sin comentarios (nada de //), sin backticks. Estructura exacta:
-{
-  "total_a_pagar_ars": 0,
-  "total_a_pagar_usd": 0,
-  "vencimiento": "DD/MM/YYYY",
-  "titulares": [
-    {"nombre": "Juan", "total_consumos_ars": 0, "empresa_ars": 0, "personal_ars": 0, "empresa_usd": 0, "rubros_empresa": {"Combustible": 0, "Movilidad": 0, "Software": 0, "Insumos Dia 317": 0, "Viajes": 0, "Seguros": 0, "Mercado Libre": 0, "ABL": 0, "Cargos bancarios": 0, "Otros empresa": 0}, "rubros_personal": {"Comida y super": 0, "Ropa": 0, "Otros personales": 0}}
-  ]
-}
-Reglas de los valores:
-- "total_a_pagar_ars"/"total_a_pagar_usd" = el SALDO ACTUAL / TOTAL A PAGAR impreso que debita el banco. Copialo EXACTO del resumen, NO lo calcules.
-- "total_consumos_ars" = el TOTAL CONSUMOS impreso de ese titular. Para cada titular: empresa_ars + personal_ars = total_consumos_ars.
-- Los consumos en dólares (software) van en empresa_usd, no en empresa_ars.
-- Omití del JSON los rubros que den 0. Números sin separador de miles ni símbolo $, con punto como decimal.`
+Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen. Campos:
+- total_a_pagar_ars (number), total_a_pagar_usd (number), vencimiento (string "DD/MM/YYYY")
+- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por rubro), rubros_personal (objeto monto por rubro).
+Reglas: para cada titular empresa_ars + personal_ars = total_consumos_ars. El software en dólares va en empresa_usd. Omití los rubros que den 0. Números sin separador de miles ni símbolo $, punto decimal.
+
+EJEMPLO DE FORMATO (los números son inventados de muestra — NO los copies, poné los del resumen real):
+{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Combustible":200000,"Movilidad":100000},"rubros_personal":{"Comida y super":500000}},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Movilidad":150000},"rubros_personal":{"Comida y super":450000}}]}`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -77,6 +77,12 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('Parse error:', e.message, '\nTexto:', txt.slice(0,800))
       return res.status(500).json({ error: 'Claude devolvió texto que no es JSON', raw: txt.slice(0,800) })
+    }
+
+    const tp = Number(parsed?.total_a_pagar_ars) || 0
+    const tits = Array.isArray(parsed?.titulares) ? parsed.titulares : []
+    if (!tp && !tits.some(t => Number(t?.total_consumos_ars) > 0)) {
+      return res.status(422).json({ error: 'La IA leyó el PDF pero no encontró los totales (SALDO ACTUAL / TOTAL CONSUMOS). Reintentá; si sigue, avisá para revisar el formato.', raw: JSON.stringify(parsed).slice(0,400) })
     }
 
     res.json({ ok: true, data: parsed })
