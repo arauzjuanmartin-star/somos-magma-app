@@ -19,6 +19,8 @@ function getCalendarAuth() {
       private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     },
     scopes: ['https://www.googleapis.com/auth/calendar'],
+    // Domain-Wide Delegation: el robot actúa en nombre de este usuario para poder INVITAR al staff (RSVP).
+    clientOptions: { subject: process.env.CALENDAR_AS || 'sofi@somosmagma.com' },
   })
 }
 
