@@ -201,6 +201,24 @@ export default function V2() {
   </Shell>
 }
 
+// Cartel de alertas del mail del usuario logueado (sin leer + pedidos de presupuesto)
+function MailAlert(){
+  const [a,setA]=useState(null)
+  useEffect(()=>{ fetch('/api/mis-alertas').then(r=>r.json()).then(setA).catch(()=>{}) },[])
+  if(!a || a.unread==null) return null
+  const nombre=(a.mailbox||'').split('@')[0]
+  const url='https://mail.google.com/mail/?authuser='+encodeURIComponent(a.mailbox||'')
+  const pedidos=a.pedidos||[], nPed=a.pedidosCount||pedidos.length
+  return <div style={{background:T.brandSoft, border:`1px solid ${T.border}`, borderRadius:12, padding:'12px 16px', marginBottom:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap'}}>
+    <span style={{fontSize:20}}>📬</span>
+    <div style={{flex:1, minWidth:200}}>
+      <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{nombre}, tenés <span style={{color:T.brand}}>{a.unread} sin leer</span>{nPed>0 && <> · <span style={{color:T.brand}}>{nPed} posible{nPed===1?'':'s'} pedido{nPed===1?'':'s'} de presupuesto</span></>}</div>
+      {pedidos.length>0 && <div style={{fontSize:11.5, color:T.ink3, marginTop:4}}>{pedidos.slice(0,3).map((p,i)=><div key={i} style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:560}}>· {p.subject||'(sin asunto)'} <span style={{color:T.ink3}}>— {(p.from||'').replace(/<.*>/,'').replace(/"/g,'').trim()}</span></div>)}</div>}
+    </div>
+    <a href={url} target="_blank" rel="noreferrer" style={{fontSize:12.5, color:T.brand, fontWeight:600, textDecoration:'none', whiteSpace:'nowrap'}}>Abrir bandeja →</a>
+  </div>
+}
+
 // ============================ DASHBOARD ============================
 function Dashboard({data, goTo}){
   const [verCuentas,setVerCuentas]=useState(false)
@@ -305,6 +323,7 @@ function Dashboard({data, goTo}){
 
   return <>
     <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
+    <MailAlert/>
 
     {/* HERO — los 3 números que mirás todos los días (clickeables) */}
     <div style={{display:'flex', gap:14}}>
