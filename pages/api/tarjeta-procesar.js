@@ -27,14 +27,33 @@ CRÍTICO — cada consumo pertenece a UN SOLO titular: la sección "Consumos <No
 - Por cada bloque "Consumos <Nombre>" / "TOTAL CONSUMOS DE <NOMBRE>" → un titular con ese total en pesos (y en USD si hay).
   Nombre: si dice Juan o Arauz → "Juan"; si dice Sofia o Grenier → "Sofi"; si no, el nombre tal cual.
 
+=== TAXONOMÍA DE RUBROS · SUBRUBROS (usá EXACTAMENTE estas claves "Rubro · Subrubro" en rubros_empresa) ===
+- "Producción · Nafta" (YPF, Shell, Axion, AppYPF, ACA, COMBUSTIBLE)
+- "Producción · Movilidad" (Didi, Cabify, Uber, Subte, peajes, estacionamiento)
+- "Producción · Viajes" (pasajes, hoteles, Airbnb, travel services de trabajo)
+- "Producción · Rental de equipos" (alquiler de cámaras/luces/drones)
+- "Producción · Comida de rodaje/equipo" (Total Pollo, catering)
+- "Producción · Freelancers/proveedores" (MerPago/transferencias a nombres de personas por servicios)
+- "Software · Edición/diseño" (Adobe, Canva)
+- "Software · IA" (OpenAI, ChatGPT, Claude, Anthropic, Higgsfield)
+- "Software · Stock/música" (Artlist, Motionarray, Sirv, WeTransfer)
+- "Software · Web/productividad" (Squarespace/SQSP, Skool, Notion, Google Workspace, Google One, Apple, iCloud, Motionarray)
+- "Seguros" (La Segunda de Magma, BBVA Seguros, caución)
+- "Compras · Mercado Libre"
+- "Compras · Insumos/equipos" (Sodimac, Easy, ferretería, bazar, GangaHome, LaRoble, Mecubrocom)
+- "Compras · Súper/almacén" (Dia Tienda, Carrefour, Coto, Jumbo, Disco)
+- "Compras · Comida/restaurantes" (Rappi, PedidosYa, bares, cafés, restaurantes, Dandy)
+- "Costos bancarios" (intereses, IVA, IIBB, percepciones, comisiones, DB.RG 5617)
+Elegí el subrubro que mejor corresponda a cada comercio. Si un comercio no encaja en ninguno, usá "Otros".
+
 === SALIDA ===
 Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen. Campos:
 - total_a_pagar_ars (number), total_a_pagar_usd (number), vencimiento (string "DD/MM/YYYY")
-- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por rubro), rubros_personal (objeto monto por rubro), y "personales" (array de los consumos PERSONALES de ese titular —los que NO son de empresa—, hasta 40, ordenados de mayor a menor monto, cada uno {comercio, monto, fecha}). Sirve para revisarlos a mano.
-Reglas: para cada titular empresa_ars + personal_ars = total_consumos_ars. El software en dólares va en empresa_usd. Omití los rubros que den 0. Números sin separador de miles ni símbolo $, punto decimal.
+- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por "Rubro · Subrubro" de la taxonomía), rubros_personal (objeto monto por rubro), y "personales" (array de los consumos PERSONALES de ese titular —los que NO son de empresa—, hasta 40, ordenados de mayor a menor monto, cada uno {comercio, monto, fecha}). Sirve para revisarlos a mano.
+Reglas: para cada titular empresa_ars + personal_ars = total_consumos_ars. El software en dólares va en empresa_usd (y también detallalo en rubros_empresa con su subrubro de Software). Omití los rubros que den 0. Números sin separador de miles ni símbolo $, punto decimal.
 
 EJEMPLO DE FORMATO (los números son inventados de muestra — NO los copies, poné los del resumen real):
-{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Combustible":200000,"Movilidad":100000},"rubros_personal":{"Comida y super":500000},"personales":[{"comercio":"Carrefour","monto":300000,"fecha":"12/05"},{"comercio":"Rappi","monto":200000,"fecha":"09/05"}]},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Movilidad":150000},"rubros_personal":{"Comida y super":450000},"personales":[{"comercio":"Zara","monto":250000,"fecha":"08/05"},{"comercio":"Coto","monto":200000,"fecha":"15/05"}]}]}`
+{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Producción · Nafta":200000,"Producción · Movilidad":100000},"rubros_personal":{"Comida y super":500000},"personales":[{"comercio":"Zara","monto":300000,"fecha":"12/05"},{"comercio":"PasajesCDP","monto":200000,"fecha":"09/05"}]},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Producción · Movilidad":150000},"rubros_personal":{"Comida y super":450000},"personales":[{"comercio":"Florian","monto":250000,"fecha":"08/05"},{"comercio":"ReinaCasa","monto":200000,"fecha":"15/05"}]}]}`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
