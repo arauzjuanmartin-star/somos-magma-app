@@ -1392,13 +1392,14 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
-    {(()=>{ const margenPct=total>0?Math.round((fee/total)*100):0; const sem=semaforo(margenPct); return (
+    {(()=>{ const ganancia=fee+mg; const margenPct=total>0?Math.round((ganancia/total)*100):0; const sem=semaforo(margenPct); return (
     <div style={{display:'flex', gap:24, marginTop:14, paddingTop:14, borderTop:`1px solid ${T.border}`, flexWrap:'wrap', alignItems:'center'}}>
       <Mini label="Presupuestado" val={fmt(total)}/>
       <Mini label="Freelance" val={fmt(fl)}/>
       <Mini label="Somos Magma" val={fmt(mg)} color={T.pos}/>
       <Mini label="Fee Magma" val={fmt(fee)} color={fee<0?T.brand:T.ink}/>
-      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div></div>
+      <Mini label="Ganancia Magma" val={fmt(ganancia)} color={T.pos}/>
+      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div><div style={{fontSize:9, color:T.ink3, marginTop:1}}>fee + Somos Magma</div></div>
       <div style={{flex:1}}/>
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
