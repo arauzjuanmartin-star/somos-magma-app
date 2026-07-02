@@ -1349,7 +1349,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       if(onRefresh) onRefresh()
       if(onClose) onClose()
       // 3. Resync Calendar en segundo plano (Google es lento, no bloqueamos)
-      if(presu){ fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}).catch(()=>{}) }
+      if(presu){ fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion:'aprobar'})}).then(r=>r.json()).then(j=>{ if(j&&j.staffSinMail&&j.staffSinMail.length) showToast('Sin mail (no se pudo invitar): '+j.staffSinMail.join(', '),'err') }).catch(()=>{}) }
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 

@@ -95,6 +95,8 @@ export default async function handler(req, res) {
     const horario = get('Horario')
     const ubicacion = get('Ubicación')
     const contactoLugar = get('Contacto Lugar')
+    const contacto = get('Contacto')
+    let staffAttendees = [], staffSinMail = []
 
     const calAuth = getCalendarAuth()
     const cal = google.calendar({ version: 'v3', auth: calAuth })
@@ -133,15 +135,15 @@ export default async function handler(req, res) {
     const partesNombre = [cliente, agencia && agencia !== cliente ? agencia : null].filter(Boolean).join(' · ')
     const titulo = `#${num} · ${partesNombre || 'Magma'} · ${proyecto || 'Cobertura'}`
     const descripcionPartes = [
-      `Presupuesto: #${num}`,
       `Cliente: ${cliente || '—'}`,
       `Agencia: ${agencia || '—'}`,
       `Proyecto: ${proyecto || '—'}`,
       `PM: ${pm || '—'}`,
     ]
-    // Datos operativos del día (lo que pide el equipo)
+    // Datos operativos del día (lo que pide el equipo) — SIN el presupuesto ($) porque se invita a freelancers
     if (horario) descripcionPartes.push(`⏰ Horario: ${horario}`)
     if (ubicacion) descripcionPartes.push(`📍 Ubicación: ${ubicacion}`)
+    if (contacto) descripcionPartes.push(`📞 Contacto: ${contacto}`)
     if (contactoLugar) descripcionPartes.push(`👤 Contacto en el lugar: ${contactoLugar}`)
 
     // Staff asignado (desde PROYECTOS) — para que en el Calendar se vea quién va
@@ -160,14 +162,22 @@ export default async function handler(req, res) {
               if (nombre && nombre !== 'Somos Magma') staffList.push(nombre)
             }
           })
-          if (staffList.length) descripcionPartes.push(`🎥 Staff: ${[...new Set(staffList)].join(', ')}`)
+          const uniqStaff = [...new Set(staffList)]
+          if (uniqStaff.length) descripcionPartes.push(`🎥 Staff: ${uniqStaff.join(', ')}`)
+          // Buscar el mail de cada uno en RRHH para invitarlos al evento
+          try {
+            const rRRHH = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:D' })
+            const rh = rRRHH.data.values || []
+            const iNom = (rh[0]||[]).indexOf('Nombre Apellido'), iMail = (rh[0]||[]).indexOf('Mail')
+            const mailDe = {}
+            rh.slice(1).forEach(r => { const n = String(r[iNom]||'').trim().toLowerCase(); const m = String(r[iMail]||'').trim(); if (n && /@/.test(m)) mailDe[n] = m })
+            uniqStaff.forEach(n => { const m = mailDe[n.toLowerCase()]; if (m) staffAttendees.push({ email: m, displayName: n }); else staffSinMail.push(n) })
+          } catch (e) { /* si falla RRHH, seguimos sin invitar */ }
         }
       } catch (e) { /* no bloquea */ }
     }
     descripcionPartes.push(
       `Estado: ${accion === 'aprobar' ? 'APROBADO ✓' : 'EN ESPERA'}`,
-      '',
-      `Ver presu: https://somos-magma-app.vercel.app/presupuesto?nro=${num}`,
       '',
       tagPresu(num),
     )
@@ -207,14 +217,25 @@ export default async function handler(req, res) {
       setStartEnd(fechas.dia)
     }
 
-    let result, accionFinal
-    if (existing) {
-      result = await cal.events.update({ calendarId: CALENDAR_ID, eventId: existing.id, requestBody: { ...existing, ...eventBody } })
-      accionFinal = 'actualizado'
-    } else {
-      result = await cal.events.insert({ calendarId: CALENDAR_ID, requestBody: eventBody })
-      accionFinal = 'creado'
+    if (staffAttendees.length) eventBody.attendees = staffAttendees
+    const doSave = (withAtt) => {
+      const body = existing ? { ...existing, ...eventBody } : { ...eventBody }
+      if (!withAtt) delete body.attendees
+      const params = { calendarId: CALENDAR_ID, requestBody: body }
+      if (withAtt && (body.attendees||[]).length) params.sendUpdates = 'all'  // manda las invitaciones
+      if (existing) { params.eventId = existing.id; return cal.events.update(params) }
+      return cal.events.insert(params)
     }
+    let result, accionFinal, invitados = false
+    try {
+      result = await doSave(true)
+      invitados = staffAttendees.length > 0
+    } catch (e) {
+      // Google bloquea invitados si no está habilitado Domain-Wide Delegation → guardamos el evento igual, sin invitar
+      result = await doSave(false)
+      invitados = false
+    }
+    accionFinal = existing ? 'actualizado' : 'creado'
 
     // Log
     try {
@@ -226,7 +247,7 @@ export default async function handler(req, res) {
       })
     } catch (e) {}
 
-    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink })
+    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink, invitados, staffSinMail })
   } catch (e) {
     console.error('Error calendar-evento:', e.message, e.response?.data)
     // Si es problema de permisos, devolver mensaje claro
