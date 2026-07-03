@@ -42,14 +42,21 @@ export default async function handler(req, res) {
       if (presupuestoNum) {
         const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
         const rows = r.data.values || [], h = rows[0] || []
-        const iNum = h.indexOf('N° Presupuesto'), iEnv = h.indexOf('Fc Enviada')
+        const iNum = h.indexOf('N° Presupuesto'), iEnv = h.indexOf('Fc Enviada'), iFecha = h.indexOf('Fecha enviada')
         if (iNum >= 0 && iEnv >= 0) {
           const idx = rows.findIndex((row, i) => i > 0 && String(row[iNum]||'').trim() === String(presupuestoNum).trim())
           if (idx > 0) {
             const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)} return s }
-            await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `FACTURACION!${colLetra(iEnv)}${idx+1}`, valueInputOption: 'USER_ENTERED', requestBody: { values: [[true]] } })
+            const upd = [{ range: `FACTURACION!${colLetra(iEnv)}${idx+1}`, values: [[true]] }]
+            // Fecha enviada: se estampa la 1ra vez que se manda por mail (si no estaba ya cargada por el upload).
+            if (iFecha >= 0 && !String(rows[idx][iFecha]||'').trim()) {
+              const d = new Date(); const hoy = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()
+              upd.push({ range: `FACTURACION!${colLetra(iFecha)}${idx+1}`, values: [[hoy]] })
+            }
+            await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: upd } })
           }
         }
+
       }
       await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'factura-mail-enviado', 'FACTURACION', String(presupuestoNum||''), `a: ${dest.join(', ')}`]] } })
     } catch (e) { console.warn('post-envío (marca/log) falló:', e.message) }
