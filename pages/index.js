@@ -138,6 +138,9 @@ export default function V2() {
           <div style={{fontSize:10, color:T.ink3, marginTop:5, letterSpacing:0.3, fontFamily:MONO}}>productora audiovisual</div>
           {readOnly && <div style={{marginTop:9, fontSize:10, fontWeight:700, color:T.brand, background:T.brandSoft, padding:'5px 8px', borderRadius:6, letterSpacing:0.4, textAlign:'center'}}>👁 MODO LECTURA</div>}
         </div>
+        {!readOnly && <div style={{padding:'0 16px 12px'}}>
+          <button onClick={()=>goTo('presupuestos','__nuevo__')} title="Cargar un presupuesto nuevo, desde donde estés" style={{width:'100%', padding:'10px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>+ Nuevo presupuesto</button>
+        </div>}
         <nav style={{flex:1, padding:'4px 12px'}}>
           {NAV.map(n=>{
             const active = mod===n.id
@@ -179,7 +182,7 @@ export default function V2() {
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
-              mod==='dashboard' ? <Dashboard data={data} goTo={goTo}/>
+              mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -220,8 +223,9 @@ function MailAlert(){
 }
 
 // ============================ DASHBOARD ============================
-function Dashboard({data, goTo}){
+function Dashboard({data, goTo, onRefresh, showToast}){
   const [verCuentas,setVerCuentas]=useState(false)
+  const [cobrando,setCobrando]=useState(null)  // cobrar directo desde el dashboard
   const hoy = new Date()
   const mesActual = hoy.getMonth()+1, anioActual = hoy.getFullYear()
   const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[], reservas=data.reservas||[]
@@ -416,7 +420,7 @@ function Dashboard({data, goTo}){
               <div style={{textAlign:'right', flexShrink:0, marginLeft:12, display:'flex', alignItems:'center', gap:10}}>
                 <div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(f.monto)}</div>
                 <div style={{fontSize:11, color:T.brand, fontWeight:600}}>{f.diasDesdeEvento}d</div></div>
-                <span style={{fontSize:12, color:T.ink3}}>→</span>
+                <button onClick={e=>{e.stopPropagation(); setCobrando(f)}} title="Registrar el cobro sin salir del Dashboard" style={{fontSize:11, padding:'5px 12px', borderRadius:7, border:'none', background:T.pos, color:'#fff', fontWeight:700, cursor:'pointer', flexShrink:0}}>Cobrar</button>
               </div>
             </div>
           ))}
@@ -447,6 +451,7 @@ function Dashboard({data, goTo}){
         </div>
       </div>
     </div>
+  {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
 }
 
@@ -464,7 +469,7 @@ const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:
 function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   const [rows,setRows]=useState(data.presupuestos||[])
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
-  useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro)setF(nav.filtro); if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro==='__nuevo__'){ setNuevo(true) } else if(nav.filtro){ setF(nav.filtro) } if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
 
