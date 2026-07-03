@@ -1463,7 +1463,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Fecha del evento por N° de presupuesto (las facturas reales a veces no la tienen en su fila)
   const eventoByNum={}; ;[...(data.proyectos||[]),...presus].forEach(p=>{ const n=String(p['N° presupuesto']||p['Columna 1']||'').trim(); const fe=p['Fecha Evento']; if(n&&fe&&!eventoByNum[n]) eventoByNum[n]=fe })
   const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null), [editarFechas,setEditarFechas]=useState(null)
   const matchMes=fechaStr=>{ if(mesF==='todos')return true; const d=parseD(fechaStr); return d?`${d.getMonth()+1}-${d.getFullYear()}`===mesF:false }
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -1606,13 +1606,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     {filt!=='sinfacturar' && (<>
     {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 235px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 275px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 235px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 275px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(evDe(f)); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
             <span style={{fontSize:9.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
@@ -1629,6 +1629,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
             <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar factura por mail (desde la app)">✉</button>
+            <button onClick={()=>setEditarFechas(f)} style={{...miniBtn, padding:'6px 8px'}} title="Editar a mano fecha de envío y de cobro (notas de crédito, facturas consolidadas)">📅</button>
             {f['Factura']
               ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
               : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
@@ -1642,6 +1643,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
@@ -1853,6 +1855,52 @@ function YaCobradaModal({x, onClose, onConfirm}){
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
         <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real))}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.ink3:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
+      </div>
+    </div>
+  </div>
+}
+
+// Editar a mano las fechas de una factura (envío / cobro). Para notas de crédito,
+// facturas consolidadas (Austral) o cualquier corrección. Usa el endpoint genérico factura-editar.
+function EditarFechasModal({f, onClose, onRefresh, showToast}){
+  const num=f['N° Presupuesto']
+  const [env,setEnv]=useState(f['Fecha enviada']||'')
+  const [cob,setCob]=useState(f['Fecha cobro']||'')
+  const [saving,setSaving]=useState(false)
+  const dias=(()=>{ const e=parseD(env), c=parseD(cob); if(!e||!c) return null; return Math.floor((c-e)/864e5) })()
+  async function guardar(){
+    const cambios={}
+    if((env||'')!==(f['Fecha enviada']||'')) cambios['Fecha enviada']=env
+    if((cob||'')!==(f['Fecha cobro']||'')) cambios['Fecha cobro']=cob
+    if(!Object.keys(cambios).length){ showToast('No hay cambios','err'); return }
+    setSaving(true)
+    try{
+      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ presupuestoNum:String(num), cambios })})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
+      showToast(`#${num} · fechas actualizadas ✓`); onClose(); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  const inp={width:'100%', fontSize:15, fontFamily:MONO, color:T.ink, border:`1px solid ${T.border}`, borderRadius:10, padding:'10px 12px', outline:'none', boxSizing:'border-box'}
+  const lbl={fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6, display:'block'}
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.35)', zIndex:900, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'60px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:420, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar fechas</div><div style={{fontSize:12, color:T.ink3, marginTop:2, fontFamily:MONO}}>#{num} · {f['Proyecto']||f['Cliente']||''}</div></div>
+      <div style={{padding:'20px 22px'}}>
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Fecha enviada (cuándo salió la factura)</label>
+          <input value={env} onChange={e=>setEnv(e.target.value)} placeholder="DD/MM/AAAA" style={inp}/>
+        </div>
+        <div>
+          <label style={lbl}>Fecha cobro (cuándo la pagaron)</label>
+          <input value={cob} onChange={e=>setCob(e.target.value)} placeholder="DD/MM/AAAA" style={inp}/>
+        </div>
+        <div style={{fontSize:12, color:dias!=null?(dias<=30?T.pos:T.brand):T.ink3, marginTop:12, fontWeight:dias!=null?600:400}}>
+          {dias!=null ? `Tardó ${dias} días en cobrarse ${dias<=30?'· a tiempo ✓':'· pasó los 30 días'}` : 'Cargá las dos fechas para ver los días de cobro.'}
+        </div>
+      </div>
+      <div style={{display:'flex', gap:10, padding:'0 22px 20px'}}>
+        <button onClick={onClose} style={{...miniBtn, flex:1, padding:'11px'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{...miniBtn, flex:2, padding:'11px', background:T.brand, color:'#fff', border:'none', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
       </div>
     </div>
   </div>
