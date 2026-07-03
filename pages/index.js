@@ -1934,6 +1934,7 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   const [forma,setForma]=useState('Transferencia')
   const [reservarIVA,setReservarIVA]=useState(String(f['Tipo de Factura']||'').toUpperCase()==='A')
   const [historico,setHistorico]=useState(false)  // ya cobrada hace tiempo: marcar sin tocar saldo
+  const [parcial,setParcial]=useState(false)  // cobro parcial: registra parte y deja la factura pendiente por el resto
   const [montoCobrado,setMontoCobrado]=useState(String(Math.round(total)))  // lo que REALMENTE entró (editable)
   const [saving,setSaving]=useState(false)
   const num=f['N° Presupuesto']
@@ -1943,14 +1944,16 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   async function cobrar(){
     if(!historico && !cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
     if(real<=0){ showToast('Poné el monto cobrado','err'); return }
-    const msg = historico
+    const msg = parcial
+      ? `Registrar COBRO PARCIAL de #${num} por ${fmt(real)}${historico?' (histórico)':` en ${cuenta}`}.\nLa factura queda PENDIENTE por el resto (${fmt(Math.round(total)-real)}). ¿Confirmás?`
+      : historico
       ? `Marcar #${num} como COBRADA (cobro histórico) por ${fmt(real)}.\nNO suma saldo a ninguna cuenta ni reserva IVA — solo deja la factura como cobrada.\n\n¿Confirmás?`
       : `Marcar #${num} como COBRADA por ${fmt(real)} en ${cuenta}. Esto suma ese monto a la cuenta${reservarIVA?' y reserva el IVA':''}. ¿Confirmás?`
     if(!window.confirm(msg)) return
     setSaving(true)
-    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:'total', monto:real, cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA:historico?false:reservarIVA, historico })})
+    try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(num), tipoCobro:parcial?'parcial':'total', monto:real, cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`, reservarIVA:historico?false:reservarIVA, historico })})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
-      showToast(`#${num} cobrada ✓`); onClose(); if(onRefresh) onRefresh()
+      showToast(`#${num} ${parcial?`cobro parcial de ${fmt(real)} ✓ (queda ${fmt(Math.round(total)-real)})`:'cobrada ✓'}`); onClose(); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -1963,6 +1966,10 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
           <input type="number" value={montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
           <div style={{fontSize:11, color:T.ink3, marginTop:5}}>Facturado: {fmt(total)}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
         </div>
+        <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:parcial?T.brandSoft:T.surfaceAlt, border:`1px solid ${parcial?T.brand:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
+          <input type="checkbox" checked={parcial} onChange={e=>setParcial(e.target.checked)} style={{marginTop:2}}/>
+          <span><strong style={{color:T.ink}}>Cobro parcial (adelanto)</strong> — cobraste solo una parte. La factura <strong>queda pendiente</strong> por el resto (no la da por cobrada del todo).{parcial && real>0 && real<Math.round(total) && <span style={{display:'block', marginTop:3, color:T.brand, fontWeight:600}}>Queda pendiente: {fmt(Math.round(total)-real)}</span>}</span>
+        </label>
         <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:historico?T.warnSoft:T.surfaceAlt, border:`1px solid ${historico?T.warn:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
           <input type="checkbox" checked={historico} onChange={e=>setHistorico(e.target.checked)} style={{marginTop:2}}/>
           <span><strong style={{color:T.ink}}>Cobro histórico</strong> — ya la cobraste hace tiempo. Solo la marca como cobrada, <strong>no suma a ninguna cuenta</strong> ni reserva IVA. (Para reconciliar facturas viejas.)</span>
