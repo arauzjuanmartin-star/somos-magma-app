@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { hoja, fila, pagado, fechaPago, cuentaPago, monto, montoParcial, notas, tipoPago } = req.body
+  const { hoja, fila, pagado, fechaPago, cuentaPago, monto, montoParcial, notas, tipoPago, mesPagoKey } = req.body
   if (!['GASTOS_FIJOS','TARJETAS','PRESTAMOS'].includes(hoja)) return res.status(400).json({ error: 'Hoja invalida' })
   if (!fila) return res.status(400).json({ error: 'Falta fila' })
 
@@ -21,10 +21,24 @@ export default async function handler(req, res) {
     const num = v => parseFloat(String(v||'0').replace(/[^\d.-]/g,''))||0
 
     // Si es pago parcial, leer fila actual para acumular
-    let acumDescuento = 0  // cuanto restar de CUENTAS efectivamente
+    let acumDescuento = 0  // cuanto restar de CUENTAS efectivamente (negativo si se desmarca)
     let nuevoPagadoFlag = pagado
     let nuevoMontoPagadoAcum = null
-    if (tipoPago === 'parcial' && montoParcial > 0) {
+    let mesesPagadosNuevo = null
+    if (hoja === 'GASTOS_FIJOS' && mesPagoKey) {
+      // Gasto fijo recurrente: se guarda la LISTA de meses pagados (ej "7/2026, 8/2026"), no un solo flag,
+      // así cada mes se marca/desmarca sin pisar los otros.
+      const iMeses = H('Meses pagados')
+      const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${hoja}!A${fila}:Z${fila}` })
+      const row = rRow.data.values?.[0] || []
+      const montoTotal = num(row[H('Monto')])
+      let lista = String(iMeses !== -1 ? row[iMeses] || '' : '').split(',').map(s => s.trim()).filter(Boolean)
+      const has = lista.includes(String(mesPagoKey))
+      if (pagado && !has) { lista.push(String(mesPagoKey)); acumDescuento = montoTotal }
+      else if (!pagado && has) { lista = lista.filter(m => m !== String(mesPagoKey)); acumDescuento = -montoTotal }
+      mesesPagadosNuevo = lista.join(', ')
+      nuevoPagadoFlag = lista.length > 0
+    } else if (tipoPago === 'parcial' && montoParcial > 0) {
       const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${hoja}!A${fila}:Z${fila}` })
       const row = rRow.data.values?.[0] || []
       const montoTotal = num(row[H('Monto')] || row[H('Monto cuota')])
@@ -54,6 +68,7 @@ export default async function handler(req, res) {
       if (idxM !== -1) updates.push({ range: `${hoja}!${colLetra(idxM)}${fila}`, values: [[monto]] })
     }
     if (nuevoMontoPagadoAcum !== null && H('Monto pagado') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Monto pagado'))}${fila}`, values: [[nuevoMontoPagadoAcum]] })
+    if (mesesPagadosNuevo !== null && H('Meses pagados') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Meses pagados'))}${fila}`, values: [[mesesPagadosNuevo]] })
     if (notas !== undefined) {
       const idxN = H('Notas') !== -1 ? H('Notas') : H('Observacion')
       if (idxN !== -1) updates.push({ range: `${hoja}!${colLetra(idxN)}${fila}`, values: [[notas]] })
@@ -67,7 +82,7 @@ export default async function handler(req, res) {
     })
 
     // Restar de CUENTAS lo efectivamente pagado en este evento
-    if (cuentaPago && acumDescuento > 0) {
+    if (cuentaPago && acumDescuento !== 0) {
       try {
         const rC = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:H' })
         const cuentasRows = rC.data.values || []

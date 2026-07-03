@@ -2648,15 +2648,22 @@ function Egresos({data, onRefresh, showToast}){
   const totalPrest=prestMes.reduce((s,p)=>s+parseMonto(p['Monto cuota']),0)
   const totalEgresos=totalGF+totalTarj+totalPrest
 
-  const estaPagado=(hoja,it)=>{ const k=hoja+':'+it.__row; return k in override ? override[k] : esPagado(it['Pagado']) }
+  // Los GASTOS_FIJOS (sueldos, alquiler…) son recurrentes: se marcan PAGADOS por mes guardando la lista
+  // de meses en "Meses pagados" (ej "7/2026, 8/2026"). Así cada mes es independiente. Tarjetas/préstamos = fila puntual.
+  const mesKey=`${mesIdx}/${anio}`
+  const estaPagado=(hoja,it)=>{ const k=hoja+':'+it.__row; if(k in override) return override[k]
+    if(hoja==='GASTOS_FIJOS'){ return String(it['Meses pagados']||'').split(',').map(s=>s.trim()).includes(mesKey) }
+    return esPagado(it['Pagado']) }
   async function toggle(hoja, it, montoItem){
     const k=hoja+':'+it.__row, pagado=!estaPagado(hoja,it)
     const cuenta = cuentaSel[k] || it['Cuenta pago'] || cuentaOpts[0] || ''
     if(pagado && !cuenta){ showToast('Elegí en qué cuenta pagás','err'); return }
     if(pagado && !window.confirm(`Marcar pagado ${fmt(montoItem)} desde ${cuenta}. Descuenta de esa cuenta. ¿Confirmás?`)) return
     setOverride(o=>({...o,[k]:pagado}))
-    const hoy=`${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`
-    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja, fila:it.__row, pagado, tipoPago:'total', cuentaPago:pagado?cuenta:'', fechaPago:pagado?hoy:''})})
+    // La fecha de pago cae en el mes que estás viendo (hoy si es el mes actual, o el día de pago del mes visto).
+    const enMesActual = mesIdx===now.getMonth()+1 && anio===now.getFullYear()
+    const hoy = enMesActual ? `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}` : `${it['Dia pago']||15}/${mesIdx}/${anio}`
+    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja, fila:it.__row, pagado, tipoPago:'total', cuentaPago:pagado?cuenta:'', fechaPago:pagado?hoy:'', mesPagoKey: hoja==='GASTOS_FIJOS'?mesKey:undefined})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err'); setOverride(o=>{const n={...o};delete n[k];return n}); return}
       showToast(pagado?'Pagado ✓':'Desmarcado'); if(onRefresh){ await onRefresh(); setOverride(o=>{const n={...o};delete n[k];return n}) }
     }catch(e){ showToast('Error de conexión','err'); setOverride(o=>{const n={...o};delete n[k];return n}) }
