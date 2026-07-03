@@ -1519,11 +1519,11 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   // "Ya está ✓" en Sin facturar: abre mini-modal para confirmar el monto REAL cobrado
   // (sugiere el del presupuesto, lo podés cambiar). Marca factura real + cobrada SIN tocar saldos.
-  async function confirmarYaCobrada(x, montoReal){
+  async function confirmarYaCobrada(x, montoReal, cobrada=true){
     const num=x.p['Columna 1']
-    try{ const r=await fetch('/api/factura-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), cobrada:true, monto:montoReal})})
+    try{ const r=await fetch('/api/factura-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), cobrada, monto:montoReal})})
       const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
-      showToast(`#${num} facturada y cobrada por ${fmt(montoReal)} ✓`); setYaModal(null); if(onRefresh) onRefresh()
+      showToast(`#${num} ${cobrada?'facturada y cobrada':'facturada (pendiente de cobro)'} por ${fmt(montoReal)} ✓`); setYaModal(null); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
   }
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
@@ -1838,23 +1838,28 @@ function YaCobradaModal({x, onClose, onConfirm}){
   const presupuestado=Math.round(x.pendiente)
   const [monto,setMonto]=useState(String(presupuestado))
   const [saving,setSaving]=useState(false)
+  const [yaCobrada,setYaCobrada]=useState(true)
   const real=parseFloat(monto)||0
   const dif=real-presupuestado
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'70px 20px'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:430, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
       <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
-        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Marcar como ya facturada y cobrada</div>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>{yaCobrada?'Marcar como ya facturada y cobrada':'Marcar como ya facturada (sin cobrar)'}</div>
         <div style={{fontSize:12, color:T.ink3, marginTop:2}}>#{x.p['Columna 1']} · {x.p['Proyecto']||x.p['Cliente']||''}</div>
       </div>
       <div style={{padding:'20px 22px'}}>
-        <label style={lblV2}>¿Cuánto cobraste en realidad? (neto sin IVA)</label>
+        <label style={lblV2}>{yaCobrada?'¿Cuánto cobraste en realidad? (neto sin IVA)':'¿Por cuánto la facturaste? (neto sin IVA)'}</label>
         <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} autoFocus style={{...inpV2, textAlign:'right', fontFamily:MONO, fontSize:16, marginBottom:8}}/>
         <div style={{fontSize:11.5, color:T.ink3}}>Presupuestado: <span style={{fontFamily:MONO}}>{fmt(presupuestado)}</span>{dif!==0 && <span style={{color:dif>0?T.pos:T.brand, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif>0?'de más':'de menos'}</span>}</div>
+        <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', marginTop:14, background:yaCobrada?T.surfaceAlt:T.warnSoft, border:`1px solid ${yaCobrada?T.border:T.warn}`, borderRadius:10, padding:'10px 12px'}}>
+          <input type="checkbox" checked={yaCobrada} onChange={e=>setYaCobrada(e.target.checked)} style={{marginTop:2}}/>
+          <span><strong style={{color:T.ink}}>Ya la cobré también.</strong> Si la <strong>destildás</strong>, queda registrada como <strong>facturada pero SIN cobrar</strong> (aparece pendiente de cobro, no la da por pagada).</span>
+        </label>
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10, background:T.surfaceAlt, borderRadius:8, padding:'9px 11px'}}>No toca el saldo de ninguna cuenta (es histórico). El presupuesto y el staff quedan intactos — esto solo registra la factura.</div>
       </div>
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real))}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.ink3:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
+        <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real), yaCobrada)}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.ink3:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
       </div>
     </div>
   </div>

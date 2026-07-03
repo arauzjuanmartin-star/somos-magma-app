@@ -38,6 +38,7 @@ export default async function handler(req, res) {
     const iPresu = H('N° Presupuesto'), iNro = H('Nro de Factura'), iEmi = H('Fecha emision')
     const iVenc = H('Vencimiento'), iNeto = H('Precio SIN IVA'), iFinal = H('Precio FINAL')
     const iCob = headers.findIndex(x => /^cobrado$/i.test(x)), iFechaCob = H('Fecha cobro'), iMontoCob = H('Monto cobrado')
+    const iFecEnv = H('Fecha enviada')
     const iCli = H('Cliente'), iAg = H('Agencia'), iProy = H('Proyecto'), iEv = H('Fecha Evento')
 
     // Buscar fila existente del mismo N°: preferir el registro fantasma (sin número y sin emisión),
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
         { range: `FACTURACION!${colLetra(iNeto)}${sheetRow}`, values: [[neto]] },  // corrige monto desde el presupuesto
       ]
       if (iCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iCob)}${sheetRow}`, values: [[cobrada ? true : false]] })
+      if (iFecEnv !== -1 && !String(rows[rowIdx][iFecEnv] || '').trim()) updates.push({ range: `FACTURACION!${colLetra(iFecEnv)}${sheetRow}`, values: [[emi]] })
       if (cobrada && iFechaCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iFechaCob)}${sheetRow}`, values: [[emi]] })
       if (cobrada && iMontoCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iMontoCob)}${sheetRow}`, values: [[neto]] })
       await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
@@ -69,7 +71,7 @@ export default async function handler(req, res) {
       // No hay registro: crear una fila nueva ya marcada
       const newRow = new Array(headers.length).fill('')
       const set = (i, v) => { if (i !== -1) newRow[i] = v }
-      set(iPresu, String(nroPresupuesto)); set(iEmi, emi); set(iEv, fechaEvento)
+      set(iPresu, String(nroPresupuesto)); set(iEmi, emi); set(iEv, fechaEvento); set(iFecEnv, emi)
       set(iNeto, neto); set(iFinal, neto); set(iCli, cliente); set(iAg, agencia); set(iProy, proyecto)
       if (cobrada) { if (iCob !== -1) newRow[iCob] = true; set(iFechaCob, emi); set(iMontoCob, neto) }
       await withSheetsRetry(() => sheets.spreadsheets.values.append({
