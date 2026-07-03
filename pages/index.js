@@ -260,6 +260,13 @@ function Dashboard({data, goTo}){
   const facMes = fc.filter(f=>esDelMes(f['Fecha emision'],mesActual,anioActual))
   const facMesCobradas = facMes.filter(isCobrada)
   const ingresosMes = facMesCobradas.reduce((s,f)=>s+parseMonto(f['Precio SIN IVA']),0)
+  // Puntualidad de cobro: de las facturas con fecha de envío Y fecha de cobro, cuántas se cobraron ≤30 días.
+  // (La fecha de envío se estampa sola al subir/mandar la factura; se puede editar a mano.)
+  const facMedibles = fc.filter(f=>parseD(f['Fecha enviada']) && parseD(f['Fecha cobro']))
+    .map(f=>({...f, _dias:Math.floor((parseD(f['Fecha cobro'])-parseD(f['Fecha enviada']))/864e5)}))
+    .filter(f=>f._dias>=0 && f._dias<400)
+  const pctATiempo = facMedibles.length ? Math.round(facMedibles.filter(f=>f._dias<=30).length/facMedibles.length*100) : null
+  const diasPromCobro = facMedibles.length ? Math.round(facMedibles.reduce((s,f)=>s+f._dias,0)/facMedibles.length) : 0
   // Eventos APROBADOS cuyo evento cae este mes (los laburos que hago en junio).
   const proyMesEvento = proyectos.filter(p=>esDelMes(p['Fecha Evento'],mesActual,anioActual))
   // Facturado (eventos del mes): valor total de los trabajos cuyo evento es este mes.
@@ -366,6 +373,7 @@ function Dashboard({data, goTo}){
     <SectionTitle>{MESES_LARGO[mesActual-1]} · este mes</SectionTitle>
     <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
       <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
+      {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`≤30 días del envío · ${diasPromCobro} días prom. (${facMedibles.length} fact.)`}/>}
       <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
       <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
       <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="fee + Somos Magma + diferencia del mes"/>
