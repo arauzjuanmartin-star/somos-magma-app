@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nroPresupuesto, cobrada = true, monto } = req.body || {}
+  const { nroPresupuesto, cobrada = true, monto, fechaEnviada, fechaCobro } = req.body || {}
   if (!nroPresupuesto) return res.status(400).json({ error: 'Falta nroPresupuesto' })
 
   try {
@@ -52,7 +52,10 @@ export default async function handler(req, res) {
     }
     if (rowIdx === -1) rowIdx = rowIdxAny
 
-    const emi = fechaEvento || hoyStr()
+    // La fecha de EMISIÓN/ENVÍO = la real que pasa el usuario (o, como último recurso, hoy — NUNCA la del evento como cobro).
+    const emi = fechaEnviada || fechaEvento || hoyStr()
+    // La fecha de COBRO = la real que pasa el usuario. NO usar la del evento (era el bug).
+    const cobroDate = fechaCobro || hoyStr()
     if (rowIdx > 0) {
       // Actualizar la fila existente → la convierte en factura real
       const sheetRow = rowIdx + 1
@@ -62,7 +65,7 @@ export default async function handler(req, res) {
       ]
       if (iCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iCob)}${sheetRow}`, values: [[cobrada ? true : false]] })
       if (iFecEnv !== -1 && !String(rows[rowIdx][iFecEnv] || '').trim()) updates.push({ range: `FACTURACION!${colLetra(iFecEnv)}${sheetRow}`, values: [[emi]] })
-      if (cobrada && iFechaCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iFechaCob)}${sheetRow}`, values: [[emi]] })
+      if (cobrada && iFechaCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iFechaCob)}${sheetRow}`, values: [[cobroDate]] })
       if (cobrada && iMontoCob !== -1) updates.push({ range: `FACTURACION!${colLetra(iMontoCob)}${sheetRow}`, values: [[neto]] })
       await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
@@ -73,7 +76,7 @@ export default async function handler(req, res) {
       const set = (i, v) => { if (i !== -1) newRow[i] = v }
       set(iPresu, String(nroPresupuesto)); set(iEmi, emi); set(iEv, fechaEvento); set(iFecEnv, emi)
       set(iNeto, neto); set(iFinal, neto); set(iCli, cliente); set(iAg, agencia); set(iProy, proyecto)
-      if (cobrada) { if (iCob !== -1) newRow[iCob] = true; set(iFechaCob, emi); set(iMontoCob, neto) }
+      if (cobrada) { if (iCob !== -1) newRow[iCob] = true; set(iFechaCob, cobroDate); set(iMontoCob, neto) }
       await withSheetsRetry(() => sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AI',
         valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS',
