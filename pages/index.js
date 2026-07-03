@@ -263,6 +263,8 @@ function Dashboard({data, goTo}){
   // Puntualidad de cobro: de las facturas con fecha de envío Y fecha de cobro, cuántas se cobraron ≤30 días.
   // (La fecha de envío se estampa sola al subir/mandar la factura; se puede editar a mano.)
   const facMedibles = fc.filter(f=>parseD(f['Fecha enviada']) && parseD(f['Fecha cobro']))
+    // Excluir facturas con fecha de cobro = fecha de evento: es el placeholder del bug viejo de "Ya está" (no es la fecha real de cobro).
+    .filter(f=>{ const ev=parseD(f['Fecha Evento']), c=parseD(f['Fecha cobro']); return !(ev && c && ev.getTime()===c.getTime()) })
     .map(f=>({...f, _dias:Math.floor((parseD(f['Fecha cobro'])-parseD(f['Fecha enviada']))/864e5)}))
     .filter(f=>f._dias>=0 && f._dias<400)
   const pctATiempo = facMedibles.length ? Math.round(facMedibles.filter(f=>f._dias<=30).length/facMedibles.length*100) : null
