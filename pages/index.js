@@ -373,7 +373,7 @@ function Dashboard({data, goTo}){
     <SectionTitle>{MESES_LARGO[mesActual-1]} · este mes</SectionTitle>
     <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
       <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
-      {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`≤30 días del envío · ${diasPromCobro} días prom. (${facMedibles.length} fact.)`}/>}
+      {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`pagadas dentro de 30 días (objetivo). Hoy tardan ${diasPromCobro} días en promedio · ${facMedibles.length} fact.`}/>}
       <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
       <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
       <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="fee + Somos Magma + diferencia del mes"/>
