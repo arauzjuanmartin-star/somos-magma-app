@@ -226,6 +226,7 @@ function MailAlert(){
 function Dashboard({data, goTo, onRefresh, showToast}){
   const [verCuentas,setVerCuentas]=useState(false)
   const [cobrando,setCobrando]=useState(null)  // cobrar directo desde el dashboard
+  const [facturando,setFacturando]=useState(null)  // facturar directo desde el dashboard
   const hoy = new Date()
   const mesActual = hoy.getMonth()+1, anioActual = hoy.getFullYear()
   const pr=data.presupuestos||[], fc=data.facturacion||[], cuentas=data.cuentas||[], proyectos=data.proyectos||[], pagosStaff=data.pagosStaff||[], reservas=data.reservas||[]
@@ -246,6 +247,12 @@ function Dashboard({data, goTo, onRefresh, showToast}){
   const totalPorCobrar = porCobrar.reduce((s,f)=>s+f.monto,0)
   const atrasadas30 = porCobrar.filter(f=>f.diasDesdeEvento>30)
   const totalAtrasadas = atrasadas30.reduce((s,f)=>s+f.monto,0)
+  // Listo para facturar: presupuestos aprobados con saldo pendiente y evento ya pasado (accionable).
+  const parafacturar = pr.filter(isAprobado).map(p=>{
+    const facturado=fc.filter(f=>esFacturaReal(f) && String(f['N° Presupuesto']||'').trim()===String(p['Columna 1']||'').trim() && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')).reduce((s,f)=>s+(parseMonto(f['Precio SIN IVA'])||parseMonto(f['Precio FINAL'])),0)
+    const neto=parseMonto(p['Precio Final']); const ev=parseD(p['Fecha Evento'])
+    return {p, facturado, neto, pendiente:Math.max(0,neto-facturado), ev, paso: ev? ev<=hoy : true}
+  }).filter(x=>x.neto>0 && x.pendiente>x.neto*0.05 && x.paso).sort((a,b)=>(a.ev?a.ev.getTime():0)-(b.ev?b.ev.getTime():0))
 
   // --- A pagar staff (próx 15) ---
   const diaHoy=hoy.getDate()
@@ -428,6 +435,23 @@ function Dashboard({data, goTo, onRefresh, showToast}){
 
       <div style={{flex:1, display:'flex', flexDirection:'column', gap:14}}>
         <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
+          <CardHead>Listo para facturar</CardHead>
+          {parafacturar.length===0
+            ? <Empty>Nada pendiente de facturar 🎉</Empty>
+            : parafacturar.slice(0,6).map((x,i)=>(
+              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Cliente']||x.p['Agencia']||'—'}</div>
+                  <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||''}</div>
+                </div>
+                <div style={{display:'flex', alignItems:'center', gap:9, flexShrink:0}}>
+                  <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(x.pendiente)}</span>
+                  <button onClick={()=>setFacturando(x)} title="Crear la factura sin salir del Dashboard" style={{fontSize:11, padding:'5px 12px', borderRadius:7, border:'none', background:T.brand, color:'#fff', fontWeight:700, cursor:'pointer'}}>Facturar</button>
+                </div>
+              </div>
+            ))}
+        </div>
+        <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
           <CardHead>Necesita atención</CardHead>
           {alertas.length===0
             ? <Empty>Todo en orden ✓</Empty>
@@ -452,6 +476,7 @@ function Dashboard({data, goTo, onRefresh, showToast}){
       </div>
     </div>
   {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
+  {facturando && <NuevaFactura pendientes={parafacturar} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={facturando} onClose={()=>setFacturando(null)} onCreada={()=>{ setFacturando(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
