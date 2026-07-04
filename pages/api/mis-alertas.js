@@ -25,13 +25,13 @@ export default async function handler(req, res) {
     const unread = inbox.data.messagesUnread || 0
 
     // Heurística de "pedido de presupuesto" entre los NO leídos
-    const q = 'in:inbox is:unread (presupuesto OR cotización OR cotizacion OR cobertura OR "pedido de" OR filmación OR filmacion OR evento)'
-    const pl = await gmail.users.messages.list({ userId: 'me', q, maxResults: 5 })
+    const q = 'in:inbox is:unread (presupuesto OR cotización OR cotizacion OR cobertura OR "pedido de" OR filmación OR filmacion OR evento OR filmar OR fotos OR video)'
+    const pl = await gmail.users.messages.list({ userId: 'me', q, maxResults: 8 })
     const pedidos = []
     for (const m of (pl.data.messages || [])) {
-      const g = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['From', 'Subject'] })
+      const g = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['From', 'Subject', 'Date'] })
       const H = n => (g.data.payload.headers.find(h => h.name === n) || {}).value || ''
-      pedidos.push({ from: H('From'), subject: H('Subject') })
+      pedidos.push({ id: m.id, from: H('From'), subject: H('Subject'), date: H('Date'), snippet: g.data.snippet || '' })
     }
     res.json({ ok: true, mailbox: email, unread, pedidos, pedidosCount: pl.data.resultSizeEstimate || pedidos.length })
   } catch (e) {

@@ -222,11 +222,18 @@ function MailAlert(){
   const nombre=(a.mailbox||'').split('@')[0]
   const url='https://mail.google.com/mail/?authuser='+encodeURIComponent(a.mailbox||'')
   const pedidos=a.pedidos||[], nPed=a.pedidosCount||pedidos.length
-  return <div style={{background:T.brandSoft, border:`1px solid ${T.border}`, borderRadius:12, padding:'12px 16px', marginBottom:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap'}}>
+  return <div style={{background:T.brandSoft, border:`1px solid ${T.border}`, borderRadius:12, padding:'12px 16px', marginBottom:14, display:'flex', gap:14, alignItems:'flex-start', flexWrap:'wrap'}}>
     <span style={{fontSize:20}}>📬</span>
     <div style={{flex:1, minWidth:200}}>
       <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{nombre}, tenés <span style={{color:T.brand}}>{a.unread} sin leer</span>{nPed>0 && <> · <span style={{color:T.brand}}>{nPed} posible{nPed===1?'':'s'} pedido{nPed===1?'':'s'} de presupuesto</span></>}</div>
-      {pedidos.length>0 && <div style={{fontSize:11.5, color:T.ink3, marginTop:4}}>{pedidos.slice(0,3).map((p,i)=><div key={i} style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:560}}>· {p.subject||'(sin asunto)'} <span style={{color:T.ink3}}>— {(p.from||'').replace(/<.*>/,'').replace(/"/g,'').trim()}</span></div>)}</div>}
+      {pedidos.length>0 && <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:6}}>{pedidos.slice(0,5).map((p,i)=>{
+        const link = p.id ? `https://mail.google.com/mail/?authuser=${encodeURIComponent(a.mailbox||'')}#all/${p.id}` : url
+        const from = (p.from||'').replace(/<[^>]*>/,'').replace(/"/g,'').trim()
+        return <a key={i} href={link} target="_blank" rel="noreferrer" title="Abrir este mail en Gmail" style={{display:'block', textDecoration:'none', background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'7px 11px'}}>
+          <div style={{fontSize:12.5, color:T.ink, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p.subject||'(sin asunto)'} <span style={{color:T.ink3, fontWeight:400}}>— {from}</span></div>
+          {p.snippet && <div style={{fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginTop:2}}>{p.snippet}</div>}
+        </a>
+      })}</div>}
     </div>
     <a href={url} target="_blank" rel="noreferrer" style={{fontSize:12.5, color:T.brand, fontWeight:600, textDecoration:'none', whiteSpace:'nowrap'}}>Abrir bandeja →</a>
   </div>
