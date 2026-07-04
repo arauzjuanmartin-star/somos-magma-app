@@ -239,6 +239,28 @@ function MailAlert(){
   </div>
 }
 
+// Oversight de mails del equipo — solo dueños (el endpoint devuelve [] si no sos dueño).
+function TeamMails(){
+  const [d,setD]=useState(null)
+  useEffect(()=>{ fetch('/api/equipo-alertas').then(r=>r.json()).then(setD).catch(()=>{}) },[])
+  if(!d || !d.equipo || d.equipo.length===0) return null
+  return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
+    <CardHead>Mails del equipo · pedidos sin leer</CardHead>
+    {d.equipo.map((m,i)=>(
+      <div key={i} style={{padding:'11px 18px', borderTop:`1px solid ${T.border}`}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <span style={{fontSize:13, fontWeight:600, color:T.ink}}>{m.nombre} <span style={{fontWeight:400, color:T.ink3, fontSize:11.5}}>· {m.error?'sin acceso':`${m.unread} sin leer`}</span></span>
+          <a href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(m.mailbox||'')}`} target="_blank" rel="noreferrer" style={{fontSize:11.5, color:T.brand, fontWeight:600, textDecoration:'none'}}>ver bandeja →</a>
+        </div>
+        {(m.pedidos||[]).slice(0,2).map((p,j)=>(
+          <a key={j} href={p.id?`https://mail.google.com/mail/?authuser=${encodeURIComponent(m.mailbox||'')}#all/${p.id}`:'#'} target="_blank" rel="noreferrer" style={{display:'block', fontSize:11.5, color:T.ink2, textDecoration:'none', marginTop:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>· {p.subject||'(sin asunto)'} <span style={{color:T.ink3}}>— {(p.from||'').replace(/<[^>]*>/,'').replace(/"/g,'').trim()}</span></a>
+        ))}
+        {(!m.pedidos || m.pedidos.length===0) && !m.error && <div style={{fontSize:11.5, color:T.ink3, marginTop:4}}>Sin pedidos recientes ✓</div>}
+      </div>
+    ))}
+  </div>
+}
+
 // ============================ DASHBOARD ============================
 function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const [verCuentas,setVerCuentas]=useState(false)
@@ -422,6 +444,8 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
         </div>
       ))}
     </div>}
+
+    {yo && yo.verTodo && <TeamMails/>}
 
     {/* HERO — los 3 números que mirás todos los días (clickeables) */}
     <div style={{display:'flex', gap:14}}>

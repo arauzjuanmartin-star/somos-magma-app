@@ -27,8 +27,10 @@ export default async function handler(req, res) {
     const inbox = await gmail.users.labels.get({ userId: 'me', id: 'INBOX' })
     const unread = inbox.data.messagesUnread || 0
 
-    // Heurística de "pedido de presupuesto" entre los NO leídos
-    const q = 'in:inbox is:unread (presupuesto OR cotización OR cotizacion OR cobertura OR "pedido de" OR filmación OR filmacion OR evento OR filmar OR fotos OR video)'
+    // Heurística de "pedido de presupuesto": no leídos recientes, sacando notificaciones/promos.
+    // (Se mantienen los internos @somosmagma porque muchos presus circulan entre el equipo.)
+    const NOISE = '-from:mercadolibre -from:mercadopago -from:instagram.com -from:facebookmail -from:linkedin -from:noreply -from:no-reply -from:notificaciones -from:google.com -from:netflix -from:youtube -from:spotify -from:mailchimp'
+    const q = `in:inbox is:unread newer_than:30d ${NOISE} (presupuesto OR cotización OR cotizacion OR cobertura OR "pedido de" OR filmación OR filmacion OR filmar OR shooting OR presu)`
     const pl = await gmail.users.messages.list({ userId: 'me', q, maxResults: 8 })
     const pedidos = []
     for (const m of (pl.data.messages || [])) {
