@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/api/auth',  // todas las rutas de /api/auth/* (signin, callback, etc)
   '/_next',
   '/favicon.ico',
+  '/web.html',  // preview público de la web nueva (para Sofi/equipo, sin login)
 ]
 
 function isPublic(pathname) {
