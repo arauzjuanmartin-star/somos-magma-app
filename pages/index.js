@@ -45,6 +45,16 @@ const dedupCI = arr => { const m=new Map(); arr.map(v=>String(v||'').trim()).fil
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
+// Mapeo mail → persona, para "Mi espacio" (proyectos a cargo + tareas). verTodo = dueños/admin.
+const USER_NAME = {
+  'juan@somosmagma.com':        {nombre:'Juan', nombres:['juan'], verTodo:true},
+  'arauzjuanmartin@gmail.com':  {nombre:'Juan', nombres:['juan'], verTodo:true},
+  'sofi@somosmagma.com':        {nombre:'Sofi', nombres:['sofi','sofia'], verTodo:true},
+  'lulu@somosmagma.com':        {nombre:'Lulu', nombres:['lulu','lucia'], verTodo:false},
+  'tom@somosmagma.com':         {nombre:'Tom',  nombres:['tom','tomi','tomas','tomás'], verTodo:false},
+  'admin@somosmagma.com':       {nombre:'Flor', nombres:['flor'], verTodo:true, admin:true},
+}
+
 const NAV = [
   {id:'dashboard',label:'Dashboard'},
   {id:'calendario',label:'Calendario'},
@@ -182,7 +192,7 @@ export default function V2() {
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
-              mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast}/>
+              mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -223,7 +233,7 @@ function MailAlert(){
 }
 
 // ============================ DASHBOARD ============================
-function Dashboard({data, goTo, onRefresh, showToast}){
+function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const [verCuentas,setVerCuentas]=useState(false)
   const [cobrando,setCobrando]=useState(null)  // cobrar directo desde el dashboard
   const [facturando,setFacturando]=useState(null)  // facturar directo desde el dashboard
@@ -341,9 +351,38 @@ function Dashboard({data, goTo, onRefresh, showToast}){
   fc.filter(f=>String(f['Fecha emision']||'').includes(String(anioActual))).forEach(f=>{ const c=f['Cliente']||f['Agencia']||'—'; porCliente[c]=(porCliente[c]||0)+parseMonto(f['Precio SIN IVA']) })
   const topClientes = Object.entries(porCliente).sort((a,b)=>b[1]-a[1]).slice(0,5)
 
+  // --- Mi espacio: proyectos a cargo + tareas del usuario logueado ---
+  const yo = USER_NAME[String(mail||'').toLowerCase()] || null
+  const misNombres = yo ? yo.nombres : []
+  const esMio = p => misNombres.includes(String(p['PM']||'').trim().toLowerCase())
+  const misProy = misNombres.length ? proyectos.filter(esMio) : []
+  const _tieneStaff = p => p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
+  const facByNro = {}; fc.forEach(f=>{ if(esFacturaReal(f)) facByNro[String(f['N° Presupuesto']||'').trim()]=true })
+  const misSinStaff = misProy.filter(p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return false; const d=Math.floor((fe-hoy)/864e5); return d>=-1 && d<=14 && !_tieneStaff(p) })
+  const misSinFacturar = misProy.filter(p=>{ const fe=parseD(p['Fecha Evento']); const paso=fe? fe<=hoy : false; return paso && !facByNro[String(p['N° presupuesto']||'').trim()] })
+  const misPorCobrar = porCobrar.filter(f=>{ const proy=proyByNro[String(f['N° Presupuesto']||'').trim()]; return proy && esMio(proy) })
+
   return <>
     <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
     <MailAlert/>
+
+    {/* MI ESPACIO — tus proyectos a cargo + tus tareas (según quién se logueó) */}
+    {misProy.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
+      <CardHead>Tu espacio · {yo?.nombre} <span style={{fontWeight:400, color:T.ink3}}>· {misProy.length} proyectos a tu cargo</span></CardHead>
+      <div style={{display:'flex', borderTop:`1px solid ${T.border}`}}>
+        {[
+          {n:misSinStaff.length, l:'sin staff (≤14 días)', to:'proyectos', filtro:'pendiente', c:T.brand},
+          {n:misSinFacturar.length, l:'para facturar', to:'facturacion', filtro:undefined, c:T.brand},
+          {n:misPorCobrar.length, l:'por cobrar', to:'facturacion', filtro:'pendiente', c:T.warn},
+        ].map((t,i)=>(
+          <div key={i} onClick={()=>t.n>0&&goTo&&goTo(t.to,t.filtro)} style={{flex:1, padding:'14px 16px', borderLeft:i>0?`1px solid ${T.border}`:'none', cursor:t.n>0?'pointer':'default', textAlign:'center'}}
+            onMouseEnter={e=>{if(t.n>0)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <div style={{fontSize:26, fontWeight:700, fontFamily:MONO, color:t.n>0?t.c:T.ink3}}>{t.n}</div>
+            <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{t.l}</div>
+          </div>
+        ))}
+      </div>
+    </div>}
 
     {/* HERO — los 3 números que mirás todos los días (clickeables) */}
     <div style={{display:'flex', gap:14}}>
