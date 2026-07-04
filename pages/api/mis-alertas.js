@@ -16,11 +16,14 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res)
   if (!auth) return
   const email = String(auth.mail || auth.session?.user?.email || '').toLowerCase()
+  // Mapeo login personal → casilla de laburo (para que Juan vea sus mails de @somosmagma aun logueado con su Gmail personal)
+  const MAILBOX_FOR = { 'arauzjuanmartin@gmail.com': 'juan@somosmagma.com' }
+  const mailbox = MAILBOX_FOR[email] || email
   // Solo buzones del dominio (los que el DWD puede impersonar)
-  if (!/@somosmagma\.com$/.test(email)) return res.json({ ok: true, mailbox: email, unread: null })
+  if (!/@somosmagma\.com$/.test(mailbox)) return res.json({ ok: true, mailbox, unread: null })
 
   try {
-    const gmail = gmailFor(email)
+    const gmail = gmailFor(mailbox)
     const inbox = await gmail.users.labels.get({ userId: 'me', id: 'INBOX' })
     const unread = inbox.data.messagesUnread || 0
 
@@ -33,8 +36,8 @@ export default async function handler(req, res) {
       const H = n => (g.data.payload.headers.find(h => h.name === n) || {}).value || ''
       pedidos.push({ id: m.id, from: H('From'), subject: H('Subject'), date: H('Date'), snippet: g.data.snippet || '' })
     }
-    res.json({ ok: true, mailbox: email, unread, pedidos, pedidosCount: pl.data.resultSizeEstimate || pedidos.length })
+    res.json({ ok: true, mailbox, unread, pedidos, pedidosCount: pl.data.resultSizeEstimate || pedidos.length })
   } catch (e) {
-    res.json({ ok: false, mailbox: email, unread: null, error: e.message })
+    res.json({ ok: false, mailbox, unread: null, error: e.message })
   }
 }

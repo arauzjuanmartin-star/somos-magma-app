@@ -369,6 +369,22 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const misSinFacturar = misProy.filter(p=>{ const fe=parseD(p['Fecha Evento']); const paso=fe? fe<=hoy : false; return paso && !facByNro[String(p['N° presupuesto']||'').trim()] })
   const misPorCobrar = porCobrar.filter(f=>{ const proy=proyByNro[String(f['N° Presupuesto']||'').trim()]; return proy && esMio(proy) })
 
+  // Oversight del equipo (solo dueños/admin): pendientes de cada PM, para que nada se caiga.
+  const _tareasDe = (nombres) => {
+    const es = p => nombres.includes(String(p['PM']||'').trim().toLowerCase())
+    const prj = proyectos.filter(es)
+    const ss = prj.filter(p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return false; const d=Math.floor((fe-hoy)/864e5); return d>=-1 && d<=14 && !_tieneStaff(p) }).length
+    const sf = prj.filter(p=>{ const fe=parseD(p['Fecha Evento']); const paso=fe?fe<=hoy:false; return paso && !facByNro[String(p['N° presupuesto']||'').trim()] }).length
+    const pc = porCobrar.filter(f=>{ const proy=proyByNro[String(f['N° Presupuesto']||'').trim()]; return proy && es(proy) }).length
+    return {n:prj.length, ss, sf, pc}
+  }
+  const equipo = (yo && yo.verTodo) ? [
+    {nombre:'Lulu', nombres:['lulu','lucia']},
+    {nombre:'Tom',  nombres:['tom','tomi','tomas','tomás']},
+    {nombre:'Sofi', nombres:['sofi','sofia']},
+    {nombre:'Juan', nombres:['juan']},
+  ].filter(m=>!m.nombres.some(n=>misNombres.includes(n))).map(m=>({...m, t:_tareasDe(m.nombres)})).filter(m=>m.t.n>0) : []
+
   return <>
     <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
     <MailAlert/>
@@ -389,6 +405,22 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
           </div>
         ))}
       </div>
+    </div>}
+
+    {/* EL EQUIPO — oversight para dueños: pendientes de cada PM */}
+    {equipo.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
+      <CardHead>El equipo · pendientes de cada uno</CardHead>
+      <div style={{display:'grid', gridTemplateColumns:'1.3fr 90px 100px 90px', padding:'8px 18px', fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, borderTop:`1px solid ${T.border}`}}>
+        <span>PM</span><span style={{textAlign:'center'}}>sin staff</span><span style={{textAlign:'center'}}>para facturar</span><span style={{textAlign:'center'}}>por cobrar</span>
+      </div>
+      {equipo.map((m,i)=>(
+        <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 90px 100px 90px', padding:'10px 18px', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+          <span style={{color:T.ink, fontWeight:600}}>{m.nombre} <span style={{fontWeight:400, color:T.ink3, fontSize:11.5}}>· {m.t.n} proy</span></span>
+          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.ss>0?T.brand:T.ink3}}>{m.t.ss}</span>
+          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.sf>0?T.brand:T.ink3}}>{m.t.sf}</span>
+          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.pc>0?T.warn:T.ink3}}>{m.t.pc}</span>
+        </div>
+      ))}
     </div>}
 
     {/* HERO — los 3 números que mirás todos los días (clickeables) */}
