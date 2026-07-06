@@ -25,6 +25,12 @@ Esta tarjeta es de uso MIXTO (personal + Magma) y muchos meses la mayoría es PE
 - Marcá "Personal" TODO lo demás: restaurantes, cafés, comida, Rappi/PedidosYa, supermercados, compras, entretenimiento/entradas (DF Entertainment, festivales), cuotas de compras personales (Ailes, Chipote, pasajes personales), estacionamiento suelto, y en especial las transferencias MercadoPago a nombres de PERSONAS (MERPAGO*NOMBRE) — NO asumas que son pagos a proveedores, por defecto son transferencias personales. Marcalas Empresa solo si el nombre es un freelancer/proveedor conocido de Magma.
 Ante la duda, poné "Personal" (el humano lo pasa a Empresa con un toque si corresponde).
 
+=== PISTAS RECURRENTES (aprendidas de meses anteriores) ===
+- Cuota/débito "JUAN MARTIN ARAUZ" (~$666.666, suele venir x2): es el RETIRO personal de Juan → Personal.
+- "La Segunda" / "LA SEG" de ~$92.000-98.000 (un solo débito de ese monto): es el seguro del auto de Juan → Personal. Los OTROS débitos "LA SEG" (de montos distintos) son seguros de Magma → Empresa.
+- Retiros o cuotas a nombre de Juan o de Sofi → Personal.
+- Adobe, OpenAI/ChatGPT, Uber/Cabify/PayU de trabajo, seguros de Magma, nafta → Empresa.
+
 === 4) CARGOS BANCARIOS ===
 Los cargos del resumen (INTERESES FINANCIACION, IVA, IIBB PERCEP, IVA RG 4240, percepciones, DB.RG 5617, comisiones) van en un titular aparte con nombre "Cargos", como movimientos con categoria "Empresa" y rubro "Costos bancarios". Podés listarlos juntos en un solo movimiento ("Intereses + IVA + IIBB + percepciones") sumando su total, o separados.
 
