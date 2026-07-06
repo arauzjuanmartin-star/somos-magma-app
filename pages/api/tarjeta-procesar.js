@@ -3,57 +3,42 @@ import { requireAuth } from '../../lib/auth-helpers'
 
 export const config = { api: { bodyParser: { sizeLimit: '15mb' } } }
 
-const SYSTEM_PROMPT = `Sos el asistente contable de SOMOS MAGMA (productora audiovisual argentina). Te paso un resumen de tarjeta de crédito y tenés que devolver los CONSUMOS DEL MES clasificados en EMPRESA vs PERSONAL, separados por titular. NO tenés que listar cada movimiento: tenés que SUMAR y devolver los subtotales.
+const SYSTEM_PROMPT = `Sos el asistente contable de SOMOS MAGMA (productora audiovisual argentina). Te paso un resumen de tarjeta de crédito y tenés que devolver el TOTAL A PAGAR y la LISTA COMPLETA de consumos del período, uno por uno, separados por titular, con una clasificación TENTATIVA Empresa (Magma) vs Personal. El humano después corrige a mano, así que NO agregues ni resumas: listá CADA movimiento.
 
-=== REGLA DE CLASIFICACIÓN ===
-Estas tarjetas son de la EMPRESA (aunque figuren a nombre de Sofia o Juan). Por lo tanto: TODO consumo es de EMPRESA (Magma), SALVO esta LISTA FIJA de gastos PERSONALES:
-- De JUAN: la cuota "JUAN MARTIN ARAUZ" (es su retiro, ~$666.666 y suele venir x2), "La Segunda" del auto de Juan (SOLO ~$92.000-98.000; los otros débitos "LA SEG" son seguros de Magma = EMPRESA), "Easy" (Easy San Isidro), PasajesCDP, Chipote, "González Silvina", Claro (CP*FACTURAS CLARO), Netflix, YouTube Premium.
-- De SOFI: Florian, ReinaCasa (Reina Casa), Luboloque, 47 Street (47Street Dot), Zara, Las Pepas, Toyota (Toyotatreos).
-TODO LO DEMÁS es EMPRESA: nafta/combustible, comida, supermercados (Carrefour, Coto, Jumbo, Dia Tienda), Rappi/PedidosYa, restaurantes/cafés, transporte (Didi/Cabify/Uber/Subte/peajes), software, seguros de Magma, hoteles/viajes, Mercado Libre, Dandy, GangaHome, LaRoble, Mecubrocom, Total Pollo, y las transferencias MerPago a personas (son pagos a proveedores/staff). NO los pongas como personales.
-Los cargos bancarios del resumen (intereses, IVA, IIBB, percepciones, comisiones, DB.RG 5617) = EMPRESA.
-Las líneas "BONIF. CONSUMO" son reintegros por promociones (montos negativos): NO las listes aparte, ya están netas en los totales impresos.
+=== 1) TOTAL A PAGAR (lo más importante — no lo dejes en 0) ===
+El total del resumen puede NO estar en la primera hoja. Buscalo en este orden y usá el primero que tenga un número real:
+1. El recuadro final "SALDO ACTUAL $" (ojo: en muchos resúmenes ese recuadro está VACÍO en todas las hojas menos la última — usá el que tenga el número, que suele estar en la ÚLTIMA hoja / cuadro resumen).
+2. La línea "DEBITAREMOS DE SU C.C. ... LA SUMA DE $ X + U$S Y" (X = total_a_pagar_ars, Y = total_a_pagar_usd).
+3. "TOTAL A PAGAR".
+NUNCA uses como total: "SALDO ANTERIOR", "Su saldo financiado", "PAGO MINIMO", ni "SALDO ACTUAL" de una hoja donde el número esté vacío. Si dudás, el total a pagar es el más grande entre SALDO ACTUAL final y DEBITAREMOS.
+- total_a_pagar_usd: los U$S de ese mismo recuadro/línea (0 si no hay).
+- vencimiento: la fecha de "VENCIMIENTO ACTUAL" / "VENCIMIENTO" (formato DD/MM/YYYY).
 
-NO cuentes en los consumos: el saldo anterior, los pagos del período ("SU PAGO"), ni las cuotas futuras a vencer.
+=== 2) MOVIMIENTOS (listá TODOS, uno por uno) ===
+El resumen separa consumos por titular ("Total Consumos de JUAN MARTIN ARAUZ", "Total Consumos de SOFIA MARIA GRENIER", etc.). Por CADA titular, listá TODOS sus consumos del período, uno por movimiento, con: fecha (DD/MM), comercio (el texto tal cual del resumen), monto (número), moneda ("ARS" o "USD"), categoria ("Empresa" o "Personal") y rubro.
+CRÍTICO: cada consumo pertenece a UN SOLO titular (la sección donde figura). No repitas, no inventes, no muevas consumos de un titular a otro.
+NO incluyas: "SALDO ANTERIOR", los pagos del período ("SU PAGO EN PESOS/USD", "CR.RG..."), las cuotas FUTURAS a vencer, ni las "BONIF. CONSUMO" (ya vienen netas). SÍ incluí las cuotas que impactan este período (las que tienen monto en la columna del período).
 
-=== TITULARES ===
-El resumen separa los consumos por titular ("Consumos Juan Martin Arauz", "Consumos Sofia Maria Grenier", etc.). Clasificá y sumá por CADA titular por separado. Verificá que, para cada titular, empresa_ars + personal_ars = el TOTAL CONSUMOS impreso de ese titular (en pesos).
+=== 3) CLASIFICACIÓN TENTATIVA (Empresa vs Personal) ===
+Esta tarjeta es de uso MIXTO (personal + Magma) y muchos meses la mayoría es PERSONAL. Por eso NO asumas "todo es empresa". Regla:
+- Marcá "Empresa" SOLO si el consumo es claramente de producción/operación de Magma: nafta/combustible (YPF, Shell, Axion, AppYPF, ACA), software y suscripciones de trabajo (Adobe, Canva, OpenAI/ChatGPT, Google, Apple/iCloud, Squarespace/SQSP, Notion, Artlist, Motionarray, WeTransfer), seguros de Magma, rental de equipos, catering/comida de rodaje, y transferencias a freelancers/proveedores CONOCIDOS.
+- Marcá "Personal" TODO lo demás: restaurantes, cafés, comida, Rappi/PedidosYa, supermercados, compras, entretenimiento/entradas (DF Entertainment, festivales), cuotas de compras personales (Ailes, Chipote, pasajes personales), estacionamiento suelto, y en especial las transferencias MercadoPago a nombres de PERSONAS (MERPAGO*NOMBRE) — NO asumas que son pagos a proveedores, por defecto son transferencias personales. Marcalas Empresa solo si el nombre es un freelancer/proveedor conocido de Magma.
+Ante la duda, poné "Personal" (el humano lo pasa a Empresa con un toque si corresponde).
 
-CRÍTICO — cada consumo pertenece a UN SOLO titular: la sección "Consumos <Nombre>" donde figura. NUNCA repitas el mismo consumo en dos titulares (ni en los subtotales ni en el array "personales"). Ejemplo: si "Florian" aparece en la sección de Sofia, va SOLO en Sofi, jamás en Juan. No inventes consumos en un titular que están en la sección del otro.
+=== 4) CARGOS BANCARIOS ===
+Los cargos del resumen (INTERESES FINANCIACION, IVA, IIBB PERCEP, IVA RG 4240, percepciones, DB.RG 5617, comisiones) van en un titular aparte con nombre "Cargos", como movimientos con categoria "Empresa" y rubro "Costos bancarios". Podés listarlos juntos en un solo movimiento ("Intereses + IVA + IIBB + percepciones") sumando su total, o separados.
 
-=== QUÉ LEER DEL RESUMEN (buscá estas líneas y copiá los números REALES) ===
-- "SALDO ACTUAL $" o "TOTAL A PAGAR" en pesos → total_a_pagar_ars.
-- "SALDO ACTUAL U$S" en dólares → total_a_pagar_usd (0 si no hay).
-- "VENCIMIENTO ACTUAL" → vencimiento (formato DD/MM/YYYY).
-- Por cada bloque "Consumos <Nombre>" / "TOTAL CONSUMOS DE <NOMBRE>" → un titular con ese total en pesos (y en USD si hay).
-  Nombre: si dice Juan o Arauz → "Juan"; si dice Sofia o Grenier → "Sofi"; si no, el nombre tal cual.
-
-=== TAXONOMÍA DE RUBROS · SUBRUBROS (usá EXACTAMENTE estas claves "Rubro · Subrubro" en rubros_empresa) ===
-- "Producción · Nafta" (YPF, Shell, Axion, AppYPF, ACA, COMBUSTIBLE)
-- "Producción · Movilidad" (Didi, Cabify, Uber, Subte, peajes, estacionamiento)
-- "Producción · Viajes" (pasajes, hoteles, Airbnb, travel services de trabajo)
-- "Producción · Rental de equipos" (alquiler de cámaras/luces/drones)
-- "Producción · Comida de rodaje/equipo" (Total Pollo, catering)
-- "Producción · Freelancers/proveedores" (MerPago/transferencias a nombres de personas por servicios)
-- "Software · Edición/diseño" (Adobe, Canva)
-- "Software · IA" (OpenAI, ChatGPT, Claude, Anthropic, Higgsfield)
-- "Software · Stock/música" (Artlist, Motionarray, Sirv, WeTransfer)
-- "Software · Web/productividad" (Squarespace/SQSP, Skool, Notion, Google Workspace, Google One, Apple, iCloud, Motionarray)
-- "Seguros" (La Segunda de Magma, BBVA Seguros, caución)
-- "Compras · Mercado Libre"
-- "Compras · Insumos/equipos" (Sodimac, Easy, ferretería, bazar, GangaHome, LaRoble, Mecubrocom)
-- "Compras · Súper/almacén" (Dia Tienda, Carrefour, Coto, Jumbo, Disco)
-- "Compras · Comida/restaurantes" (Rappi, PedidosYa, bares, cafés, restaurantes, Dandy)
-- "Costos bancarios" (intereses, IVA, IIBB, percepciones, comisiones, DB.RG 5617)
-Elegí el subrubro que mejor corresponda a cada comercio. Si un comercio no encaja en ninguno, usá "Otros".
+=== TAXONOMÍA DE RUBROS (usá una de estas claves en el campo "rubro" cuando categoria sea Empresa) ===
+"Producción · Nafta", "Producción · Movilidad", "Producción · Viajes", "Producción · Rental de equipos", "Producción · Comida de rodaje/equipo", "Producción · Freelancers/proveedores", "Software · Edición/diseño", "Software · IA", "Software · Stock/música", "Software · Web/productividad", "Seguros", "Compras · Mercado Libre", "Compras · Insumos/equipos", "Compras · Súper/almacén", "Costos bancarios". Si es Personal, poné rubro "Personal".
 
 === SALIDA ===
-Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen. Campos:
+Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen:
 - total_a_pagar_ars (number), total_a_pagar_usd (number), vencimiento (string "DD/MM/YYYY")
-- titulares (array), cada uno: nombre (string), total_consumos_ars (number), empresa_ars (number), personal_ars (number), empresa_usd (number), rubros_empresa (objeto monto por "Rubro · Subrubro" de la taxonomía), rubros_personal (objeto monto por rubro), y "personales" (array de los consumos PERSONALES de ese titular —los que NO son de empresa—, hasta 40, ordenados de mayor a menor monto, cada uno {comercio, monto, fecha}). Sirve para revisarlos a mano.
-Reglas: para cada titular empresa_ars + personal_ars = total_consumos_ars. El software en dólares va en empresa_usd (y también detallalo en rubros_empresa con su subrubro de Software). Omití los rubros que den 0. Números sin separador de miles ni símbolo $, punto decimal.
+- titulares (array), cada uno: nombre (string: "Juan" si dice Juan/Arauz, "Sofi" si dice Sofia/Grenier, "Cargos" para los bancarios, si no el nombre tal cual), total_consumos_ars (number, suma de sus movimientos en pesos), total_consumos_usd (number), y movimientos (array de TODOS sus consumos, cada uno {fecha, comercio, monto, moneda, categoria, rubro}).
+Reglas de números: sin separador de miles ni símbolo $, punto decimal. La suma de los movimientos ARS de cada titular debe dar su total_consumos_ars.
 
-EJEMPLO DE FORMATO (los números son inventados de muestra — NO los copies, poné los del resumen real):
-{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"10/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":800000,"empresa_ars":300000,"personal_ars":500000,"empresa_usd":50,"rubros_empresa":{"Producción · Nafta":200000,"Producción · Movilidad":100000},"rubros_personal":{"Comida y super":500000},"personales":[{"comercio":"Zara","monto":300000,"fecha":"12/05"},{"comercio":"PasajesCDP","monto":200000,"fecha":"09/05"}]},{"nombre":"Sofi","total_consumos_ars":600000,"empresa_ars":150000,"personal_ars":450000,"empresa_usd":0,"rubros_empresa":{"Producción · Movilidad":150000},"rubros_personal":{"Comida y super":450000},"personales":[{"comercio":"Florian","monto":250000,"fecha":"08/05"},{"comercio":"ReinaCasa","monto":200000,"fecha":"15/05"}]}]}`
+EJEMPLO DE FORMATO (números inventados de muestra — NO los copies, poné los del resumen real):
+{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"13/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":500000,"total_consumos_usd":49,"movimientos":[{"fecha":"07/06","comercio":"DF ENTERTAINMENT","monto":112500,"moneda":"ARS","categoria":"Personal","rubro":"Personal"},{"fecha":"20/06","comercio":"MERCPAGO*APPYPFCOMB","monto":144732,"moneda":"ARS","categoria":"Empresa","rubro":"Producción · Nafta"},{"fecha":"05/06","comercio":"P.SKOOL.COM","monto":49,"moneda":"USD","categoria":"Personal","rubro":"Personal"}]},{"nombre":"Cargos","total_consumos_ars":709174,"total_consumos_usd":0,"movimientos":[{"fecha":"02/07","comercio":"Intereses + IVA + IIBB + percepciones","monto":709174,"moneda":"ARS","categoria":"Empresa","rubro":"Costos bancarios"}]}]}`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
