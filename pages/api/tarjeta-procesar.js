@@ -15,7 +15,8 @@ NUNCA uses como total: "SALDO ANTERIOR", "Su saldo financiado", "PAGO MINIMO", n
 - vencimiento: la fecha de "VENCIMIENTO ACTUAL" / "VENCIMIENTO" (formato DD/MM/YYYY).
 
 === 2) MOVIMIENTOS (listá TODOS, uno por uno) ===
-El resumen separa consumos por titular ("Total Consumos de JUAN MARTIN ARAUZ", "Total Consumos de SOFIA MARIA GRENIER", etc.). Por CADA titular, listá TODOS sus consumos del período, uno por movimiento, con: fecha (DD/MM), comercio (el texto tal cual del resumen), monto (número), moneda ("ARS" o "USD"), categoria ("Empresa" o "Personal") y rubro.
+El resumen separa consumos por titular ("Total Consumos de JUAN MARTIN ARAUZ", "Total Consumos de SOFIA MARIA GRENIER", etc.). Por CADA titular, listá TODOS sus consumos del período, uno por movimiento, con: fecha (DD/MM), comercio (el texto tal cual del resumen), monto (número), moneda ("ARS" o "USD"), categoria ("Empresa" o "Personal"), rubro y cuota.
+CUOTAS: si el movimiento es una cuota (el texto dice "C.NN/MM", "NN/MM" o "cuota NN/MM"), poné el campo cuota con "NN/MM" (ej: "C.03/09" → cuota "3/9"). Si NO es cuota, cuota "".
 CRÍTICO: cada consumo pertenece a UN SOLO titular (la sección donde figura). No repitas, no inventes, no muevas consumos de un titular a otro.
 NO incluyas: "SALDO ANTERIOR", los pagos del período ("SU PAGO EN PESOS/USD", "CR.RG..."), las cuotas FUTURAS a vencer, ni las "BONIF. CONSUMO" (ya vienen netas). SÍ incluí las cuotas que impactan este período (las que tienen monto en la columna del período).
 
@@ -40,11 +41,11 @@ Los cargos del resumen (INTERESES FINANCIACION, IVA, IIBB PERCEP, IVA RG 4240, p
 === SALIDA ===
 Devolvé ÚNICAMENTE un objeto JSON (sin texto antes/después, sin comentarios, sin backticks) con los valores REALES del resumen:
 - total_a_pagar_ars (number), total_a_pagar_usd (number), vencimiento (string "DD/MM/YYYY")
-- titulares (array), cada uno: nombre (string: "Juan" si dice Juan/Arauz, "Sofi" si dice Sofia/Grenier, "Cargos" para los bancarios, si no el nombre tal cual), total_consumos_ars (number, suma de sus movimientos en pesos), total_consumos_usd (number), y movimientos (array de TODOS sus consumos, cada uno {fecha, comercio, monto, moneda, categoria, rubro}).
+- titulares (array), cada uno: nombre (string: "Juan" si dice Juan/Arauz, "Sofi" si dice Sofia/Grenier, "Cargos" para los bancarios, si no el nombre tal cual), total_consumos_ars (number, suma de sus movimientos en pesos), total_consumos_usd (number), y movimientos (array de TODOS sus consumos, cada uno {fecha, comercio, monto, moneda, categoria, rubro, cuota}).
 Reglas de números: sin separador de miles ni símbolo $, punto decimal. La suma de los movimientos ARS de cada titular debe dar su total_consumos_ars.
 
 EJEMPLO DE FORMATO (números inventados de muestra — NO los copies, poné los del resumen real):
-{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"13/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":500000,"total_consumos_usd":49,"movimientos":[{"fecha":"07/06","comercio":"DF ENTERTAINMENT","monto":112500,"moneda":"ARS","categoria":"Personal","rubro":"Personal"},{"fecha":"20/06","comercio":"MERCPAGO*APPYPFCOMB","monto":144732,"moneda":"ARS","categoria":"Empresa","rubro":"Producción · Nafta"},{"fecha":"05/06","comercio":"P.SKOOL.COM","monto":49,"moneda":"USD","categoria":"Personal","rubro":"Personal"}]},{"nombre":"Cargos","total_consumos_ars":709174,"total_consumos_usd":0,"movimientos":[{"fecha":"02/07","comercio":"Intereses + IVA + IIBB + percepciones","monto":709174,"moneda":"ARS","categoria":"Empresa","rubro":"Costos bancarios"}]}]}`
+{"total_a_pagar_ars":1234567.89,"total_a_pagar_usd":123.45,"vencimiento":"13/07/2026","titulares":[{"nombre":"Juan","total_consumos_ars":500000,"total_consumos_usd":49,"movimientos":[{"fecha":"07/06","comercio":"DF ENTERTAINMENT","monto":112500,"moneda":"ARS","categoria":"Personal","rubro":"Personal","cuota":""},{"fecha":"16/04","comercio":"MERPAGO*ROUGE C.03/09","monto":45000,"moneda":"ARS","categoria":"Personal","rubro":"Personal","cuota":"3/9"},{"fecha":"20/06","comercio":"MERCPAGO*APPYPFCOMB","monto":144732,"moneda":"ARS","categoria":"Empresa","rubro":"Producción · Nafta","cuota":""},{"fecha":"05/06","comercio":"P.SKOOL.COM","monto":49,"moneda":"USD","categoria":"Personal","rubro":"Personal","cuota":""}]},{"nombre":"Cargos","total_consumos_ars":709174,"total_consumos_usd":0,"movimientos":[{"fecha":"02/07","comercio":"Intereses + IVA + IIBB + percepciones","monto":709174,"moneda":"ARS","categoria":"Empresa","rubro":"Costos bancarios","cuota":""}]}]}`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()

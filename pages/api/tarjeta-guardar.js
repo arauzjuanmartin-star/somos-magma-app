@@ -74,6 +74,29 @@ export default async function handler(req, res) {
       await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:L', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filas } })
     }
 
+    // 2b) CUOTAS: cada resumen lista TODAS las cuotas activas de la tarjeta →
+    // reemplazamos las cuotas de esta tarjeta con las de este resumen (siempre al día, sin duplicados).
+    try {
+      const cuotasMovs = movs.filter(m => /^\s*\d+\s*\/\s*\d+\s*$/.test(String(m.cuota||'')))
+      const meta2 = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties(title,sheetId))' })
+      const csheet = meta2.data.sheets.find(s => s.properties.title === 'CUOTAS')
+      if (csheet) {
+        // mes base = mes del vencimiento (cuándo se paga la cuota actual); fallback al mes del resumen
+        let baseM = Number(mes) || (new Date().getMonth()+1), baseA = Number(anio) || (new Date().getFullYear())
+        const vm = String(vencimiento||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+        if (vm) { baseM = Number(vm[2]); baseA = Number(vm[3].length===2 ? '20'+vm[3] : vm[3]) }
+        const curC = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUOTAS!A:K' })).data.values || []
+        const delC = curC.map((r,i)=>({r,i})).filter(({r},i)=> i>0 && norm(r[2])===norm(tarjeta)).map(x=>x.i)
+        if (delC.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: delC.sort((a,b)=>b-a).map(i=>({ deleteDimension: { range: { sheetId: csheet.properties.sheetId, dimension:'ROWS', startIndex:i, endIndex:i+1 } } })) } })
+        const filasC = cuotasMovs.map(m => {
+          const [act, tot] = String(m.cuota).split('/').map(s => parseInt(String(s).trim())||0)
+          const pers = /juan/i.test(m.titular||'') ? 'Juan' : /sof/i.test(m.titular||'') ? 'Sofi' : (String(m.categoria).toLowerCase()==='empresa' ? 'Magma' : (m.titular||''))
+          return [m.comercio||'', pers, tarjeta, m.categoria||'Personal', Number(m.monto)||0, act, tot, baseM, baseA, act<tot?'Activa':'Terminada', '']
+        }).filter(f => f[6] > 0)
+        if (filasC.length) await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'CUOTAS!A:K', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filasC } })
+      }
+    } catch (e) { console.error('cuotas upsert', e.message) }
+
     // 3) Upsert del total en TARJETAS (para Egresos) + link del PDF
     if (totalArs !== undefined && totalArs !== null) {
       const tr = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'TARJETAS!A:N' })

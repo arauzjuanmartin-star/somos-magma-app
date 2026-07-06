@@ -2751,7 +2751,7 @@ function Historico({data}){
 
 // ============================ EGRESOS (lectura) ============================
 function Egresos({data, onRefresh, showToast}){
-  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[]
+  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[], cuot=data.cuotas||[]
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
   const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({})
@@ -2779,6 +2779,14 @@ function Egresos({data, onRefresh, showToast}){
   const prestMes=prest.filter(p=>{ const v=parseD(p['Vencimiento']); return v && v.getMonth()+1===mesIdx && v.getFullYear()===anio })
   const totalPrest=prestMes.reduce((s,p)=>s+parseMonto(p['Monto cuota']),0)
   const totalEgresos=totalGF+totalTarj+totalPrest
+
+  // === CUOTAS de tarjeta ya comprometidas (proyección a futuro) ===
+  const cuotasAll=cuot.filter(c=>String(c['Estado']||'Activa').toLowerCase()!=='terminada' && (parseInt(c['Cuotas total'])||0)>(parseInt(c['Cuota actual'])||0))
+  const absM=(m,a)=>a*12+(m-1)
+  const persDe=c=>/juan/i.test(c['Persona'])?'Juan':/sof/i.test(c['Persona'])?'Sofi':'Magma'
+  const cuotaEn=(c,m,a)=>{ const base=absM(parseInt(c['Mes base'])||7,parseInt(c['Año base'])||2026); const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0; const t=absM(m,a), last=base+(tot-act), first=base-(act-1); if(t<first||t>last)return null; return {num:act+(t-base), monto:parseMonto(c['Monto cuota'])} }
+  const proxCuotas=[]; for(let k=0;k<6;k++){ const t=absM(mesIdx,anio)+k, m=(t%12)+1, a=Math.floor(t/12); const its=cuotasAll.map(c=>({c,e:cuotaEn(c,m,a)})).filter(x=>x.e); const per={Juan:0,Sofi:0,Magma:0}; its.forEach(({c,e})=>{ per[persDe(c)]+=e.monto }); proxCuotas.push({m,a,tot:its.reduce((s,x)=>s+x.e.monto,0),per,n:its.length}) }
+  const totFutCuota=p=>cuotasAll.filter(c=>persDe(c)===p).reduce((s,c)=>s+parseMonto(c['Monto cuota'])*((parseInt(c['Cuotas total'])||0)-(parseInt(c['Cuota actual'])||0)),0)
 
   // Los GASTOS_FIJOS (sueldos, alquiler…) son recurrentes: se marcan PAGADOS por mes guardando la lista
   // de meses en "Meses pagados" (ej "7/2026, 8/2026"). Así cada mes es independiente. Tarjetas/préstamos = fila puntual.
@@ -2838,13 +2846,32 @@ function Egresos({data, onRefresh, showToast}){
         : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
     </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
     <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    {cuotasAll.length>0 && <Sec titulo="Cuotas de tarjeta a futuro (ya comprometidas)">
+      <div style={{padding:'6px 18px 2px'}}>
+        <div style={{display:'flex', gap:6, overflowX:'auto', paddingBottom:8}}>
+          {proxCuotas.map((mm,i)=><div key={i} style={{minWidth:100, flex:'0 0 auto', background:i===0?T.brandSoft:T.surfaceAlt, borderRadius:9, padding:'8px 10px'}}>
+            <div style={{fontSize:10.5, color:T.ink3, fontWeight:600}}>{MESES_LARGO[mm.m-1].slice(0,3)}/{String(mm.a).slice(2)}{i===0?' (este)':''}</div>
+            <div style={{fontSize:14, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(mm.tot)}</div>
+            <div style={{fontSize:9.5, color:T.ink3}}>{mm.n} cuota{mm.n===1?'':'s'}</div>
+          </div>)}
+        </div>
+        <div style={{fontSize:11, color:T.ink3, marginBottom:4}}>Comprometido de acá en más: 👤 Juan {fmt(totFutCuota('Juan'))} · 👩 Sofi {fmt(totFutCuota('Sofi'))} · 🏢 Magma {fmt(totFutCuota('Magma'))}</div>
+      </div>
+      {[...cuotasAll].sort((a,b)=> (parseMonto(b['Monto cuota'])*((parseInt(b['Cuotas total'])||0)-(parseInt(b['Cuota actual'])||0))) - (parseMonto(a['Monto cuota'])*((parseInt(a['Cuotas total'])||0)-(parseInt(a['Cuota actual'])||0))) ).map((c,i)=>{
+        const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0, faltan=Math.max(0,tot-act), lastT=absM(parseInt(c['Mes base'])||7,parseInt(c['Año base'])||2026)+faltan, lm=(lastT%12)+1, la=Math.floor(lastT/12), pIcon=persDe(c)==='Juan'?'👤':persDe(c)==='Sofi'?'👩':'🏢'
+        return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 18px', borderTop:`1px solid ${T.border}`}}>
+          <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{pIcon} {c['Comercio']} <span style={{fontSize:10.5, color:T.ink3, fontWeight:400}}>{c['Tarjeta']}</span></div><div style={{fontSize:11, color:T.ink3}}>cuota {act}/{tot} · faltan {faltan} · hasta {MESES_LARGO[lm-1].slice(0,3)}/{String(la).slice(2)}</div></div>
+          <div style={{fontFamily:MONO, fontSize:13, color:T.ink2}}>{fmt(parseMonto(c['Monto cuota']))}<span style={{fontSize:10, color:T.ink3}}>/mes</span></div>
+        </div>
+      })}
+    </Sec>}
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
-    {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
+    {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} cuotas={cuotasAll.filter(c=>normTxt(c['Tarjeta'])===normTxt(detalle['Tarjeta']))} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
 }
 
 // Ver detalle de una tarjeta: gastos ya guardados, con toggle Personal <-> Empresa (guarda al instante)
-function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
+function DetalleTarjeta({t, items, cuotas=[], onClose, onRefresh, showToast}){
   const [busy,setBusy]=useState('')
   // Todos los consumos son editables (Personal ⇄ Magma). Solo los cargos bancarios quedan como agregado fijo.
   const esCargo=m=>/banc/i.test(`${m['Subcategoria']||''} ${m['Comercio']||''}`)
@@ -2875,6 +2902,13 @@ function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
       {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Cargos bancarios (fijo)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
       {deuda>1000?<div style={{marginTop:8, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{display:'flex', justifyContent:'space-between', fontSize:12.5, color:T.ink2, fontWeight:600}}><span>💳 Deuda del mes pasado (financiada)</span><span style={{fontFamily:MONO}}>{fmt(deuda)}</span></div><div style={{fontSize:10.5, color:T.ink3, marginTop:2}}>No es gasto de este mes — es deuda que se arrastra. Seguimiento en la solapa DEUDA_TARJETAS.</div></div>:null}
       <div style={{marginTop:10, paddingTop:10, borderTop:`2px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, color:T.ink}}><span>Total del resumen (a pagar)</span><span style={{fontFamily:MONO}}>{fmt(totalCard)}</span></div>
+      {cuotas.length>0 && <div style={{marginTop:12, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
+        <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:6}}>Cuotas en curso de esta tarjeta ({cuotas.length})</div>
+        {cuotas.map((c,i)=>{ const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0, faltan=Math.max(0,tot-act), pIcon=/juan/i.test(c['Persona'])?'👤':/sof/i.test(c['Persona'])?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0', color:T.ink2}}>
+          <span>{pIcon} {c['Comercio']} <span style={{color:T.ink3, fontSize:10.5}}>cuota {act}/{tot} · faltan {faltan}</span></span>
+          <span style={{fontFamily:MONO}}>{fmt(parseMonto(c['Monto cuota']))}/mes</span>
+        </div> })}
+      </div>}
     </div>
   </div>
 }
@@ -2930,7 +2964,7 @@ function SubirResumen({onClose, onDone, showToast}){
   const totalPagarUsd=Number(data?.total_a_pagar_usd ?? 0)
   // Aplanar TODOS los movimientos (empresa + personal). Fallback al formato viejo (personales) = Personal.
   const movsAll=[]
-  titulares.forEach((t,ti)=>{ const arr=Array.isArray(t.movimientos)?t.movimientos:(t.personales||[]).map(p=>({...p,categoria:'Personal'})); arr.forEach((it,j)=>movsAll.push({ ti, j, key:ti+':'+j, titular:t.nombre||it.titular||'', fecha:it.fecha||'', comercio:it.comercio||'', monto:Number(it.monto)||0, moneda:String(it.moneda||'ARS').toUpperCase(), rubro:it.rubro||it.subcategoria||'', catAI: String(it.categoria||'Personal').toLowerCase()==='empresa'?'Empresa':'Personal' })) })
+  titulares.forEach((t,ti)=>{ const arr=Array.isArray(t.movimientos)?t.movimientos:(t.personales||[]).map(p=>({...p,categoria:'Personal'})); arr.forEach((it,j)=>movsAll.push({ ti, j, key:ti+':'+j, titular:t.nombre||it.titular||'', fecha:it.fecha||'', comercio:it.comercio||'', monto:Number(it.monto)||0, moneda:String(it.moneda||'ARS').toUpperCase(), rubro:it.rubro||it.subcategoria||'', cuota:it.cuota||'', catAI: String(it.categoria||'Personal').toLowerCase()==='empresa'?'Empresa':'Personal' })) })
   const catOf=m=>override[m.key]||m.catAI
   const isEmp=m=>catOf(m)==='Empresa'
   const sumIf=pred=>movsAll.filter(pred).reduce((s,m)=>s+m.monto,0)
@@ -2954,7 +2988,7 @@ function SubirResumen({onClose, onDone, showToast}){
     setSaving(true)
     try{
       // cada movimiento con su marca final → se guarda ítem por ítem (después editable en el detalle de la tarjeta)
-      const movs=movsAll.map(m=>({ fecha:m.fecha, titular:m.titular, comercio:m.comercio, monto:m.monto, moneda:m.moneda, categoria:catOf(m), subcategoria: catOf(m)==='Empresa'?(m.rubro||'Empresa'):'Personal' }))
+      const movs=movsAll.map(m=>({ fecha:m.fecha, titular:m.titular, comercio:m.comercio, monto:m.monto, moneda:m.moneda, categoria:catOf(m), subcategoria: catOf(m)==='Empresa'?(m.rubro||'Empresa'):'Personal', cuota:m.cuota||'' }))
       const nota=lecturaOk?`Magma ${Math.round(empresa).toLocaleString('es-AR')}${empresaUsd?` (+US$${empresaUsd.toFixed(0)})`:''} · Juan ${Math.round(juanPers).toLocaleString('es-AR')} · Sofi ${Math.round(sofiPers).toLocaleString('es-AR')}`:'Total cargado (clasificación pendiente)'
       const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,movimientosCompletos:true,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota,pdfBase64:b64,fileName:file?.name})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
