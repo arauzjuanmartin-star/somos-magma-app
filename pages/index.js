@@ -2868,8 +2868,8 @@ function DetalleTarjeta({t, items, onClose, onRefresh, showToast}){
       {Object.entries(porPersona).map(([p,arr])=><div key={p} style={{marginBottom:14}}>
         <div style={{fontSize:12, fontWeight:700, color:T.ink2, marginBottom:2}}>{p} · {arr.length}</div>
         {arr.map((m,i)=>{ const emp=String(m['Categoria']||'').toLowerCase()==='empresa'; return <div key={i} onClick={()=>flip(m)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 4px', cursor:'pointer', borderTop:i?`1px solid ${T.border}`:'none', opacity:busy===m.__row?0.4:1}}>
-          <span style={{fontSize:12.5, color:emp?T.pos:T.ink2, fontWeight:emp?600:400}}>{emp?'🏢':'👤'} {m['Comercio']} <span style={{color:T.ink3, fontSize:11}}>{m['Fecha']}</span></span>
-          <span style={{fontFamily:MONO, fontSize:12.5, color:emp?T.pos:T.ink2}}>{fmt(parseMonto(m['Monto']))}</span>
+          <span style={{fontSize:12.5, color:emp?T.pos:T.ink2, fontWeight:emp?600:400}}>{emp?'🏢':'👤'} {m['Comercio']} <span style={{color:T.ink3, fontSize:11}}>{m['Fecha']}{String(m['Moneda']||'').toUpperCase()==='USD'?' · USD':''}</span></span>
+          <span style={{fontFamily:MONO, fontSize:12.5, color:emp?T.pos:T.ink2}}>{String(m['Moneda']||'').toUpperCase()==='USD'?`US$${fmt(parseMonto(m['Monto']))}`:fmt(parseMonto(m['Monto']))}</span>
         </div> })}
       </div>)}
       {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Cargos bancarios (fijo)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
