@@ -15,6 +15,7 @@ export const ALLOWED_MAILS = [
 // Invitados en modo LECTURA: pueden entrar y ver todo, pero no modificar nada. Ej: coach.
 export const READONLY_MAILS = [
   'info@marianatardito.com',
+  'marianatardito@gmail.com',
 ]
 
 export const authOptions = {
