@@ -748,6 +748,9 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   async function guardar(){
     const cambios={}
     campos.forEach(([k])=>{ if((form[k]||'')!==(p[k]||'')) cambios[k]=form[k] })
+    // Si cambiás la Fecha Evento desde acá, es un día suelto → normalizar el tipo de fecha
+    // para que no quede un "rango" viejo con el final desactualizado (rompía el Calendar en silencio).
+    if(cambios['Fecha Evento']!==undefined){ cambios['Tipo Fechas']='dia'; cambios['Fechas Adicionales']='' }
     if(Object.keys(cambios).length===0){ showToast('No hay cambios','err'); return }
     setSaving(true)
     try{

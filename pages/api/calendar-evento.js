@@ -41,7 +41,10 @@ function fechasEvento(fechaPrincipal, tipoFechas, fechasAdicionales) {
   const ad = String(fechasAdicionales||'').trim()
   if (tipo === 'rango' && ad) {
     const f1 = parseFecha(ad)
-    return f1 ? { type: 'rango', desde: f0, hasta: f1 } : { type: 'dia', dia: f0 }
+    // Solo es rango válido si el fin es >= inicio. Si no (fin antes del inicio, o sin fin),
+    // lo tratamos como un día suelto — así un rango viejo desactualizado no rompe el evento.
+    if (f1 && f1 >= f0) return { type: 'rango', desde: f0, hasta: f1 }
+    return { type: 'dia', dia: f0 }
   }
   if (tipo === 'multi' && ad) {
     return { type: 'multi', fechas: [f0, ...ad.split('|').filter(Boolean).map(parseFecha).filter(Boolean)] }
