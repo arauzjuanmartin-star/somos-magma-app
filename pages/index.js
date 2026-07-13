@@ -2762,6 +2762,7 @@ function Egresos({data, onRefresh, showToast}){
   const [subir,setSubir]=useState(false)
   const [agregar,setAgregar]=useState(false)
   const [detalle,setDetalle]=useState(null)
+  const [editGasto,setEditGasto]=useState(null)
   const itemsDe=t=>movTarj.filter(m=>normTxt(m['Tarjeta'])===normTxt(t['Tarjeta'])&&String(m['Mes']).trim()===String(t['Mes']).trim()&&String(m['Año']).includes(String(t['Año'])))
   const splitDe=t=>{ const its=itemsDe(t); let emp=0,juan=0,sofi=0,eusd=0; its.forEach(m=>{ const mo=parseMonto(m['Monto']); const cat=String(m['Categoria']||'').toLowerCase(); if(String(m['Moneda']||'').toUpperCase()==='USD'){ if(cat==='empresa')eusd+=mo; return } if(cat==='empresa')emp+=mo; else if(/juan/i.test(m['Descripcion']))juan+=mo; else if(/sof/i.test(m['Descripcion']))sofi+=mo }); return {emp,juan,sofi,eusd,n:its.length} }
   const esPagado=v=>{ const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
@@ -2848,6 +2849,7 @@ function Egresos({data, onRefresh, showToast}){
         {venc && <span style={{fontSize:10.5, color:T.ink3, marginLeft:8}}>· {venc}</span>}
         {extra}
       </span>
+      {hoja==='GASTOS_FIJOS' && <button onClick={()=>setEditGasto(it)} title="Editar este gasto" style={{fontSize:13, padding:'3px 7px', borderRadius:6, border:`1px solid ${T.border}`, background:T.surface, color:T.ink3, cursor:'pointer'}}>✎</button>}
       {!pagado && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:11.5}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:'none', cursor:'pointer', background:pagado?T.posSoft:T.warnSoft, color:pagado?T.pos:T.warn, fontWeight:600}}>{pagado?'Pagado ✓':'Pendiente'}</button>
       {editing
@@ -2929,6 +2931,7 @@ function Egresos({data, onRefresh, showToast}){
     </Sec>}
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={cuentaOpts} cuentas={cuentas} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {editGasto && <EditarGasto g={editGasto} onClose={()=>setEditGasto(null)} onDone={()=>{ setEditGasto(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} cuotas={cuotasAll.filter(c=>normTxt(c['Tarjeta'])===normTxt(detalle['Tarjeta']))} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
 }
@@ -2939,7 +2942,9 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
   const [saving,setSaving]=useState(false)
   const monedaCuenta=n=>{ const c=(cuentas||[]).find(x=>String(x['Nombre']||'').trim().toLowerCase()===String(n||'').trim().toLowerCase()); return /d[oó]lar|usd/i.test(String(c?.['Tipo']||'')+String(c?.['Nombre']||''))?'USD':'ARS' }
   // --- Gasto ---
-  const [g,setG]=useState({recurrencia:'unico', categoria:'Impuestos', concepto:'', monto:'', moneda:'ARS', diaPago:'', notas:''})
+  const pad2=n=>String(n).padStart(2,'0')
+  const [g,setG]=useState(()=>({recurrencia:'unico', categoria:'Impuestos', concepto:'', monto:'', moneda:'ARS', diaPago:'', fecha:`${anio}-${pad2(mesIdx)}-${pad2(Math.min(new Date().getDate(),28))}`, pagado:false, cuentaPago:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', notas:''}))
+  const gFy=Number((g.fecha||'').split('-')[0])||anio, gFm=Number((g.fecha||'').split('-')[1])||mesIdx
   // --- Movimiento ---
   const [mv,setMv]=useState({tipo:'Compra dólares', cuentaOrigen:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', cuentaDestino:cuentaOpts.find(c=>/d[oó]lar/i.test(c))||'', montoOrigen:'', montoDestino:'', descripcion:'', notas:''})
   const moOrig=monedaCuenta(mv.cuentaOrigen), moDest=monedaCuenta(mv.cuentaDestino), esConv=moOrig!==moDest
@@ -2952,8 +2957,12 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
     catch(e){ showToast('Error de conexión','err'); setSaving(false); return false } }
 
   async function guardarGasto(){ if(!g.concepto.trim()){showToast('Poné el concepto','err');return} if(parseMonto(g.monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
-    const ok=await post('/api/gasto-nuevo',{categoria:g.categoria, concepto:g.concepto, monto:parseMonto(g.monto), moneda:g.moneda, recurrencia:g.recurrencia, diaPago:g.diaPago, mes:mesIdx, anio, notas:g.notas})
-    if(ok){ showToast(g.recurrencia==='unico'?'Gasto agregado a este mes ✓':'Gasto fijo agregado ✓'); onDone() } }
+    if(g.pagado && !g.cuentaPago){showToast('Elegí de qué cuenta se pagó','err');return}
+    // Puntual: la fecha del datepicker define el mes/año/día. Fijo: mes/año del que estás viendo + día de pago.
+    let mesEnv=mesIdx, anioEnv=anio, diaEnv=g.diaPago, fechaPagoEnv=''
+    if(g.recurrencia==='unico'){ const [Y,M,D]=(g.fecha||'').split('-').map(Number); if(Y&&M&&D){ anioEnv=Y; mesEnv=M; diaEnv=D; fechaPagoEnv=`${D}/${M}/${Y}` } }
+    const ok=await post('/api/gasto-nuevo',{categoria:g.categoria, concepto:g.concepto, monto:parseMonto(g.monto), moneda:g.moneda, recurrencia:g.recurrencia, diaPago:diaEnv, mes:mesEnv, anio:anioEnv, notas:g.notas, pagado:g.pagado, cuentaPago:g.pagado?g.cuentaPago:'', fechaPago:g.pagado?(fechaPagoEnv||undefined):''})
+    if(ok){ showToast(g.pagado?'Gasto agregado y pagado ✓':(g.recurrencia==='unico'?'Gasto agregado ✓':'Gasto fijo agregado ✓')); onDone() } }
   async function guardarMov(){ if(parseMonto(mv.montoOrigen)<=0){showToast('Poné el monto','err');return} if(esConv&&mv.cuentaDestino&&parseMonto(mv.montoDestino)<=0){showToast('Poné cuántos '+moDest+' entran','err');return}
     const ok=await post('/api/movimiento-nuevo',{tipo:mv.tipo, descripcion:mv.descripcion, cuentaOrigen:mv.cuentaOrigen, monedaOrigen:moOrig, montoOrigen:parseMonto(mv.montoOrigen), cuentaDestino:mv.cuentaDestino, monedaDestino:moDest, montoDestino:esConv?parseMonto(mv.montoDestino):parseMonto(mv.montoOrigen), cotizacion:coti?Math.round(coti):'', notas:mv.notas})
     if(ok){ showToast('Movimiento registrado ✓'); onDone() } }
@@ -2981,21 +2990,30 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
 
         {tab==='gasto' && <>
           <div style={{display:'flex', gap:8, marginBottom:14}}>
-            <button onClick={()=>setG(s=>({...s,recurrencia:'unico',categoria:s.categoria==='Otros'?'Impuestos':s.categoria}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='unico'?T.brand:T.border}`, background:g.recurrencia==='unico'?T.brandSoft:T.surface, color:g.recurrencia==='unico'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Puntual / impuesto<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>solo este mes</div></button>
+            <button onClick={()=>setG(s=>({...s,recurrencia:'unico',categoria:s.categoria==='Otros'?'Impuestos':s.categoria}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='unico'?T.brand:T.border}`, background:g.recurrencia==='unico'?T.brandSoft:T.surface, color:g.recurrencia==='unico'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Puntual / impuesto<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>un solo pago</div></button>
             <button onClick={()=>setG(s=>({...s,recurrencia:'fijo'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='fijo'?T.brand:T.border}`, background:g.recurrencia==='fijo'?T.brandSoft:T.surface, color:g.recurrencia==='fijo'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Fijo mensual<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>todos los meses</div></button>
           </div>
-          {g.recurrencia==='unico' && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[mesIdx-1]} {anio}</b>. Lo marcás pagado y se descuenta de la cuenta que elijas, igual que los demás.</div>}
+          {g.recurrencia==='unico' && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[gFm-1]} {gFy}</b> (según la fecha que elijas). Lo marcás pagado y se descuenta de la cuenta.</div>}
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
             <Fld label="Categoría"><input list="ae-cats" value={g.categoria} onChange={e=>setG(s=>({...s,categoria:e.target.value}))} style={inpV2}/><datalist id="ae-cats"><option value="Impuestos"/><option value="Operativos"/><option value="Seguros"/><option value="Software"/><option value="Sueldos"/><option value="Otros"/></datalist></Fld>
-            <Fld label="Día de pago"><input value={g.diaPago} onChange={e=>setG(s=>({...s,diaPago:e.target.value}))} placeholder="ej 23" style={inpV2}/></Fld>
+            {g.recurrencia==='unico'
+              ? <Fld label="Fecha"><input type="date" value={g.fecha} onChange={e=>setG(s=>({...s,fecha:e.target.value}))} style={inpV2}/></Fld>
+              : <Fld label="Día de pago"><input value={g.diaPago} onChange={e=>setG(s=>({...s,diaPago:e.target.value}))} placeholder="ej 23" style={inpV2}/></Fld>}
           </div>
           <div style={{marginBottom:12}}><label style={lblV2}>Concepto *</label><input value={g.concepto} onChange={e=>setG(s=>({...s,concepto:e.target.value}))} placeholder={g.recurrencia==='unico'?'ej: IVA julio 2026':'ej: Seguro oficina'} style={inpV2} autoFocus/></div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
             <Fld label="Monto *"><input value={g.monto} onChange={e=>setG(s=>({...s,monto:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>
             <Fld label="Moneda"><select value={g.moneda} onChange={e=>setG(s=>({...s,moneda:e.target.value}))} style={inpV2}><option>ARS</option><option>USD</option></select></Fld>
           </div>
+          <div style={{marginBottom:12, background:g.pagado?T.posSoft:T.surfaceAlt, borderRadius:8, padding:'10px 12px'}}>
+            <label style={{display:'flex', gap:8, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', fontWeight:600}}>
+              <input type="checkbox" checked={g.pagado} onChange={e=>setG(s=>({...s,pagado:e.target.checked}))}/>
+              ✅ Ya está pagado (descontar de una cuenta ahora)
+            </label>
+            {g.pagado && <div style={{marginTop:10}}><label style={lblV2}>Pagado desde</label><select value={g.cuentaPago} onChange={e=>setG(s=>({...s,cuentaPago:e.target.value}))} style={inpV2}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
+          </div>
           <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={g.notas} onChange={e=>setG(s=>({...s,notas:e.target.value}))} style={inpV2}/></div>
-          <button disabled={saving} onClick={guardarGasto} style={btnAgregar(saving)}>{saving?'Guardando…':`Agregar ${g.recurrencia==='unico'?'gasto puntual':'gasto fijo'}`}</button>
+          <button disabled={saving} onClick={guardarGasto} style={btnAgregar(saving)}>{saving?'Guardando…':`${g.pagado?'Agregar y marcar pagado':`Agregar ${g.recurrencia==='unico'?'gasto puntual':'gasto fijo'}`}`}</button>
         </>}
 
         {tab==='movimiento' && <>
@@ -3042,6 +3060,39 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
   </div>
 }
 const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, border:'none', background:disabled?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:700, cursor:disabled?'default':'pointer'})
+
+// Editar un gasto ya cargado (concepto, categoría, monto, día). Si ya está pagado y cambia el monto, ajusta la cuenta.
+function EditarGasto({g, onClose, onDone, showToast}){
+  const [f,setF]=useState({Concepto:g['Concepto']||'', Categoria:g['Categoria']||'', Monto:parseMonto(g['Monto'])||'', 'Dia pago':g['Dia pago']||''})
+  const [saving,setSaving]=useState(false)
+  const pagado=/^s[íi]$|^true$/i.test(String(g['Pagado']||''))||String(g['Meses pagados']||'').trim()!==''
+  async function guardar(){
+    if(!String(f.Concepto).trim()){showToast('Poné el concepto','err');return}
+    if(parseMonto(f.Monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
+    setSaving(true)
+    try{ const r=await fetch('/api/gasto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:g.__row, cambios:{Concepto:f.Concepto, Categoria:f.Categoria, Monto:parseMonto(f.Monto), 'Dia pago':f['Dia pago']}})})
+      const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
+      showToast('Gasto actualizado ✓'+(j.ajusteCuenta?` · cuenta ajustada ${fmt(Math.abs(j.ajusteCuenta))}`:'')); onDone()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) } }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:210, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 20px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:460, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar gasto</div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px'}}>
+        <div style={{marginBottom:12}}><label style={lblV2}>Concepto</label><input value={f.Concepto} onChange={e=>setF(s=>({...s,Concepto:e.target.value}))} style={inpV2} autoFocus/></div>
+        <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+          <div style={{flex:'1 1 140px'}}><label style={lblV2}>Categoría</label><input value={f.Categoria} onChange={e=>setF(s=>({...s,Categoria:e.target.value}))} style={inpV2}/></div>
+          <div style={{flex:'0 1 100px'}}><label style={lblV2}>Día de pago</label><input value={f['Dia pago']} onChange={e=>setF(s=>({...s,['Dia pago']:e.target.value}))} placeholder="ej 23" style={inpV2}/></div>
+        </div>
+        <div style={{marginBottom:14}}><label style={lblV2}>Monto{String(g['Moneda']||'').toUpperCase()==='USD'?' (USD)':''}</label><input value={f.Monto} onChange={e=>setF(s=>({...s,Monto:e.target.value}))} inputMode="decimal" style={{...inpV2, fontFamily:MONO}}/></div>
+        {pagado && parseMonto(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:11.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMonto(f.Monto))}).</div>}
+        <button disabled={saving} onClick={guardar} style={btnAgregar(saving)}>{saving?'Guardando…':'Guardar cambios'}</button>
+      </div>
+    </div>
+  </div>
+}
 
 // Ver detalle de una tarjeta: gastos ya guardados, con toggle Personal <-> Empresa (guarda al instante)
 function DetalleTarjeta({t, items, cuotas=[], onClose, onRefresh, showToast}){
