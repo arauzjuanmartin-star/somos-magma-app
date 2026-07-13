@@ -5,6 +5,7 @@ import { getToken } from 'next-auth/jwt'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth',  // todas las rutas de /api/auth/* (signin, callback, etc)
+  '/api/whatsapp-webhook',  // Meta llama a este webhook sin login (verifica con hub.verify_token + firma)
   '/_next',
   '/favicon.ico',
   '/web.html',  // preview público de la web nueva (para Sofi/equipo, sin login)
