@@ -3332,6 +3332,7 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
   const [para,setPara]=useState(datos['Mail']||'')
   const [cc,setCc]=useState([]), [ccInput,setCcInput]=useState('')
   const [tipo,setTipo]=useState('factura')
+  const [saving,setSaving]=useState(false)
   const [facturarA,setFacturarA]=useState(FACTURAR_OPC.find(e=>/somos magma/i.test(e))||FACTURAR_OPC[0])
   const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
   const pend=persona.trabajos.filter(t=>!t.pagado)
@@ -3346,13 +3347,21 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
     ? `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre}:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nEste pago es en EFECTIVO — no hace falta factura.\n\n¡Gracias!`
     : `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${mesNombre} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\n${lineasFact.join('\n')}\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   const addCc=(v)=>{ const x=String(v||'').trim(); if(x&&!cc.includes(x)) setCc(c=>[...c,x]); setCcInput('') }
+  const asuntoMail=`Facturación ${mesNombre} — Somos Magma`
+  // Envía DE VERDAD desde admin@somosmagma.com (server-side), sin abrir Outlook.
+  async function enviar(){
+    if(!para.trim()){ showToast('Falta el mail del freelancer','err'); return }
+    setSaving(true)
+    try{ const r=await fetch('/api/pago-staff-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:para.trim(), cc, asunto:asuntoMail, cuerpo})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
+      showToast('Mail enviado ✓ (desde admin@somosmagma.com)'); if(onSent) onSent(); onClose()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) } }
+  // Fallback: abrir en el cliente de mail propio (por si hiciera falta).
   function abrir(){
     if(!para.trim()){ showToast('Falta el mail del freelancer','err'); return }
-    const asunto=`Facturación ${mesNombre} — Somos Magma`
     const ccStr=cc.length?`&cc=${encodeURIComponent(cc.join(','))}`:''
-    window.location.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asunto)}${ccStr}&body=${encodeURIComponent(cuerpo)}`
-    if(onSent) onSent()
-    onClose()
+    window.location.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asuntoMail)}${ccStr}&body=${encodeURIComponent(cuerpo)}`
+    if(onSent) onSent(); onClose()
   }
   return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,25,23,0.35)',zIndex:950,display:'flex',justifyContent:'center',overflowY:'auto',padding:'40px 20px'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:560,background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 16px 50px rgba(0,0,0,0.18)',height:'fit-content'}}>
@@ -3385,9 +3394,11 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
         <label style={lblV2}>Vista previa</label>
         <textarea readOnly value={cuerpo} rows={8} style={{...inpV2,resize:'vertical',fontSize:12,fontFamily:MONO,color:T.ink2}}/>
       </div>
-      <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
-        <button onClick={()=>{navigator.clipboard?.writeText(cuerpo);showToast('Mensaje copiado')}} style={{padding:'9px 16px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Copiar</button>
-        <button onClick={abrir} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:600,cursor:'pointer'}}>Abrir mail</button>
+      <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
+        <span style={{fontSize:11,color:T.ink3,marginRight:'auto'}}>Sale de <b>admin@somosmagma.com</b></span>
+        <button onClick={()=>{navigator.clipboard?.writeText(cuerpo);showToast('Mensaje copiado')}} style={{padding:'9px 14px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:12.5,fontWeight:500,cursor:'pointer'}}>Copiar</button>
+        <button onClick={abrir} style={{padding:'9px 14px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:12.5,fontWeight:500,cursor:'pointer'}}>Abrir en Outlook</button>
+        <button onClick={enviar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Enviando…':'✉ Enviar mail'}</button>
       </div>
     </div>
   </div>
