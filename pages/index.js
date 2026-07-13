@@ -2137,8 +2137,13 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   const [staffModalPS,setStaffModalPS]=useState(null)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
+  const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false)
+  async function cargarRespuestas(){ setLoadingResp(true)
+    try{ const r=await fetch('/api/pagos-staff-respuestas'); const j=await r.json(); setRespuestas(j&&j.ok?(j.respuestas||[]):[]) }
+    catch(e){ setRespuestas([]) } setLoadingResp(false) }
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   useEffect(()=>{ setSelPay({}) },[mesIdx,anio])  // cambiar de mes limpia la selección
+  useEffect(()=>{ cargarRespuestas() /* eslint-disable-next-line */ },[])  // respuestas de freelancers al abrir el módulo
 
   // proyectos del mes/año por Fecha Evento
   const proyMes=proyectos.filter(p=>esDelMes(p['Fecha Evento'], mesIdx, anio))
@@ -2282,6 +2287,23 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     <div style={{display:'flex', gap:14, marginBottom:20}}>
       <Hero label="Pendiente de pago" value={fmt(totalPend)} accent={totalPend>0?T.brand:T.pos} sub="este mes"/>
       <Hero label="Ya pagado" value={fmt(totalPag)} sub="este mes" subStrong="" />
+    </div>
+    {/* Respuestas de freelancers a los mails de pago (lee la casilla admin@somosmagma.com) */}
+    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
+      <div style={{padding:'11px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:(respuestas&&respuestas.length)?`1px solid ${T.border}`:'none'}}>
+        <span style={{fontSize:13, fontWeight:700, color:T.ink}}>📨 Respuestas de freelancers{respuestas&&respuestas.length?` · ${respuestas.filter(m=>!m.leido).length} sin leer`:''}</span>
+        <button onClick={cargarRespuestas} disabled={loadingResp} style={{fontSize:11.5, padding:'4px 10px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink3, cursor:loadingResp?'default':'pointer'}}>{loadingResp?'Buscando…':'↻ Actualizar'}</button>
+      </div>
+      {respuestas && respuestas.length===0 && !loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Sin respuestas todavía. Cuando un freelancer conteste el mail de pago, aparece acá.</div>}
+      {respuestas===null && loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Buscando respuestas en admin@somosmagma.com…</div>}
+      {(respuestas||[]).map((m,i)=><a key={i} href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:('+m.asunto+')')}`} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', gap:10, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none', textDecoration:'none'}}>
+        <span style={{width:7, height:7, borderRadius:7, background:m.leido?'transparent':T.brand, flexShrink:0}}/>
+        <span style={{flex:1, minWidth:0}}>
+          <span style={{fontSize:13, color:T.ink, fontWeight:m.leido?500:700}}>{m.nombre}{m.adjunto && <span title="Adjuntó factura" style={{marginLeft:7}}>📎</span>}</span>
+          <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{m.asunto}</div>
+        </span>
+        <span style={{fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>{m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):''}</span>
+      </a>)}
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
