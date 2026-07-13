@@ -20,6 +20,18 @@ export default async function handler(req, res) {
     const H = name => headers.indexOf(name)
     const num = v => parseFloat(String(v||'0').replace(/[^\d.-]/g,''))||0
 
+    // Pago de la parte en USD de una tarjeta, SEPARADO del pago en pesos.
+    // (Los dólares a veces se pagan aparte.) Solo toca "Monto pagado USD"; no toca el flag Pagado (ARS) ni CUENTAS.
+    if (hoja === 'TARJETAS' && tipoPago === 'usd') {
+      const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${hoja}!A${fila}:Z${fila}` })
+      const row = rRow.data.values?.[0] || []
+      const montoUsd = num(row[H('Monto USD')])
+      if (H('Monto pagado USD') === -1) return res.status(400).json({ error: 'Falta columna Monto pagado USD' })
+      await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `${hoja}!${colLetra(H('Monto pagado USD'))}${fila}`, valueInputOption: 'USER_ENTERED', requestBody: { values: [[pagado ? montoUsd : 0]] } })
+      try { await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'egreso-toggle-usd', hoja, String(fila), `usd pagado=${pagado} montoUsd=${montoUsd}`]] } }) } catch(e) {}
+      return res.json({ ok: true, usd: true, montoUsd, pagado })
+    }
+
     // Si es pago parcial, leer fila actual para acumular
     let acumDescuento = 0  // cuanto restar de CUENTAS efectivamente (negativo si se desmarca)
     let nuevoPagadoFlag = pagado

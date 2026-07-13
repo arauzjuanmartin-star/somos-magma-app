@@ -2751,12 +2751,13 @@ function Historico({data}){
 
 // ============================ EGRESOS (lectura) ============================
 function Egresos({data, onRefresh, showToast}){
-  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[], cuot=data.cuotas||[]
+  const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[], cuot=data.cuotas||[], movim=data.movimientos||[]
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
-  const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({})
+  const [override,setOverride]=useState({}), [cuentaSel,setCuentaSel]=useState({}), [usdOv,setUsdOv]=useState({})
   const [editM,setEditM]=useState({})  // key -> true (editando monto)
   const [subir,setSubir]=useState(false)
+  const [agregar,setAgregar]=useState(false)
   const [detalle,setDetalle]=useState(null)
   const itemsDe=t=>movTarj.filter(m=>normTxt(m['Tarjeta'])===normTxt(t['Tarjeta'])&&String(m['Mes']).trim()===String(t['Mes']).trim()&&String(m['Año']).includes(String(t['Año'])))
   const splitDe=t=>{ const its=itemsDe(t); let emp=0,juan=0,sofi=0,eusd=0; its.forEach(m=>{ const mo=parseMonto(m['Monto']); const cat=String(m['Categoria']||'').toLowerCase(); if(String(m['Moneda']||'').toUpperCase()==='USD'){ if(cat==='empresa')eusd+=mo; return } if(cat==='empresa')emp+=mo; else if(/juan/i.test(m['Descripcion']))juan+=mo; else if(/sof/i.test(m['Descripcion']))sofi+=mo }); return {emp,juan,sofi,eusd,n:its.length} }
@@ -2769,16 +2770,44 @@ function Egresos({data, onRefresh, showToast}){
     }catch(e){ showToast('Error de conexión','err') } }
   const cuentaOpts=[...new Set(cuentas.filter(c=>{const a=String(c['Activa']||'').toUpperCase();return a==='SÍ'||a==='SI'||a==='TRUE'||c['Activa']===true}).map(c=>c['Nombre']).filter(Boolean))]
 
-  const gfActivos=gf.filter(g=>esPagado(g['Activo'])||String(g['Activo']||'').trim()==='')
+  // Un gasto "único" (impuesto/gasto puntual) solo aparece en su mes (Mes carga/Año carga). Los recurrentes (mensual), siempre.
+  const gfActivos=gf.filter(g=>{
+    const act=esPagado(g['Activo'])||String(g['Activo']||'').trim()===''
+    if(!act) return false
+    if(/[uú]nico/i.test(String(g['Frecuencia']||''))) return parseInt(g['Mes carga'])===mesIdx && String(g['Año carga']).includes(String(anio))
+    return true
+  })
   const porCat={}; gfActivos.forEach(g=>{ const c=g['Categoria']||'Otros'; (porCat[c]=porCat[c]||[]).push(g) })
   const totalGF=gfActivos.reduce((s,g)=>s+parseMonto(g['Monto']),0)
   // Las tarjetas se ubican por VENCIMIENTO (cuándo se pagan), no por el mes del resumen.
   // Ej: resumen de mayo con vto en junio → aparece en junio. Fallback al mes del resumen si no hay vencimiento.
   const tarjMes=tarj.filter(t=>{ const v=parseD(t['Vencimiento']); if(v) return v.getMonth()+1===mesIdx && v.getFullYear()===anio; return parseInt(t['Mes'])===mesIdx && String(t['Año']).includes(String(anio)) })
   const totalTarj=tarjMes.reduce((s,t)=>s+parseMonto(t['Monto']),0)
+  // Dólares por tarjeta (se pagan aparte del monto en pesos)
+  const usdDe=t=>parseMonto(t['Monto USD'])
+  const usdPagado=t=>{ const k=t.__row; if(k in usdOv) return usdOv[k]; const pg=parseMonto(t['Monto pagado USD']), tot=usdDe(t); return tot>0 && pg>=tot-0.01 }
+  const totalTarjUsd=tarjMes.reduce((s,t)=>s+usdDe(t),0)
+  const totalTarjUsdPend=tarjMes.filter(t=>!usdPagado(t)).reduce((s,t)=>s+usdDe(t),0)
+  // Préstamos: los del banco (cuotas del mes) vs deudas entre socios (Magma↔Juan/Sofi, sin cronograma)
+  const esSocio=p=>/socio/i.test(String(p['Tipo']||''))
   const prestMes=prest.filter(p=>{ const v=parseD(p['Vencimiento']); return v && v.getMonth()+1===mesIdx && v.getFullYear()===anio })
-  const totalPrest=prestMes.reduce((s,p)=>s+parseMonto(p['Monto cuota']),0)
+  const prestBancoMes=prestMes.filter(p=>!esSocio(p))
+  const prestSocio=prest.filter(p=>esSocio(p) && !esPagado(p['Saldado']))
+  const totalPrest=prestBancoMes.reduce((s,p)=>s+parseMonto(p['Monto cuota']),0)
   const totalEgresos=totalGF+totalTarj+totalPrest
+  // Movimientos del mes (plata que cambió de lugar, no gastos)
+  const movMes=movim.filter(m=>{ const d=parseD(m['Fecha']); return d && d.getMonth()+1===mesIdx && d.getFullYear()===anio })
+  async function toggleUsd(t){ const k=t.__row, pagado=!usdPagado(t)
+    if(pagado && !window.confirm(`Marcar los US$ ${fmt(usdDe(t))} de ${t['Tarjeta']} como pagados aparte (no toca el pago en pesos). ¿Confirmás?`)) return
+    setUsdOv(o=>({...o,[k]:pagado}))
+    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja:'TARJETAS', fila:t.__row, pagado, tipoPago:'usd'})})
+      const j=await r.json(); if(j&&j.error){showToast(j.error,'err'); setUsdOv(o=>{const n={...o};delete n[k];return n}); return}
+      showToast(pagado?'US$ pagado ✓':'US$ desmarcado'); if(onRefresh){ await onRefresh(); setUsdOv(o=>{const n={...o};delete n[k];return n}) }
+    }catch(e){ showToast('Error de conexión','err'); setUsdOv(o=>{const n={...o};delete n[k];return n}) } }
+  async function saldarSocio(p){ if(!window.confirm(`Marcar como SALDADA la deuda "${p['Prestamo']||`${p['Deudor']} → ${p['Acreedor']}`}" (${fmt(parseMonto(p['Monto cuota']))}). ¿Confirmás?`)) return
+    try{ const r=await fetch('/api/prestamo-socio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({saldarFila:p.__row})})
+      const j=await r.json(); if(j&&j.error){showToast(j.error,'err');return} showToast('Deuda saldada ✓'); if(onRefresh) await onRefresh()
+    }catch(e){ showToast('Error de conexión','err') } }
 
   // === CUOTAS de tarjeta ya comprometidas (proyección a futuro) ===
   const cuotasAll=cuot.filter(c=>String(c['Estado']||'Activa').toLowerCase()!=='terminada' && (parseInt(c['Cuotas total'])||0)>(parseInt(c['Cuota actual'])||0))
@@ -2828,24 +2857,45 @@ function Egresos({data, onRefresh, showToast}){
   return <>
     <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>
     <div style={{display:'flex', gap:14, marginBottom:18}}>
-      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGF)} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}`}/>
+      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGF)} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:16}}>
       <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
       <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:120, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
       <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a) }} style={navBtn}>→</button>
+      <div style={{flex:1}}/>
+      <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
     </div>
     {Object.entries(porCat).map(([cat,items])=>(
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">{tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const sp=splitDe(t); return <div key={i}>
+    <Sec titulo="Tarjetas">
+      {totalTarjUsd>0 && <div style={{padding:'0 18px 8px', display:'flex', gap:8, alignItems:'center', fontSize:12}}>
+        <span style={{color:T.ink2}}>💵 Dólares a pagar este mes: <b style={{fontFamily:MONO}}>US$ {fmt(totalTarjUsd)}</b></span>
+        {totalTarjUsdPend>0 ? <span style={{fontSize:11, color:T.warn, background:T.warnSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>pendiente US$ {fmt(totalTarjUsdPend)}</span> : <span style={{fontSize:11, color:T.pos, background:T.posSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>todo pagado ✓</span>}
+      </div>}
+      {tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const sp=splitDe(t); const usd=usdDe(t); const upg=usdPagado(t); return <div key={i}>
       <Fila hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/>
+      {usd>0 && <div style={{padding:'0 18px 9px 18px', display:'flex', gap:10, alignItems:'center', fontSize:11.5}}>
+        <span style={{color:T.ink3}}>💵 En dólares: <b style={{fontFamily:MONO, color:upg?T.pos:T.ink2}}>US$ {fmt(usd)}</b></span>
+        <button onClick={()=>toggleUsd(t)} style={{fontSize:10.5, padding:'2px 9px', borderRadius:6, border:'none', cursor:'pointer', background:upg?T.posSoft:T.warnSoft, color:upg?T.pos:T.warn, fontWeight:600}}>{upg?'US$ pagado ✓':'US$ pendiente'}</button>
+      </div>}
       {sp.n>0
         ? <div style={{padding:'0 18px 9px 18px', display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', fontSize:11.5, color:T.ink3}}><span>🏢 Empresa {fmt(sp.emp)}{sp.eusd?` +US$${Math.round(sp.eusd)}`:''}</span><span>👨 Juan {fmt(sp.juan)}</span><span>👩 Sofi {fmt(sp.sofi)}</span><button onClick={()=>setDetalle(t)} style={{fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>Ver detalle ›</button></div>
         : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
     </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
-    <Sec titulo="Préstamos">{prestMes.length?prestMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    <Sec titulo="Préstamos">{prestBancoMes.length?prestBancoMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    {prestSocio.length>0 && <Sec titulo="Deudas entre socios">
+      {prestSocio.map((p,i)=>{ const deudor=p['Deudor']||'', acreedor=p['Acreedor']||'', magmaDebe=/magma/i.test(deudor); const ic=n=>/juan/i.test(n)?'👤':/sof/i.test(n)?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:13, color:T.ink}}>{ic(deudor)} <b>{deudor}</b> le debe a {ic(acreedor)} <b>{acreedor}</b></div>
+          <div style={{fontSize:11, color:T.ink3}}>{p['Prestamo']}{p['Notas']?` · ${p['Notas']}`:''}{magmaDebe?' · Magma tiene que devolver':' · le entra a Magma'}</div>
+        </div>
+        <span style={{fontSize:13.5, fontFamily:MONO, color:magmaDebe?T.warn:T.pos, fontWeight:600}}>{fmt(parseMonto(p['Monto cuota']))}</span>
+        <button onClick={()=>saldarSocio(p)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:`1px solid ${T.border}`, cursor:'pointer', background:T.surface, color:T.ink2, fontWeight:600}}>Marcar saldada</button>
+      </div> })}
+    </Sec>}
     {cuotasAll.length>0 && <Sec titulo="Cuotas de tarjeta a futuro (ya comprometidas)">
       <div style={{padding:'6px 18px 2px'}}>
         <div style={{display:'flex', gap:6, overflowX:'auto', paddingBottom:8}}>
@@ -2865,10 +2915,130 @@ function Egresos({data, onRefresh, showToast}){
         </div>
       })}
     </Sec>}
+    {movMes.length>0 && <Sec titulo="Movimientos del mes (cambios de plata, no gastos)">
+      {movMes.map((m,i)=>{ const mo=String(m['Moneda origen']||'ARS').toUpperCase(), md=String(m['Moneda destino']||'ARS').toUpperCase(); const showM=(v,cur)=>cur==='USD'?`US$ ${fmt(parseMonto(v))}`:fmt(parseMonto(v)); return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 18px', borderTop:`1px solid ${T.border}`}}>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:13, color:T.ink}}>{m['Tipo']}{m['Descripción']?` · ${m['Descripción']}`:''}</div>
+          <div style={{fontSize:11, color:T.ink3}}>{m['Fecha']}{m['Cuenta origen']?` · de ${m['Cuenta origen']}`:''}{m['Cuenta destino']?` → ${m['Cuenta destino']}`:''}{m['Persona']?` · ${m['Persona']}`:''}</div>
+        </div>
+        <span style={{fontSize:13, fontFamily:MONO, color:T.ink2}}>{m['Cuenta destino']&&parseMonto(m['Monto destino'])?showM(m['Monto destino'],md):showM(m['Monto origen'],mo)}</span>
+      </div> })}
+    </Sec>}
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {agregar && <AgregarEgreso cuentaOpts={cuentaOpts} cuentas={cuentas} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} cuotas={cuotasAll.filter(c=>normTxt(c['Tarjeta'])===normTxt(detalle['Tarjeta']))} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
 }
+
+// Modal "Agregar": gasto (fijo o impuesto puntual) · movimiento de plata (dólares/transferencia/efectivo) · préstamo entre socios
+function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, showToast}){
+  const [tab,setTab]=useState('gasto')
+  const [saving,setSaving]=useState(false)
+  const monedaCuenta=n=>{ const c=(cuentas||[]).find(x=>String(x['Nombre']||'').trim().toLowerCase()===String(n||'').trim().toLowerCase()); return /d[oó]lar|usd/i.test(String(c?.['Tipo']||'')+String(c?.['Nombre']||''))?'USD':'ARS' }
+  // --- Gasto ---
+  const [g,setG]=useState({recurrencia:'unico', categoria:'Impuestos', concepto:'', monto:'', moneda:'ARS', diaPago:'', notas:''})
+  // --- Movimiento ---
+  const [mv,setMv]=useState({tipo:'Compra dólares', cuentaOrigen:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', cuentaDestino:cuentaOpts.find(c=>/d[oó]lar/i.test(c))||'', montoOrigen:'', montoDestino:'', descripcion:'', notas:''})
+  const moOrig=monedaCuenta(mv.cuentaOrigen), moDest=monedaCuenta(mv.cuentaDestino), esConv=moOrig!==moDest
+  const coti=esConv&&mv.montoOrigen&&mv.montoDestino ? (parseMonto(moOrig==='USD'?mv.montoDestino:mv.montoOrigen)/parseMonto(moOrig==='USD'?mv.montoOrigen:mv.montoDestino)) : 0
+  // --- Préstamo socio ---
+  const [pr,setPr]=useState({direccion:'a_magma', persona:'Sofi', monto:'', moneda:'ARS', ajusta:true, cuenta:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', notas:''})
+
+  async function post(url, body){ setSaving(true)
+    try{ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return false } setSaving(false); return true }
+    catch(e){ showToast('Error de conexión','err'); setSaving(false); return false } }
+
+  async function guardarGasto(){ if(!g.concepto.trim()){showToast('Poné el concepto','err');return} if(parseMonto(g.monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
+    const ok=await post('/api/gasto-nuevo',{categoria:g.categoria, concepto:g.concepto, monto:parseMonto(g.monto), moneda:g.moneda, recurrencia:g.recurrencia, diaPago:g.diaPago, mes:mesIdx, anio, notas:g.notas})
+    if(ok){ showToast(g.recurrencia==='unico'?'Gasto agregado a este mes ✓':'Gasto fijo agregado ✓'); onDone() } }
+  async function guardarMov(){ if(parseMonto(mv.montoOrigen)<=0){showToast('Poné el monto','err');return} if(esConv&&mv.cuentaDestino&&parseMonto(mv.montoDestino)<=0){showToast('Poné cuántos '+moDest+' entran','err');return}
+    const ok=await post('/api/movimiento-nuevo',{tipo:mv.tipo, descripcion:mv.descripcion, cuentaOrigen:mv.cuentaOrigen, monedaOrigen:moOrig, montoOrigen:parseMonto(mv.montoOrigen), cuentaDestino:mv.cuentaDestino, monedaDestino:moDest, montoDestino:esConv?parseMonto(mv.montoDestino):parseMonto(mv.montoOrigen), cotizacion:coti?Math.round(coti):'', notas:mv.notas})
+    if(ok){ showToast('Movimiento registrado ✓'); onDone() } }
+  async function guardarPrestamo(){ if(parseMonto(pr.monto)<=0){showToast('Poné el monto','err');return}
+    const aMagma=pr.direccion==='a_magma'  // socio → Magma (Magma le debe)
+    const deudor=aMagma?'Magma':pr.persona, acreedor=aMagma?pr.persona:'Magma', efecto=aMagma?'entra':'sale'
+    const ok=await post('/api/prestamo-socio',{nombre:`${deudor} debe a ${acreedor}`, deudor, acreedor, monto:parseMonto(pr.monto), moneda:pr.moneda, cuenta:pr.ajusta?pr.cuenta:'', efecto:pr.ajusta?efecto:'', notas:pr.notas})
+    if(ok){ showToast('Préstamo registrado ✓'); onDone() } }
+
+  const TabBtn=({id,label})=><button onClick={()=>setTab(id)} style={{flex:1, padding:'9px 8px', borderRadius:9, border:`1px solid ${tab===id?T.brand:T.border}`, background:tab===id?T.brandSoft:T.surface, color:tab===id?T.brand:T.ink2, fontSize:12.5, fontWeight:tab===id?700:500, cursor:'pointer'}}>{label}</button>
+  const Fld=({label,children})=><div style={{flex:'1 1 140px'}}><label style={lblV2}>{label}</label>{children}</div>
+
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 20px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:520, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Agregar</div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px'}}>
+        <div style={{display:'flex', gap:8, marginBottom:16}}>
+          <TabBtn id="gasto" label="💸 Gasto / Impuesto"/>
+          <TabBtn id="movimiento" label="🔁 Movimiento"/>
+          <TabBtn id="prestamo" label="🤝 Préstamo"/>
+        </div>
+
+        {tab==='gasto' && <>
+          <div style={{display:'flex', gap:8, marginBottom:14}}>
+            <button onClick={()=>setG(s=>({...s,recurrencia:'unico',categoria:s.categoria==='Otros'?'Impuestos':s.categoria}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='unico'?T.brand:T.border}`, background:g.recurrencia==='unico'?T.brandSoft:T.surface, color:g.recurrencia==='unico'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Puntual / impuesto<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>solo este mes</div></button>
+            <button onClick={()=>setG(s=>({...s,recurrencia:'fijo'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='fijo'?T.brand:T.border}`, background:g.recurrencia==='fijo'?T.brandSoft:T.surface, color:g.recurrencia==='fijo'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Fijo mensual<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>todos los meses</div></button>
+          </div>
+          {g.recurrencia==='unico' && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[mesIdx-1]} {anio}</b>. Lo marcás pagado y se descuenta de la cuenta que elijas, igual que los demás.</div>}
+          <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+            <Fld label="Categoría"><input list="ae-cats" value={g.categoria} onChange={e=>setG(s=>({...s,categoria:e.target.value}))} style={inpV2}/><datalist id="ae-cats"><option value="Impuestos"/><option value="Operativos"/><option value="Seguros"/><option value="Software"/><option value="Sueldos"/><option value="Otros"/></datalist></Fld>
+            <Fld label="Día de pago"><input value={g.diaPago} onChange={e=>setG(s=>({...s,diaPago:e.target.value}))} placeholder="ej 23" style={inpV2}/></Fld>
+          </div>
+          <div style={{marginBottom:12}}><label style={lblV2}>Concepto *</label><input value={g.concepto} onChange={e=>setG(s=>({...s,concepto:e.target.value}))} placeholder={g.recurrencia==='unico'?'ej: IVA julio 2026':'ej: Seguro oficina'} style={inpV2} autoFocus/></div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+            <Fld label="Monto *"><input value={g.monto} onChange={e=>setG(s=>({...s,monto:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>
+            <Fld label="Moneda"><select value={g.moneda} onChange={e=>setG(s=>({...s,moneda:e.target.value}))} style={inpV2}><option>ARS</option><option>USD</option></select></Fld>
+          </div>
+          <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={g.notas} onChange={e=>setG(s=>({...s,notas:e.target.value}))} style={inpV2}/></div>
+          <button disabled={saving} onClick={guardarGasto} style={btnAgregar(saving)}>{saving?'Guardando…':`Agregar ${g.recurrencia==='unico'?'gasto puntual':'gasto fijo'}`}</button>
+        </>}
+
+        {tab==='movimiento' && <>
+          <div style={{marginBottom:12}}><label style={lblV2}>Tipo de movimiento</label>
+            <select value={mv.tipo} onChange={e=>setMv(s=>({...s,tipo:e.target.value}))} style={inpV2}>
+              <option>Compra dólares</option><option>Venta dólares</option><option>Transferencia entre cuentas</option><option>Retiro de efectivo</option><option>Depósito de efectivo</option><option>Otro</option>
+            </select>
+          </div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+            <Fld label="Sale de"><select value={mv.cuentaOrigen} onChange={e=>setMv(s=>({...s,cuentaOrigen:e.target.value}))} style={inpV2}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
+            <Fld label="Entra a"><select value={mv.cuentaDestino} onChange={e=>setMv(s=>({...s,cuentaDestino:e.target.value}))} style={inpV2}><option value="">— (no entra a otra cuenta)</option>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
+          </div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+            <Fld label={`Monto que sale (${moOrig})`}><input value={mv.montoOrigen} onChange={e=>setMv(s=>({...s,montoOrigen:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
+            {esConv && mv.cuentaDestino && <Fld label={`Monto que entra (${moDest})`}><input value={mv.montoDestino} onChange={e=>setMv(s=>({...s,montoDestino:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>}
+          </div>
+          {esConv && mv.cuentaDestino && coti>0 && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Tipo de cambio: <b style={{fontFamily:MONO}}>${Math.round(coti).toLocaleString('es-AR')}</b> por dólar</div>}
+          <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={mv.notas} onChange={e=>setMv(s=>({...s,notas:e.target.value}))} placeholder="ej: para pagar tarjeta en dólares" style={inpV2}/></div>
+          <div style={{fontSize:11, color:T.ink3, marginBottom:12}}>Esto NO cuenta como gasto del mes — solo mueve los saldos de las cuentas.</div>
+          <button disabled={saving} onClick={guardarMov} style={btnAgregar(saving)}>{saving?'Guardando…':'Registrar movimiento'}</button>
+        </>}
+
+        {tab==='prestamo' && <>
+          <div style={{display:'flex', gap:8, marginBottom:14}}>
+            <button onClick={()=>setPr(s=>({...s,direccion:'a_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='a_magma'?T.brand:T.border}`, background:pr.direccion==='a_magma'?T.brandSoft:T.surface, color:pr.direccion==='a_magma'?T.brand:T.ink2, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Un socio le presta a Magma<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>Magma le debe</div></button>
+            <button onClick={()=>setPr(s=>({...s,direccion:'de_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='de_magma'?T.brand:T.border}`, background:pr.direccion==='de_magma'?T.brandSoft:T.surface, color:pr.direccion==='de_magma'?T.brand:T.ink2, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Magma le presta a un socio<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>el socio le debe</div></button>
+          </div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
+            <Fld label="Socio"><input list="ae-socios" value={pr.persona} onChange={e=>setPr(s=>({...s,persona:e.target.value}))} style={inpV2}/><datalist id="ae-socios"><option value="Sofi"/><option value="Juan"/></datalist></Fld>
+            <Fld label="Monto *"><input value={pr.monto} onChange={e=>setPr(s=>({...s,monto:e.target.value}))} inputMode="decimal" placeholder="ej 650000" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
+            <Fld label="Moneda"><select value={pr.moneda} onChange={e=>setPr(s=>({...s,moneda:e.target.value}))} style={inpV2}><option>ARS</option><option>USD</option></select></Fld>
+          </div>
+          <label style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, color:T.ink2, marginBottom:10, cursor:'pointer'}}>
+            <input type="checkbox" checked={pr.ajusta} onChange={e=>setPr(s=>({...s,ajusta:e.target.checked}))}/>
+            {pr.direccion==='a_magma'?'La plata ya entró a una cuenta (sumar saldo)':'La plata salió de una cuenta (restar saldo)'}
+          </label>
+          {pr.ajusta && <div style={{marginBottom:12}}><label style={lblV2}>Cuenta</label><select value={pr.cuenta} onChange={e=>setPr(s=>({...s,cuenta:e.target.value}))} style={inpV2}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
+          <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={pr.notas} onChange={e=>setPr(s=>({...s,notas:e.target.value}))} style={inpV2}/></div>
+          <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Queda en <b>Préstamos → Deudas entre socios</b>: {pr.direccion==='a_magma'?`Magma le debe ${fmt(parseMonto(pr.monto))} a ${pr.persona}`:`${pr.persona} le debe ${fmt(parseMonto(pr.monto))} a Magma`}</div>
+          <button disabled={saving} onClick={guardarPrestamo} style={btnAgregar(saving)}>{saving?'Guardando…':'Registrar préstamo'}</button>
+        </>}
+      </div>
+    </div>
+  </div>
+}
+const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, border:'none', background:disabled?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:700, cursor:disabled?'default':'pointer'})
 
 // Ver detalle de una tarjeta: gastos ya guardados, con toggle Personal <-> Empresa (guarda al instante)
 function DetalleTarjeta({t, items, cuotas=[], onClose, onRefresh, showToast}){
