@@ -242,22 +242,25 @@ function MailAlert(){
 // Cartel de respuestas de freelancers a los mails de pago (lee admin@somosmagma.com por IMAP).
 // Avisa cuántos contestaron y cuántas facturas adjuntaron que todavía no están guardadas.
 function RespuestasFreelancerAlert({data, goTo}){
-  const [resp,setResp]=useState(null)
-  useEffect(()=>{ fetch('/api/pagos-staff-respuestas').then(r=>r.json()).then(j=>setResp(j&&j.ok?(j.respuestas||[]):[])).catch(()=>{}) },[])
-  if(!resp || resp.length===0) return null
-  const norm=s=>String(s||'').trim().toLowerCase()
-  const conFactura=new Set((data?.pagosStaff||[]).filter(r=>String(r['Factura']||'').trim()).map(r=>norm(r['Freelancer'])))
-  const sinGuardar=resp.filter(m=>m.adjunto && !conFactura.has(norm(m.nombre)))
-  const nResp=resp.length, nSinLeer=resp.filter(m=>!m.leido).length
-  return <div onClick={()=>goTo&&goTo('pagos')} style={{background:sinGuardar.length>0?T.warnSoft:T.surface, border:`1px solid ${sinGuardar.length>0?T.warn+'55':T.border}`, borderRadius:12, padding:'12px 16px', marginTop:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', cursor:'pointer'}}>
-    <span style={{fontSize:20}}>📨</span>
-    <div style={{flex:1, minWidth:200}}>
-      <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{nResp} freelancer{nResp===1?'':'s'} respondi{nResp===1?'ó':'eron'} el mail de pago{nSinLeer>0 && <span style={{color:T.ink3, fontWeight:400}}> · {nSinLeer} sin leer</span>}</div>
-      {sinGuardar.length>0
-        ? <div style={{fontSize:12, color:T.warn, fontWeight:600, marginTop:2}}>📎 {sinGuardar.length} factura{sinGuardar.length===1?'':'s'} sin guardar: {sinGuardar.slice(0,4).map(m=>m.nombre.split(' ')[0]).join(', ')}{sinGuardar.length>4?'…':''}</div>
-        : <div style={{fontSize:12, color:T.ink3, marginTop:2}}>Todas las facturas recibidas ya están guardadas ✓</div>}
+  const [d,setD]=useState(null)
+  useEffect(()=>{ fetch('/api/pagos-staff-respuestas').then(r=>r.json()).then(j=>setD(j&&j.ok?j:null)).catch(()=>{}) },[])
+  if(!d || !d.resumen || d.resumen.enviados===0) return null
+  const {enviados:nEnv, respondieron, sinResponder, sinGuardar}=d.resumen
+  const chase=(d.enviados||[]).filter(e=>!e.respondio).map(e=>String(e.nombre).split(' ')[0])
+  const pct=nEnv?Math.round(respondieron/nEnv*100):0
+  const alerta=sinGuardar>0 || sinResponder>0
+  return <div onClick={()=>goTo&&goTo('pagos')} style={{background:alerta?T.warnSoft:T.surface, border:`1px solid ${alerta?T.warn+'55':T.border}`, borderRadius:12, padding:'13px 16px', marginTop:14, display:'flex', gap:14, alignItems:'flex-start', flexWrap:'wrap', cursor:'pointer'}}>
+    <span style={{fontSize:20, lineHeight:1.2}}>📨</span>
+    <div style={{flex:1, minWidth:220}}>
+      <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>Pagos a freelancers · <span style={{fontFamily:MONO}}>{nEnv}</span> mails enviados</div>
+      <div style={{height:6, borderRadius:6, background:T.surfaceAlt, overflow:'hidden', margin:'8px 0 2px'}}><div style={{height:'100%', width:pct+'%', background:T.pos}}/></div>
+      <div style={{fontSize:12, marginTop:4}}>
+        <span style={{color:T.pos, fontWeight:600}}>✅ {respondieron} respondieron</span> · <span style={{color:T.warn, fontWeight:600}}>⏳ {sinResponder} sin responder</span>
+        {chase.length>0 && <span style={{color:T.ink3}}> — {chase.slice(0,5).join(', ')}{chase.length>5?` +${chase.length-5}`:''}</span>}
+        {sinGuardar>0 && <div style={{color:T.warn, fontWeight:600, marginTop:3}}>📎 {sinGuardar} factura{sinGuardar===1?'':'s'} sin guardar — un click y va a Drive</div>}
+      </div>
     </div>
-    <span style={{fontSize:12.5, color:T.brand, fontWeight:600, whiteSpace:'nowrap'}}>Ver en Pagos Staff →</span>
+    <span style={{fontSize:12.5, color:T.brand, fontWeight:600, whiteSpace:'nowrap', alignSelf:'center'}}>Ver en Pagos Staff →</span>
   </div>
 }
 
@@ -2160,10 +2163,10 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   const [staffModalPS,setStaffModalPS]=useState(null)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
-  const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false)
+  const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false), [resumenResp,setResumenResp]=useState(null)
   const [savingAdj,setSavingAdj]=useState({}), [savedAdj,setSavedAdj]=useState({})
   async function cargarRespuestas(){ setLoadingResp(true)
-    try{ const r=await fetch('/api/pagos-staff-respuestas'); const j=await r.json(); setRespuestas(j&&j.ok?(j.respuestas||[]):[]) }
+    try{ const r=await fetch('/api/pagos-staff-respuestas'); const j=await r.json(); setRespuestas(j&&j.ok?(j.respuestas||[]):[]); setResumenResp(j&&j.ok?j.resumen:null) }
     catch(e){ setRespuestas([]) } setLoadingResp(false) }
   // Agarra la factura adjunta del mail y la guarda en Drive + la linkea al pago (mismo destino que "Subir factura")
   async function guardarAdjunto(m){ const p=lista.find(x=>norm(x.nombre)===norm(m.nombre)); const nros=p?p.trabajos.map(t=>t.nro):[]
@@ -2321,10 +2324,11 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     </div>
     {/* Respuestas de freelancers a los mails de pago (lee la casilla admin@somosmagma.com) */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
-      <div style={{padding:'11px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:(respuestas&&respuestas.length)?`1px solid ${T.border}`:'none'}}>
+      <div style={{padding:'11px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:((resumenResp&&resumenResp.enviados>0)||(respuestas&&respuestas.length))?`1px solid ${T.border}`:'none'}}>
         <span style={{fontSize:13, fontWeight:700, color:T.ink}}>📨 Respuestas de freelancers{respuestas&&respuestas.length?` · ${respuestas.filter(m=>!m.leido).length} sin leer`:''}</span>
         <button onClick={cargarRespuestas} disabled={loadingResp} style={{fontSize:11.5, padding:'4px 10px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink3, cursor:loadingResp?'default':'pointer'}}>{loadingResp?'Buscando…':'↻ Actualizar'}</button>
       </div>
+      {resumenResp && resumenResp.enviados>0 && <div style={{padding:'8px 18px', fontSize:11.5, color:T.ink2, background:T.surfaceAlt, borderBottom:(respuestas&&respuestas.length)?`1px solid ${T.border}`:'none'}}><b style={{fontFamily:MONO}}>{resumenResp.enviados}</b> mails enviados · <b style={{color:T.pos}}>{resumenResp.respondieron}</b> respondieron · <b style={{color:T.warn}}>{resumenResp.sinResponder}</b> sin responder{resumenResp.sinGuardar>0?` · 📎 ${resumenResp.sinGuardar} sin guardar`:''}</div>}
       {respuestas && respuestas.length===0 && !loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Sin respuestas todavía. Cuando un freelancer conteste el mail de pago, aparece acá.</div>}
       {respuestas===null && loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Buscando respuestas en admin@somosmagma.com…</div>}
       {(respuestas||[]).map((m,i)=><div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none'}}>
