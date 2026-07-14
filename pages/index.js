@@ -2138,9 +2138,17 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [staffModalPS,setStaffModalPS]=useState(null)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
   const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false)
+  const [savingAdj,setSavingAdj]=useState({}), [savedAdj,setSavedAdj]=useState({})
   async function cargarRespuestas(){ setLoadingResp(true)
     try{ const r=await fetch('/api/pagos-staff-respuestas'); const j=await r.json(); setRespuestas(j&&j.ok?(j.respuestas||[]):[]) }
     catch(e){ setRespuestas([]) } setLoadingResp(false) }
+  // Agarra la factura adjunta del mail y la guarda en Drive + la linkea al pago (mismo destino que "Subir factura")
+  async function guardarAdjunto(m){ const p=lista.find(x=>norm(x.nombre)===norm(m.nombre)); const nros=p?p.trabajos.map(t=>t.nro):[]
+    setSavingAdj(s=>({...s,[m.uid]:true}))
+    try{ const r=await fetch('/api/pago-staff-guardar-adjunto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:m.uid, persona:p?p.nombre:m.nombre, mes:mesLabel, nros})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSavingAdj(s=>{const n={...s};delete n[m.uid];return n}); return }
+      setSavedAdj(s=>({...s,[m.uid]:j.link})); showToast(`Factura guardada en Drive ✓${j.filas?` · linkeada a ${p?p.nombre:m.nombre}`:''}`); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err') } setSavingAdj(s=>{const n={...s};delete n[m.uid];return n}) }
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   useEffect(()=>{ setSelPay({}) },[mesIdx,anio])  // cambiar de mes limpia la selección
   useEffect(()=>{ cargarRespuestas() /* eslint-disable-next-line */ },[])  // respuestas de freelancers al abrir el módulo
@@ -2296,14 +2304,18 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       </div>
       {respuestas && respuestas.length===0 && !loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Sin respuestas todavía. Cuando un freelancer conteste el mail de pago, aparece acá.</div>}
       {respuestas===null && loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Buscando respuestas en admin@somosmagma.com…</div>}
-      {(respuestas||[]).map((m,i)=><a key={i} href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:('+m.asunto+')')}`} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', gap:10, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none', textDecoration:'none'}}>
+      {(respuestas||[]).map((m,i)=><div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none'}}>
         <span style={{width:7, height:7, borderRadius:7, background:m.leido?'transparent':T.brand, flexShrink:0}}/>
         <span style={{flex:1, minWidth:0}}>
           <span style={{fontSize:13, color:T.ink, fontWeight:m.leido?500:700}}>{m.nombre}{m.adjunto && <span title="Adjuntó factura" style={{marginLeft:7}}>📎</span>}</span>
           <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{m.asunto}</div>
         </span>
+        {m.adjunto && (savedAdj[m.uid]
+          ? <a href={savedAdj[m.uid]} target="_blank" rel="noreferrer" style={{...miniBtn, color:T.pos, borderColor:T.pos, fontSize:11.5}}>📄 en Drive ✓</a>
+          : <button onClick={()=>guardarAdjunto(m)} disabled={!!savingAdj[m.uid]} style={{...miniBtn, fontSize:11.5, cursor:savingAdj[m.uid]?'default':'pointer'}}>{savingAdj[m.uid]?'Guardando…':'⬇ Guardar en Drive'}</button>)}
+        <a href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:('+m.asunto+')')}`} target="_blank" rel="noreferrer" title="Abrir en Gmail" style={{fontSize:12, color:T.ink3, textDecoration:'none', whiteSpace:'nowrap'}}>Gmail ↗</a>
         <span style={{fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>{m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):''}</span>
-      </a>)}
+      </div>)}
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
