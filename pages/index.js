@@ -239,6 +239,28 @@ function MailAlert(){
   </div>
 }
 
+// Cartel de respuestas de freelancers a los mails de pago (lee admin@somosmagma.com por IMAP).
+// Avisa cuántos contestaron y cuántas facturas adjuntaron que todavía no están guardadas.
+function RespuestasFreelancerAlert({data, goTo}){
+  const [resp,setResp]=useState(null)
+  useEffect(()=>{ fetch('/api/pagos-staff-respuestas').then(r=>r.json()).then(j=>setResp(j&&j.ok?(j.respuestas||[]):[])).catch(()=>{}) },[])
+  if(!resp || resp.length===0) return null
+  const norm=s=>String(s||'').trim().toLowerCase()
+  const conFactura=new Set((data?.pagosStaff||[]).filter(r=>String(r['Factura']||'').trim()).map(r=>norm(r['Freelancer'])))
+  const sinGuardar=resp.filter(m=>m.adjunto && !conFactura.has(norm(m.nombre)))
+  const nResp=resp.length, nSinLeer=resp.filter(m=>!m.leido).length
+  return <div onClick={()=>goTo&&goTo('pagos')} style={{background:sinGuardar.length>0?T.warnSoft:T.surface, border:`1px solid ${sinGuardar.length>0?T.warn+'55':T.border}`, borderRadius:12, padding:'12px 16px', marginTop:14, display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', cursor:'pointer'}}>
+    <span style={{fontSize:20}}>📨</span>
+    <div style={{flex:1, minWidth:200}}>
+      <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{nResp} freelancer{nResp===1?'':'s'} respondi{nResp===1?'ó':'eron'} el mail de pago{nSinLeer>0 && <span style={{color:T.ink3, fontWeight:400}}> · {nSinLeer} sin leer</span>}</div>
+      {sinGuardar.length>0
+        ? <div style={{fontSize:12, color:T.warn, fontWeight:600, marginTop:2}}>📎 {sinGuardar.length} factura{sinGuardar.length===1?'':'s'} sin guardar: {sinGuardar.slice(0,4).map(m=>m.nombre.split(' ')[0]).join(', ')}{sinGuardar.length>4?'…':''}</div>
+        : <div style={{fontSize:12, color:T.ink3, marginTop:2}}>Todas las facturas recibidas ya están guardadas ✓</div>}
+    </div>
+    <span style={{fontSize:12.5, color:T.brand, fontWeight:600, whiteSpace:'nowrap'}}>Ver en Pagos Staff →</span>
+  </div>
+}
+
 // Oversight de mails del equipo — solo dueños (el endpoint devuelve [] si no sos dueño).
 function TeamMails(){
   const [d,setD]=useState(null)
@@ -410,6 +432,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   return <>
     <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
     <MailAlert/>
+    <RespuestasFreelancerAlert data={data} goTo={goTo}/>
 
     {/* MI ESPACIO — tus proyectos a cargo + tus tareas (según quién se logueó) */}
     {misProy.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
