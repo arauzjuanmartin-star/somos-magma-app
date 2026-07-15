@@ -91,7 +91,11 @@ export default async function handler(req, res) {
       if (String(row[iFac] || '').trim()) porPers[k].factura = true
       const env = String(row[iEnv] || '').trim(); if (env) { const d = parseDMY(env); if (d && d >= hace) porPers[k].enviadoReciente = true }
     })
-    const enviados = Object.values(porPers).filter(p => p.enviadoReciente).map(p => {
+    // Equipo interno: cobra por recibo/sueldo, NO le manda factura a Magma → fuera del "a quién apurar".
+    // Lista ajustable (patrones sobre el nombre en PAGOS_STAFF). Grenier Basavilbaso = Sofi + Lucía/Lulu.
+    const EQUIPO_INTERNO = [/arauz/i, /grenier\s+basavilbaso/i]
+    const esInterno = n => EQUIPO_INTERNO.some(re => re.test(String(n || '')))
+    const enviados = Object.values(porPers).filter(p => p.enviadoReciente && !esInterno(p.nombre)).map(p => {
       const replied = repliedNames.has(norm(p.nombre))
       return { nombre: p.nombre, replied, factura: p.factura, respondio: replied || p.factura }
     })
