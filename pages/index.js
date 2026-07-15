@@ -245,22 +245,13 @@ function RespuestasFreelancerAlert({data, goTo}){
   const [d,setD]=useState(null)
   useEffect(()=>{ fetch('/api/pagos-staff-respuestas').then(r=>r.json()).then(j=>setD(j&&j.ok?j:null)).catch(()=>{}) },[])
   if(!d || !d.resumen || d.resumen.enviados===0) return null
-  const {enviados:nEnv, respondieron, sinResponder, sinGuardar}=d.resumen
-  const chase=(d.enviados||[]).filter(e=>!e.respondio).map(e=>String(e.nombre).split(' ')[0])
-  const pct=nEnv?Math.round(respondieron/nEnv*100):0
-  const alerta=sinGuardar>0 || sinResponder>0
-  return <div onClick={()=>goTo&&goTo('pagos')} style={{background:alerta?T.warnSoft:T.surface, border:`1px solid ${alerta?T.warn+'55':T.border}`, borderRadius:12, padding:'13px 16px', marginTop:14, display:'flex', gap:14, alignItems:'flex-start', flexWrap:'wrap', cursor:'pointer'}}>
-    <span style={{fontSize:20, lineHeight:1.2}}>📨</span>
-    <div style={{flex:1, minWidth:220}}>
-      <div style={{fontSize:13.5, color:T.ink, fontWeight:600}}>Pagos a freelancers · <span style={{fontFamily:MONO}}>{nEnv}</span> mails enviados</div>
-      <div style={{height:6, borderRadius:6, background:T.surfaceAlt, overflow:'hidden', margin:'8px 0 2px'}}><div style={{height:'100%', width:pct+'%', background:T.pos}}/></div>
-      <div style={{fontSize:12, marginTop:4}}>
-        <span style={{color:T.pos, fontWeight:600}}>✅ {respondieron} respondieron</span> · <span style={{color:T.warn, fontWeight:600}}>⏳ {sinResponder} sin responder</span>
-        {chase.length>0 && <span style={{color:T.ink3}}> — {chase.slice(0,5).join(', ')}{chase.length>5?` +${chase.length-5}`:''}</span>}
-        {sinGuardar>0 && <div style={{color:T.warn, fontWeight:600, marginTop:3}}>📎 {sinGuardar} factura{sinGuardar===1?'':'s'} sin guardar — un click y va a Drive</div>}
-      </div>
-    </div>
-    <span style={{fontSize:12.5, color:T.brand, fontWeight:600, whiteSpace:'nowrap', alignSelf:'center'}}>Ver en Pagos Staff →</span>
+  const {enviados:nEnv, sinResponder, sinGuardar}=d.resumen
+  const alerta=sinGuardar>0
+  // Resumen corto: un vistazo. El detalle (barra, nombres, guardar) vive en Pagos Staff.
+  return <div onClick={()=>goTo&&goTo('pagos')} style={{background:alerta?T.warnSoft:T.surface, border:`1px solid ${alerta?T.warn+'55':T.border}`, borderRadius:12, padding:'12px 16px', marginTop:14, display:'flex', gap:12, alignItems:'center', cursor:'pointer'}}>
+    <span style={{fontSize:18}}>📨</span>
+    <div style={{flex:1, minWidth:0, fontSize:13.5, color:T.ink, fontWeight:600}}>Pagos a freelancers · {sinResponder>0?<span style={{color:T.warn}}>{sinResponder} sin responder</span>:<span style={{color:T.pos}}>todos respondieron</span>} <span style={{color:T.ink3, fontWeight:400}}>de {nEnv}</span>{sinGuardar>0 && <span style={{color:T.warn}}> · 📎 {sinGuardar} sin guardar</span>}</div>
+    <span style={{fontSize:12.5, color:T.brand, fontWeight:600, whiteSpace:'nowrap'}}>Ver detalle →</span>
   </div>
 }
 
