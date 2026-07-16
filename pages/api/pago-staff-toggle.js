@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { mes, persona, nroProyecto, proyecto, pedido, monto, fechaEvento, agencia, pagado, cuenta, fechaPago, observacion } = req.body || {}
+  const { mes, persona, nroProyecto, proyecto, pedido, monto, montoAdeudado, fechaEvento, agencia, pagado, cuenta, fechaPago, observacion } = req.body || {}
   if (!mes || !persona) return res.status(400).json({ error: 'Faltan mes o persona' })
 
   try {
@@ -73,6 +73,8 @@ export default async function handler(req, res) {
     // Estado/cuenta previos (para ajustar el saldo sin descontar dos veces)
     const wasPaid = rowIdx > 0 ? PAG(rows[rowIdx][iEstado]) : false
     const cuentaPrevia = rowIdx > 0 ? (rows[rowIdx][iCuenta]||'') : ''
+    // Monto realmente pagado antes (para devolver EXACTO al deshacer, aunque haya incluido IVA)
+    const montoPagadoPrevio = rowIdx > 0 ? (parseFloat(String(rows[rowIdx][iPagado$]||'0').replace(/[^\d.-]/g,''))||0) : 0
 
     if (rowIdx > 0) {
       const sheetRow = rowIdx + 1
@@ -95,8 +97,8 @@ export default async function handler(req, res) {
       if (nroProyecto) newRow[iNro] = nroProyecto
       if (proyecto)    newRow[iProy] = proyecto
       if (pedido)      newRow[iPedido] = pedido
-      newRow[iAdeudado]  = montoN
-      newRow[iPagado$]   = montoN
+      newRow[iAdeudado]  = Number(montoAdeudado) || montoN  // neto (costo); si no viene, = pagado
+      newRow[iPagado$]   = montoN                            // lo pagado (bruto con IVA si aplica)
       newRow[iTipo]      = 'Total'
       newRow[iCuenta]    = cuenta || ''
       newRow[iEstado]    = estado
@@ -111,7 +113,7 @@ export default async function handler(req, res) {
 
     // Ajustar saldo de la cuenta: descontar al pagar (nuevo), devolver al desmarcar
     if (pagado && !wasPaid && montoN > 0) await ajustarCuenta(sheets, SHEET_ID, cuenta, -montoN)
-    else if (!pagado && wasPaid && montoN > 0) await ajustarCuenta(sheets, SHEET_ID, cuentaPrevia, montoN)
+    else if (!pagado && wasPaid && montoPagadoPrevio > 0) await ajustarCuenta(sheets, SHEET_ID, cuentaPrevia, montoPagadoPrevio)
 
     try {
       await sheets.spreadsheets.values.append({

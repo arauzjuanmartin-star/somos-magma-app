@@ -2154,6 +2154,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   const [staffModalPS,setStaffModalPS]=useState(null)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
+  const [ivaPersona,setIvaPersona]=useState({})  // nombre -> true : pagar +21% IVA (puntual, para RI que factura con IVA)
+  const conIvaDe=persona=>!!ivaPersona[persona.nombre]
   const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false), [resumenResp,setResumenResp]=useState(null)
   const [savingAdj,setSavingAdj]=useState({}), [savedAdj,setSavedAdj]=useState({})
   async function cargarRespuestas(){ setLoadingResp(true)
@@ -2232,7 +2234,12 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
-  const postPago=(persona,t,pagado)=>fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:t.precio, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:pagado?cuentaPago:'' })}).then(r=>r.json().catch(()=>({})))
+  const postPago=(persona,t,pagado)=>{
+    const conIva = pagado && conIvaDe(persona)
+    const montoPagar = conIva ? Math.round(t.precio*1.21) : t.precio
+    const obs = conIva ? `Pago con IVA 21% · neto ${fmt(t.precio)} + IVA ${fmt(Math.round(t.precio*0.21))}` : undefined
+    return fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:montoPagar, montoAdeudado:t.precio, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:pagado?cuentaPago:'', observacion:obs })}).then(r=>r.json().catch(()=>({})))
+  }
 
   async function togglePago(persona, t, pagado){
     const k=t.key
@@ -2250,7 +2257,9 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     if(!pend.length) return
     const nombre=persona.nombre.split(' ')[0]
     if(!cuentaPago){ showToast('Elegí desde qué cuenta pagás (arriba)','err'); return }
-    if(!window.confirm(`Pagar TODO lo de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${pend.length} trabajos = ${fmt(persona.totalPendiente)}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
+    const conIva=conIvaDe(persona), totalPagar=conIva?Math.round(persona.totalPendiente*1.21):persona.totalPendiente
+    const detalle=conIva?`${pend.length} trabajos: neto ${fmt(persona.totalPendiente)} + IVA 21% = ${fmt(totalPagar)}`:`${pend.length} trabajos = ${fmt(persona.totalPendiente)}`
+    if(!window.confirm(`Pagar TODO lo de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${detalle}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
     setOverride(o=>{const n={...o}; pend.forEach(t=>n[t.key]=true); return n})
     try{
       for(const t of pend){ const j=await postPago(persona,t,true); if(j&&j.error) showToast(`Error en ${t.pedido}: ${j.error}`,'err') }
@@ -2271,7 +2280,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     }catch(e){ showToast('Error de conexión','err') }
   }
   const selList=Object.values(selPay)
-  const selTotal=selList.reduce((s,x)=>s+x.t.precio,0)
+  const selTotal=selList.reduce((s,x)=>s+(conIvaDe(x.persona)?Math.round(x.t.precio*1.21):x.t.precio),0)
   const toggleSel=(persona,t)=>setSelPay(s=>{ const n={...s}; if(n[t.key]) delete n[t.key]; else n[t.key]={persona,t}; return n })
   async function pagarSeleccion(){
     if(!selList.length) return
@@ -2363,7 +2372,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
             <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}</div></div>
             <div style={{display:'flex', gap:7, alignItems:'center', flexShrink:0}}>
               {persona.totalPendiente>0
-                ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Pagar todo</button>
+                ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>{conIvaDe(persona)?'Pagar todo +IVA':'Pagar todo'}</button>
                 : <span style={{padding:'8px 8px', fontSize:12, color:T.pos, fontWeight:600}}>✓ Pagado</span>}
               {persona.totalPagado>0 && <button onClick={e=>{e.stopPropagation();deshacerTodo(persona)}} title="Volver atrás todos los pagos de esta persona este mes" style={{padding:'8px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, fontWeight:500, cursor:'pointer'}}>↩ Deshacer</button>}
             </div>
@@ -2383,6 +2392,13 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
                 <button onClick={()=>{ const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Editar montos / agregar viáticos en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
               </div>
             )})}
+            {persona.totalPendiente>0 && <div style={{marginTop:10, padding:'9px 11px', borderRadius:8, background:conIvaDe(persona)?T.brandSoft:T.surface, border:`1px solid ${conIvaDe(persona)?T.brand+'40':T.border}`}}>
+              <label style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, color:T.ink2, cursor:'pointer', fontWeight:600}}>
+                <input type="checkbox" checked={conIvaDe(persona)} onChange={e=>setIvaPersona(s=>({...s,[persona.nombre]:e.target.checked}))}/>
+                Pagar con IVA (+21%) <span style={{fontWeight:400, color:T.ink3}}>— si te factura como Responsable Inscripto</span>
+              </label>
+              {conIvaDe(persona) && <div style={{fontSize:12, color:T.ink2, marginTop:7, fontFamily:MONO}}>neto {fmt(persona.totalPendiente)} + IVA 21% {fmt(Math.round(persona.totalPendiente*0.21))} = <b style={{color:T.brand}}>{fmt(Math.round(persona.totalPendiente*1.21))}</b></div>}
+            </div>}
             <div style={{display:'flex', justifyContent:'flex-end', gap:6, marginTop:10, flexWrap:'wrap'}}>
               <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
               <button onClick={()=>setMailModal({persona, datos:rrhhByName[persona.nombre.trim()]||{}})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
