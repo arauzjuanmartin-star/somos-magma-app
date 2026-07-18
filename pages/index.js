@@ -970,10 +970,10 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const clNuevo=form.cliente.trim() && !clSet.has(nrm(form.cliente))
   const ctNuevo=form.contacto.trim() && !ctSet.has(nrm(form.contacto))
   const ctExist=(data?.contactos||[]).find(c=>nrm(c['Nombre'])===nrm(form.contacto))
-  const ctIncompleto=!!ctExist && (!String(ctExist['Mail']||'').trim() || !String(ctExist['Teléfono']||'').trim())
+  const ctIncompleto=!!ctExist && (!sinErr(ctExist['Mail']) || !sinErr(ctExist['Teléfono']))
   const ctMostrar=ctNuevo||ctIncompleto
   // precargar datos del contacto existente para completar lo que falte
-  useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:c['Mail']||'',telefono:c['Teléfono']||'',cargo:c['Cargo']||'',cuit:c['Cuit']||''}) /* eslint-disable-next-line */ },[form.contacto])
+  useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:sinErr(c['Mail']),telefono:sinErr(c['Teléfono']),cargo:sinErr(c['Cargo']),cuit:sinErr(c['Cuit'])}) /* eslint-disable-next-line */ },[form.contacto])
 
   const updPed=(i,ch)=>setPeds(ps=>ps.map((p,j)=>j===i?{...p,...ch}:p))
   const selSvc=(i,nombre)=>{ const m=SVCS_LIST.find(s=>s.n===nombre); if(m) updPed(i,{svc:nombre, precio:peds[i].manual&&peds[i].precio?peds[i].precio:(m.p||''), feeAg:m.fee}); else updPed(i,{svc:nombre}) }
@@ -1271,6 +1271,10 @@ function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
 }
 const dayKey = d => d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
 const normTxt = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+// Una celda rota del sheet (#ERROR!, #N/A, #REF!...) no es un dato: se trata como vacía.
+// Pasa cuando el valor arranca con "+" y Sheets lo interpreta como fórmula (ej: teléfonos +54 9 11...).
+const ERR_SHEET = /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/
+const sinErr = v => { const s = String(v||'').trim(); return ERR_SHEET.test(s) ? '' : s }
 
 function Calendario({data, onRefresh, showToast}){
   const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]

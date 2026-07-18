@@ -10,6 +10,8 @@ export default async function handler(req, res) {
   try {
     const { sheets, SHEET_ID } = await getSheets()
     const norm = v => String(v||'').toLowerCase().trim().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    // Celda rota del sheet (#ERROR!, #N/A...) = celda vacía, así se puede sobreescribir con el dato bueno
+    const sinErr = v => { const s = String(v||'').trim(); return /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/.test(s) ? '' : s }
 
     // Detectar duplicado por (nombre + agencia). Si existe, mergear datos faltantes en lugar de duplicar.
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Contactos/agencias!A:H' }))
@@ -23,14 +25,16 @@ export default async function handler(req, res) {
     if (dup > 0) {
       const updates = []
       const existing = rows[dup-1]
-      if (mail && !existing[1]) updates.push({ range: `Contactos/agencias!B${dup}`, values: [[mail]] })
-      if (cargo && !existing[4]) updates.push({ range: `Contactos/agencias!E${dup}`, values: [[cargo]] })
-      if (telefono && !existing[5]) updates.push({ range: `Contactos/agencias!F${dup}`, values: [[telefono]] })
-      if (cuit && !existing[7]) updates.push({ range: `Contactos/agencias!H${dup}`, values: [[cuit]] })
+      if (mail && !sinErr(existing[1])) updates.push({ range: `Contactos/agencias!B${dup}`, values: [[mail]] })
+      if (cargo && !sinErr(existing[4])) updates.push({ range: `Contactos/agencias!E${dup}`, values: [[cargo]] })
+      if (telefono && !sinErr(existing[5])) updates.push({ range: `Contactos/agencias!F${dup}`, values: [[telefono]] })
+      if (cuit && !sinErr(existing[7])) updates.push({ range: `Contactos/agencias!H${dup}`, values: [[cuit]] })
       if (updates.length > 0) {
+        // RAW y no USER_ENTERED: un teléfono que arranca con "+" (ej "+54 9 11...") Sheets lo toma
+        // como fórmula y deja la celda en #ERROR!. Con RAW se guarda tal cual, como texto.
         await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+          requestBody: { valueInputOption: 'RAW', data: updates }
         }))
       }
       return res.json({ ok: true, accion: 'actualizado', fila: dup, camposCompletados: updates.length })
@@ -40,7 +44,7 @@ export default async function handler(req, res) {
     await withSheetsRetry(() => sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'Contactos/agencias!A:H',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [[nombre, mail||'', agencia||'', '', cargo||'', telefono||'', '', cuit||'']] }
     }))

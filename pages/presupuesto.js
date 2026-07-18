@@ -560,7 +560,7 @@ export default function Presupuesto() {
 
       if (y > H - 5) console.warn('PDF desbordó la página', y, 'mm de', H)
 
-      // Nombre archivo: Presu-NRO-Agencia-Cliente.pdf (Title Case, sin tildes)
+      // Nombre archivo: Presu-NRO-Agencia-Cliente-Proyecto.pdf (Title Case, sin tildes)
       const titleCase = s => String(s||'')
         .normalize('NFD').replace(/[̀-ͯ]/g,'')                    // sacar tildes
         .replace(/[^a-zA-Z0-9 ]+/g,' ').trim().split(/\s+/)          // limpiar y dividir
@@ -571,6 +571,7 @@ export default function Presupuesto() {
         form.nro || 'Borrador',
         form.agencia ? titleCase(form.agencia) : null,
         titleCase(form.cliente) || 'Cliente',
+        form.proyecto ? titleCase(form.proyecto) : null,
       ].filter(Boolean)
       doc.save(partesNombre.join('-') + '.pdf')
     } catch(e){ alert('Error: '+e.message) }
