@@ -18,10 +18,19 @@ export default async function handler(req, res) {
     const headers = r.data.values?.[0] || []
     const rows = r.data.values || []
 
-    const idx = {
+    // Posición esperada de cada columna. Se usa como respaldo: si la solapa tiene el
+    // título en la fila 1, mandan los títulos reales (si alguien reordena columnas,
+    // seguimos escribiendo en la correcta en vez de pisar datos de otra).
+    const idxDefault = {
       Nombre: 0, CUIT: 1, 'Condicion IVA': 2, 'Mail facturacion': 3, Telefono: 4,
       'PM default': 5, 'Direccion fiscal': 6, Tipo: 7, Notas: 8, Activa: 9, Creada: 10, Modificada: 11,
     }
+    const norm2 = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    const idx = {}
+    Object.entries(idxDefault).forEach(([campo, pos]) => {
+      const real = headers.findIndex(h => norm2(h) === norm2(campo))
+      idx[campo] = real >= 0 ? real : pos
+    })
     const norm = v => String(v||'').trim().toLowerCase()
     const filaExistente = rows.findIndex((row,i) => i>0 && norm(row[0]) === norm(nombre))
     const hoy = new Date().toLocaleDateString('es-AR')
