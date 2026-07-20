@@ -615,7 +615,25 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
   useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro==='__nuevo__'){ setNuevo(true) } else if(nav.filtro){ setF(nav.filtro) } if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
+  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
+
+  async function eliminarPresupuesto(){
+    const p=borrando; if(!p) return
+    const id=p['Columna 1']
+    setBorrSaving(true)
+    try{
+      const r=await fetch('/api/presupuesto-eliminar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, fila:p.__row})})
+      const j=await r.json()
+      if(j.error){ showToast(j.error,'err'); setBorrSaving(false); if(j.recargar&&onRefresh) onRefresh(); return }
+      // filtra por fila, no por número: hay N° repetidos y se borraría el de la fila equivocada
+      setRows(rs=>rs.filter(rr=> p.__row ? rr.__row!==p.__row : String(rr['Columna 1'])!==String(id)))
+      setBorrando(null); setBorrSaving(false); setOpen(null)
+      showToast(`#${id} eliminado`)
+      if(onRefresh) onRefresh()
+      // Si tenía evento en Calendar, lo sacamos también
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion:'borrar'})}).catch(()=>{})
+    }catch(e){ showToast('Error de conexión','err'); setBorrSaving(false) }
+  }
 
   async function aprobarConAdic({nuevoEsAdic, nuevoTotal}){
     const p=aprobAdic; if(!p) return
@@ -711,7 +729,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
             <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : (nuevo==='APROBADO' && presuTieneAdicionales(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
           </div>
-          {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)}/>}
+          {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
         </div>
       })}
     </div>
@@ -721,6 +739,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
     {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
+    {borrando && <EliminarPresupuestoModal presu={borrando} saving={borrSaving} onClose={()=>setBorrando(null)} onConfirm={eliminarPresupuesto}/>}
   </>
 }
 
@@ -841,7 +860,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   </div>
 }
 
-function DetallePresupuesto({p, id, onEdit, onRepresupuestar}){
+function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar}){
   const servicios=[]
   for(let j=1;j<=12;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
@@ -881,6 +900,9 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar}){
           <button onClick={onRepresupuestar} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Represupuestar</button>
           <a href={`/presupuesto?nro=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer" style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:500, textDecoration:'none'}}>Ver PDF →</a>
         </div>
+        <button onClick={onEliminar} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.ink3, fontSize:12, fontWeight:500, cursor:'pointer'}}
+          onMouseEnter={e=>{e.currentTarget.style.color=T.brand; e.currentTarget.style.borderColor=T.brand}}
+          onMouseLeave={e=>{e.currentTarget.style.color=T.ink3; e.currentTarget.style.borderColor=T.border}}>Eliminar presupuesto</button>
       </div>
     </div>
   </div>
@@ -1255,6 +1277,46 @@ function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
         <button onClick={confirmar} disabled={saving} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Aprobando…':'Aprobar'}</button>
+      </div>
+    </div>
+  </div>
+}
+
+// Confirmación para eliminar un presupuesto cargado por error.
+// El backend bloquea si ya tiene proyecto o factura, y deja backup de la fila en LOG.
+function EliminarPresupuestoModal({presu, onClose, onConfirm, saving}){
+  const id=presu['Columna 1']
+  const total=parseMonto(presu['Precio Final'])
+  const datos=[['Agencia',presu['Agencia']],['Cliente',presu['Cliente']],['Proyecto',presu['Proyecto']],
+    ['Fecha evento',presu['Fecha Evento']],['Contacto',presu['Contacto']],['PM',presu['PM Interno']],
+    ['Estado',presu['Estado']]].filter(x=>x[1])
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:920, display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'60px 20px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:460, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Eliminar presupuesto #{id}</div>
+        <div style={{fontSize:12, color:T.ink3, marginTop:2}}>Se borra del sheet. Esto no se puede deshacer desde la app.</div>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <div style={{border:`1px solid ${T.border}`, borderRadius:10, overflow:'hidden'}}>
+          {datos.map(([k,v],i)=>(
+            <div key={k} style={{display:'flex', justifyContent:'space-between', gap:14, padding:'8px 13px', borderTop:i===0?'none':`1px solid ${T.border}`}}>
+              <span style={{fontSize:11.5, color:T.ink3}}>{k}</span>
+              <span style={{fontSize:12.5, color:T.ink, textAlign:'right'}}>{v}</span>
+            </div>
+          ))}
+          <div style={{display:'flex', justifyContent:'space-between', padding:'9px 13px', borderTop:`1px solid ${T.border}`, background:T.surfaceAlt}}>
+            <span style={{fontSize:12.5, fontWeight:600, color:T.ink}}>Precio final</span>
+            <span style={{fontSize:14, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(total)}</span>
+          </div>
+        </div>
+        <div style={{fontSize:11.5, color:T.ink3, marginTop:11, lineHeight:1.5}}>
+          Queda una copia guardada en la solapa LOG por si hay que recuperarlo.<br/>
+          Si el presupuesto ya tiene proyecto o factura cargada, no se va a poder eliminar.
+        </div>
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onConfirm} disabled={saving} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Eliminando…':'Sí, eliminar'}</button>
       </div>
     </div>
   </div>
