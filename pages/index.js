@@ -2028,9 +2028,9 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
     try{ const r=await fetch('/api/reclamo-prep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agencia:nombre})}); const j=await r.json()
       if(!j.ok){ showToast(j.error||'Error','err'); setLoading(false); return }
       setData(j)
-      // Solo se reclama lo que SE EMITIÓ. Lo que nunca se facturó viene destildado:
-      // primero hay que emitir la factura, no se puede reclamar algo que el cliente nunca recibió.
-      setItems((j.pendientes||[]).map(p=>({...p, sel:!p.sinEmitir})))
+      // Se reclama lo VENCIDO. Lo que todavía está en plazo (mes de gracia) viene destildado:
+      // no se le reclama a un cliente algo que aún no venció. Igual se puede tildar a mano.
+      setItems((j.pendientes||[]).map(p=>({...p, sel:!p.enPlazo})))
       setDests((j.destinatarios||[]).map((d,i)=>({...d, sel:d.admin ? true : (i===0 && !(j.destinatarios||[]).some(x=>x.admin))})))
       setLoading(false)
     }catch(e){ showToast('Error de conexión','err'); setLoading(false) }
@@ -2101,19 +2101,26 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
               <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>{elegidas.length} de {items.length} · {vencSel>0?`${vencSel} vencidas`:'ninguna vencida'}</span>
               <span style={{fontSize:16, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(totalSel)}</span>
             </div>
+            <div style={{display:'flex', gap:6, marginBottom:8, flexWrap:'wrap'}}>
+              <button onClick={()=>setItems(a=>a.map(x=>({...x,sel:x.diasVencida>0})))} style={{...miniBtn, padding:'4px 10px', fontSize:11}}>Solo vencidas</button>
+              <button onClick={()=>setItems(a=>a.map(x=>({...x,sel:true})))} style={{...miniBtn, padding:'4px 10px', fontSize:11}}>Todas</button>
+              <button onClick={()=>setItems(a=>a.map(x=>({...x,sel:false})))} style={{...miniBtn, padding:'4px 10px', fontSize:11}}>Ninguna</button>
+            </div>
             {items.map((p,i)=>(
               <label key={i} style={{display:'flex', alignItems:'center', gap:9, padding:'5px 0', fontSize:12, borderTop:i?`1px solid ${T.border}`:'none', cursor:'pointer', opacity:p.sel?1:0.5}}>
                 <input type="checkbox" checked={p.sel} onChange={()=>setItems(a=>a.map((x,j)=>j===i?{...x,sel:!x.sel}:x))}/>
                 <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                   {p.nroFactura?`Fc ${p.nroFactura}`:`#${p.nro}`} · {p.proyecto||'—'}
-                  {p.sinEmitir && <span style={{color:T.warn, fontWeight:600}}> · sin emitir</span>}
+                  {p.sinNumero && <span style={{color:T.warn, fontWeight:600}}> · falta N°</span>}
+                  {p.enPlazo && <span style={{color:T.ink3}}> · en plazo, vence en {p.diasParaVencer}d</span>}
                 </span>
                 <span style={{fontFamily:MONO, color:p.diasVencida>0?T.brand:T.ink2, fontWeight:p.diasVencida>0?600:400, flexShrink:0}}>{fmt(p.monto)}{p.diasVencida>0?` · ${p.diasVencida}d`:''}</span>
               </label>
             ))}
           </div>
-          {data.sinEmitir>0 && <div style={{fontSize:12, color:T.warn, background:T.warnSoft, borderRadius:8, padding:'9px 12px', marginBottom:14, lineHeight:1.45}}>
-            <b>{data.sinEmitir} {data.sinEmitir===1?'trabajo no tiene factura emitida':'trabajos no tienen factura emitida'}</b> — vienen destildados. No se puede reclamar una factura que el cliente nunca recibió: primero hay que emitirla.
+          {(data.enPlazo>0 || data.sinNumero>0) && <div style={{fontSize:12, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:'9px 12px', marginBottom:14, lineHeight:1.5}}>
+            {data.enPlazo>0 && <div><b style={{color:T.ink}}>{data.enPlazo} {data.enPlazo===1?'factura todavía no venció':'facturas todavía no vencieron'}</b> — vienen destildadas (están en plazo). Tildalas si igual las querés incluir.</div>}
+            {data.sinNumero>0 && <div style={{marginTop:data.enPlazo>0?5:0}}><b style={{color:T.warn}}>{data.sinNumero} sin N° de factura cargado</b> — la factura está emitida, falta anotar el número en el sheet. Se reclaman igual.</div>}
           </div>}
 
           <label style={lblV2}>Para</label>

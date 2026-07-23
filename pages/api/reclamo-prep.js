@@ -43,6 +43,7 @@ export default async function handler(req, res) {
                 && !esTrue(r[F('Cobrado')]) && num(r[F('Precio FINAL')]) > 0)
       .map(r => {
         const venc = parseD(r[F('Vencimiento')])
+        const diasVencida = venc && venc < hoy ? Math.round((hoy - venc) / 86400000) : 0
         return {
           nro: String(r[F('N° Presupuesto')]||'').trim(),
           nroFactura: String(r[F('Nro de Factura')]||'').trim(),
@@ -52,8 +53,13 @@ export default async function handler(req, res) {
           emision: r[F('Fecha emision')] || '',
           vencimiento: r[F('Vencimiento')] || '',
           fechaEvento: r[F('Fecha Evento')] || '',
-          diasVencida: venc && venc < hoy ? Math.round((hoy - venc) / 86400000) : 0,
-          sinEmitir: !String(r[F('Nro de Factura')]||'').trim(),
+          diasVencida,
+          // OJO: sin número NO quiere decir sin facturar. La factura está emitida; lo que
+          // falta es cargar el número en el sheet. Es un dato a completar, no un impedimento.
+          sinNumero: !String(r[F('Nro de Factura')]||'').trim(),
+          // Mes de gracia: todavía no venció, no corresponde reclamarla.
+          enPlazo: !!(venc && venc >= hoy),
+          diasParaVencer: venc && venc >= hoy ? Math.round((venc - hoy) / 86400000) : 0,
         }
       })
       .sort((a, b) => b.diasVencida - a.diasVencida || b.monto - a.monto)
@@ -104,7 +110,8 @@ export default async function handler(req, res) {
       ok: true, agencia, pendientes, destinatarios: dest, total, vencidas: vencidas.length,
       lineasTransfer: lineasTransfer.length ? lineasTransfer : ['(Cargar datos en la solapa CUENTAS)'],
       nombreEmisor,
-      sinEmitir: pendientes.filter(p => p.sinEmitir).length,
+      sinNumero: pendientes.filter(p => p.sinNumero).length,
+      enPlazo: pendientes.filter(p => p.enPlazo).length,
     })
   } catch (e) {
     console.error('reclamo-prep:', e)
