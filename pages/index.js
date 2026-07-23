@@ -198,7 +198,7 @@ export default function V2() {
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav}/>
+            : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
@@ -2506,9 +2506,14 @@ const STAFF_CANON_MAP={juan:'Juan Martin Arauz','juan martin':'Juan Martin Arauz
 const canonKey=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/['’´`]/g,'').replace(/\s+/g,' ').trim()
 const canonStaff=name=>{ const k=canonKey(name); return STAFF_CANON_MAP[k]||String(name||'').trim() }
 
-function Freelancers({data, nav, clearNav}){
+function Freelancers({data, nav, clearNav, onRefresh, showToast}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
   const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState(''), [lAnio,setLAnio]=useState(''), [lMes,setLMes]=useState('')
+  // Editar datos del freelancer acá mismo (antes solo se podía desde Pagos Staff)
+  const [editando,setEditando]=useState(null)
+  // Por defecto el panel muestra lo activo/reciente, no todo el histórico
+  const [verTodos,setVerTodos]=useState(false)
+  useEffect(()=>{ setVerTodos(false) },[sel])
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -2584,6 +2589,7 @@ function Freelancers({data, nav, clearNav}){
       {selP && <div style={{flex:'0 0 360px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
         <div style={{padding:'14px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
           <span style={{fontSize:15, fontWeight:700, color:T.ink, flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{selP.nombre}</span>
+          <button onClick={()=>setEditando({nombre:selP.nombre, datos})} title="Editar datos" style={{border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontWeight:600, padding:'4px 10px', borderRadius:7, cursor:'pointer', whiteSpace:'nowrap'}}>Editar</button>
           <button onClick={()=>setSel(null)} title="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
         <div style={{padding:'14px 18px'}}>
@@ -2593,18 +2599,41 @@ function Freelancers({data, nav, clearNav}){
             <Mini label="Promedio x trabajo" val={fmtM(selP.trabajos?selP.ganado/selP.trabajos:0)}/>
             <Mini label="Se le debe" val={pend>0?fmtM(pend):'—'} color={pend>0?T.brand:T.pos}/>
           </div>
-          {datos['Rubro'] && <div style={{fontSize:11.5, color:T.ink2, marginBottom:10}}>{datos['Rubro']}</div>}
-          {[['Mail',datos['Mail']],['Tel',datos['Celular']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=>(
+          {/* Rubro como etiquetas */}
+          {datos['Rubro'] && <div style={{display:'flex', flexWrap:'wrap', gap:5, marginBottom:10}}>
+            {String(datos['Rubro']).split(',').map(s=>s.trim()).filter(Boolean).map((r,i)=>(
+              <span key={i} style={{padding:'3px 9px', borderRadius:20, background:T.brandSoft, color:T.brand, fontSize:11, fontWeight:600}}>{r}</span>
+            ))}
+          </div>}
+          {/* Ficha completa: todo lo que hay cargado en RRHH */}
+          {[['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['Nacimiento',datos['Fecha de nac']||datos['Fecha de Nac']],['Nacionalidad',datos['Nacionalidad']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=>(
             <div key={k} style={{display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink, fontFamily:MONO, fontSize:11.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span></div>
           ))}
-          {!Object.keys(datos).length && <div style={{fontSize:11.5, color:T.warn}}>⚠ Sin datos fiscales en RRHH</div>}
+          {/* Qué falta cargar — para que el registro se complete solo */}
+          {(()=>{
+            const falta=[['Mail',datos['Mail']],['Tel',datos['Celular']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['CBU',datos['CBU']],['Rubro',datos['Rubro']]].filter(x=>!String(x[1]||'').trim()).map(x=>x[0])
+            if(!Object.keys(datos).length) return <button onClick={()=>setEditando({nombre:selP.nombre, datos:{}})} style={{width:'100%', marginTop:6, padding:'8px', borderRadius:8, border:`1px solid ${T.warn}`, background:T.warnSoft, color:T.warn, fontSize:12, fontWeight:600, cursor:'pointer'}}>⚠ Sin ficha en RRHH — cargar datos</button>
+            if(falta.length) return <button onClick={()=>setEditando({nombre:selP.nombre, datos})} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.warn, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Falta cargar: {falta.join(' · ')}</button>
+            return null
+          })()}
           {(()=>{
             const anios=[...new Set(selP.items.map(it=>it.anio).filter(Boolean))].sort((a,b)=>b-a)
             const its=selP.items.filter(it=>(!fAnio||String(it.anio)===String(fAnio))&&(!fMes||String(it.mes)===String(fMes)))
             const totF=its.reduce((s,it)=>s+it.monto,0), debeF=its.filter(it=>!it.pagado).reduce((s,it)=>s+it.monto,0)
+            // Ordenado por fecha (lo más nuevo arriba). Los históricos viejos traen solo el año.
+            const ts=it=>{ const d=parseD(it.fecha); return d?d.getTime():(it.anio?new Date(Number(it.anio),0,1).getTime():0) }
+            const ord=its.slice().sort((a,b)=>ts(b)-ts(a))
+            // Por defecto: lo ACTIVO (lo que se le debe) + los últimos 5. El resto, con los
+            // filtros de año/mes o "ver todos". Antes se listaba el histórico completo y era ilegible.
+            const hayFiltro=!!(fAnio||fMes)
+            const pendientes=ord.filter(it=>!it.pagado)
+            const recientes=ord.filter(it=>it.pagado).slice(0,5)
+            const resumen=[...pendientes,...recientes]
+            const mostrar=(hayFiltro||verTodos)?ord:resumen
+            const ocultos=ord.length-mostrar.length
             return <>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, margin:'16px 0 8px'}}>
-                <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>Histórico</span>
+                <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>{hayFiltro||verTodos?'Trabajos':'Activo y reciente'}</span>
                 <div style={{display:'flex', gap:6}}>
                   <select value={fAnio} onChange={e=>setFAnio(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
                   <select value={fMes} onChange={e=>setFMes(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
@@ -2612,18 +2641,27 @@ function Freelancers({data, nav, clearNav}){
               </div>
               <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.ink2, marginBottom:4}}><span>{its.length} trabajo{its.length===1?'':'s'}</span><span style={{fontFamily:MONO}}>{fmtM(totF)}</span></div>
               {debeF>0 && <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.brand, fontWeight:600, marginBottom:6}}><span>Se le debe</span><span style={{fontFamily:MONO}}>{fmtM(debeF)}</span></div>}
-              {its.slice().reverse().map((it,i)=>(
+              {mostrar.map((it,i)=>(
                 <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
                   <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?String(it.fecha).slice(0,10)+' · ':''}{it.ped||it.proy} <span style={{color:T.ink3}}>· {it.proy}</span></span>
                   <span style={{fontFamily:MONO, color:it.pagado?T.ink3:T.brand, fontWeight:it.pagado?400:600, flexShrink:0}} title={it.pagado?'pagado':'se le debe'}>{fmtM(it.monto)}{it.pagado?'':' •'}</span>
                 </div>
               ))}
+              {ocultos>0 && !hayFiltro && <button onClick={()=>setVerTodos(true)} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.ink2, fontSize:11.5, cursor:'pointer'}}>Ver los {ocultos} trabajos anteriores</button>}
+              {verTodos && !hayFiltro && <button onClick={()=>setVerTodos(false)} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.ink3, fontSize:11.5, cursor:'pointer'}}>Ver menos</button>}
               {!its.length && <div style={{fontSize:11.5, color:T.ink3, padding:'8px 0'}}>Sin trabajos en ese período</div>}
             </>
           })()}
         </div>
       </div>}
     </div>
+    {editando && <FreelancerModal
+      nombre={editando.nombre}
+      datos={editando.datos||{}}
+      rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())).filter(Boolean))]}
+      showToast={showToast}
+      onClose={()=>setEditando(null)}
+      onSaved={()=>{ setEditando(null); onRefresh&&onRefresh() }}/>}
   </>
 }
 
