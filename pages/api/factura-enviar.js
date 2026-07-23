@@ -11,7 +11,9 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { to = [], cc = [], asunto, cuerpo, presupuestoNum } = req.body || {}
+  // accion/detalle: para que el LOG distinga un envío de factura de un reclamo de cuenta.
+  // Sin presupuestoNum NO se marca "Fc Enviada" (un reclamo no re-envía la factura).
+  const { to = [], cc = [], asunto, cuerpo, presupuestoNum, accion, detalle } = req.body || {}
   const dest = (Array.isArray(to) ? to : [to]).map(s => String(s||'').trim()).filter(Boolean)
   if (!dest.length) return res.status(400).json({ error: 'No hay destinatarios' })
   if (!asunto || !cuerpo) return res.status(400).json({ error: 'Falta asunto o cuerpo' })
@@ -58,7 +60,7 @@ export default async function handler(req, res) {
         }
 
       }
-      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'factura-mail-enviado', 'FACTURACION', String(presupuestoNum||''), `a: ${dest.join(', ')}`]] } })
+      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, accion || 'factura-mail-enviado', 'FACTURACION', String(presupuestoNum || detalle || ''), `a: ${dest.join(', ')}`]] } })
     } catch (e) { console.warn('post-envío (marca/log) falló:', e.message) }
 
     res.json({ ok: true, enviadoA: dest })

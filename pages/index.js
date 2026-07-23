@@ -1683,7 +1683,19 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Fecha del evento por N° de presupuesto (las facturas reales a veces no la tienen en su fila)
   const eventoByNum={}; ;[...(data.proyectos||[]),...presus].forEach(p=>{ const n=String(p['N° presupuesto']||p['Columna 1']||'').trim(); const fe=p['Fecha Evento']; if(n&&fe&&!eventoByNum[n]) eventoByNum[n]=fe })
   const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null), [editarFechas,setEditarFechas]=useState(null)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null), [editarFechas,setEditarFechas]=useState(null), [reclamo,setReclamo]=useState(null)
+
+  // Quién debe plata, agrupado — para reclamar de una todo lo de un mismo cliente
+  const agenciasPendientes=(()=>{
+    const m={}
+    ;(data.facturacion||[]).forEach(f=>{
+      if(isCobrada(f)) return
+      const monto=parseMonto(f['Precio FINAL']); if(monto<=0) return
+      const k=String(f['Agencia']||f['Cliente']||'').trim(); if(!k) return
+      m[k]=m[k]||{nombre:k,n:0,monto:0}; m[k].n++; m[k].monto+=monto
+    })
+    return Object.values(m).sort((a,b)=>b.monto-a.monto)
+  })()
   const matchMes=fechaStr=>{ if(mesF==='todos')return true; const d=parseD(fechaStr); return d?`${d.getMonth()+1}-${d.getFullYear()}`===mesF:false }
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -1773,6 +1785,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
       <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Facturación</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>{filtrada.length} de {fc.length} · {pendientes.length} sin facturar</div></div>
+      <button onClick={()=>setReclamo('')} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13.5, fontWeight:600, cursor:'pointer'}} title="Un solo mail con todas las facturas pendientes de un cliente">✉ Reclamar cuenta</button>
       <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
     </div>
     <div style={{display:'flex', gap:14, marginBottom:20}}>
@@ -1859,6 +1872,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
@@ -1989,6 +2003,143 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
         <button onClick={()=>crear(false,false)} disabled={saving||neto<=0} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer', opacity:(saving||neto<=0)?0.5:1}}>Solo crear</button>
         <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
       </div>}
+    </div>
+  </div>
+}
+
+// Un solo mail con TODAS las facturas pendientes de un cliente.
+// Caso real: Ostara debe varias y siempre contesta la misma persona de administración.
+function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast }){
+  const [ag,setAg]=useState(inicial||'')
+  const [loading,setLoading]=useState(false)
+  const [data,setData]=useState(null)
+  const [dests,setDests]=useState([])
+  const [nuevo,setNuevo]=useState('')
+  const [asunto,setAsunto]=useState('')
+  const [cuerpo,setCuerpo]=useState('')
+  const [saving,setSaving]=useState(false)
+
+  const [items,setItems]=useState([])   // facturas con su tilde
+  const [tocado,setTocado]=useState(false) // si Flor editó el texto, no lo pisamos
+
+  const cargar=async(nombre)=>{
+    if(!nombre){ setData(null); setItems([]); return }
+    setLoading(true); setData(null); setTocado(false)
+    try{ const r=await fetch('/api/reclamo-prep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agencia:nombre})}); const j=await r.json()
+      if(!j.ok){ showToast(j.error||'Error','err'); setLoading(false); return }
+      setData(j)
+      // Solo se reclama lo que SE EMITIÓ. Lo que nunca se facturó viene destildado:
+      // primero hay que emitir la factura, no se puede reclamar algo que el cliente nunca recibió.
+      setItems((j.pendientes||[]).map(p=>({...p, sel:!p.sinEmitir})))
+      setDests((j.destinatarios||[]).map((d,i)=>({...d, sel:d.admin ? true : (i===0 && !(j.destinatarios||[]).some(x=>x.admin))})))
+      setLoading(false)
+    }catch(e){ showToast('Error de conexión','err'); setLoading(false) }
+  }
+  useEffect(()=>{ if(inicial) cargar(inicial) /* eslint-disable-next-line */ },[])
+
+  const elegidas=items.filter(i=>i.sel)
+  const totalSel=elegidas.reduce((s,i)=>s+i.monto,0)
+  const vencSel=elegidas.filter(i=>i.diasVencida>0).length
+
+  // El mail se rearma solo cada vez que cambia la selección, salvo que ya lo hayan editado a mano
+  useEffect(()=>{
+    if(!data||tocado) return
+    const prim=dests.find(d=>d.sel)?.nombre?.split(' ')[0]||''
+    setAsunto(`Resumen de cuenta - Somos Magma / ${ag} · ${elegidas.length} ${elegidas.length===1?'factura pendiente':'facturas pendientes'}`)
+    setCuerpo([
+      `Hola${prim && !/facturaci/i.test(prim) ? ' '+prim : ''},`,``,
+      `Te paso el resumen de cuenta con los trabajos que tenemos pendientes de cobro:`,``,
+      ...elegidas.map(p=>{
+        const ref=p.nroFactura?`Factura ${p.nroFactura}`:`Presupuesto #${p.nro}`
+        const det=[]; if(p.emision)det.push(`emitida ${p.emision}`)
+        if(p.vencimiento)det.push(p.diasVencida>0?`venció ${p.vencimiento} (${p.diasVencida} días)`:`vence ${p.vencimiento}`)
+        return `• ${ref} — ${p.proyecto||p.cliente||'s/d'}: $${Math.round(p.monto).toLocaleString('es-AR')}`+(det.length?`\n   ${det.join(' · ')}`:'')
+      }),``,
+      `TOTAL PENDIENTE: $${Math.round(totalSel).toLocaleString('es-AR')}`,
+      vencSel?`(${vencSel} ${vencSel===1?'factura vencida':'facturas vencidas'})`:null,``,
+      `Datos para transferir:`,...(data.lineasTransfer||[]),``,
+      `¿Nos podés confirmar fecha estimada de pago así lo ordenamos de nuestro lado?`,``,
+      `Cualquier cosa que necesites (duplicado de alguna factura, detalle de un trabajo), avisame y te lo mando.`,``,
+      `Gracias,`,`${data.nombreEmisor}`,`Somos Magma`,
+    ].filter(l=>l!==null).join('\n'))
+  /* eslint-disable-next-line */ },[items,dests,data])
+  const toggle=i=>setDests(d=>d.map((x,j)=>j===i?{...x,sel:!x.sel}:x))
+  const agregar=()=>{ const m=nuevo.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){ showToast('Mail inválido','err'); return } if(dests.find(d=>d.mail.toLowerCase()===m.toLowerCase())){setNuevo('');return} setDests(d=>[...d,{mail:m,nombre:'agregado',match:'agregado a mano',sel:true}]); setNuevo('') }
+  const elegidos=dests.filter(d=>d.sel).map(d=>d.mail)
+
+  async function enviar(){
+    if(!elegidos.length){ showToast('Elegí al menos un destinatario','err'); return }
+    setSaving(true)
+    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({to:elegidos, asunto, cuerpo, accion:'reclamo-enviado', detalle:`${ag} · ${elegidas.length} facturas · ${fmt(totalSel)}`})})
+      const j=await r.json()
+      if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
+      showToast(`Reclamo enviado a ${elegidos.length===1?elegidos[0]:elegidos.length+' destinatarios'} ✓`); onSent&&onSent(); onClose()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:620, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Reclamar cuenta</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Un solo mail con todo lo que debe · sale de admin@somosmagma.com</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px'}}>
+        <label style={lblV2}>Cliente / agencia</label>
+        <select value={ag} onChange={e=>{ setAg(e.target.value); cargar(e.target.value) }} style={{...inpV2, marginBottom:14}}>
+          <option value="">Elegí a quién reclamar…</option>
+          {agenciasPendientes.map(a=><option key={a.nombre} value={a.nombre}>{a.nombre} — {a.n} pendiente{a.n===1?'':'s'} · {fmtM(a.monto)}</option>)}
+        </select>
+
+        {loading && <div style={{padding:'24px', textAlign:'center', color:T.ink3, fontSize:13}}>Buscando lo pendiente…</div>}
+
+        {data && data.pendientes.length===0 && <div style={{fontSize:13, color:T.pos, padding:'10px 0'}}>No hay facturas pendientes de {ag} ✓</div>}
+
+        {data && data.pendientes.length>0 && <>
+          <div style={{background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 14px', marginBottom:14}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8}}>
+              <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>{elegidas.length} de {items.length} · {vencSel>0?`${vencSel} vencidas`:'ninguna vencida'}</span>
+              <span style={{fontSize:16, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(totalSel)}</span>
+            </div>
+            {items.map((p,i)=>(
+              <label key={i} style={{display:'flex', alignItems:'center', gap:9, padding:'5px 0', fontSize:12, borderTop:i?`1px solid ${T.border}`:'none', cursor:'pointer', opacity:p.sel?1:0.5}}>
+                <input type="checkbox" checked={p.sel} onChange={()=>setItems(a=>a.map((x,j)=>j===i?{...x,sel:!x.sel}:x))}/>
+                <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                  {p.nroFactura?`Fc ${p.nroFactura}`:`#${p.nro}`} · {p.proyecto||'—'}
+                  {p.sinEmitir && <span style={{color:T.warn, fontWeight:600}}> · sin emitir</span>}
+                </span>
+                <span style={{fontFamily:MONO, color:p.diasVencida>0?T.brand:T.ink2, fontWeight:p.diasVencida>0?600:400, flexShrink:0}}>{fmt(p.monto)}{p.diasVencida>0?` · ${p.diasVencida}d`:''}</span>
+              </label>
+            ))}
+          </div>
+          {data.sinEmitir>0 && <div style={{fontSize:12, color:T.warn, background:T.warnSoft, borderRadius:8, padding:'9px 12px', marginBottom:14, lineHeight:1.45}}>
+            <b>{data.sinEmitir} {data.sinEmitir===1?'trabajo no tiene factura emitida':'trabajos no tienen factura emitida'}</b> — vienen destildados. No se puede reclamar una factura que el cliente nunca recibió: primero hay que emitirla.
+          </div>}
+
+          <label style={lblV2}>Para</label>
+          <div style={{display:'flex', flexDirection:'column', gap:6, marginBottom:8}}>
+            {dests.length===0 && <div style={{fontSize:12, color:T.ink3}}>Sin contactos cargados para {ag}. Agregá un mail abajo.</div>}
+            {dests.map((d,i)=>(
+              <label key={i} style={{display:'flex', alignItems:'center', gap:9, fontSize:13, color:T.ink, cursor:'pointer', padding:'7px 10px', borderRadius:8, border:`1px solid ${d.sel?T.ink:T.border}`, background:d.sel?T.surfaceAlt:T.surface}}>
+                <input type="checkbox" checked={d.sel} onChange={()=>toggle(i)}/>
+                <span style={{flex:1, minWidth:0}}><span style={{fontFamily:MONO, fontSize:12.5}}>{d.mail}</span> <span style={{fontSize:10.5, color:T.ink3}}>· {d.match||d.nombre}</span></span>
+              </label>
+            ))}
+          </div>
+          <div style={{display:'flex', gap:8, marginBottom:14}}>
+            <input value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();agregar()}}} placeholder="Agregar otro mail…" style={{...inpV2, flex:1}}/>
+            <button onClick={agregar} style={{...miniBtn, padding:'8px 14px'}}>+ Agregar</button>
+          </div>
+          <label style={lblV2}>Asunto</label>
+          <input value={asunto} onChange={e=>{setTocado(true); setAsunto(e.target.value)}} style={{...inpV2, marginBottom:12}}/>
+          <label style={lblV2}>Mensaje</label>
+          <textarea value={cuerpo} onChange={e=>{setTocado(true); setCuerpo(e.target.value)}} rows={14} style={{...inpV2, resize:'vertical', fontFamily:MONO, fontSize:12, lineHeight:1.5}}/>
+        </>}
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={enviar} disabled={saving||!elegidas.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!data)?'default':'pointer', opacity:(saving||!elegidas.length)?0.5:1}}>{saving?'Enviando…':`Enviar reclamo${elegidas.length?' · '+fmtM(totalSel):''}`}</button>
+      </div>
     </div>
   </div>
 }
