@@ -1700,11 +1700,16 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
-  const pendientes=presus.filter(isAprobado).map(p=>{
+  const pendTodos=presus.filter(isAprobado).map(p=>{
     const facturado=fc.filter(f=>esFacturaReal(f) && String(f['N° Presupuesto']||'').trim()===String(p['Columna 1']||'').trim() && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')).reduce((s,f)=>s+(parseMonto(f['Precio SIN IVA'])||parseMonto(f['Precio FINAL'])),0)
     const neto=parseMonto(p['Precio Final'])
     return {p, facturado, neto, pendiente:Math.max(0,neto-facturado)}
   }).filter(x=>x.neto>0 && x.pendiente>x.neto*0.05)
+  // "Por facturar" = trabajo YA HECHO que falta facturar. Los eventos que todavía no
+  // pasaron no se pueden facturar: contarlos hacía parecer que faltaba cobrar mucho más.
+  const pendientes=pendTodos.filter(x=>!semEvento(x.p['Fecha Evento']).futuro)
+  const pendFuturos=pendTodos.filter(x=>semEvento(x.p['Fecha Evento']).futuro)
+  const montoFuturos=pendFuturos.reduce((s,x)=>s+x.pendiente,0)
 
   // (se eliminó mandarMail(): abría Outlook con mailto: y ya no lo usaba nadie.
   //  El envío real sale del botón ✉ → MailFacturaModal → /api/factura-enviar)
@@ -1755,14 +1760,24 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
 
-  // por cobrar
-  const pcTotal=fcReal.filter(f=>!isCobrada(f)).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  // Saldo REAL de cada factura: si hubo cobro parcial, se debe solo el resto.
+  // Antes la tarjeta sumaba el precio entero de las parciales y la lista las excluía:
+  // por eso el total de arriba no coincidía con la suma de abajo.
+  const saldoF=f=>Math.max(0, parseMonto(f['Precio FINAL'])-parseMonto(f['Monto cobrado']))
+
+  // Por cobrar, abierto por estado (para que el total grande no asuste sin contexto)
+  const noCobradas=fcReal.filter(f=>!isCobrada(f))
+  const pcTotal=noCobradas.reduce((s,f)=>s+saldoF(f),0)
+  const vencidasMonto=noCobradas.filter(f=>(diffVenc(f)??99)<0).reduce((s,f)=>s+saldoF(f),0)
+  const pcPorVencer=noCobradas.filter(f=>{const d=diffVenc(f); return d!=null&&d>=0&&d<7}).reduce((s,f)=>s+saldoF(f),0)
+  const pcEnPlazo=Math.max(0, pcTotal-vencidasMonto-pcPorVencer)
+
   const porFacturarTotal=pendientes.reduce((s,x)=>s+x.pendiente,0)
-  const vencidasMonto=fcReal.filter(f=>!isCobrada(f)&&(diffVenc(f)??99)<0).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
 
   const filtrada=fcReal.filter(f=>{
     const e=estF(f)
-    const owed=['pendiente','por-vencer','vencida','reclamar']
+    // 'parcial' entra en "Por cobrar": lo que falta cobrar de una parcial también se debe.
+    const owed=['pendiente','por-vencer','vencida','reclamar','parcial']
     const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || ((filt==='porcobrar'||filt==='pendiente'||filt==='atrasadas')&&owed.includes(e)) || (filt==='parcial'&&e==='parcial')
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mf&&mq&&matchMes(evDe(f))
@@ -1773,7 +1788,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Proyectos aprobados sin facturar (o con saldo), ordenados por evento más atrasado arriba
   const pendOrdenados = pendientes.filter(x=>(!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))&&matchMes(x.p['Fecha Evento'])).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
   const sinFactAtrasados = pendientes.filter(x=>{const s=semEvento(x.p['Fecha Evento']);return !s.futuro&&s.dias>30}).length
-  const sumFiltrada = filtrada.reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0)
+  const sumFiltrada = filtrada.reduce((s,f)=>s+saldoF(f),0)
   const sumPend = pendOrdenados.reduce((s,x)=>s+x.pendiente,0)
 
   // Opciones de mes (por fecha de evento) para el filtro
@@ -1789,8 +1804,14 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
     </div>
     <div style={{display:'flex', gap:14, marginBottom:20}}>
-      <Hero label="Por cobrar" value={fmt(pcTotal)} accent={vencidasMonto>0?T.brand:T.ink} sub="facturado y sin cobrar · vencido " subStrong={fmt(vencidasMonto)} subStrongColor={vencidasMonto>0?T.brand:T.pos}/>
-      <Hero label="Por facturar" value={fmt(porFacturarTotal)} accent={T.warn} sub={`${pendientes.length} proyectos aprobados sin factura`}/>
+      <Hero label="Por cobrar" value={fmt(pcTotal)} accent={T.ink} sub={`${noCobradas.length} facturas · saldo real`}
+        desglose={[
+          {l:'Vencido', v:fmt(vencidasMonto), c:vencidasMonto>0?T.brand:T.ink3},
+          {l:'Vence esta semana', v:fmt(pcPorVencer), c:pcPorVencer>0?T.warn:T.ink3},
+          {l:'En plazo', v:fmt(pcEnPlazo), c:T.ink2},
+        ]}/>
+      <Hero label="Por facturar" value={fmt(porFacturarTotal)} accent={T.warn} sub={`${pendientes.length} trabajos ya hechos sin factura`}
+        desglose={montoFuturos>0?[{l:`+ ${pendFuturos.length} trabajos futuros (todavía no se pueden facturar)`, v:fmt(montoFuturos), c:T.ink3}]:null}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar factura, presu, cliente, proyecto…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
@@ -3821,11 +3842,19 @@ function GlobalSearch({data, onClose, onNavegar}){
 }
 
 // ============================ PIEZAS UI ============================
-function Hero({label, value, sub, subStrong, subStrongColor, accent}){
+function Hero({label, value, sub, subStrong, subStrongColor, accent, desglose}){
   return <div style={{flex:1, padding:'22px 24px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:14}}>
     <div style={{fontSize:11, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink3}}>{label}</div>
     <div style={{fontSize:33, fontWeight:600, fontFamily:MONO, color:accent||T.ink, marginTop:12, letterSpacing:-0.5}}>{value}</div>
     <div style={{fontSize:12.5, color:T.ink2, marginTop:9}}>{sub}{subStrong && <span style={{color:subStrongColor||T.ink, fontWeight:600}}>{subStrong}</span>}</div>
+    {desglose && <div style={{marginTop:12, paddingTop:11, borderTop:`1px solid ${T.border}`, display:'grid', gap:5}}>
+      {desglose.map((d,i)=>(
+        <div key={i} style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:12}}>
+          <span style={{color:T.ink3}}>{d.l}</span>
+          <span style={{fontFamily:MONO, color:d.c||T.ink, fontWeight:600}}>{d.v}</span>
+        </div>
+      ))}
+    </div>}
   </div>
 }
 function Stat({label, value, color, sub}){
