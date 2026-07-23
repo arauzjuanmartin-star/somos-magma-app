@@ -38,25 +38,30 @@ for(const [nombre,cfg] of Object.entries(SOCIOS)){
 
   // DEBE: sueldo + extras
   const sueldoDebe=SUELDO*mesesTranscurridos.length
-  let extrasDebe=0
-  PRO.slice(1).forEach(row=>{const f=fecha(row[3]);if(!txt(row[2])||!enVentana(f))return
-    STF.forEach((sc,k)=>{if(cfg.re.test(txt(row[sc])))extrasDebe+=num(row[PRC[k]])})})
+  // Extras = todo lo trabajado 2026 menos lo cobrado = lo que quedó sin pagar (arranca en marzo).
+  let trabTot=0
+  PRO.slice(1).forEach(row=>{const f=fecha(row[3]);if(!txt(row[2])||!f||f.getFullYear()!==2026)return
+    STF.forEach((sc,k)=>{if(cfg.re.test(txt(row[sc])))trabTot+=num(row[PRC[k]])})})
+  const cobExtra=PAG.slice(1).filter(x=>cfg.re.test(txt(x[1]))&&num(x[7])>0).map(x=>({f:fecha(x[0]),m:num(x[7])})).filter(x=>x.f&&x.f.getFullYear()===2026).reduce((s,x)=>s+x.m,0)
+  const extrasDebe=Math.max(0,trabTot-cobExtra)
 
   // RECIBIÓ: haberes/transferencias + tarjeta personal
-  const haberes=SOC.slice(1).filter(x=>cfg.soc.test(txt(x[si('Socio')]))&&txt(x[si('Dirección')])==='Magma→Socio'&&enVentana(fecha(x[si('Fecha')]))).reduce((s,x)=>s+num(x[si('Monto')]),0)
+  // Recibió = todo lo que le entró al socio desde 1/4 (de Magma, Sofi o Lucía), menos los VEPs.
+  const filasSocio=SOC.slice(1).filter(x=>cfg.soc.test(txt(x[si('Socio')]))&&enVentana(fecha(x[si('Fecha')])))
+  const haberes=filasSocio.filter(x=>!/vep/i.test(txt(x[si('Concepto')]))).reduce((s,x)=>s+num(x[si('Monto')]),0)
   let tarjeta=0
   MOV.slice(1).forEach(x=>{if(!/personal/i.test(txt(x[8]))||!cfg.card.test(txt(x[4])))return
     const m=+txt(x[1]),a=txt(x[2]);if(a==='2026'&&m-1>=DESDE)tarjeta+=num(x[7])})
 
   // PUSO: VEPs
-  const veps=SOC.slice(1).filter(x=>cfg.soc.test(txt(x[si('Socio')]))&&txt(x[si('Dirección')])==='Socio→Magma'&&enVentana(fecha(x[si('Fecha')]))).reduce((s,x)=>s+num(x[si('Monto')]),0)
+  const veps=filasSocio.filter(x=>/vep/i.test(txt(x[si('Concepto')]))).reduce((s,x)=>s+num(x[si('Monto')]),0)
 
   const debe=sueldoDebe+extrasDebe, recibio=haberes+tarjeta
   const neto=debe-recibio+veps
 
   console.log(`\n  MAGMA LE DEBE:`)
   console.log(`     Sueldo gerente ($3,2M × ${mesesTranscurridos.length} meses)   ${money(sueldoDebe).padStart(15)}`)
-  console.log(`     Extras (trabajo en proyectos)         ${money(extrasDebe).padStart(15)}`)
+  console.log(`     Extras sin cobrar (trabajó ${money(trabTot)} − cobró ${money(cobExtra)}) ${money(extrasDebe).padStart(12)}`)
   console.log(`     ${'─'.repeat(40)}`)
   console.log(`     TOTAL QUE MAGMA LE DEBE               ${money(debe).padStart(15)}`)
   console.log(`\n  EL SOCIO RETIRÓ / RECIBIÓ:`)
@@ -74,3 +79,12 @@ for(const [nombre,cfg] of Object.entries(SOCIOS)){
 console.log(`\n\n  Nota: tarjeta ene-mar quedó fuera (ventana desde abril). Los "Retiros en`)
 console.log(`  efectivo" (ej: 2× $666.667 de Juan en abril) están contados como tarjeta`)
 console.log(`  personal; si en realidad son sueldo en efectivo, decime y los muevo.`)
+
+// ============ DETALLE TARJETA ABRIL (pedido de Juan) ============
+console.log(`\n\n${'█'.repeat(66)}\n  DETALLE TARJETA — ABRIL 2026\n${'█'.repeat(66)}`)
+for(const [nombre,cfg] of Object.entries(SOCIOS)){
+  const filas=MOV.slice(1).filter(x=>txt(x[1])==='4'&&txt(x[2])==='2026'&&/personal/i.test(txt(x[8]))&&cfg.card.test(txt(x[4])))
+  const tot=filas.reduce((s,x)=>s+num(x[7]),0)
+  console.log(`\n  ${nombre} — abril personal: ${money(tot)} (${filas.length} movimientos)`)
+  filas.sort((a,b)=>num(b[7])-num(a[7])).forEach(x=>console.log(`     ${money(num(x[7])).padStart(13)}  ${txt(x[0]).padEnd(16)} ${txt(x[5]).slice(0,34)}`))
+}
