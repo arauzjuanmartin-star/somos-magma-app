@@ -1694,14 +1694,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     return {p, facturado, neto, pendiente:Math.max(0,neto-facturado)}
   }).filter(x=>x.neto>0 && x.pendiente>x.neto*0.05)
 
-  async function mandarMail(f){
-    try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:f['N° Presupuesto']})})
-      const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
-      const to=(j.destinatarios||[]).map(d=>d.mail).join(',')
-      if(!to) showToast('Sin email de contacto — revisá el mail antes de mandar','err')
-      window.location.href=`mailto:${to}?subject=${encodeURIComponent(j.asunto)}&body=${encodeURIComponent(j.cuerpo)}`
-    }catch(e){ showToast('Error de conexión','err') }
-  }
+  // (se eliminó mandarMail(): abría Outlook con mailto: y ya no lo usaba nadie.
+  //  El envío real sale del botón ✉ → MailFacturaModal → /api/factura-enviar)
 
   function subirPDF(f){
     const input=document.createElement('input'); input.type='file'; input.accept='application/pdf,image/*'
@@ -1904,8 +1898,19 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       }
       // 2) Mandar mail al cliente (con destinatarios + cuerpo + link al PDF)
       if(conMail){
+        // Sale desde admin@somosmagma.com por Gmail (mismo camino que Pagos Staff).
+        // Antes abría Outlook con mailto: y el mail quedaba sin mandar.
         try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum})}); const jm=await rm.json()
-          if(jm.ok){ const to=(jm.destinatarios||[]).map(d=>d.mail).join(','); if(!to) showToast('Factura lista — sin email de contacto, revisá el destinatario','err'); window.location.href=`mailto:${to}?subject=${encodeURIComponent(jm.asunto)}&body=${encodeURIComponent(jm.cuerpo)}` }
+          if(jm.ok){
+            const to=(jm.destinatarios||[]).map(d=>d.mail).filter(Boolean)
+            if(!to.length) showToast('Factura creada — sin mail de contacto. Mandala con el botón ✉ de la lista.','err')
+            else {
+              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum})})
+              const je=await re.json()
+              if(je.ok) showToast(`Mail enviado a ${to.length===1?to[0]:to.length+' destinatarios'} ✓`)
+              else showToast('Factura creada — el mail falló: '+(je.error||''),'err')
+            }
+          }
           else showToast('Factura creada — no pude armar el mail: '+(jm.error||''),'err')
         }catch(e){ showToast('Factura creada — el mail falló','err') }
       }
