@@ -35,12 +35,14 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nombre, nombreOriginal, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad } = req.body
+  const { nombre, nombreOriginal, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad,
+          tarifaMedia, tarifaJornada, zona, estado, notas } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:K' })
+    // A:P — incluye las columnas del registro (tarifas, zona, estado, notas)
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:P' })
     const headers = r.data.values?.[0] || []
     const rows = r.data.values || []
 
@@ -56,6 +58,11 @@ export default async function handler(req, res) {
       banco: headers.indexOf('Banco'),
       alias: headers.indexOf('Alias'),
       cbu: headers.indexOf('CBU'),
+      tarifaMedia: headers.indexOf('Tarifa media jornada'),
+      tarifaJornada: headers.indexOf('Tarifa jornada'),
+      zona: headers.indexOf('Zona'),
+      estado: headers.indexOf('Estado'),
+      notas: headers.indexOf('Notas'),
     }
 
     const norm = v => String(v||'').trim().toLowerCase()
@@ -71,10 +78,19 @@ export default async function handler(req, res) {
         if (col === undefined || col === -1) return null
         return { range: `RRHH!${colLetra(col)}${fila}`, values: [[String(valor)]] }
       }
+      // Estado y Notas SÍ se pueden vaciar (son campos que se corrigen), el resto no se pisa con vacío
+      const setNulleable = (campo, valor) => {
+        if (valor === undefined || valor === null) return null
+        const col = idx[campo]
+        if (col === undefined || col === -1) return null
+        return { range: `RRHH!${colLetra(col)}${fila}`, values: [[String(valor)]] }
+      }
       const updates = [
         set('rubro', rubro), set('cel', celular), set('mail', mailFreelancer),
         set('dni', dni), set('cuit', cuit), set('banco', banco),
         set('alias', alias), set('cbu', cbu), set('fechaNac', fechaNac), set('nac', nacionalidad),
+        set('tarifaMedia', tarifaMedia), set('tarifaJornada', tarifaJornada), set('zona', zona),
+        setNulleable('estado', estado), setNulleable('notas', notas),
       ].filter(Boolean)
       // Renombrar: si cambió el nombre, actualizar la columna Nombre Apellido
       if (nombreOriginal && norm(nombreOriginal) !== norm(nombre) && idx.nombre !== -1) {
@@ -105,22 +121,18 @@ export default async function handler(req, res) {
     }
 
     // Nuevo freelancer
-    const row = new Array(11).fill('')
+    const row = new Array(Math.max(16, headers.length)).fill('')
+    const put = (campo, valor) => { const c = idx[campo]; if (c >= 0) row[c] = valor || '' }
     row[idx.nombre] = nombre.trim()
-    row[idx.rubro] = rubro || ''
-    row[idx.cel] = celular || ''
-    row[idx.mail] = mailFreelancer || ''
-    row[idx.dni] = dni || ''
-    row[idx.fechaNac] = fechaNac || ''
-    row[idx.nac] = nacionalidad || ''
-    row[idx.cuit] = cuit || ''
-    row[idx.banco] = banco || ''
-    row[idx.alias] = alias || ''
-    row[idx.cbu] = cbu || ''
+    put('rubro', rubro); put('cel', celular); put('mail', mailFreelancer); put('dni', dni)
+    put('fechaNac', fechaNac); put('nac', nacionalidad); put('cuit', cuit); put('banco', banco)
+    put('alias', alias); put('cbu', cbu)
+    put('tarifaMedia', tarifaMedia); put('tarifaJornada', tarifaJornada); put('zona', zona)
+    put('estado', estado); put('notas', notas)
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'RRHH!A:K',
+      range: 'RRHH!A:P',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },

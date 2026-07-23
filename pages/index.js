@@ -2610,6 +2610,16 @@ function Freelancers({data, nav, clearNav, onRefresh, showToast}){
               <span key={i} style={{padding:'3px 9px', borderRadius:20, background:T.brandSoft, color:T.brand, fontSize:11, fontWeight:600}}>{r}</span>
             ))}
           </div>}
+          {/* Tarifas y estado — lo primero que se mira al armar un presupuesto */}
+          {(datos['Tarifa media jornada']||datos['Tarifa jornada']||datos['Zona']||datos['Estado']) && (
+            <div style={{display:'flex', gap:14, flexWrap:'wrap', padding:'9px 11px', marginBottom:10, background:T.surfaceAlt, borderRadius:9, border:`1px solid ${T.border}`}}>
+              {datos['Tarifa media jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>½ jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa media jornada']))}</div></div>}
+              {datos['Tarifa jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa jornada']))}</div></div>}
+              {datos['Zona'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Zona</div><div style={{fontSize:12.5, color:T.ink}}>{datos['Zona']}</div></div>}
+              {datos['Estado'] && <div style={{marginLeft:'auto'}}><span style={{padding:'3px 9px', borderRadius:20, fontSize:10.5, fontWeight:600, background:/activo/i.test(datos['Estado'])?T.posSoft:/no llamar|inactivo/i.test(datos['Estado'])?T.brandSoft:T.warnSoft, color:/activo/i.test(datos['Estado'])?T.pos:/no llamar|inactivo/i.test(datos['Estado'])?T.brand:T.warn}}>{datos['Estado']}</span></div>}
+            </div>
+          )}
+          {datos['Notas'] && <div style={{fontSize:12, color:T.ink2, background:T.warnSoft, borderRadius:8, padding:'8px 11px', marginBottom:10, lineHeight:1.45}}>{datos['Notas']}</div>}
           {/* Ficha completa: todo lo que hay cargado en RRHH */}
           {[['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['Nacimiento',datos['Fecha de nac']||datos['Fecha de Nac']],['Nacionalidad',datos['Nacionalidad']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=>(
             <div key={k} style={{display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink, fontFamily:MONO, fontSize:11.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span></div>
@@ -3452,12 +3462,14 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
   const [rubros,setRubros]=useState(()=>String(datos['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean))
   const [rubroInput,setRubroInput]=useState('')
   const fnInit=()=>{ const v=datos['Fecha de nac']||datos['Fecha de Nac']||''; return v?(String(v).includes('/')?dmyToISO(v):v):'' }
-  const [form,setForm]=useState(()=>({ celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', fechaNac:fnInit(), cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'' }))
+  const [form,setForm]=useState(()=>({ celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', fechaNac:fnInit(), cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'',
+    tarifaMedia:datos['Tarifa media jornada']||'', tarifaJornada:datos['Tarifa jornada']||'', zona:datos['Zona']||'', estado:datos['Estado']||'', notas:datos['Notas']||'' }))
   const [saving,setSaving]=useState(false)
   const existe = datos && Object.keys(datos).length>0
   const sugeridos=[...new Set([...RUBROS_DEFAULT, ...rubrosConocidos])].filter(r=>r&&!rubros.includes(r)).sort()
   const addRubro=(t)=>{ const v=String(t||'').trim(); if(v&&!rubros.includes(v)) setRubros(rs=>[...rs,v]); setRubroInput('') }
-  const campos=[['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['fechaNac','Fecha de nacimiento','date'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
+  const campos=[['tarifaMedia','Tarifa media jornada'],['tarifaJornada','Tarifa jornada completa'],['zona','Zona'],
+    ['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['fechaNac','Fecha de nacimiento','date'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
   async function guardar(){
     if(!String(nombreEdit).trim()){ showToast('El nombre no puede quedar vacío','err'); return }
     setSaving(true)
@@ -3486,11 +3498,27 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16}}>
           {sugeridos.slice(0,8).map(r=><button key={r} onClick={()=>addRubro(r)} style={{padding:'3px 9px',borderRadius:20,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:11.5,cursor:'pointer'}}>+ {r}</button>)}
         </div>
+        {/* Estado: para filtrar el roster real de los que ya no trabajan */}
+        <div style={{marginBottom:12}}>
+          <label style={lblV2}>Estado</label>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {['Activo','Candidato','Inactivo','No llamar'].map(e=>(
+              <button key={e} onClick={()=>setForm(f=>({...f,estado:f.estado===e?'':e}))}
+                style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${form.estado===e?T.brand:T.border}`,background:form.estado===e?T.brandSoft:T.surface,color:form.estado===e?T.brand:T.ink2,fontSize:12,fontWeight:form.estado===e?600:500,cursor:'pointer'}}>{e}</button>
+            ))}
+          </div>
+        </div>
         {/* Resto de campos */}
         <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
           {campos.map(([k,l,tipo])=>(
             <div key={k} style={{flex:'1 1 45%',minWidth:160}}><label style={lblV2}>{l}</label><input type={tipo||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
           ))}
+        </div>
+        <div style={{marginTop:12}}>
+          <label style={lblV2}>Notas (lo que hay que saber de esta persona)</label>
+          <textarea value={form.notas} onChange={e=>setForm(f=>({...f,notas:e.target.value}))} rows={2}
+            placeholder="Ej: buenísimo con drone · no cobra IVA · avisar con 3 días"
+            style={{...inpV2,resize:'vertical',fontFamily:'inherit'}}/>
         </div>
       </div>
       <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
