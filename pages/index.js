@@ -1718,6 +1718,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     const input=document.createElement('input'); input.type='file'; input.accept='application/pdf,image/*'
     input.onchange=async()=>{
       const file=input.files?.[0]; if(!file) return
+      // Reemplazo: avisar que el PDF viejo se deja de usar (queda en Drive, no se borra)
+      if(f['Factura'] && !window.confirm(`Esta factura ya tiene un PDF cargado.\n\n¿Reemplazarlo por "${file.name}"?\n\n(El anterior queda guardado en Drive, solo deja de estar linkeado acá.)`)) return
       const nro=f['Nro de Factura']||'', nl=nro.toLowerCase()
       const entidad=nl.includes('sofia')?'Sofia':nl.includes('lulu')?'Lulu':(nl.includes('ef-')||nl.includes('efectivo'))?'Efectivo':'SRL'
       const fe=parseD(f['Fecha emision']), mes=fe?fe.getMonth()+1:hoy.getMonth()+1, anio=fe?fe.getFullYear():hoy.getFullYear()
@@ -1878,9 +1880,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
             <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar factura por mail (desde la app)">✉</button>
             <button onClick={()=>setEditarFechas(f)} style={{...miniBtn, padding:'6px 8px'}} title="Editar a mano fecha de envío y de cobro (notas de crédito, facturas consolidadas)">📅</button>
-            {f['Factura']
-              ? <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>
-              : <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title="Subir PDF de la factura">⬆</button>}
+            {/* Si ya hay PDF se puede VER y también REEMPLAZAR: antes, con un PDF mal subido
+                no había forma de cambiarlo desde la app (el botón de subir desaparecía). */}
+            {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>}
+            <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title={f['Factura']?'Reemplazar el PDF de la factura':'Subir PDF de la factura'}>{f['Factura']?'↻':'⬆'}</button>
             <button onClick={()=>goTo&&goTo('proyectos',{q:String(num)})} style={{...miniBtn, padding:'6px 9px'}} title="Abrir el proyecto">Proyecto</button>
             <button onClick={()=>borrarFactura(f)} style={{...miniBtn, padding:'6px 9px', color:T.brand, borderColor:`${T.brand}55`}} title="Anular/borrar esta factura (error, nota de crédito, duplicado)">✕</button>
           </span>
