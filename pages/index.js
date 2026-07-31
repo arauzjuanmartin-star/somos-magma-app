@@ -933,6 +933,27 @@ const SVCS_LIST=[
   {n:'MakeUp',p:0,fee:false},{n:'Rental',p:0,fee:false},
   {n:'Model',p:0,fee:false},{n:'Catering',p:0,fee:false},{n:'Otros',p:0,fee:false},
 ]
+// Normaliza un servicio para comparar: saca emoji y acentos, ½ pasa a 1/2.
+// Así "📸 Foto ½" y "Foto 1/2" se reconocen como el mismo servicio.
+const svcKey = s => String(s||'').replace(/½/g,'1/2')
+  .normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/[^a-zA-Z0-9\s/+-]/g,'').replace(/\s+/g,' ').trim().toLowerCase()
+// La lista de servicios sale del sheet (solapa "listado"). SVCS_LIST queda de
+// respaldo por si el sheet no responde, y aporta el flag fee (si suma al margen
+// Magma). Para un servicio nuevo se infiere: precio 0 = pass-through, sin fee.
+const getSvcs = data => {
+  const delSheet = data?.listado?.serviciosFull || []
+  if(!delSheet.length) return SVCS_LIST
+  const base = new Map(SVCS_LIST.map(s=>[svcKey(s.n), s]))
+  const out = []
+  delSheet.forEach(s=>{
+    const k = svcKey(s.n), m = base.get(k)
+    out.push({ n:s.n, p:s.p || m?.p || 0, fee: m ? m.fee : s.p > 0 })
+    base.delete(k)
+  })
+  base.forEach(s=>out.push(s))
+  return out
+}
 const isoToDMY = iso => { if(!iso) return ''; const [y,m,d]=String(iso).split('-'); return d&&m&&y?`${d}/${m}/${y}`:'' }
 const dmyToISO = s => { const p=String(s||'').split('/'); if(p.length!==3) return ''; const y=p[2].length===4?p[2]:'20'+p[2]; return `${y}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` }
 const parseHorarioStr = s => { const m=String(s||'').match(/(\d{1,2})[:.]?(\d{0,2})\s*(?:a|hasta|-)\s*(\d{1,2})[:.]?(\d{0,2})/i); if(!m) return {h1:'',h2:''}; const pad=n=>String(n).padStart(2,'0'); return {h1:pad(parseInt(m[1]))+':'+(m[2]?pad(parseInt(m[2])):'00'), h2:pad(parseInt(m[3]))+':'+(m[4]?pad(parseInt(m[4])):'00')} }
@@ -1005,8 +1026,31 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // precargar datos del contacto existente para completar lo que falte
   useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:sinErr(c['Mail']),telefono:sinErr(c['Teléfono']),cargo:sinErr(c['Cargo']),cuit:sinErr(c['Cuit'])}) /* eslint-disable-next-line */ },[form.contacto])
 
+  const svcs=getSvcs(data)
   const updPed=(i,ch)=>setPeds(ps=>ps.map((p,j)=>j===i?{...p,...ch}:p))
-  const selSvc=(i,nombre)=>{ const m=SVCS_LIST.find(s=>s.n===nombre); if(m) updPed(i,{svc:nombre, precio:peds[i].manual&&peds[i].precio?peds[i].precio:(m.p||''), feeAg:m.fee}); else updPed(i,{svc:nombre}) }
+  const selSvc=(i,nombre)=>{ const m=svcs.find(s=>s.n===nombre)||svcs.find(s=>svcKey(s.n)===svcKey(nombre)); if(m) updPed(i,{svc:m.n, precio:peds[i].manual&&peds[i].precio?peds[i].precio:(m.p||''), feeAg:m.fee}); else updPed(i,{svc:nombre}) }
+  // alta de servicio nuevo — queda guardado en la solapa "listado"
+  const [svcNew,setSvcNew]=useState(null) // {nombre, precio, fee} | null
+  const [svcSaving,setSvcSaving]=useState(false)
+  const guardarSvc=async()=>{
+    const nombre=String(svcNew?.nombre||'').trim()
+    if(!nombre) return showToast('Poné un nombre','err')
+    setSvcSaving(true)
+    try{
+      const r=await fetch('/api/servicio-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({nombre, precio:svcNew.precio||0})})
+      const j=await r.json()
+      if(!r.ok) return showToast(j.error||'No se pudo guardar','err')
+      // lo uso en la primera línea vacía, o agrego una
+      const idx=peds.findIndex(p=>!p.svc&&!p.adicional)
+      const nuevo={svc:nombre, precio:String(svcNew.precio||''), feeAg:!!svcNew.fee, manual:false}
+      if(idx>=0) updPed(idx,nuevo)
+      else setPeds(ps=>[...ps,{id:Date.now(),...nuevo,adicional:false,precioCliente:''}])
+      setSvcNew(null)
+      showToast(`"${nombre}" agregado a la lista`,'ok')
+    }catch(e){ showToast('Error de red','err') }
+    finally{ setSvcSaving(false) }
+  }
   const addPed=(adicional=false)=>setPeds(ps=>[...ps,{id:Date.now(),svc:'',precio:'',feeAg:!adicional,manual:false,adicional,precioCliente:''}])
   const delPed=i=>setPeds(ps=>ps.filter((_,j)=>j!==i))
 
@@ -1161,8 +1205,26 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
             <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
           </div>
         ))}
-        <datalist id="np-svc">{SVCS_LIST.map(s=><option key={s.n} value={s.n}/>)}</datalist>
-        <button onClick={()=>addPed(false)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Agregar servicio</button>
+        <datalist id="np-svc">{svcs.map(s=><option key={s.n} value={s.n}/>)}</datalist>
+        <div style={{display:'flex', gap:14, alignItems:'center'}}>
+          <button onClick={()=>addPed(false)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Agregar servicio</button>
+          <button onClick={()=>setSvcNew({nombre:'',precio:'',fee:true})} style={{fontSize:12, color:T.brand, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Crear servicio nuevo</button>
+        </div>
+        {svcNew && <div style={{border:`1px solid ${T.brand}`, borderRadius:8, padding:12, marginTop:8, background:T.surfaceAlt}}>
+          <div style={{fontSize:11, fontWeight:600, color:T.ink2, marginBottom:8}}>SERVICIO NUEVO — queda guardado para todos los presupuestos</div>
+          <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px', gap:8, marginBottom:8}}>
+            <input value={svcNew.nombre} onChange={e=>setSvcNew(s=>({...s,nombre:e.target.value}))} placeholder="Ej: Locución" style={inpV2} autoFocus/>
+            <input type="number" value={svcNew.precio} onChange={e=>setSvcNew(s=>({...s,precio:e.target.value}))} placeholder="precio" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+          </div>
+          <label style={{display:'flex', gap:6, alignItems:'center', fontSize:12, color:T.ink2, marginBottom:10, cursor:'pointer'}}>
+            <input type="checkbox" checked={svcNew.fee} onChange={e=>setSvcNew(s=>({...s,fee:e.target.checked}))} style={{cursor:'pointer'}}/>
+            Aplica fee Magma <span style={{color:T.ink3}}>(destildar si es un costo que se pasa tal cual: viáticos, rental…)</span>
+          </label>
+          <div style={{display:'flex', gap:8}}>
+            <button onClick={guardarSvc} disabled={svcSaving} style={{fontSize:12, padding:'6px 14px', borderRadius:6, border:'none', background:T.brand, color:'#fff', cursor:svcSaving?'wait':'pointer'}}>{svcSaving?'Guardando…':'Guardar'}</button>
+            <button onClick={()=>setSvcNew(null)} style={{fontSize:12, padding:'6px 14px', borderRadius:6, border:`1px solid ${T.border}`, background:'transparent', color:T.ink2, cursor:'pointer'}}>Cancelar</button>
+          </div>
+        </div>}
 
         {/* Adicionales opcionales */}
         {adicList.length>0 && <>
@@ -1368,7 +1430,7 @@ function Calendario({data, onRefresh, showToast}){
     }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
   }
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
-  const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
+  const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
   const presusByNum={}; presus.forEach(p=>{presusByNum[String(p['Columna 1']||'').trim()]=p})
   const proyByNum={}; proyectos.forEach(p=>{proyByNum[String(p['N° presupuesto']||'').trim()]=p})
@@ -1497,7 +1559,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const proyectos=data.proyectos||[]
   const rrhh=data.rrhh||[]
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
-  const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
+  const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
   const presuByNum={}; (data.presupuestos||[]).forEach(p=>{presuByNum[String(p['Columna 1']||'').trim()]=p})
   const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [editando,setEditando]=useState(null)
   useEffect(()=>{ if(nav?.mod==='proyectos'){ if(nav.filtro)setEstado(nav.filtro); if(nav.q){setQ(nav.q); setEstado('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
@@ -2493,7 +2555,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const proyByNum={}; proyectos.forEach(p=>{ proyByNum[String(p['N° presupuesto']||'').trim()]=p })
   const presuByNumPS={}; (data.presupuestos||[]).forEach(p=>{ presuByNumPS[String(p['Columna 1']||'').trim()]=p })
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
-  const serviciosConocidos=[...new Set([...SVCS_LIST.map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
+  const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
 
   const postPago=(persona,t,pagado)=>{
     const conIva = pagado && conIvaDe(persona)

@@ -219,13 +219,16 @@ export default async function handler(req, res) {
       }
 
       if (proyRowIdx === -1) {
-        await sheets.spreadsheets.values.append({
+        const ap = await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
           range: 'PROYECTOS!A:BH',
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [proyRow] }
         })
+        // La fila donde cayó, para escribir Días (CG) que está fuera del rango A:BH
+        const m = String(ap.data?.updates?.updatedRange || '').match(/!\w+?(\d+)/)
+        if (m) proyRowIdx = parseInt(m[1])
       } else {
         // Update fila existente — completar BB-BH y H/I/K (Fee/Total), preservar Carga Staff y Staff slots
         await sheets.spreadsheets.values.update({
@@ -243,6 +246,28 @@ export default async function handler(req, res) {
           ]},
         })
       }
+
+      // 📅 DÍAS (CG) — "Cant. Fechas" del presu como punto de partida.
+      // OJO: Cant. Fechas son las fechas presupuestadas (armado + evento); no todos
+      // van a todas. Por eso se marca origen "presupuesto" y NO se pisa lo revisado.
+      try {
+        const cantFechas = parseInt(String(presuRow[7]||'').replace(/[^\d]/g,'')) || 0
+        if (cantFechas > 0 && proyRowIdx > 0) {
+          const rD = await sheets.spreadsheets.values.get({
+            spreadsheetId: SHEET_ID, range: `PROYECTOS!CG${proyRowIdx}:CI${proyRowIdx}`,
+          })
+          const [diasAct, , origen] = (rD.data.values?.[0] || [])
+          if (String(origen||'').trim() !== 'revisado' && !String(diasAct||'').trim()) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId: SHEET_ID,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: [
+                { range: `PROYECTOS!CG${proyRowIdx}`, values: [[cantFechas]] },
+                { range: `PROYECTOS!CI${proyRowIdx}`, values: [['presupuesto']] },
+              ]},
+            })
+          }
+        }
+      } catch (e) { console.warn('No se pudo propagar Días:', e.message) }
     }
 
     // 🗓 SINCRONIZAR CON CALENDAR MAGMA (best-effort, no bloquea el flujo si falla)
