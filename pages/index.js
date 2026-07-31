@@ -1626,8 +1626,11 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
 }
 
 function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, onRefresh, showToast, onClose, onEditarDatos}){
-  const svcSet=new Set(serviciosConocidos.map(s=>String(s).toLowerCase().trim()))
-  const esSvcNuevo=v=>v && !svcSet.has(String(v).toLowerCase().trim())
+  // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
+  // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
+  // matcheaban y TODO servicio ya existente salía marcado como "+ servicio nuevo".
+  const svcSet=new Set(serviciosConocidos.map(svcKey))
+  const esSvcNuevo=v=>v && !svcSet.has(svcKey(v))
   const rrhhMap={}; rrhh.forEach(r=>{ const n=normTxt(r['Nombre Apellido']||r['Nombre']); if(n) rrhhMap[n]=r })
   const esFreelancerNuevo=v=>{ const n=normTxt(v); return n && n!=='somos magma' && !rrhhMap[n] }
   const [freel,setFreel]=useState(null)  // nombre del freelancer a completar
@@ -1705,7 +1708,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         <button onClick={()=>delRow(i)} title="Quitar línea" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:17, padding:0, alignSelf:'center'}}>×</button>
       </div>
     ))}
-    <datalist id="v2-rrhh"><option value="Somos Magma"/>{rrhhNames.map(n=><option key={n} value={n}/>)}</datalist>
+    {/* "Somos Magma" salía dos veces: estaba hardcodeado acá Y cargado en RRHH (fila 36).
+        Ahora se dedupe por nombre normalizado — sirve igual para los repetidos del sheet. */}
+    <datalist id="v2-rrhh">{[...new Map([['somos magma','Somos Magma'], ...rrhhNames.map(n=>[normTxt(n),n])]).values()].map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
