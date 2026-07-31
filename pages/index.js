@@ -31,6 +31,14 @@ const T = {
 
 // ---------- helpers (idénticos a la app) ----------
 const parseMonto = v => { if (!v) return 0; const n = parseFloat(String(v).replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n }
+// --- Plata que escribe Juan (formato argentino: puntos de mil, coma decimal) ---
+// El sheet guarda el número plano (927902.19). Estos helpers son SOLO para inputs.
+const fmtMontoAR = v => { const s=String(v??'').replace(/[^\d,]/g,''); if(!s) return ''
+  const [ent,...resto]=s.split(',')
+  const entF=(ent.replace(/^0+(?=\d)/,'')||'0').replace(/\B(?=(\d{3})+(?!\d))/g,'.')
+  return resto.length ? `${entF},${resto.join('').slice(0,2)}` : entF }
+const parseMontoAR = v => { const n=parseFloat(String(v??'').replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
+const numAMontoAR = n => { const v=Number(n)||0; return v ? v.toLocaleString('es-AR',{minimumFractionDigits:0, maximumFractionDigits:2}) : '' }
 const fmt = n => '$' + Math.round(Math.abs(n||0)).toLocaleString('es-AR')
 const fmtS = n => (n<0?'-':'') + '$' + Math.round(Math.abs(n||0)).toLocaleString('es-AR')
 const fmtM = n => { const a=Math.abs(n||0); return (n<0?'-':'')+(a>=1000000?'$'+(a/1000000).toFixed(1)+'M':'$'+Math.round(a/1000)+'K') }
@@ -3136,7 +3144,7 @@ function Egresos({data, onRefresh, showToast}){
   const splitDe=t=>{ const its=itemsDe(t); let emp=0,juan=0,sofi=0,eusd=0; its.forEach(m=>{ const mo=parseMonto(m['Monto']); const cat=String(m['Categoria']||'').toLowerCase(); if(String(m['Moneda']||'').toUpperCase()==='USD'){ if(cat==='empresa')eusd+=mo; return } if(cat==='empresa')emp+=mo; else if(/juan/i.test(m['Descripcion']))juan+=mo; else if(/sof/i.test(m['Descripcion']))sofi+=mo }); return {emp,juan,sofi,eusd,n:its.length} }
   const esPagado=v=>{ const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
   const vencTxt=(hoja,it)=>{ if(hoja==='GASTOS_FIJOS'){ const d=it['Dia pago']; return d?`vence día ${d}`:'' } const v=it['Vencimiento']; const d=parseD(v); return d?`vence ${d.getDate()}/${d.getMonth()+1}`:(v?String(v):'') }
-  async function saveMonto(hoja,it,val){ const k=hoja+':'+it.__row, n=parseMonto(val)
+  async function saveMonto(hoja,it,val){ const k=hoja+':'+it.__row, n=parseMontoAR(val)
     try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja,fila:it.__row,monto:n})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');return}
       showToast('Monto actualizado ✓'); setEditM(e=>{const x={...e};delete x[k];return x}); if(onRefresh) await onRefresh()
@@ -3222,7 +3230,7 @@ function Egresos({data, onRefresh, showToast}){
       {!pagado && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:11.5}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:'none', cursor:'pointer', background:pagado?T.posSoft:T.warnSoft, color:pagado?T.pos:T.warn, fontWeight:600}}>{pagado?'Pagado ✓':'Pendiente'}</button>
       {editing
-        ? <input autoFocus defaultValue={monto} onBlur={e=>saveMonto(hoja,it,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); if(e.key==='Escape') setEditM(x=>{const n={...x};delete n[k];return n}) }} style={{width:100, padding:'4px 7px', borderRadius:6, border:`1px solid ${T.brand}`, fontSize:13, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
+        ? <input autoFocus inputMode="decimal" defaultValue={numAMontoAR(monto)} onBlur={e=>saveMonto(hoja,it,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); if(e.key==='Escape') setEditM(x=>{const n={...x};delete n[k];return n}) }} style={{width:110, padding:'4px 7px', borderRadius:6, border:`1px solid ${T.brand}`, fontSize:13, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
         : <span onClick={()=>setEditM(x=>({...x,[k]:true}))} title="Tocá para editar el monto" style={{fontSize:13, fontFamily:MONO, color:T.ink, minWidth:90, textAlign:'right', cursor:'pointer', borderBottom:`1px dashed ${T.border}`}}>{fmt(monto)}</span>}
     </div>
   }
@@ -3317,7 +3325,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
   // --- Movimiento ---
   const [mv,setMv]=useState({tipo:'Compra dólares', cuentaOrigen:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', cuentaDestino:cuentaOpts.find(c=>/d[oó]lar/i.test(c))||'', montoOrigen:'', montoDestino:'', descripcion:'', notas:''})
   const moOrig=monedaCuenta(mv.cuentaOrigen), moDest=monedaCuenta(mv.cuentaDestino), esConv=moOrig!==moDest
-  const coti=esConv&&mv.montoOrigen&&mv.montoDestino ? (parseMonto(moOrig==='USD'?mv.montoDestino:mv.montoOrigen)/parseMonto(moOrig==='USD'?mv.montoOrigen:mv.montoDestino)) : 0
+  const coti=esConv&&mv.montoOrigen&&mv.montoDestino ? (parseMontoAR(moOrig==='USD'?mv.montoDestino:mv.montoOrigen)/parseMontoAR(moOrig==='USD'?mv.montoOrigen:mv.montoDestino)) : 0
   // --- Préstamo socio ---
   const [pr,setPr]=useState({direccion:'a_magma', persona:'Sofi', monto:'', moneda:'ARS', ajusta:true, cuenta:cuentaOpts.find(c=>!/d[oó]lar/i.test(c))||cuentaOpts[0]||'', notas:''})
 
@@ -3325,24 +3333,23 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
     try{ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return false } setSaving(false); return true }
     catch(e){ showToast('Error de conexión','err'); setSaving(false); return false } }
 
-  async function guardarGasto(){ if(!g.concepto.trim()){showToast('Poné el concepto','err');return} if(parseMonto(g.monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
+  async function guardarGasto(){ if(!g.concepto.trim()){showToast('Poné el concepto','err');return} if(parseMontoAR(g.monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
     if(g.pagado && !g.cuentaPago){showToast('Elegí de qué cuenta se pagó','err');return}
     // Puntual: la fecha del datepicker define el mes/año/día. Fijo: mes/año del que estás viendo + día de pago.
     let mesEnv=mesIdx, anioEnv=anio, diaEnv=g.diaPago, fechaPagoEnv=''
     if(g.recurrencia==='unico'){ const [Y,M,D]=(g.fecha||'').split('-').map(Number); if(Y&&M&&D){ anioEnv=Y; mesEnv=M; diaEnv=D; fechaPagoEnv=`${D}/${M}/${Y}` } }
-    const ok=await post('/api/gasto-nuevo',{categoria:g.categoria, concepto:g.concepto, monto:parseMonto(g.monto), moneda:g.moneda, recurrencia:g.recurrencia, diaPago:diaEnv, mes:mesEnv, anio:anioEnv, notas:g.notas, pagado:g.pagado, cuentaPago:g.pagado?g.cuentaPago:'', fechaPago:g.pagado?(fechaPagoEnv||undefined):''})
+    const ok=await post('/api/gasto-nuevo',{categoria:g.categoria, concepto:g.concepto, monto:parseMontoAR(g.monto), moneda:g.moneda, recurrencia:g.recurrencia, diaPago:diaEnv, mes:mesEnv, anio:anioEnv, notas:g.notas, pagado:g.pagado, cuentaPago:g.pagado?g.cuentaPago:'', fechaPago:g.pagado?(fechaPagoEnv||undefined):''})
     if(ok){ showToast(g.pagado?'Gasto agregado y pagado ✓':(g.recurrencia==='unico'?'Gasto agregado ✓':'Gasto fijo agregado ✓')); onDone() } }
-  async function guardarMov(){ if(parseMonto(mv.montoOrigen)<=0){showToast('Poné el monto','err');return} if(esConv&&mv.cuentaDestino&&parseMonto(mv.montoDestino)<=0){showToast('Poné cuántos '+moDest+' entran','err');return}
-    const ok=await post('/api/movimiento-nuevo',{tipo:mv.tipo, descripcion:mv.descripcion, cuentaOrigen:mv.cuentaOrigen, monedaOrigen:moOrig, montoOrigen:parseMonto(mv.montoOrigen), cuentaDestino:mv.cuentaDestino, monedaDestino:moDest, montoDestino:esConv?parseMonto(mv.montoDestino):parseMonto(mv.montoOrigen), cotizacion:coti?Math.round(coti):'', notas:mv.notas})
+  async function guardarMov(){ if(parseMontoAR(mv.montoOrigen)<=0){showToast('Poné el monto','err');return} if(esConv&&mv.cuentaDestino&&parseMontoAR(mv.montoDestino)<=0){showToast('Poné cuántos '+moDest+' entran','err');return}
+    const ok=await post('/api/movimiento-nuevo',{tipo:mv.tipo, descripcion:mv.descripcion, cuentaOrigen:mv.cuentaOrigen, monedaOrigen:moOrig, montoOrigen:parseMontoAR(mv.montoOrigen), cuentaDestino:mv.cuentaDestino, monedaDestino:moDest, montoDestino:esConv?parseMontoAR(mv.montoDestino):parseMontoAR(mv.montoOrigen), cotizacion:coti?Math.round(coti):'', notas:mv.notas})
     if(ok){ showToast('Movimiento registrado ✓'); onDone() } }
-  async function guardarPrestamo(){ if(parseMonto(pr.monto)<=0){showToast('Poné el monto','err');return}
+  async function guardarPrestamo(){ if(parseMontoAR(pr.monto)<=0){showToast('Poné el monto','err');return}
     const aMagma=pr.direccion==='a_magma'  // socio → Magma (Magma le debe)
     const deudor=aMagma?'Magma':pr.persona, acreedor=aMagma?pr.persona:'Magma', efecto=aMagma?'entra':'sale'
-    const ok=await post('/api/prestamo-socio',{nombre:`${deudor} debe a ${acreedor}`, deudor, acreedor, monto:parseMonto(pr.monto), moneda:pr.moneda, cuenta:pr.ajusta?pr.cuenta:'', efecto:pr.ajusta?efecto:'', notas:pr.notas})
+    const ok=await post('/api/prestamo-socio',{nombre:`${deudor} debe a ${acreedor}`, deudor, acreedor, monto:parseMontoAR(pr.monto), moneda:pr.moneda, cuenta:pr.ajusta?pr.cuenta:'', efecto:pr.ajusta?efecto:'', notas:pr.notas})
     if(ok){ showToast('Préstamo registrado ✓'); onDone() } }
 
   const TabBtn=({id,label})=><button onClick={()=>setTab(id)} style={{flex:1, padding:'9px 8px', borderRadius:9, border:`1px solid ${tab===id?T.brand:T.border}`, background:tab===id?T.brandSoft:T.surface, color:tab===id?T.brand:T.ink2, fontSize:12.5, fontWeight:tab===id?700:500, cursor:'pointer'}}>{label}</button>
-  const Fld=({label,children})=><div style={{flex:'1 1 140px'}}><label style={lblV2}>{label}</label>{children}</div>
 
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 20px', overflowY:'auto'}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:520, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
@@ -3371,7 +3378,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
           </div>
           <div style={{marginBottom:12}}><label style={lblV2}>Concepto *</label><input value={g.concepto} onChange={e=>setG(s=>({...s,concepto:e.target.value}))} placeholder={g.recurrencia==='unico'?'ej: IVA julio 2026':'ej: Seguro oficina'} style={inpV2} autoFocus/></div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
-            <Fld label="Monto *"><input value={g.monto} onChange={e=>setG(s=>({...s,monto:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>
+            <Fld label="Monto *"><MontoInput value={g.monto} onChange={v=>setG(s=>({...s,monto:v}))} placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>
             <Fld label="Moneda"><select value={g.moneda} onChange={e=>setG(s=>({...s,moneda:e.target.value}))} style={inpV2}><option>ARS</option><option>USD</option></select></Fld>
           </div>
           <div style={{marginBottom:12, background:g.pagado?T.posSoft:T.surfaceAlt, borderRadius:8, padding:'10px 12px'}}>
@@ -3396,8 +3403,8 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
             <Fld label="Entra a"><select value={mv.cuentaDestino} onChange={e=>setMv(s=>({...s,cuentaDestino:e.target.value}))} style={inpV2}><option value="">— (no entra a otra cuenta)</option>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
           </div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
-            <Fld label={`Monto que sale (${moOrig})`}><input value={mv.montoOrigen} onChange={e=>setMv(s=>({...s,montoOrigen:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
-            {esConv && mv.cuentaDestino && <Fld label={`Monto que entra (${moDest})`}><input value={mv.montoDestino} onChange={e=>setMv(s=>({...s,montoDestino:e.target.value}))} inputMode="decimal" placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>}
+            <Fld label={`Monto que sale (${moOrig})`}><MontoInput value={mv.montoOrigen} onChange={v=>setMv(s=>({...s,montoOrigen:v}))} placeholder="0" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
+            {esConv && mv.cuentaDestino && <Fld label={`Monto que entra (${moDest})`}><MontoInput value={mv.montoDestino} onChange={v=>setMv(s=>({...s,montoDestino:v}))} placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>}
           </div>
           {esConv && mv.cuentaDestino && coti>0 && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Tipo de cambio: <b style={{fontFamily:MONO}}>${Math.round(coti).toLocaleString('es-AR')}</b> por dólar</div>}
           <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={mv.notas} onChange={e=>setMv(s=>({...s,notas:e.target.value}))} placeholder="ej: para pagar tarjeta en dólares" style={inpV2}/></div>
@@ -3412,7 +3419,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
           </div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
             <Fld label="Socio"><input list="ae-socios" value={pr.persona} onChange={e=>setPr(s=>({...s,persona:e.target.value}))} style={inpV2}/><datalist id="ae-socios"><option value="Sofi"/><option value="Juan"/></datalist></Fld>
-            <Fld label="Monto *"><input value={pr.monto} onChange={e=>setPr(s=>({...s,monto:e.target.value}))} inputMode="decimal" placeholder="ej 650000" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
+            <Fld label="Monto *"><MontoInput value={pr.monto} onChange={v=>setPr(s=>({...s,monto:v}))} placeholder="ej 650.000" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
             <Fld label="Moneda"><select value={pr.moneda} onChange={e=>setPr(s=>({...s,moneda:e.target.value}))} style={inpV2}><option>ARS</option><option>USD</option></select></Fld>
           </div>
           <label style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, color:T.ink2, marginBottom:10, cursor:'pointer'}}>
@@ -3421,7 +3428,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
           </label>
           {pr.ajusta && <div style={{marginBottom:12}}><label style={lblV2}>Cuenta</label><select value={pr.cuenta} onChange={e=>setPr(s=>({...s,cuenta:e.target.value}))} style={inpV2}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
           <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={pr.notas} onChange={e=>setPr(s=>({...s,notas:e.target.value}))} style={inpV2}/></div>
-          <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Queda en <b>Préstamos → Deudas entre socios</b>: {pr.direccion==='a_magma'?`Magma le debe ${fmt(parseMonto(pr.monto))} a ${pr.persona}`:`${pr.persona} le debe ${fmt(parseMonto(pr.monto))} a Magma`}</div>
+          <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Queda en <b>Préstamos → Deudas entre socios</b>: {pr.direccion==='a_magma'?`Magma le debe ${fmt(parseMontoAR(pr.monto))} a ${pr.persona}`:`${pr.persona} le debe ${fmt(parseMontoAR(pr.monto))} a Magma`}</div>
           <button disabled={saving} onClick={guardarPrestamo} style={btnAgregar(saving)}>{saving?'Guardando…':'Registrar préstamo'}</button>
         </>}
       </div>
@@ -3432,14 +3439,14 @@ const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, bord
 
 // Editar un gasto ya cargado (concepto, categoría, monto, día). Si ya está pagado y cambia el monto, ajusta la cuenta.
 function EditarGasto({g, onClose, onDone, showToast}){
-  const [f,setF]=useState({Concepto:g['Concepto']||'', Categoria:g['Categoria']||'', Monto:parseMonto(g['Monto'])||'', 'Dia pago':g['Dia pago']||''})
+  const [f,setF]=useState({Concepto:g['Concepto']||'', Categoria:g['Categoria']||'', Monto:numAMontoAR(parseMonto(g['Monto'])), 'Dia pago':g['Dia pago']||''})
   const [saving,setSaving]=useState(false)
   const pagado=/^s[íi]$|^true$/i.test(String(g['Pagado']||''))||String(g['Meses pagados']||'').trim()!==''
   async function guardar(){
     if(!String(f.Concepto).trim()){showToast('Poné el concepto','err');return}
-    if(parseMonto(f.Monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
+    if(parseMontoAR(f.Monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
     setSaving(true)
-    try{ const r=await fetch('/api/gasto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:g.__row, cambios:{Concepto:f.Concepto, Categoria:f.Categoria, Monto:parseMonto(f.Monto), 'Dia pago':f['Dia pago']}})})
+    try{ const r=await fetch('/api/gasto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:g.__row, cambios:{Concepto:f.Concepto, Categoria:f.Categoria, Monto:parseMontoAR(f.Monto), 'Dia pago':f['Dia pago']}})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       showToast('Gasto actualizado ✓'+(j.ajusteCuenta?` · cuenta ajustada ${fmt(Math.abs(j.ajusteCuenta))}`:'')); onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) } }
@@ -3455,8 +3462,8 @@ function EditarGasto({g, onClose, onDone, showToast}){
           <div style={{flex:'1 1 140px'}}><label style={lblV2}>Categoría</label><input value={f.Categoria} onChange={e=>setF(s=>({...s,Categoria:e.target.value}))} style={inpV2}/></div>
           <div style={{flex:'0 1 100px'}}><label style={lblV2}>Día de pago</label><input value={f['Dia pago']} onChange={e=>setF(s=>({...s,['Dia pago']:e.target.value}))} placeholder="ej 23" style={inpV2}/></div>
         </div>
-        <div style={{marginBottom:14}}><label style={lblV2}>Monto{String(g['Moneda']||'').toUpperCase()==='USD'?' (USD)':''}</label><input value={f.Monto} onChange={e=>setF(s=>({...s,Monto:e.target.value}))} inputMode="decimal" style={{...inpV2, fontFamily:MONO}}/></div>
-        {pagado && parseMonto(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:11.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMonto(f.Monto))}).</div>}
+        <div style={{marginBottom:14}}><label style={lblV2}>Monto{String(g['Moneda']||'').toUpperCase()==='USD'?' (USD)':''}</label><MontoInput value={f.Monto} onChange={v=>setF(s=>({...s,Monto:v}))} style={{...inpV2, fontFamily:MONO}}/></div>
+        {pagado && parseMontoAR(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:11.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMontoAR(f.Monto))}).</div>}
         <button disabled={saving} onClick={guardar} style={btnAgregar(saving)}>{saving?'Guardando…':'Guardar cambios'}</button>
       </div>
     </div>
@@ -3898,6 +3905,21 @@ function Shell({children}){
 const selectStyle = { padding:'9px 11px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12.5, cursor:'pointer', outline:'none' }
 const inpV2 = { width:'100%', padding:'9px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.bg, color:T.ink, fontSize:13.5, outline:'none' }
 const lblV2 = { fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5 }
+// Campo con label. A nivel módulo a propósito (ver nota de MontoInput).
+const Fld=({label,children})=><div style={{flex:'1 1 140px'}}><label style={lblV2}>{label}</label>{children}</div>
+// Input de plata: formatea mientras escribís (100.000,55) y mantiene el cursor donde estaba.
+// OJO: tiene que vivir a nivel módulo. Si se define adentro de otro componente, React lo
+// desmonta en cada render y el input pierde el foco a cada tecla.
+function MontoInput({ value, onChange, style, ...rest }){
+  const ref=useRef(null), caret=useRef(null)
+  useEffect(()=>{ if(caret.current!=null && ref.current){ ref.current.setSelectionRange(caret.current, caret.current); caret.current=null } })
+  const handle=e=>{ const el=e.target, raw=el.value, pos=el.selectionStart??raw.length
+    const signif=raw.slice(0,pos).replace(/[^\d,]/g,'').length   // dígitos/coma a la izquierda del cursor
+    const out=fmtMontoAR(raw)
+    let n=0,i=0; while(i<out.length && n<signif){ if(/[\d,]/.test(out[i])) n++; i++ }
+    caret.current=i; onChange(out) }
+  return <input ref={ref} value={value??''} onChange={handle} inputMode="decimal" style={style} {...rest}/>
+}
 const navBtn = { width:34, height:34, borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:14, cursor:'pointer' }
 const miniBtn = { padding:'6px 11px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, fontWeight:500, cursor:'pointer', textDecoration:'none', display:'inline-block' }
 const btnPrimary = { padding:'11px 22px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer' }

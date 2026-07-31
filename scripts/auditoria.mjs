@@ -77,6 +77,21 @@ py.forEach((r,i)=>{if(i===0)return;const n=String(r[yN]||'').trim();if(!n)return
 const dupY=Object.entries(yByNum).filter(([k,v])=>v.length>1)
 if(dupY.length) dupY.forEach(([n,v])=>warn(`Proyecto #${n} en ${v.length} filas (${v.join(',')})`)); else ok('Sin proyectos duplicados')
 
+// 6bis) Fecha Evento desincronizada PROYECTOS vs PRESUPUESTOS
+// El calendario de la app lee PROYECTOS para los aprobados. Si la fecha se edita a mano
+// en el sheet (no desde la app), PROYECTOS queda viejo y el laburo aparece en el mes equivocado.
+// Se arregla con: node scripts/fix-fecha-desync.mjs <N°>
+const pyF=await g('PROYECTOS!A:H'), prF=await g('PRESUPUESTOS!A:H')
+const yfN=pyF[0].findIndex(x=>/n°\s*presupuesto/i.test(String(x||''))), yfF=pyF[0].indexOf('Fecha Evento')
+const pfF=prF[0].indexOf('Fecha Evento'), pfC=prF[0].indexOf('Cliente'), pfP=prF[0].indexOf('Proyecto')
+const nd=f=>{const p=String(f||'').trim().split('/');return p.length<3?'':`${+p[0]}/${+p[1]}/${+p[2]}`}
+H('CALENDARIO · fecha del evento distinta entre PROYECTOS y PRESUPUESTOS')
+const presF={}; prF.forEach((r,i)=>{if(i===0)return;const n=String(r[0]||'').trim();if(n&&!presF[n])presF[n]={f:r[pfF],c:r[pfC],p:r[pfP]}})
+let desync=0
+pyF.forEach((r,i)=>{if(i===0)return;const n=String(r[yfN]||'').trim();const pe=presF[n];if(!n||!pe)return
+  const a=nd(r[yfF]),b=nd(pe.f); if(a&&b&&a!==b){desync++;warn(`#${n} "${pe.c||''} · ${pe.p||''}" → PROYECTOS ${a} ≠ PRESUPUESTOS ${b} (el calendario lo muestra en el mes de ${a})`)}})
+if(!desync) ok('Todas las fechas de evento coinciden entre solapas')
+
 // 6) PAGOS_STAFF
 const ps=await g('PAGOS_STAFF!A:N')
 const psh=ps[0]
