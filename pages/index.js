@@ -1863,11 +1863,16 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const sumFiltrada = filtrada.reduce((s,f)=>s+saldoF(f),0)
   const sumPend = pendOrdenados.reduce((s,x)=>s+x.pendiente,0)
 
+  // Trabajos futuros: todavía no pasó el evento, pero a veces el cliente pide la factura
+  // por adelantado (orden de compra, cierre de mes de la agencia). Acá se pueden facturar.
+  const futOrdenados = pendFuturos.filter(x=>(!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))&&matchMes(x.p['Fecha Evento'])).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
+  const sumFut = futOrdenados.reduce((s,x)=>s+x.pendiente,0)
+
   // Opciones de mes (por fecha de evento) para el filtro
-  const mesesSet={}; ;[...fcReal.map(evDe), ...pendientes.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
+  const mesesSet={}; ;[...fcReal.map(evDe), ...pendTodos.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
   const monthOpts=Object.entries(mesesSet).sort((a,b)=>{ const [ma,ya]=a[0].split('-').map(Number),[mb,yb]=b[0].split('-').map(Number); return yb-ya||mb-ma })
 
-  const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`]]
+  const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`],['futuros',`Futuros (${pendFuturos.length})`]]
 
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
@@ -1883,7 +1888,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
           {l:'En plazo', v:fmt(pcEnPlazo), c:T.ink2},
         ]}/>
       <Hero label="Por facturar" value={fmt(porFacturarTotal)} accent={T.warn} sub={`${pendientes.length} trabajos ya hechos sin factura`}
-        desglose={montoFuturos>0?[{l:`+ ${pendFuturos.length} trabajos futuros (todavía no se pueden facturar)`, v:fmt(montoFuturos), c:T.ink3}]:null}/>
+        desglose={montoFuturos>0?[{l:`+ ${pendFuturos.length} trabajos futuros · ver para facturar por adelantado`, v:fmt(montoFuturos), c:T.ink3, onClick:()=>setFilt('futuros')}]:null}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar factura, presu, cliente, proyecto…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
@@ -1893,8 +1898,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
     </div>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, padding:'9px 15px', background:T.surfaceAlt, borderRadius:9}}>
-      <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
-      <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:sumFiltrada)}</span>
+      <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : filt==='futuros' ? `${futOrdenados.length} ${futOrdenados.length===1?'trabajo futuro':'trabajos futuros'}` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
+      <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:filt==='futuros'?sumFut:sumFiltrada)}</span>
     </div>
     {(filt==='sinfacturar'||filt==='todas') && (<>
     {filt==='todas' && <div style={{margin:'4px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Sin facturar · {pendOrdenados.length} · {fmt(sumPend)}</div>}
@@ -1923,7 +1928,33 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       )})}
     </div>
     </>)}
-    {filt!=='sinfacturar' && (<>
+    {filt==='futuros' && (
+    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
+      <div style={{background:T.surfaceAlt, color:T.ink2, padding:'9px 18px', fontSize:12, borderBottom:`1px solid ${T.border}`}}>Trabajos aprobados cuyo evento todavía no pasó. Facturalos solo si el cliente te lo pide por adelantado.</div>
+      <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Acción</span>
+      </div>
+      {futOrdenados.length===0 && <Empty>No hay trabajos futuros pendientes de facturar</Empty>}
+      {futOrdenados.slice(0,200).map((x,i)=>{ const fi=semEvento(x.p['Fecha Evento']); return (
+        <div key={i} style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+          <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
+            <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:T.ink3, flexShrink:0}}/><span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:500}}>{fi.fecha}</span></span>
+            <span style={{fontSize:9.5, color:T.ink3}}>en {-fi.dias}d</span>
+          </span>
+          <span style={{minWidth:0, paddingRight:10}}>
+            <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
+            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
+          </span>
+          <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink2, fontWeight:600}}>{fmt(x.pendiente)}</span>
+          <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
+            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title="Facturar por adelantado (el evento todavía no pasó)">Facturar</button>
+            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
+          </span>
+        </div>
+      )})}
+    </div>
+    )}
+    {filt!=='sinfacturar' && filt!=='futuros' && (<>
     {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 275px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
@@ -1965,7 +1996,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
-    {nuevaF && <NuevaFactura pendientes={pendientes} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
@@ -3921,8 +3952,8 @@ function Hero({label, value, sub, subStrong, subStrongColor, accent, desglose}){
     <div style={{fontSize:12.5, color:T.ink2, marginTop:9}}>{sub}{subStrong && <span style={{color:subStrongColor||T.ink, fontWeight:600}}>{subStrong}</span>}</div>
     {desglose && <div style={{marginTop:12, paddingTop:11, borderTop:`1px solid ${T.border}`, display:'grid', gap:5}}>
       {desglose.map((d,i)=>(
-        <div key={i} style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:12}}>
-          <span style={{color:T.ink3}}>{d.l}</span>
+        <div key={i} onClick={d.onClick} style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:12, cursor:d.onClick?'pointer':'default'}}>
+          <span style={{color:T.ink3, textDecoration:d.onClick?'underline':'none', textUnderlineOffset:3}}>{d.l}</span>
           <span style={{fontFamily:MONO, color:d.c||T.ink, fontWeight:600}}>{d.v}</span>
         </div>
       ))}
