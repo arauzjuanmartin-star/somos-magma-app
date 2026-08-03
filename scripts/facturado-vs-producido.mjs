@@ -20,7 +20,7 @@ const yes=v=>/^(s[ií]|true|x|✓)$/i.test(txt(v))
 const fecha=v=>{const m=txt(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;let y=+m[3];if(y<100)y+=2000;return new Date(y,+m[2]-1,+m[1])}
 const MESES=['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['PROYECTOS!A:CI','FACTURACION!A:V'],valueRenderOption:'FORMATTED_VALUE'})
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['PROYECTOS!A:CZ','FACTURACION!A:V'],valueRenderOption:'FORMATTED_VALUE'})
 const [PRO,FAC]=R.data.valueRanges.map(v=>v.values||[])
 const FH=FAC[0], fNro=FH.indexOf('N° Presupuesto'), fNum=FH.indexOf('Nro de Factura'), fFin=FH.indexOf('Precio FINAL'), fMes=0
 const facDe={}
@@ -28,11 +28,15 @@ FAC.slice(1).forEach(r=>{ const n=txt(r[fNro]); if(!n)return
   ;(facDe[n]=facDe[n]||[]).push({num:txt(r[fNum]), final:num(r[fFin]), cobrada:yes(r[4]), mes:txt(r[fMes])}) })
 
 const iTot=PRO[0].findIndex(x=>txt(x)==='Total')
+// un proyecto marcado como no facturable en el sheet no es un pendiente:
+// el trabajo se hizo pero se decidió no cobrarlo (marcar-no-facturable.mjs)
+const iNF=PRO[0].indexOf('No facturable')
 const proy={}
 PRO.slice(1).forEach(r=>{ const f=fecha(r[3]); if(!f||f.getFullYear()!==2026)return
   const n=txt(r[2]); if(!n)return
-  const p=proy[n]||={nro:n,mes:f.getMonth()+1,fecha:txt(r[3]),ag:txt(r[4]),nombre:txt(r[6]),total:0}
-  p.total=Math.max(p.total,num(r[iTot])) })
+  const p=proy[n]||={nro:n,mes:f.getMonth()+1,fecha:txt(r[3]),ag:txt(r[4]),nombre:txt(r[6]),total:0,noFact:''}
+  p.total=Math.max(p.total,num(r[iTot]))
+  if(iNF>=0 && txt(r[iNF])) p.noFact=txt(r[iNF]) })
 const todos=Object.values(proy).filter(p=>p.total>0&&(!MES||p.mes===MES))
 todos.forEach(p=>{ const f=facDe[p.nro]||[]
   p.fac = f.reduce((a,x)=>a+x.final,0)
@@ -41,9 +45,10 @@ todos.forEach(p=>{ const f=facDe[p.nro]||[]
   p.cobrada = f.some(x=>x.cobrada)
   p.mesFactura = f.map(x=>x.mes).filter(Boolean).join('/') })
 
-const sin = todos.filter(p=>!p.tieneFactura)
+const noFact = todos.filter(p=>p.noFact)
+const sin = todos.filter(p=>!p.tieneFactura && !p.noFact)
 const sinNro = todos.filter(p=>p.tieneFactura&&!p.conNumero)
-const ok = todos.filter(p=>p.conNumero)
+const ok = todos.filter(p=>p.conNumero && !p.noFact)
 const S=(a,k)=>a.reduce((s,x)=>s+x[k],0)
 
 console.log(`\n${'█'.repeat(86)}\n  PRODUCIDO vs FACTURADO ${MES?'— '+MESES[MES].toUpperCase()+' 2026':'— 2026'}, proyecto por proyecto\n${'█'.repeat(86)}`)
@@ -52,6 +57,7 @@ console.log(`  ${'─'.repeat(56)}`)
 console.log(`  \x1b[32m${'Con factura emitida'.padEnd(34)}${String(ok.length).padStart(5)}${M(S(ok,'total')).padStart(16)}\x1b[0m`)
 if(sinNro.length) console.log(`  \x1b[33m${'En FACTURACION pero sin N° de factura'.padEnd(34)}${String(sinNro.length).padStart(5)}${M(S(sinNro,'total')).padStart(16)}\x1b[0m`)
 console.log(`  \x1b[31m${'Sin ninguna factura'.padEnd(34)}${String(sin.length).padStart(5)}${M(S(sin,'total')).padStart(16)}\x1b[0m`)
+if(noFact.length) console.log(`  ${'Marcados NO FACTURABLE'.padEnd(34)}${String(noFact.length).padStart(5)}${M(S(noFact,'total')).padStart(16)}`)
 console.log(`  ${'─'.repeat(56)}`)
 console.log(`  ${'TOTAL PRODUCIDO'.padEnd(34)}${String(todos.length).padStart(5)}${M(S(todos,'total')).padStart(16)}`)
 
@@ -62,6 +68,8 @@ const ver=(t,a,color)=>{ if(!a.length)return
     console.log(`  ${p.nro.padEnd(7)}${p.fecha.padEnd(11)}${p.ag.slice(0,18).padEnd(20)}${p.nombre.slice(0,32).padEnd(34)}${M(p.total).padStart(14)}`))
   console.log(`  ${' '.repeat(72)}${M(S(a,'total')).padStart(14)}`)}
 ver(`SIN NINGUNA FACTURA (${sin.length})`, sin)
+if(noFact.length){ console.log(`\n\x1b[1m■ NO FACTURABLES (${noFact.length}) — decisión tomada, no son pendientes\x1b[0m\n`)
+  noFact.forEach(p=>console.log(`  ${p.nro.padEnd(7)}${p.fecha.padEnd(11)}${p.ag.slice(0,18).padEnd(20)}${p.nombre.slice(0,28).padEnd(30)}${M(p.total).padStart(13)}   ${p.noFact.slice(0,46)}`)) }
 ver(`EN FACTURACION PERO SIN N° DE FACTURA (${sinNro.length})`, sinNro)
 if(MES){ const otros=ok.filter(p=>p.mesFactura&&!p.mesFactura.toLowerCase().includes(MESES[MES]))
   if(otros.length){ console.log(`\n  \x1b[36m${otros.length} proyectos de ${MESES[MES]} están facturados en OTRO mes (${M(S(otros,'total'))}) — por eso la comparación mes a mes engaña.\x1b[0m`) } }

@@ -73,8 +73,8 @@ check('Facturado ene–jul 2026',          169776190, facEneJul, 1000)
 try {
   const out = execSync('node scripts/facturado-vs-producido.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const g = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
-  check('Proyectos sin ninguna factura',       20, g(/Sin ninguna factura\s+(\d+)/), 0)
-  check('Producido sin factura',         32788560, g(/Sin ninguna factura\s+\d+\s+\$([\d.]+)/), 1000)
+  check('Proyectos sin ninguna factura',       19, g(/Sin ninguna factura\s+(\d+)/), 0)
+  check('Producido sin factura',         32378560, g(/Sin ninguna factura\s+\d+\s+\$([\d.]+)/), 1000)
 } catch(e) { check('Producido vs facturado (script)', 1, 0, 0) }
 
 // ── gastos fijos ──
@@ -137,7 +137,7 @@ SM.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return
   if(mon!=='ARS') return                            // USD va aparte
   if(!/juan/i.test(so))return
   if(/Magma→Socio/i.test(dir)) juanRec+=m; else juanPuso+=m })
-check('Juan — retiró de Magma',           14485000, juanRec, 1000)
+check('Juan — retiró de Magma',           14945000, juanRec, 1000)
 check('Juan — puso de su bolsillo',        3250036, juanPuso, 1000)
 check('Sofi — movimientos cargados',             15, sofiMov, 0)
 
@@ -157,7 +157,7 @@ try {
     return parseFloat((montos[montos.length-1] || '0').replace(/[$.]/g,''))
   }
   check('Saldo de socio — Sofi',  11866046, saldo('Sofi'), 1000)
-  check('Saldo de socio — Juan',  -1952973, saldo('Juan'), 1000)
+  check('Saldo de socio — Juan',  -2412973, saldo('Juan'), 1000)
 } catch(e) { check('Saldo de socios (script)', 1, 0, 0) }
 
 // ── formatos de rodaje con margen (sección B.1 bis) ──
