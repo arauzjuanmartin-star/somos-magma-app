@@ -165,7 +165,7 @@ try {
   check('Presupuestado para staff',    106270909, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
   check('Pagado de verdad al staff',   112503344, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
   check('Desvío de costo',               6232435, n(/desvío\s+\$([\d.]+)/), 1000)
-  check('Proyectos sin staff cargado',         18, n(/(\d+) proyectos todavía no tienen/), 0)
+  check('Proyectos sin staff cargado',         15, n(/(\d+) proyectos todavía no tienen/), 0)
 } catch(e) { check('Desvío de costo (script)', 1, 0, 0) }
 
 // ── punto de equilibrio con la estructura separada (A.7) ──

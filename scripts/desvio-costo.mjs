@@ -28,6 +28,14 @@ const H=PRO[0]
 const iTot=H.findIndex(x=>txt(x)==='Total'), iSub=H.indexOf('Subtotal')
 const PED=[11,14,17,20,23,26,29,32,35,38,41,44,47,60,63,66,69,72,75,78,81]
 
+// Casos revisados con Juan (03/08/2026) que están bien así, aunque el staff
+// figure en cero. No son pendientes: no hay nadie esperando cobrar.
+const VALIDADOS = {
+  '1683':'Austral · el staff va en $0, confirmado',
+  '1684':'Austral · el staff va en $0, confirmado',
+  '1829':'la edición la hizo la casa (Somos Magma $1)',
+}
+
 const p={}
 PRO.slice(1).forEach(r=>{const f=fecha(r[3]);if(!f||f.getFullYear()!==2026)return
   const n=txt(r[2]);if(!n)return
@@ -38,8 +46,12 @@ PRO.slice(1).forEach(r=>{const f=fecha(r[3]);if(!f||f.getFullYear()!==2026)retur
     if(/somos magma/i.test(pe)) x.propio+=v; else x.real+=v })})
 const ps=Object.values(p).filter(x=>x.total>0)
 ps.forEach(x=>{ x.costoReal=x.real+x.propio; x.desvio=x.costoReal-x.sub
-  x.estado = x.ped===0 ? 'Sin pedidos' : (x.conStaff===0 ? 'Staff sin cargar' : (x.conStaff<x.ped ? 'Staff a medio cargar' : 'Staff completo')) })
+  x.nota = VALIDADOS[x.nro] || ''
+  x.estado = x.nota ? 'Revisado — está bien'
+    : x.ped===0 ? 'Sin pedidos'
+    : (x.conStaff===0 ? 'Staff sin cargar' : (x.conStaff<x.ped ? 'Staff a medio cargar' : 'Staff completo')) })
 
+const validados=ps.filter(x=>x.estado==='Revisado — está bien')
 const completos=ps.filter(x=>x.estado==='Staff completo')
 const parciales=ps.filter(x=>x.estado==='Staff a medio cargar')
 const pendientes=ps.filter(x=>x.estado==='Staff sin cargar'||x.estado==='Sin pedidos')
@@ -57,9 +69,9 @@ console.log(`\n${'█'.repeat(86)}\n  DESVÍO DE COSTO 2026 — lo presupuestado
 console.log(`\n  El costo real es el staff cargado en cada pedido. El Subtotal es lo que se presupuestó.\n`)
 console.log(`  ${'estado'.padEnd(24)}${'proy'.padStart(5)}${'presupuestado'.padStart(16)}${'pagado real'.padStart(16)}${'desvío'.padStart(15)}`)
 console.log(`  ${'─'.repeat(76)}`)
-;[['Staff completo',completos],['Staff a medio cargar',parciales],['Falta cargar el staff',pendientes]].forEach(([l,a])=>{
+;[['Staff completo',completos],['Staff a medio cargar',parciales],['Falta cargar el staff',pendientes],['Revisado — está bien',validados]].forEach(([l,a])=>{
   if(!a.length)return
-  console.log(`  ${l.padEnd(24)}${String(a.length).padStart(5)}${M(S(a,'sub')).padStart(16)}${M(S(a,'costoReal')).padStart(16)}${(l==='Falta cargar el staff'?'—':M(S(a,'desvio'))).padStart(15)}`)})
+  console.log(`  ${l.padEnd(24)}${String(a.length).padStart(5)}${M(S(a,'sub')).padStart(16)}${M(S(a,'costoReal')).padStart(16)}${(/Falta|Revisado/.test(l)?'—':M(S(a,'desvio'))).padStart(15)}`)})
 console.log(`  ${'─'.repeat(76)}`)
 console.log(`  ${'TOTAL'.padEnd(24)}${String(ps.length).padStart(5)}${M(S(ps,'sub')).padStart(16)}${M(S(ps,'costoReal')).padStart(16)}`)
 
