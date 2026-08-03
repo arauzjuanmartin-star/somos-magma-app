@@ -34,6 +34,7 @@ const VALIDADOS = {
   '1683':'Austral · el staff va en $0, confirmado',
   '1684':'Austral · el staff va en $0, confirmado',
   '1829':'la edición la hizo la casa (Somos Magma $1)',
+  '2913':'se le pagó a Lucho y no se cobra al cliente, cerrado por Juan',
 }
 
 const p={}

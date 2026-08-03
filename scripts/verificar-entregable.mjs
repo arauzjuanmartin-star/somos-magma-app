@@ -51,13 +51,13 @@ PRO.slice(1).forEach(r=>{
   if(t>0){ tickets.push(t); if(esEvento) ticketsEvento.push(t) }
 })
 check('Producción ene–jul 2026',        232971990, prodEneJul, 1000)
-check('Costo de freelancers 2026',       98208063, costoFree, 1000)
+check('Costo de freelancers 2026',       99448063, costoFree, 1000)
 // margen = ganancia Magma real (Fee Agencia + Somos Magma + Diferencia) / producción,
 // igual que snapshot-coach. NO es (producción - costo freelancers), que incluye impuestos.
 const margenPct=Math.round(ganMagma/prodTot*100)
 check('Margen de producción (%)',              50, margenPct, 1)   // tolerancia 1: queda en el borde 49,5%
 check('Ticket promedio de eventos',       1372762, Math.round(ticketsEvento.reduce((s,x)=>s+x,0)/ticketsEvento.length), 5000)
-check('Ticket mediana de eventos',         800000, mediana(ticketsEvento), 1000)
+check('Ticket mediana de eventos',         825000, mediana(ticketsEvento), 1000)
 
 // ── facturación ──
 let facEneJul=0, porCobrar=0
@@ -90,19 +90,28 @@ check('  · de eso, interés',               6394557, int, 1000)
 // ── caja ──
 let caja=0
 CUE.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return; if(yes(r[4])) caja+=num(r[5]) })
-check('Caja (cuentas activas)',          -22520166, caja, 1000)
+check('Caja (cuentas activas)',          -19337866, caja, 1000)
 
 // ── Oir ──
 let oirPend=0
 FAC.slice(1).forEach(r=>{ if(!/oir/i.test(txt(r[7])))return; if(!yes(r[4])) oirPend+=num(r[12]) })
 check('Oir — facturas abiertas',           7260000, oirPend, 1000)
 
+// ── cobranza pendiente (sección C.2) ──
+let sinCobrar=0, vencido90=0
+const hoyRef=new Date('2026-08-03')
+FAC.slice(1).forEach(r=>{ if(!r||!r.some(c=>txt(c)))return; if(yes(r[4]))return
+  const v=num(r[12]); if(!v)return; sinCobrar+=v
+  const vt=fecha(r[19]); if(vt && (hoyRef-vt)/864e5>90) vencido90+=v })
+check('Facturado sin cobrar',             58247001, sinCobrar, 1000)
+check('Vencido a más de 90 días',                0, vencido90, 1000)
+
 // ── Pagos_Staff conciliado ──
 const nros2026=new Set()
 PRO.slice(1).forEach(r=>{const f=fecha(r[3]); if(f&&f.getFullYear()===2026){const n=txt(r[2]); if(n)nros2026.add(n)}})
 let psAd=0
 PS.slice(1).forEach(r=>{ if(!r||!txt(r[1]))return; if(nros2026.has(txt(r[3]))) psAd+=num(r[6]) })
-check('Pagos_Staff (proyectos 2026)',     100565063, psAd, 1000)
+check('Pagos_Staff (proyectos 2026)',     101805063, psAd, 1000)
 const esMonto=v=>/^\$?\s*[\d.,]+\s*$/.test(txt(v))&&txt(v)!==''
 let sinServicio=0
 PS.slice(1).forEach(r=>{ if(r&&txt(r[1])&&esMonto(txt(r[5])))sinServicio++ })
@@ -146,10 +155,10 @@ try {
 try {
   const out = execSync('node scripts/formato-rodaje.mjs 2026', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
-  check('Proyectos 2026',                     234, n(/· (\d+) proyectos/), 0)
-  check('Facturado 2026',               259911731, n(/proyectos · \$([\d.]+)/), 1000)
-  check('Costo de freelancers',         105928800, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
-  check('MARGEN de Magma',              153982931, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('Proyectos 2026',                     235, n(/· (\d+) proyectos/), 0)
+  check('Facturado 2026',               261381731, n(/proyectos · \$([\d.]+)/), 1000)
+  check('Costo de freelancers',         106628800, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('MARGEN de Magma',              154752931, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
   check('IVA facturado 2026',            44522890, n(/IVA cobrado aparte: \$([\d.]+)/), 1000)
   check('1 pers × media — proyectos',          93, n(/1 persona × media jornada\s+(\d+)/), 0)
   check('1 pers × media — facturado',    49143202, n(/1 persona × media jornada\s+\d+\s+\$([\d.]+)/), 1000)
@@ -161,11 +170,11 @@ try {
 try {
   const out = execSync('node scripts/desvio-costo.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/[.−]/g,'')) : 0 }
-  check('Proyectos con staff completo',       211, n(/De los (\d+) proyectos con el staff/), 0)
-  check('Presupuestado para staff',    106270909, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
-  check('Pagado de verdad al staff',   112503344, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
-  check('Desvío de costo',               6232435, n(/desvío\s+\$([\d.]+)/), 1000)
-  check('Proyectos sin staff cargado',         15, n(/(\d+) proyectos todavía no tienen/), 0)
+  check('Proyectos con staff completo',       213, n(/De los (\d+) proyectos con el staff/), 0)
+  check('Presupuestado para staff',    107576909, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
+  check('Pagado de verdad al staff',   113648344, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
+  check('Desvío de costo',               6071435, n(/desvío\s+\$([\d.]+)/), 1000)
+  check('Proyectos sin staff cargado',         14, n(/(\d+) proyectos todavía no tienen/), 0)
 } catch(e) { check('Desvío de costo (script)', 1, 0, 0) }
 
 // ── punto de equilibrio con la estructura separada (A.7) ──
