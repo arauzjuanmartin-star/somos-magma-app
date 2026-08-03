@@ -12,17 +12,8 @@ const SUELDO = 3000000
 const SUELDO_DESDE = 5      // mayo
 const EXTRAS_DESDE = 3      // marzo
 const ANIO = 2026
-const SANT_COMPARTIDO = 'Santander #810-03510008128/6'   // 50% Magma / 50% Sofi
-const SANT_PERSONAL   = 'Santander #810-03510008035/1'   // 100% Sofi
-// pagos que Magma hizo por Sofi y que ella declaró; todavía no están en ninguna solapa
-const PAGOS_SOFI_DECLARADOS = [
-  { mes:5, concepto:'Pago tarjeta Visa Galicia', monto:600000 },
-  { mes:5, concepto:'Pago tarjeta Visa Galicia', monto:217230 },
-  { mes:5, concepto:'Pago psicóloga',            monto:86000 },
-  { mes:6, concepto:'Pago tarjeta Visa Galicia', monto:474630 },
-  { mes:6, concepto:'Haberes',                   monto:2800000 },
-]
-const PUSO_SOFI = [{ mes:7, concepto:'Préstamo en efectivo a Magma', monto:600000 }]
+// SOCIOS_MOVIMIENTOS es la fuente única de los dos socios: lo que se carga desde
+// la app impacta el saldo de cualquiera de los dos.
 const PED = [11,14,17,20,23,26,29,32,35,38,41,44,47,60,63,66,69,72,75,78,81]
 
 const txt = v => String(v ?? '').trim()
@@ -45,22 +36,8 @@ export default async function handler(req, res) {
     const MESES = []
     for (let m = SUELDO_DESDE; m <= hastaSueldo; m++) MESES.push(m)
 
-    // ── lo que Magma pagó por Sofi: cuotas de sus préstamos personales ──
-    const cuota = (pres, mes) => { let v = 0
-      PRE.slice(1).forEach(row => { if (!row || txt(row[0]) !== pres) return
-        const f = fecha(row[3]); if (!f || f.getFullYear() !== ANIO || f.getMonth()+1 !== mes) return
-        v = num(row[4]) })
-      return v }
-    const recSofi = []
-    MESES.forEach(m => {
-      const c1 = cuota(SANT_COMPARTIDO, m), c2 = cuota(SANT_PERSONAL, m)
-      if (c1) recSofi.push({ mes:m, concepto:'Santander compartido (50%)', monto:c1/2 })
-      if (c2) recSofi.push({ mes:m, concepto:'Santander personal (100%)',  monto:c2 })
-    })
-    PAGOS_SOFI_DECLARADOS.forEach(p => { if (MESES.includes(p.mes)) recSofi.push(p) })
-
     // ── SOCIOS_MOVIMIENTOS: solo ARS y solo lo que pasa con Magma ──
-    const recJuan = [], pusoJuan = [], usd = []
+    const recJuan = [], pusoJuan = [], recSofi = [], pusoSofi = [], usd = []
     SM.slice(1).forEach(row => { if (!row || !txt(row[0])) return
       const f = fecha(row[0]); if (!f || f.getFullYear() !== ANIO) return
       const socio = txt(row[1]), dir = txt(row[2]), concepto = txt(row[3]), monto = num(row[4])
@@ -68,9 +45,12 @@ export default async function handler(req, res) {
       if (/→/.test(dir) && !/magma/i.test(dir)) return      // deuda entre socios: va por otro lado
       if (moneda !== 'ARS') { usd.push({ socio, dir, concepto, monto }); return }
       if (f.getMonth()+1 < SUELDO_DESDE) return
-      if (!/juan/i.test(socio)) return
+      const esJuan = /juan/i.test(socio), esSofi = /sof/i.test(socio)
+      if (!esJuan && !esSofi) return
       const item = { mes: f.getMonth()+1, concepto, monto }
-      if (/Magma→Socio/i.test(dir)) recJuan.push(item); else pusoJuan.push(item)
+      const recibe = /Magma→Socio/i.test(dir)
+      if (esJuan) (recibe ? recJuan : pusoJuan).push(item)
+      else        (recibe ? recSofi : pusoSofi).push(item)
     })
 
     // ── gastos personales con tarjeta de Magma (col 4 = titular) ──
@@ -109,7 +89,7 @@ export default async function handler(req, res) {
     }
     res.json({ ok:true, anio: ANIO, sueldoMensual: SUELDO,
       desdeSueldo: SUELDO_DESDE, hastaSueldo, desdeExtras: EXTRAS_DESDE, hastaExtras,
-      socios: [armar('Sofi', recSofi, PUSO_SOFI), armar('Juan', recJuan, pusoJuan)], usd })
+      socios: [armar('Sofi', recSofi, pusoSofi), armar('Juan', recJuan, pusoJuan)], usd })
   } catch (e) {
     console.error('socios-cuenta', e)
     res.status(500).json({ error: e.message })

@@ -26,27 +26,9 @@ const EXTRAS_DESDE=3, EXTRAS_HASTA=7   // trabajo de marzo a julio (agosto reci�
 const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['SOCIOS_MOVIMIENTOS','MOVIMIENTOS_TARJETA','PRESTAMOS','PROYECTOS'],valueRenderOption:'FORMATTED_VALUE'})
 const [SM,MT,PRE,PRO]=R.data.valueRanges.map(v=>v.values||[])
 
-// ── lo que Magma pagó por Sofi (del resumen que armó ella; las cuotas se reemplazan por el cronograma)
-const cuota=(pres,mes)=>{ let v=0
-  PRE.slice(1).forEach(r=>{ if(!r||txt(r[0])!==pres)return
-    const f=fecha(r[3]); if(!f||f.getFullYear()!==2026||f.getMonth()+1!==mes)return
-    v=num(r[4]) })
-  return v }
-const SANT_COMPARTIDO='Santander #810-03510008128/6'   // 50% Magma / 50% Sofi → solo la mitad es pago a Sofi
-const SANT_PERSONAL  ='Santander #810-03510008035/1'   // 100% Sofi → la cuota entera es pago a Sofi
-const pagosSofi=[]
-MESES.forEach(m=>{
-  const c1=cuota(SANT_COMPARTIDO,m), c2=cuota(SANT_PERSONAL,m)
-  if(c1) pagosSofi.push({mes:m, concepto:`Santander compartido (50%)`, monto:c1/2})
-  if(c2) pagosSofi.push({mes:m, concepto:`Santander personal (100%)`, monto:c2})
-})
-// pagos directos declarados por Sofi (no están en ninguna solapa todavía)
-pagosSofi.push({mes:5, concepto:'Pago tarjeta Visa Galicia', monto:600000})
-pagosSofi.push({mes:5, concepto:'Pago tarjeta Visa Galicia', monto:217230})
-pagosSofi.push({mes:5, concepto:'Pago psicóloga', monto:86000})
-pagosSofi.push({mes:6, concepto:'Pago tarjeta Visa Galicia', monto:474630})
-pagosSofi.push({mes:6, concepto:'Haberes', monto:2800000})
-const pusoSofi=[{mes:7, concepto:'Préstamo en efectivo a Magma', monto:600000}]
+// SOCIOS_MOVIMIENTOS es la fuente única de los DOS socios (antes los de Sofi estaban
+// hardcodeados acá y lo que se cargara desde la app no impactaba su saldo).
+const pagosSofi=[], pusoSofi=[]
 
 // ── de SOCIOS_MOVIMIENTOS (solo ARS para el saldo; USD y deuda entre socios van aparte)
 const recJuan=[], pusoJuan=[], usd=[], entreSocios=[]
@@ -58,8 +40,11 @@ SM.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return
   if(/→/.test(dir)&&!/magma/i.test(dir)){ entreSocios.push(item); return }
   if(moneda!=='ARS'){ usd.push(item); return }
   if(f.getMonth()+1<DESDE_MES) return
-  if(!/juan/i.test(socio)) return
-  if(/Magma→Socio/i.test(dir)) recJuan.push(item); else pusoJuan.push(item) })
+  const esJuan=/juan/i.test(socio), esSofi=/sof/i.test(socio)
+  if(!esJuan&&!esSofi) return
+  const recibe=/Magma→Socio/i.test(dir)
+  if(esJuan) (recibe?recJuan:pusoJuan).push(item)
+  else       (recibe?pagosSofi:pusoSofi).push(item) })
 
 // ── gastos personales con tarjeta de Magma (col 4 = titular)
 const tarj={Juan:[],Sofi:[]}

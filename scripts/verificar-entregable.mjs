@@ -121,7 +121,7 @@ SM.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return
   if(/Magma→Socio/i.test(dir)) juanRec+=m; else juanPuso+=m })
 check('Juan — retiró de Magma',           14485000, juanRec, 1000)
 check('Juan — puso de su bolsillo',        3250036, juanPuso, 1000)
-check('Sofi — movimientos cargados',             12, sofiMov, 0)
+check('Sofi — movimientos cargados',             15, sofiMov, 0)
 
 // ── saldos de la cuenta de socios ──
 // No los re-implemento acá: corro cuenta-socios.mjs (que es la fuente del número
@@ -138,7 +138,7 @@ try {
     // sacar $ y los puntos de miles ya deja el signo bien puesto en ambos casos
     return parseFloat((montos[montos.length-1] || '0').replace(/[$.]/g,''))
   }
-  check('Saldo de socio — Sofi',  12421647, saldo('Sofi'), 1000)
+  check('Saldo de socio — Sofi',  11750046, saldo('Sofi'), 1000)
   check('Saldo de socio — Juan',  -1952973, saldo('Juan'), 1000)
 } catch(e) { check('Saldo de socios (script)', 1, 0, 0) }
 
@@ -157,11 +157,18 @@ try {
   const dos = out.match(/½ jornada ×2 \+ Edición\s+(\d+)\s+\$([\d.]+)/)
   check('Receta 2 personas — proy',            14, dos?+dos[1]:0, 0)
   check('Receta 2 personas — $',         20478000, dos?parseFloat(dos[2].replace(/\./g,'')):0, 1000)
-  const p1 = out.match(/1 persona\s+(\d+) proy\s+\d+%\s+\$([\d.]+)/)
-  const p2 = out.match(/2 personas\s+(\d+) proy\s+\d+%\s+\$([\d.]+)/)
-  check('Salidas de 1 persona',               114, p1?+p1[1]:0, 0)
-  check('Salidas de 2 personas',               40, p2?+p2[1]:0, 0)
-  check('Facturado con 2 personas',      75241990, p2?parseFloat(p2[2].replace(/\./g,'')):0, 1000)
+} catch(e) { check('Pareto por proyecto (script)', 1, 0, 0) }
+
+// ── formato de rodaje (media vs completa × cuánta gente) ──
+try {
+  const out = execSync('node scripts/formato-rodaje.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const fila = (rx, n) => { const m = out.match(rx); return m ? parseFloat(String(m[n]).replace(/\./g,'')) : 0 }
+  check('1 pers × media jornada — proy',       93, fila(/1 persona × media jornada\s+(\d+)/, 1), 0)
+  check('1 pers × media jornada — $',    49143202, fila(/1 persona × media jornada\s+\d+ proy\s+\$([\d.]+)/, 1), 1000)
+  check('2 pers × media jornada — $',    36873000, fila(/2 personas × media jornada\s+\d+\s+\d+%\s+\$([\d.]+)/, 1), 1000)
+  // anclado a inicio de línea: si no, matchea la fila "1 persona × media jornada"
+  check('Media jornada — proyectos',          126, fila(/^  media jornada\s+(\d+)/m, 1), 0)
+  check('Jornada completa — proyectos',        43, fila(/^  jornada completa\s+(\d+)/m, 1), 0)
 } catch(e) { check('Pareto por proyecto (script)', 1, 0, 0) }
 
 // ── salida ──

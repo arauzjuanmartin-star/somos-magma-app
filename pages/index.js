@@ -3251,9 +3251,13 @@ function CuentaSocios({showToast}){
           <div style={{fontSize:21, fontFamily:MONO, fontWeight:700, color:aFavor?T.pos:T.brand, lineHeight:1.1}}>{aFavor?'':'–'}{fmt(Math.abs(s.saldo))}</div>
           <div style={{fontSize:11.5, color:T.ink2, marginTop:3, fontWeight:600}}>{aFavor?'le queda por cobrar':'retiró de más — se lo debe a Magma'}</div>
           <div style={{marginTop:9, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11.5, color:T.ink3, display:'grid', gap:2}}>
-            <div style={{display:'flex', justifyContent:'space-between'}}><span>Ganó (sueldo + extras)</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.devengado)}</b></div>
-            <div style={{display:'flex', justifyContent:'space-between'}}><span>Cobró / le pagaron</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.recibido)}</b></div>
-            <div style={{display:'flex', justifyContent:'space-between'}}><span>Gastó con tarjeta</span><b style={{fontFamily:MONO, color:s.tarjetas>s.recibido?T.brand:T.ink2}}>{fmt(s.tarjetas)}</b></div>
+            <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Ganó</div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Sueldo · {s.meses} meses × {fmtM(d.sueldoMensual)}</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.sueldo)}</b></div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Trabajos extras en proyectos</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.extra)}</b></div>
+            <div style={{display:'flex', justifyContent:'space-between', borderTop:`1px solid ${T.border}`, paddingTop:2, marginTop:1}}><span style={{fontWeight:700, color:T.ink2}}>Le corresponde</span><b style={{fontFamily:MONO, color:T.ink}}>{fmt(s.devengado)}</b></div>
+            <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3, marginTop:6}}>Ya sacó</div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Transferencias y pagos</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.recibido)}</b></div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Tarjeta (gastos personales)</span><b style={{fontFamily:MONO, color:s.tarjetas>s.recibido?T.brand:T.ink2}}>{fmt(s.tarjetas)}</b></div>
             {s.puso>0 && <div style={{display:'flex', justifyContent:'space-between'}}><span>Puso de su bolsillo</span><b style={{fontFamily:MONO, color:T.pos}}>+{fmt(s.puso)}</b></div>}
           </div>
           <div style={{marginTop:9, display:'flex', gap:6}}>
