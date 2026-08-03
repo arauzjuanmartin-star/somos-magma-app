@@ -66,7 +66,16 @@ FAC.slice(1).forEach(r=>{ if(!r||!r.some(c=>txt(c)))return
   if(f&&f.getFullYear()===2026&&f.getMonth()<=6) facEneJul+=final
   if(!yes(r[4])) porCobrar+=final })
 check('Facturado ene–jul 2026',          169776190, facEneJul, 1000)
-check('Gap producción vs facturación',    63195801, prodEneJul-facEneJul, 2000)
+
+// ── el gap REAL: proyectos sin factura, cruzados por N° (no por mes) ──
+// Comparar los totales mes a mes daba $63,2M de hueco, pero era un espejismo:
+// PROYECTOS agrupa por fecha de evento y FACTURACION por mes de emisión.
+try {
+  const out = execSync('node scripts/facturado-vs-producido.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const g = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
+  check('Proyectos sin ninguna factura',       18, g(/Sin ninguna factura\s+(\d+)/), 0)
+  check('Producido sin factura',         28445900, g(/Sin ninguna factura\s+\d+\s+\$([\d.]+)/), 1000)
+} catch(e) { check('Producido vs facturado (script)', 1, 0, 0) }
 
 // ── gastos fijos ──
 let gf=0
