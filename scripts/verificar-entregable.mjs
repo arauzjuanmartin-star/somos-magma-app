@@ -142,34 +142,27 @@ try {
   check('Saldo de socio — Juan',  -1952973, saldo('Juan'), 1000)
 } catch(e) { check('Saldo de socios (script)', 1, 0, 0) }
 
-// ── 80/20 por proyecto (sección B.1 bis) ──
-// Se recalcula con el mismo script que produjo la tabla, por la misma razón que
-// los saldos de socios: si cambia PROYECTOS, el documento tiene que enterarse.
+// ── formatos de rodaje con margen (sección B.1 bis) ──
 try {
-  const out = execSync('node scripts/pareto-proyectos.mjs 2026', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
-  const cab = out.match(/(\d+) proyectos · \$([\d.]+)/)
-  check('Proyectos 2026 (pareto)',           232, cab?+cab[1]:0, 0)
-  check('Facturación 2026 (pareto)',   259171731, cab?parseFloat(cab[2].replace(/\./g,'')):0, 1000)
-  // la receta top ahora distingue 1 persona de 2: son productos distintos
-  const top = out.match(/½ jornada \+ Edición\s+(\d+)\s+\$([\d.]+)/)
-  check('Receta top (1 persona) — proy',       55, top?+top[1]:0, 0)
-  check('Receta top (1 persona) — $',    26816800, top?parseFloat(top[2].replace(/\./g,'')):0, 1000)
-  const dos = out.match(/½ jornada ×2 \+ Edición\s+(\d+)\s+\$([\d.]+)/)
-  check('Receta 2 personas — proy',            14, dos?+dos[1]:0, 0)
-  check('Receta 2 personas — $',         20478000, dos?parseFloat(dos[2].replace(/\./g,'')):0, 1000)
-} catch(e) { check('Pareto por proyecto (script)', 1, 0, 0) }
+  const out = execSync('node scripts/formato-rodaje.mjs 2026', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
+  check('Proyectos 2026',                     234, n(/· (\d+) proyectos/), 0)
+  check('Facturado 2026',               259911731, n(/proyectos · \$([\d.]+)/), 1000)
+  check('Costo de freelancers',         105928800, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('MARGEN de Magma',              153982931, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('IVA facturado 2026',            44522890, n(/IVA cobrado aparte: \$([\d.]+)/), 1000)
+  check('1 pers × media — proyectos',          93, n(/1 persona × media jornada\s+(\d+)/), 0)
+  check('1 pers × media — facturado',    49143202, n(/1 persona × media jornada\s+\d+\s+\$([\d.]+)/), 1000)
+  check('2 pers × media — facturado',    36873000, n(/2 personas × media jornada\s+\d+\s+\$([\d.]+)/), 1000)
+  check('Solo edición — facturado',      12185000, n(/^  Solo edición\s+\d+\s+\$([\d.]+)/m), 1000)
+} catch(e) { check('Formatos de rodaje (script)', 1, 0, 0) }
 
-// ── formato de rodaje (media vs completa × cuánta gente) ──
+// ── proyectos que no cuadran por dentro ──
 try {
-  const out = execSync('node scripts/formato-rodaje.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
-  const fila = (rx, n) => { const m = out.match(rx); return m ? parseFloat(String(m[n]).replace(/\./g,'')) : 0 }
-  check('1 pers × media jornada — proy',       93, fila(/1 persona × media jornada\s+(\d+)/, 1), 0)
-  check('1 pers × media jornada — $',    49143202, fila(/1 persona × media jornada\s+\d+ proy\s+\$([\d.]+)/, 1), 1000)
-  check('2 pers × media jornada — $',    36873000, fila(/2 personas × media jornada\s+\d+\s+\d+%\s+\$([\d.]+)/, 1), 1000)
-  // anclado a inicio de línea: si no, matchea la fila "1 persona × media jornada"
-  check('Media jornada — proyectos',          126, fila(/^  media jornada\s+(\d+)/m, 1), 0)
-  check('Jornada completa — proyectos',        43, fila(/^  jornada completa\s+(\d+)/m, 1), 0)
-} catch(e) { check('Formato de rodaje (script)', 1, 0, 0) }
+  const out = execSync('node scripts/auditar-proyectos.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const m = out.match(/no cuadran\s+(\d+) de/)
+  check('Proyectos que no cuadran',           109, m?+m[1]:0, 0)
+} catch(e) { check('Auditoría de proyectos (script)', 1, 0, 0) }
 
 // ── punto de equilibrio con la estructura separada (A.7) ──
 try {
