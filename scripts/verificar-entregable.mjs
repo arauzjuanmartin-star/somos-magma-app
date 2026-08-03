@@ -169,7 +169,17 @@ try {
   // anclado a inicio de línea: si no, matchea la fila "1 persona × media jornada"
   check('Media jornada — proyectos',          126, fila(/^  media jornada\s+(\d+)/m, 1), 0)
   check('Jornada completa — proyectos',        43, fila(/^  jornada completa\s+(\d+)/m, 1), 0)
-} catch(e) { check('Pareto por proyecto (script)', 1, 0, 0) }
+} catch(e) { check('Formato de rodaje (script)', 1, 0, 0) }
+
+// ── punto de equilibrio con la estructura separada (A.7) ──
+try {
+  const out = execSync('node scripts/equilibrio.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const g = (rx,n=1) => { const m = out.match(rx); return m ? parseFloat(String(m[n]).replace(/\./g,'')) : 0 }
+  check('Estructura mensual real',       18578821, g(/todos los meses\s+\$([\d.]+)/), 1000)
+  check('Pagos únicos en la estructura',  6927108, g(/\$([\d.]+) son pagos únicos/), 1000)
+  check('Equilibrio — eventos/mes',            28, g(/todos los meses.*?=\s+(\d+) eventos/), 0)
+  check('Ritmo actual — eventos/mes',          23, g(/Ritmo actual: .*· (\d+) eventos/), 0)
+} catch(e) { check('Equilibrio (script)', 1, 0, 0) }
 
 // ── salida ──
 console.log(`\n${'█'.repeat(74)}`)
