@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 
@@ -3228,6 +3228,90 @@ function Historico({data}){
 }
 
 // ============================ EGRESOS (lectura) ============================
+// Cuenta corriente de cada socio contra Magma: cuánto le queda por cobrar antes de
+// sacar más plata. Sin esto se retira a ciegas y se termina sacando por adelantado.
+function CuentaSocios({showToast}){
+  const [d,setD]=useState(null), [err,setErr]=useState(''), [abierto,setAbierto]=useState(null)
+  const [mov,setMov]=useState(null)   // {socio, tipo} cuando se está registrando un movimiento
+  const cargar=useCallback(()=>fetch('/api/socios-cuenta').then(r=>r.json()).then(j=>{ if(j.error)setErr(j.error); else {setD(j); setErr('')} })
+    .catch(()=>setErr('No se pudo calcular')),[])
+  useEffect(()=>{ cargar() },[cargar])
+  if(err) return null
+  if(!d) return <div style={{fontSize:12, color:T.ink3, padding:'10px 18px'}}>Calculando cuenta de socios…</div>
+  const MES=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
+    <CardHead>Cuenta de socios · cuánto queda por cobrar</CardHead>
+    <div style={{padding:'4px 18px 10px', fontSize:11, color:T.ink3}}>
+      Sueldo de {MES[d.desdeSueldo]} a {MES[d.hastaSueldo]} ({d.socios[0].meses} × {fmt(d.sueldoMensual)}) + extras de {MES[d.desdeExtras]} a {MES[d.hastaExtras]}, menos lo que ya retiró cada uno (transferencias + gastos personales con tarjeta de la empresa).
+    </div>
+    <div style={{display:'flex', gap:12, padding:'0 18px 16px', flexWrap:'wrap'}}>
+      {d.socios.map(s=>{ const aFavor=s.saldo>=0, icon=/juan/i.test(s.nombre)?'👨':'👩'
+        return <div key={s.nombre} style={{flex:'1 1 240px', minWidth:230, border:`1px solid ${aFavor?T.posSoft:T.warnSoft}`, borderLeft:`3px solid ${aFavor?T.pos:T.brand}`, borderRadius:10, padding:'12px 14px', background:aFavor?T.posSoft:T.warnSoft}}>
+          <div style={{fontSize:12.5, fontWeight:700, color:T.ink, marginBottom:6}}>{icon} {s.nombre}</div>
+          <div style={{fontSize:21, fontFamily:MONO, fontWeight:700, color:aFavor?T.pos:T.brand, lineHeight:1.1}}>{aFavor?'':'–'}{fmt(Math.abs(s.saldo))}</div>
+          <div style={{fontSize:11.5, color:T.ink2, marginTop:3, fontWeight:600}}>{aFavor?'le queda por cobrar':'retiró de más — se lo debe a Magma'}</div>
+          <div style={{marginTop:9, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11.5, color:T.ink3, display:'grid', gap:2}}>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Ganó (sueldo + extras)</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.devengado)}</b></div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Cobró / le pagaron</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.recibido)}</b></div>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>Gastó con tarjeta</span><b style={{fontFamily:MONO, color:s.tarjetas>s.recibido?T.brand:T.ink2}}>{fmt(s.tarjetas)}</b></div>
+            {s.puso>0 && <div style={{display:'flex', justifyContent:'space-between'}}><span>Puso de su bolsillo</span><b style={{fontFamily:MONO, color:T.pos}}>+{fmt(s.puso)}</b></div>}
+          </div>
+          <div style={{marginTop:9, display:'flex', gap:6}}>
+            <button onClick={()=>setMov({socio:s.nombre, tipo:'saco'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>Sacó plata</button>
+            <button onClick={()=>setMov({socio:s.nombre, tipo:'puso'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>Puso plata</button>
+          </div>
+          <button onClick={()=>setAbierto(abierto===s.nombre?null:s.nombre)} style={{marginTop:8, fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>{abierto===s.nombre?'Ocultar detalle':'Ver detalle ›'}</button>
+          {abierto===s.nombre && <div style={{marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.ink3, display:'grid', gap:2}}>
+            <div style={{fontWeight:700, color:T.ink2, marginBottom:1}}>Extras sin cobrar, por mes</div>
+            {Object.entries(s.extrasPorMes).sort((a,b)=>a[0]-b[0]).map(([m,v])=><div key={m} style={{display:'flex', justifyContent:'space-between'}}><span>{MES[m]}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}
+            <div style={{fontWeight:700, color:T.ink2, margin:'5px 0 1px'}}>Tarjeta personal, por mes</div>
+            {Object.entries(s.tarjPorMes).sort((a,b)=>a[0]-b[0]).map(([m,v])=><div key={m} style={{display:'flex', justifyContent:'space-between'}}><span>{MES[m]}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}
+          </div>}
+        </div> })}
+    </div>
+    {mov && <MovimientoSocio {...mov} onClose={()=>setMov(null)} onHecho={async()=>{ setMov(null); await cargar() }} showToast={showToast}/>}
+  </div>
+}
+
+// Alta de un retiro o aporte de socio. Va a SOCIOS_MOVIMIENTOS, que es la fuente
+// del saldo — no al "Sueldo X" de GASTOS_FIJOS, que es el compromiso del mes.
+function MovimientoSocio({socio, tipo, onClose, onHecho, showToast}){
+  const [monto,setMonto]=useState(''), [concepto,setConcepto]=useState(''), [moneda,setMoneda]=useState('ARS'), [busy,setBusy]=useState(false)
+  const saco=tipo==='saco'
+  async function guardar(){
+    const n=parseMontoAR(monto)
+    if(!n||n<=0) return showToast('Poné un monto','err')
+    setBusy(true)
+    try{
+      const r=await fetch('/api/socio-movimiento',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({socio, tipo, monto:n, concepto, moneda})})
+      const j=await r.json()
+      if(j.error){ showToast(j.error,'err'); setBusy(false); return }
+      showToast(saco?`${socio} sacó ${fmt(n)} ✓`:`${socio} puso ${fmt(n)} ✓`)
+      await onHecho()
+    }catch(e){ showToast('Error de conexión','err'); setBusy(false) }
+  }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:20, width:380, maxWidth:'100%', border:`1px solid ${T.border}`}}>
+      <h3 style={{margin:'0 0 4px', fontSize:16, fontWeight:700, color:T.ink}}>{saco?`${socio} sacó plata`:`${socio} puso plata`}</h3>
+      <p style={{margin:'0 0 14px', fontSize:11.5, color:T.ink3}}>{saco
+        ? 'Plata que Magma le dio al socio. Se descuenta de lo que tiene por cobrar.'
+        : 'Plata que el socio puso en Magma (un VEP, un préstamo). Se suma a lo que tiene a favor.'}</p>
+      <label style={{fontSize:11, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Monto</label>
+      <div style={{display:'flex', gap:8, margin:'4px 0 12px'}}>
+        <input autoFocus inputMode="decimal" value={monto} onChange={e=>setMonto(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')guardar()}} placeholder="0" style={{flex:1, padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:15, fontFamily:MONO, textAlign:'right', outline:'none', background:T.surface, color:T.ink}}/>
+        <select value={moneda} onChange={e=>setMoneda(e.target.value)} style={{...selectStyle, width:78}}><option>ARS</option><option>USD</option></select>
+      </div>
+      <label style={{fontSize:11, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Concepto</label>
+      <input value={concepto} onChange={e=>setConcepto(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')guardar()}} placeholder={saco?'Retiro, adelanto, pago de tarjeta…':'VEP, préstamo en efectivo…'} style={{width:'100%', padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, margin:'4px 0 16px', outline:'none', background:T.surface, color:T.ink}}/>
+      <div style={{display:'flex', gap:8}}>
+        <button onClick={onClose} style={{flex:1, padding:'10px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={busy} style={{flex:2, padding:'10px', borderRadius:9, border:'none', background:busy?T.ink3:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:busy?'default':'pointer'}}>{busy?'Guardando…':'Registrar'}</button>
+      </div>
+    </div>
+  </div>
+}
+
 function Egresos({data, onRefresh, showToast}){
   const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[], cuot=data.cuotas||[], movim=data.movimientos||[]
   const now=new Date()
@@ -3346,6 +3430,7 @@ function Egresos({data, onRefresh, showToast}){
       <div style={{flex:1}}/>
       <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
     </div>
+    <CuentaSocios showToast={showToast}/>
     {Object.entries(porCat).map(([cat,items])=>(
       <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
