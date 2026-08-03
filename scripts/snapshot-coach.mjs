@@ -8,17 +8,19 @@ const auth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIE
 const sheets=google.sheets({version:'v4',auth})
 const N=v=>{ if(typeof v==='number')return v; if(!v)return 0; const n=parseFloat(String(v).replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
 const yes=v=>['SÍ','SI','TRUE','PAGADO','X','✓'].includes(String(v||'').toUpperCase().trim())||v===true
-const HOY=new Date(2026,5,18)
+const HOY=new Date()
 const toDate=v=>{ if(typeof v==='number'){ return new Date(Math.round((v-25569)*864e5)) } const m=String(v||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m)return null; let y=+m[3]; if(y<100)y+=2000; return new Date(y,+m[2]-1,+m[1]) }
 const yearOf=v=>{ const d=toDate(v); return d?d.getUTCFullYear?.()||d.getFullYear():0 }
 const M=n=>'$'+Math.round(n).toLocaleString('es-AR')
 const get=async r=>(await sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:r,valueRenderOption:'UNFORMATTED_VALUE'})).data.values||[]
-const MES=6 // meses transcurridos 2026 (ene-jun)
+const MES=(new Date()).getMonth()+1 // meses transcurridos 2026 (dinámico)
 
 // ===== PRODUCCIÓN REAL (PROYECTOS) — la fuente confiable de margen =====
 const py=await get('PROYECTOS!A:CF'); const ph=py[0].map(x=>String(x||''))
 const iPF=ph.indexOf('Fecha Evento'), iPT=ph.findIndex(x=>x.trim()==='Total'||x.trim()==='Total '), iPFee=ph.indexOf('Fee Agencia'), iPDif=ph.indexOf('Diferencia')
-const sC=[],pC=[]; ph.forEach((x,i)=>{ if(x.trim()==='Staff')sC.push(i); if(x.trim()==='Precio')pC.push(i) })
+// ojo: los pedidos 13-20 tienen los headers numerados ("Staff 13", "Precio 13"),
+// por eso no alcanza con comparar por igualdad exacta — si no, se pierden ~$5M de costo.
+const sC=[],pC=[]; ph.forEach((x,i)=>{ const h=x.trim(); if(/^Staff(\s+\d+)?$/.test(h))sC.push(i); if(/^Precio(\s+\d+)?$/.test(h))pC.push(i) })
 let prod=0,costoFree=0,ganMagma=0,nPy=0
 for(let i=1;i<py.length;i++){ const r=py[i]; if(!r||yearOf(r[iPF])!==2026)continue; nPy++; prod+=N(r[iPT])
   let sm=0,cf=0; for(let k=0;k<sC.length;k++){ const st=String(r[sC[k]]||'').trim(),pc=N(r[pC[k]]); if(!st||pc<=0)continue; if(st==='Somos Magma')sm+=pc; else cf+=pc }
@@ -50,7 +52,7 @@ for(let i=1;i<cu.length;i++){ const r=cu[i]; if(r&&yes(r[4]))caja+=N(r[5]) }
 
 const resultadoMes=ganMagma/MES-gfMes
 console.log(`╔══════════════════════════════════════════════════════╗`)
-console.log(`║  SNAPSHOT FINANCIERO SOMOS MAGMA — al 18/06/2026      ║`)
+console.log(`║  SNAPSHOT FINANCIERO SOMOS MAGMA — al ${String(HOY.getDate()).padStart(2,'0')}/${String(HOY.getMonth()+1).padStart(2,'0')}/${HOY.getFullYear()}      ║`)
 console.log(`╚══════════════════════════════════════════════════════╝`)
 console.log(`\n■ PRODUCCIÓN 2026 (${nPy} proyectos, fuente: PROYECTOS)`)
 console.log(`    Facturación/producción:  ${M(prod)}   (${M(prod/MES)}/mes)`)

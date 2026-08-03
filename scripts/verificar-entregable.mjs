@@ -157,12 +157,16 @@ try {
   check('Solo edición — facturado',      12185000, n(/^  Solo edición\s+\d+\s+\$([\d.]+)/m), 1000)
 } catch(e) { check('Formatos de rodaje (script)', 1, 0, 0) }
 
-// ── proyectos que no cuadran por dentro ──
+// ── desvío entre lo presupuestado y lo que se pagó al staff ──
 try {
-  const out = execSync('node scripts/auditar-proyectos.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
-  const m = out.match(/no cuadran\s+(\d+) de/)
-  check('Proyectos que no cuadran',           109, m?+m[1]:0, 0)
-} catch(e) { check('Auditoría de proyectos (script)', 1, 0, 0) }
+  const out = execSync('node scripts/desvio-costo.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
+  const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/[.−]/g,'')) : 0 }
+  check('Proyectos con staff completo',       211, n(/De los (\d+) proyectos con el staff/), 0)
+  check('Presupuestado para staff',    106270909, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
+  check('Pagado de verdad al staff',   112503344, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
+  check('Desvío de costo',               6232435, n(/desvío\s+\$([\d.]+)/), 1000)
+  check('Proyectos sin staff cargado',         18, n(/(\d+) proyectos todavía no tienen/), 0)
+} catch(e) { check('Desvío de costo (script)', 1, 0, 0) }
 
 // ── punto de equilibrio con la estructura separada (A.7) ──
 try {
