@@ -50,14 +50,14 @@ PRO.slice(1).forEach(r=>{
   ganMagma+=num(r[iFee])+sm+num(r[iDif])
   if(t>0){ tickets.push(t); if(esEvento) ticketsEvento.push(t) }
 })
-check('Producción ene–jul 2026',        232971990, prodEneJul, 1000)
-check('Costo de freelancers 2026',       99448063, costoFree, 1000)
+check('Producción ene–jul 2026',        231276990, prodEneJul, 1000)
+check('Costo de freelancers 2026',       103592313, costoFree, 1000)
 // margen = ganancia Magma real (Fee Agencia + Somos Magma + Diferencia) / producción,
 // igual que snapshot-coach. NO es (producción - costo freelancers), que incluye impuestos.
 const margenPct=Math.round(ganMagma/prodTot*100)
 check('Margen de producción (%)',              50, margenPct, 1)   // tolerancia 1: queda en el borde 49,5%
-check('Ticket promedio de eventos',       1372762, Math.round(ticketsEvento.reduce((s,x)=>s+x,0)/ticketsEvento.length), 5000)
-check('Ticket mediana de eventos',         825000, mediana(ticketsEvento), 1000)
+check('Ticket promedio de eventos',       1387104, Math.round(ticketsEvento.reduce((s,x)=>s+x,0)/ticketsEvento.length), 5000)
+check('Ticket mediana de eventos',         850000, mediana(ticketsEvento), 1000)
 
 // ── facturación ──
 let facEneJul=0, porCobrar=0
@@ -73,8 +73,8 @@ check('Facturado ene–jul 2026',          169776190, facEneJul, 1000)
 try {
   const out = execSync('node scripts/facturado-vs-producido.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const g = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
-  check('Proyectos sin ninguna factura',       18, g(/Sin ninguna factura\s+(\d+)/), 0)
-  check('Producido sin factura',         28445900, g(/Sin ninguna factura\s+\d+\s+\$([\d.]+)/), 1000)
+  check('Proyectos sin ninguna factura',       20, g(/Sin ninguna factura\s+(\d+)/), 0)
+  check('Producido sin factura',         32788560, g(/Sin ninguna factura\s+\d+\s+\$([\d.]+)/), 1000)
 } catch(e) { check('Producido vs facturado (script)', 1, 0, 0) }
 
 // ── gastos fijos ──
@@ -120,7 +120,7 @@ const nros2026=new Set()
 PRO.slice(1).forEach(r=>{const f=fecha(r[3]); if(f&&f.getFullYear()===2026){const n=txt(r[2]); if(n)nros2026.add(n)}})
 let psAd=0
 PS.slice(1).forEach(r=>{ if(!r||!txt(r[1]))return; if(nros2026.has(txt(r[3]))) psAd+=num(r[6]) })
-check('Pagos_Staff (proyectos 2026)',     101805063, psAd, 1000)
+check('Pagos_Staff (proyectos 2026)',     105949313, psAd, 1000)
 const esMonto=v=>/^\$?\s*[\d.,]+\s*$/.test(txt(v))&&txt(v)!==''
 let sinServicio=0
 PS.slice(1).forEach(r=>{ if(r&&txt(r[1])&&esMonto(txt(r[5])))sinServicio++ })
@@ -156,7 +156,7 @@ try {
     // sacar $ y los puntos de miles ya deja el signo bien puesto en ambos casos
     return parseFloat((montos[montos.length-1] || '0').replace(/[$.]/g,''))
   }
-  check('Saldo de socio — Sofi',  11750046, saldo('Sofi'), 1000)
+  check('Saldo de socio — Sofi',  11866046, saldo('Sofi'), 1000)
   check('Saldo de socio — Juan',  -1952973, saldo('Juan'), 1000)
 } catch(e) { check('Saldo de socios (script)', 1, 0, 0) }
 
@@ -164,10 +164,10 @@ try {
 try {
   const out = execSync('node scripts/formato-rodaje.mjs 2026', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/\./g,'')) : 0 }
-  check('Proyectos 2026',                     235, n(/· (\d+) proyectos/), 0)
-  check('Facturado 2026',               261381731, n(/proyectos · \$([\d.]+)/), 1000)
-  check('Costo de freelancers',         106628800, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
-  check('MARGEN de Magma',              154752931, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('Proyectos 2026',                     237, n(/· (\d+) proyectos/), 0)
+  check('Facturado 2026',               265724391, n(/proyectos · \$([\d.]+)/), 1000)
+  check('Costo de freelancers',         107087800, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
+  check('MARGEN de Magma',              158636591, n(/^  TOTAL\s+\d+\s+\$[\d.]+\s+\$[\d.]+\s+\$([\d.]+)/m), 1000)
   check('IVA facturado 2026',            44522890, n(/IVA cobrado aparte: \$([\d.]+)/), 1000)
   check('1 pers × media — proyectos',          93, n(/1 persona × media jornada\s+(\d+)/), 0)
   check('1 pers × media — facturado',    49143202, n(/1 persona × media jornada\s+\d+\s+\$([\d.]+)/), 1000)
@@ -179,11 +179,11 @@ try {
 try {
   const out = execSync('node scripts/desvio-costo.mjs', { cwd:'/Users/dronjuan/somos-magma-app', encoding:'utf8' })
   const n = (rx,i=1) => { const m = out.match(rx); return m ? parseFloat(String(m[i]).replace(/[.−]/g,'')) : 0 }
-  check('Proyectos con staff completo',       213, n(/De los (\d+) proyectos con el staff/), 0)
-  check('Presupuestado para staff',    107576909, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
-  check('Pagado de verdad al staff',   113648344, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
-  check('Desvío de costo',               6071435, n(/desvío\s+\$([\d.]+)/), 1000)
-  check('Proyectos sin staff cargado',         14, n(/(\d+) proyectos todavía no tienen/), 0)
+  check('Proyectos con staff completo',       222, n(/De los (\d+) proyectos con el staff/), 0)
+  check('Presupuestado para staff',    112046159, n(/presupuestado para staff\s+\$([\d.]+)/), 1000)
+  check('Pagado de verdad al staff',   118627594, n(/pagado de verdad\s+\$([\d.]+)/), 1000)
+  check('Desvío de costo',               6581435, n(/desvío\s+\$([\d.]+)/), 1000)
+  check('Proyectos sin staff cargado',          7, n(/(\d+) proyectos todavía no tienen/), 0)
 } catch(e) { check('Desvío de costo (script)', 1, 0, 0) }
 
 // ── punto de equilibrio con la estructura separada (A.7) ──
