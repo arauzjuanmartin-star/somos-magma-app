@@ -2040,18 +2040,20 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
           showToast('Subiendo PDF…'); const ru=await fetch('/api/factura-upload',{method:'POST',body:fd}); const ju=await ru.json(); if(!ju.ok) showToast('Factura creada, pero el PDF falló: '+(ju.error||''),'err')
         }catch(e){ showToast('Factura creada, el PDF falló','err') }
       }
-      // 2) Mandar mail al cliente (con destinatarios + cuerpo + link al PDF)
+      // 2) Mandar mail al cliente (destinatarios + cuerpo + el PDF adjunto al mail)
       if(conMail){
         // Sale desde admin@somosmagma.com por Gmail (mismo camino que Pagos Staff).
         // Antes abría Outlook con mailto: y el mail quedaba sin mandar.
         try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum})}); const jm=await rm.json()
           if(jm.ok){
-            const to=(jm.destinatarios||[]).map(d=>d.mail).filter(Boolean)
+            // Solo los sugeridos: el contacto del presu y facturación de la agencia.
+            // Antes salía a TODOS los contactos de la agencia y quedaban todos en copia.
+            const to=(jm.destinatarios||[]).filter(d=>d.sugerido).map(d=>d.mail).filter(Boolean)
             if(!to.length) showToast('Factura creada — sin mail de contacto. Mandala con el botón ✉ de la lista.','err')
             else {
-              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum})})
+              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum, adjuntarPDF:!!jm.adjuntarPDF})})
               const je=await re.json()
-              if(je.ok) showToast(`Mail enviado a ${to.length===1?to[0]:to.length+' destinatarios'} ✓`)
+              if(je.ok) showToast(`Mail enviado a ${to.join(', ')}${je.adjunto?' con la factura adjunta':''} ✓`)
               else showToast('Factura creada — el mail falló: '+(je.error||''),'err')
             }
           }
@@ -2289,23 +2291,62 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
   const [asunto,setAsunto]=useState('')
   const [cuerpo,setCuerpo]=useState('')
   const [saving,setSaving]=useState(false)
+  const [adjPDF,setAdjPDF]=useState(false)   // el PDF va pegado al mail (no como link de Drive)
+  const [agencia,setAgencia]=useState('')      // para aprender el mail de facturación de la agencia
+  const [mailFactAg,setMailFactAg]=useState('')
+  const [recordar,setRecordar]=useState(false)
   useEffect(()=>{ let vivo=true; (async()=>{
     try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num})}); const j=await r.json()
       if(!vivo) return
       if(!j.ok){ showToast(j.error||'Error preparando el mail','err'); onClose(); return }
-      setDests((j.destinatarios||[]).map(d=>({...d, sel:true})))
+      // Solo vienen tildados los sugeridos (contacto del presu + facturación de la agencia).
+      // El resto de la agencia queda desmarcado: la factura no va en copia a todo el mundo.
+      setDests((j.destinatarios||[]).map(d=>({...d, sel:!!d.sugerido})))
+      setAdjPDF(!!j.adjuntarPDF)
+      setAgencia(j.agenciaNombre||''); setMailFactAg(j.mailFacturacionAgencia||'')
       setAsunto(j.asunto||''); setCuerpo(j.cuerpo||''); setLoading(false)
     }catch(e){ if(vivo){ showToast('Error de conexión','err'); onClose() } }
   })(); return ()=>{vivo=false} },[])  // eslint-disable-line
   const toggle=i=>setDests(d=>d.map((x,j)=>j===i?{...x,sel:!x.sel}:x))
   const agregar=()=>{ const m=nuevo.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){ showToast('Mail inválido','err'); return } if(dests.find(d=>d.mail.toLowerCase()===m.toLowerCase())){ setNuevo(''); return } setDests(d=>[...d,{mail:m,nombre:'agregado',match:'agregado a mano',sel:true}]); setNuevo('') }
   const seleccionados=dests.filter(d=>d.sel).map(d=>d.mail)
+  // Si mandás la factura a alguien que no es el contacto del presu y la agencia no tiene
+  // mail de facturación cargado, ofrecemos guardarlo: la próxima ya viene sugerido.
+  const candidatoFact=(!mailFactAg && agencia) ? (dests.find(d=>d.sel && !/contacto del presu/i.test(d.match||''))?.mail||'') : ''
+
+  // Subir el PDF sin salir del modal: si falta, el mail sale sin adjunto y no sirve de nada
+  const [subiendo,setSubiendo]=useState(false)
+  function subirPDF(){
+    const input=document.createElement('input'); input.type='file'; input.accept='application/pdf,image/*'
+    input.onchange=async()=>{
+      const file=input.files?.[0]; if(!file) return
+      const nro=f['Nro de Factura']||'', nl=nro.toLowerCase()
+      const entidad=nl.includes('sofia')?'Sofia':nl.includes('lulu')?'Lulu':(nl.includes('ef-')||nl.includes('efectivo'))?'Efectivo':'SRL'
+      const fe=parseD(f['Fecha emision'])||new Date()
+      const fd=new FormData()
+      fd.append('file', file, file.name); fd.append('entidad', entidad); fd.append('nroFactura', nro)
+      fd.append('presupuestoNum', num||''); fd.append('mes', String(fe.getMonth()+1)); fd.append('anio', String(fe.getFullYear()))
+      setSubiendo(true)
+      try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json()
+        if(!j.ok){ showToast(j.error||'Error subiendo el PDF','err'); setSubiendo(false); return }
+        setAdjPDF(true); setSubiendo(false); showToast('PDF subido ✓ ahora va adjunto')
+        // El cuerpo cambia según haya PDF o no: lo re-armamos
+        try{ const rp=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num})}); const jp=await rp.json(); if(jp.ok&&jp.cuerpo) setCuerpo(jp.cuerpo) }catch(e){}
+        onSent&&onSent()
+      }catch(e){ showToast('Error de conexión','err'); setSubiendo(false) }
+    }
+    input.click()
+  }
   async function enviar(){
     if(!seleccionados.length){ showToast('Elegí al menos un destinatario','err'); return }
     setSaving(true)
-    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num})}); const j=await r.json()
+    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num, adjuntarPDF:adjPDF})}); const j=await r.json()
       if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
-      showToast(`Mail enviado a ${seleccionados.length} ${seleccionados.length===1?'destinatario':'destinatarios'} ✓`); onSent&&onSent(); onClose()
+      // Aprender el mail de facturación de la agencia (queda en la solapa AGENCIAS)
+      if(recordar && candidatoFact){
+        try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agencia, mailFact:candidatoFact})}) }catch(e){}
+      }
+      showToast(`Mail enviado a ${seleccionados.length} ${seleccionados.length===1?'destinatario':'destinatarios'}${j.adjunto?' con la factura adjunta':''} ✓`); onSent&&onSent(); onClose()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
@@ -2320,26 +2361,44 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
         <div style={{display:'flex', flexDirection:'column', gap:6, marginBottom:8}}>
           {dests.length===0 && <div style={{fontSize:12, color:T.ink3}}>No hay contactos sugeridos para esta agencia. Agregá un mail abajo.</div>}
           {dests.map((d,i)=>(
-            <label key={i} style={{display:'flex', alignItems:'center', gap:9, fontSize:13, color:T.ink, cursor:'pointer', padding:'7px 10px', borderRadius:8, border:`1px solid ${d.sel?T.ink:T.border}`, background:d.sel?T.surfaceAlt:T.surface}}>
-              <input type="checkbox" checked={d.sel} onChange={()=>toggle(i)}/>
-              <span style={{flex:1, minWidth:0}}><span style={{fontFamily:MONO, fontSize:12.5}}>{d.mail}</span> <span style={{fontSize:10.5, color:T.ink3}}>· {d.match||d.nombre}</span></span>
-            </label>
+            <span key={i}>
+              {/* Separador: de acá para abajo son contactos de la agencia que NO van tildados */}
+              {i>0 && !d.sugerido && dests[i-1].sugerido &&
+                <div style={{fontSize:10.5, color:T.ink3, textTransform:'uppercase', letterSpacing:0.4, margin:'10px 0 6px'}}>Otros contactos de la agencia — tildá solo si corresponde</div>}
+              <label style={{display:'flex', alignItems:'center', gap:9, fontSize:13, color:T.ink, cursor:'pointer', padding:'7px 10px', borderRadius:8, border:`1px solid ${d.sel?T.ink:T.border}`, background:d.sel?T.surfaceAlt:T.surface, opacity:(!d.sugerido&&!d.sel)?0.72:1}}>
+                <input type="checkbox" checked={d.sel} onChange={()=>toggle(i)}/>
+                <span style={{flex:1, minWidth:0}}><span style={{fontFamily:MONO, fontSize:12.5}}>{d.mail}</span> <span style={{fontSize:10.5, color:T.ink3}}>· {d.match||d.nombre}</span></span>
+              </label>
+            </span>
           ))}
         </div>
         <div style={{display:'flex', gap:8, marginBottom:16}}>
           <input value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();agregar()}}} placeholder="Agregar otro mail…" style={{...inpV2, flex:1}}/>
           <button onClick={agregar} style={{...miniBtn, padding:'8px 14px'}}>+ Agregar</button>
         </div>
+        {candidatoFact && <label style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:T.ink2, marginBottom:14, cursor:'pointer'}}>
+          <input type="checkbox" checked={recordar} onChange={e=>setRecordar(e.target.checked)}/>
+          <span>Guardar <b style={{fontFamily:MONO, fontSize:11.5}}>{candidatoFact}</b> como mail de facturación de {agencia} (la próxima ya viene sugerido)</span>
+        </label>}
+        {/* El PDF viaja adjunto al mail. Con link de Drive el cliente caía en "solicitar acceso". */}
+        {adjPDF
+          ? <div style={{display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderRadius:9, background:T.posSoft, border:`1px solid ${T.pos}33`, marginBottom:16, fontSize:12.5, color:T.pos}}>
+              📎 <span style={{color:T.ink}}>La factura va <b>adjunta</b> al mail{f['Nro de Factura']?` (Factura ${f['Nro de Factura']}.pdf)`:''} — el cliente la abre sin pedir acceso.</span>
+            </div>
+          : <div style={{padding:'11px 12px', borderRadius:9, background:'#FFF7E8', border:`1px solid ${T.warn}33`, marginBottom:16, fontSize:12.5, color:T.ink, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+              <span style={{flex:1, minWidth:180}}>⚠ Esta factura todavía no está cargada: el mail saldría <b>sin adjunto</b>.</span>
+              <button onClick={subirPDF} disabled={subiendo} style={{padding:'8px 14px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:600, cursor:subiendo?'default':'pointer', opacity:subiendo?0.6:1}}>{subiendo?'Subiendo…':'📎 Cargar la factura'}</button>
+            </div>}
         <label style={lblV2}>Asunto</label>
         <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{...inpV2, marginBottom:12}}/>
         <label style={lblV2}>Mensaje</label>
         <textarea value={cuerpo} onChange={e=>setCuerpo(e.target.value)} rows={11} style={{...inpV2, fontFamily:'inherit', lineHeight:1.5, resize:'vertical'}}/>
       </div>
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'space-between', alignItems:'center'}}>
-        <span style={{fontSize:11.5, color:T.ink3}}>{seleccionados.length} destinatario{seleccionados.length!==1?'s':''}</span>
+        <span style={{fontSize:11.5, color:T.ink3}}>{seleccionados.length} destinatario{seleccionados.length!==1?'s':''}{adjPDF?' · con factura adjunta':''}</span>
         <div style={{display:'flex', gap:10}}>
           <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-          <button onClick={enviar} disabled={saving||!seleccionados.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||!seleccionados.length)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!seleccionados.length)?'default':'pointer'}}>{saving?'Enviando…':'✉ Enviar'}</button>
+          <button onClick={enviar} disabled={saving||!seleccionados.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||!seleccionados.length)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!seleccionados.length)?'default':'pointer'}}>{saving?'Enviando…':(adjPDF?'✉ Enviar con la factura':'✉ Enviar')}</button>
         </div>
       </div>
       </>}

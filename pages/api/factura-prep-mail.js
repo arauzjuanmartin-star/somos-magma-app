@@ -74,30 +74,34 @@ export default async function handler(req, res) {
     const ctHeaders = ctR.data.values[0]
     const norm = v => String(v||'').toLowerCase().trim()
     const contactos = ctR.data.values.slice(1)
-    const destinatariosSugeridos = []
 
-    // 1° priorizar el contacto exacto del presu
+    // La factura NO va a todos los contactos de la agencia (pasó: un mail de Ostara con
+    // media agencia en copia). Solo se tildan dos: el contacto con el que se armó el presu
+    // y el mail de facturación de la ficha de la agencia. El resto aparece DESMARCADO.
+    const destinatariosSugeridos = []
+    const push = d => { if (d.mail && !destinatariosSugeridos.find(x => norm(x.mail) === norm(d.mail))) destinatariosSugeridos.push(d) }
+
+    // 1° el contacto del presu — el que pidió el trabajo
     if (contactoNombre) {
       const c = contactos.find(c => norm(c[0]) === norm(contactoNombre))
-      if (c && c[1]) destinatariosSugeridos.push({nombre:c[0], mail:c[1], match:'Contacto del presu'})
+      if (c && c[1]) push({nombre:c[0], mail:c[1], match:'Contacto del presu', sugerido:true})
     }
-    // 2° otros contactos de la misma agencia
-    contactos.forEach(c => {
-      if (!c[1]) return
-      if (norm(c[2]) === norm(agencia) || norm(c[2]) === norm(cliente)) {
-        if (!destinatariosSugeridos.find(d => d.mail === c[1])) {
-          destinatariosSugeridos.push({nombre:c[0]||'(sin nombre)', mail:c[1], match:`Misma agencia (${c[2]})`})
-        }
-      }
-    })
 
-    // Mail de facturación de la AGENCIA (si está cargado)
+    // 2° el mail de facturación cargado en la ficha de la AGENCIA
     const agHeaders = agR.data.values[0]
     const agRow = agR.data.values.slice(1).find(row => norm(row[0]) === norm(agencia) || norm(row[0]) === norm(cliente))
     const mailFacturacionAgencia = agRow ? (agRow[3]||'') : ''
-    if (mailFacturacionAgencia && !destinatariosSugeridos.find(d => d.mail === mailFacturacionAgencia)) {
-      destinatariosSugeridos.push({nombre:`Facturación ${agencia||cliente}`, mail:mailFacturacionAgencia, match:'Mail facturación de la agencia'})
+    if (mailFacturacionAgencia) {
+      push({nombre:`Facturación ${agencia||cliente}`, mail:mailFacturacionAgencia, match:'Mail de facturación de la agencia', sugerido:true})
     }
+
+    // 3° el resto de los contactos de la agencia — desmarcados, se tildan a mano si hace falta
+    contactos.forEach(c => {
+      if (!c[1]) return
+      if (norm(c[2]) === norm(agencia) || norm(c[2]) === norm(cliente)) {
+        push({nombre:c[0]||'(sin nombre)', mail:c[1], match:`Otro contacto de ${c[2]}`, sugerido:false})
+      }
+    })
 
     // Datos de transferencia desde CUENTAS
     const cuHeaders = cuR.data.values[0]
@@ -129,10 +133,16 @@ export default async function handler(req, res) {
       lineasTransfer.push('(Cargar datos de transferencia en la solapa CUENTAS del Master Magma)')
     }
 
+    // El PDF va ADJUNTO al mail (lo baja factura-enviar de Drive). Antes iba el link de Drive
+    // y el cliente caía en "solicitar acceso" porque la carpeta ADMINISTRACION es privada.
+    const tienePDF = !!String(linkPDF||'').trim()
+
     const cuerpo = [
       `Hola${contactoNombre?' '+contactoNombre.split(' ')[0]:''},`,
       ``,
-      `Adjunto factura y datos de transferencia por los trabajos realizados.`,
+      tienePDF
+        ? `Adjunto la factura en PDF y los datos de transferencia por los trabajos realizados.`
+        : `Te paso el detalle de la factura y los datos de transferencia por los trabajos realizados.`,
       ``,
       `Detalle:`,
       `• Cliente: ${cliente || agencia || '—'}`,
@@ -144,8 +154,6 @@ export default async function handler(req, res) {
       vencimiento ? `• Vencimiento del pago: ${vencimiento}` : null,
       `• Total: $${fmt(total)}${iva > 0 ? ' (IVA incluido)' : ' + IVA'}`,
       ``,
-      linkPDF ? `Link a la factura PDF: ${linkPDF}` : null,
-      linkPDF ? `` : null,
       `Datos para transferir:`,
       ...lineasTransfer,
       ``,
@@ -160,6 +168,11 @@ export default async function handler(req, res) {
 
     res.json({
       ok: true,
+      adjuntarPDF: tienePDF,   // el front lo reenvía a factura-enviar para que pegue el PDF al mail
+      // Para poder ofrecer "guardar este mail como el de facturación de la agencia":
+      // solo 7 de 82 agencias lo tienen cargado, así que la sugerencia se aprende sobre la marcha.
+      agenciaNombre: agencia || cliente,
+      mailFacturacionAgencia,
       factura: { nroFactura, tipoFactura, cliente, agencia, proyecto, total, fechaEmision, vencimiento, linkPDF, entidadKey },
       destinatarios: destinatariosSugeridos,
       asunto,
