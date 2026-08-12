@@ -124,17 +124,14 @@ export default async function handler(req, res) {
         const headers = r.data.values?.[0] || []
         const idxNro = headers.indexOf('N° Presupuesto')
         const idxFactura = headers.indexOf('Factura')
-        const idxEnv = headers.indexOf('Fecha enviada')
         if (idxNro !== -1 && idxFactura !== -1) {
           for (let i = 1; i < r.data.values.length; i++) {
             if (String(r.data.values[i][idxNro]||'').trim() === String(presupuestoNum).trim()) {
               const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
               const upd = [{ range: `FACTURACION!${colLetra(idxFactura)}${i+1}`, values: [[fileRes.data.webViewLink]] }]
-              // Fecha enviada: se estampa la 1ra vez que la factura sale (se sube). No se pisa si ya estaba.
-              if (idxEnv !== -1 && !String(r.data.values[i][idxEnv]||'').trim()) {
-                const d = new Date(); const hoy = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()
-                upd.push({ range: `FACTURACION!${colLetra(idxEnv)}${i+1}`, values: [[hoy]] })
-              }
+              // OJO: subir el PDF NO es enviarlo. Administración carga la factura y a veces
+              // espera el OK para mandarla. "Fecha enviada"/"Fc Enviada" las estampa solo
+              // factura-enviar, cuando el mail sale de verdad.
               await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: SHEET_ID,
                 requestBody: { valueInputOption: 'USER_ENTERED', data: upd }

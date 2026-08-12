@@ -1837,6 +1837,13 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const estF=f=>{ if(isCobrada(f))return'cobrada'; const ya=parseMonto(f['Monto cobrado']); if(ya>0)return'parcial'; const d=diffVenc(f); if(d==null)return'pendiente'; if(d<-30)return'reclamar'; if(d<0)return'vencida'; if(d<7)return'por-vencer'; return'pendiente' }
   const ESTF={ cobrada:{c:T.pos,l:'Cobrada'}, parcial:{c:T.warn,l:'Parcial'}, 'por-vencer':{c:T.warn,l:'Por vencer'}, pendiente:{c:T.ink3,l:'Pendiente'}, vencida:{c:T.brand,l:'Vencida'}, reclamar:{c:T.brand,l:'¡Reclamar!'} }
 
+  // ¿La factura salió para el cliente? Administración a veces la carga y espera el OK para
+  // mandarla: cargada NO es enviada. Marcan envío "Fc Enviada" (mail desde la app) y
+  // "Fecha enviada" (cargada a mano o histórico del sheet).
+  const enviadaF=f=>/^(TRUE|VERDADERO|SI|SÍ|X)$/i.test(String(f['Fc Enviada']||'').trim()) || !!String(f['Fecha enviada']||'').trim()
+  // Solo alarma sobre las que están sin cobrar: si ya la cobraste, obvio que salió.
+  const sinEnviarLista=fcReal.filter(f=>!enviadaF(f) && !isCobrada(f))
+
   // Saldo REAL de cada factura: si hubo cobro parcial, se debe solo el resto.
   // Antes la tarjeta sumaba el precio entero de las parciales y la lista las excluía:
   // por eso el total de arriba no coincidía con la suma de abajo.
@@ -1856,6 +1863,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
     // 'parcial' entra en "Por cobrar": lo que falta cobrar de una parcial también se debe.
     const owed=['pendiente','por-vencer','vencida','reclamar','parcial']
     const mf = filt==='todas' || (filt==='cobrada'&&e==='cobrada') || ((filt==='porcobrar'||filt==='pendiente'||filt==='atrasadas')&&owed.includes(e)) || (filt==='parcial'&&e==='parcial')
+      || (filt==='sinenviar'&&!enviadaF(f)&&!isCobrada(f))
     const mq=!q||[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Agencia'],f['Proyecto']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     return mf&&mq&&matchMes(evDe(f))
   }).sort((a,b)=> filt==='todas'
@@ -1877,7 +1885,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const mesesSet={}; ;[...fcReal.map(evDe), ...pendTodos.map(x=>x.p['Fecha Evento'])].forEach(s=>{ const d=parseD(s); if(d) mesesSet[`${d.getMonth()+1}-${d.getFullYear()}`]=`${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}` })
   const monthOpts=Object.entries(mesesSet).sort((a,b)=>{ const [ma,ya]=a[0].split('-').map(Number),[mb,yb]=b[0].split('-').map(Number); return yb-ya||mb-ma })
 
-  const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinfacturar',`Sin facturar (${pendientes.length})`],['futuros',`Futuros (${pendFuturos.length})`]]
+  const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinenviar',`Sin enviar (${sinEnviarLista.length})`],['sinfacturar',`Sin facturar (${pendientes.length})`],['futuros',`Futuros (${pendFuturos.length})`]]
 
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
@@ -1981,6 +1989,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
             <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
             {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:11, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
+            {/* ¿Salió para el cliente? Cargar el PDF no es enviarlo. */}
+            {enviadaF(f)
+              ? <span style={{fontSize:10.5, color:T.ink3}} title="La factura ya salió para el cliente">✉ enviada{f['Fecha enviada']?` ${f['Fecha enviada']}`:''}</span>
+              : !isCobrada(f) && <span style={{fontSize:10.5, color:T.warn, fontWeight:700}} title={f['Factura']?'La factura está cargada pero todavía no se mandó al cliente':'Todavía no se mandó al cliente'}>{f['Factura']?'📎 cargada · SIN ENVIAR':'✉ SIN ENVIAR'}</span>}
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
