@@ -1070,11 +1070,15 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const margenBase=total-costoBase, margenBasePct=total>0?(margenBase/total)*100:0
 
   // Descuento %: calcula el monto exacto de ajuste para bajar el total ese %
+  const totalSinAjuste=base+gan+iibb+intMto
   const aplicarDescPct=(v)=>{
     const pct=parseFloat(v)
-    const totalSinAjuste=base+gan+iibb+intMto
     setForm(f=>({...f, descPct:v, ...(pct>0 ? {tajuste:'-1', ajuste:String(Math.round(totalSinAjuste*pct/100))} : {ajuste:'0'}) }))
   }
+  // Redondeo: al cliente no le mandamos $877.240 porque así dieron ganancias + IIBB.
+  // Cierra el precio final en un número redondo moviendo SOLO el ajuste (los servicios no se tocan).
+  const fijarTotal=(target)=>{ const dif=Math.round(target-totalSinAjuste); setForm(f=>({...f, descPct:'', tajuste:dif<0?'-1':'1', ajuste:String(Math.abs(dif))})) }
+  const opcRedondeo = total>0 ? [10000,50000,100000].map(p=>Math.ceil(total/p)*p).filter((v,i,a)=>Math.round(v-total)>=1 && a.indexOf(v)===i) : []
 
   const falta=[]; if(!form.cliente.trim())falta.push('Cliente'); if(!form.proyecto.trim())falta.push('Proyecto'); if(!form.pm.trim())falta.push('PM'); if(!baseList.some(p=>p.svc.trim()))falta.push('un servicio')
   const fechaOK = form.fechaMode==='dia'?form.fe1:form.fechaMode==='rango'?(form.feIni&&form.feFin):form.fe1
@@ -1283,7 +1287,15 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
           {!!intMto&&<Mini label="Interés" val={fmt(intMto)}/>}
           {!!ajMto&&<Mini label="Ajuste" val={fmtS(ajMto)} color={ajMto<0?T.brand:T.ink}/>}
           <div style={{flex:1}}/>
-          <div style={{textAlign:'right'}}><div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>Precio final</div><div style={{fontSize:26, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(total)}</div></div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>Precio final</div>
+            <div style={{fontSize:26, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(total)}</div>
+            {(opcRedondeo.length>0 || !!ajMto) && <div style={{display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center', marginTop:6}}>
+              <span style={{fontSize:10.5, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, fontWeight:600}}>Redondear a</span>
+              {opcRedondeo.map(v=><button key={v} onClick={()=>fijarTotal(v)} title={`Precio final ${fmt(v)} — la diferencia va al ajuste`} style={{padding:'4px 9px', borderRadius:6, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontFamily:MONO, cursor:'pointer'}}>{fmt(v)}</button>)}
+              {!!ajMto && <button onClick={()=>setForm(f=>({...f, ajuste:'0', descPct:''}))} title="Sacar el ajuste y volver al precio calculado" style={{padding:'4px 8px', borderRadius:6, border:'none', background:'transparent', color:T.ink3, fontSize:11.5, cursor:'pointer'}}>↺ sin ajuste</button>}
+            </div>}
+          </div>
         </div>
         <div style={{display:'flex', alignItems:'center', gap:14}}>
           <span style={{fontSize:12, color:semaforo(margenBasePct).c, fontWeight:600}}>Margen {Math.round(margenBasePct)}% · {semaforo(margenBasePct).l}</span>
@@ -1911,7 +1923,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       {FILTROS.map(([k,l])=><button key={k} onClick={()=>setFilt(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filt===k?T.ink:T.border}`, background:filt===k?T.ink:T.surface, color:filt===k?'#fff':T.ink2}}>{l}</button>)}
     </div>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, padding:'9px 15px', background:T.surfaceAlt, borderRadius:9}}>
-      <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : filt==='futuros' ? `${futOrdenados.length} ${futOrdenados.length===1?'trabajo futuro':'trabajos futuros'}` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
+      <span style={{fontSize:13.5, color:T.ink, fontWeight:600}}>{filt==='sinfacturar' ? `${pendOrdenados.length} ${pendOrdenados.length===1?'proyecto':'proyectos'} sin facturar` : filt==='futuros' ? `${futOrdenados.length} ${futOrdenados.length===1?'trabajo futuro':'trabajos futuros'}` : `${filtrada.length} ${filtrada.length===1?'factura':'facturas'}`}{/* buscando: aclarar que abajo también hay sin facturar y futuros */}{filt==='todas'&&q.trim() ? ` · ${pendOrdenados.length} sin facturar · ${futOrdenados.length} ${futOrdenados.length===1?'futuro':'futuros'}` : ''}{mesF!=='todos' ? ` · ${mesesSet[mesF]}` : ''}</span>
       <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:filt==='futuros'?sumFut:sumFiltrada)}</span>
     </div>
     {(filt==='sinfacturar'||filt==='todas') && (<>
@@ -1941,7 +1953,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       )})}
     </div>
     </>)}
-    {filt==='futuros' && (
+    {/* Los trabajos con evento futuro viven en su propio filtro, pero cuando BUSCÁS algo
+        tienen que aparecer igual: si no, buscás "casamiento" y parece que no existe. */}
+    {(filt==='futuros' || (filt==='todas' && q.trim() && futOrdenados.length>0)) && (<>
+    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Trabajos futuros · {futOrdenados.length} · {fmt(sumFut)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{background:T.surfaceAlt, color:T.ink2, padding:'9px 18px', fontSize:12, borderBottom:`1px solid ${T.border}`}}>Trabajos aprobados cuyo evento todavía no pasó. Facturalos solo si el cliente te lo pide por adelantado.</div>
       <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 180px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
@@ -1966,7 +1981,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
         </div>
       )})}
     </div>
-    )}
+    </>)}
     {filt!=='sinfacturar' && filt!=='futuros' && (<>
     {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>

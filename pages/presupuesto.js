@@ -145,6 +145,8 @@ const CLAUSULAS_COBERTURA = {
     {titulo:'3. Plazos de entrega', texto:'Las fotografías y/o video serán entregados en formato digital dentro de los plazos acordados previamente entre las partes.'},
     {titulo:'4. Cancelación', texto:'En caso de cancelación por parte del cliente, el importe abonado para la reserva de fecha no será reembolsable, ya que la fecha queda bloqueada exclusivamente para el evento.'},
     {titulo:'5. Uso del material', texto:'Somos Magma podrá utilizar fotografías y fragmentos del material realizado con fines de portfolio, sitio web y redes sociales. Si preferís mantener el material privado, comunicalo por escrito previamente.'},
+    // Acordado en la reunión Juan+Sofi del 14/08/2026. Mismo criterio (15%) que el presu de producción.
+    {titulo:'6. Retraso en el pago (mora)', texto:'El incumplimiento de las fechas de pago acordadas genera un cargo por mora del 15% mensual sobre el monto pendiente, calculado a partir del día siguiente al vencimiento. Mientras exista saldo impago, la entrega del material final y la cesión de sus derechos de uso quedan suspendidas.'},
   ],
 }
 
@@ -168,7 +170,7 @@ export default function Presupuesto() {
   const [form, setForm] = useState({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
     servicios:[''], adicionales:[], observaciones:'', descripcion:'', precioTotal:'',
-    pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'7',
+    pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'30',  // 30 días por default (reunión 14/08/2026)
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
   })
   const [validez, setValidez] = useState(addDays(hoy, 5))
@@ -182,6 +184,10 @@ export default function Presupuesto() {
   }, [form.tipoPresu])
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
+  // Lo que dice el sheet para este presu. Sirve para avisar cuando el precio del PDF
+  // se editó acá y quedó distinto del sistema (antes se mandaba el PDF con otro número y nadie se enteraba).
+  const [presuSheet, setPresuSheet] = useState(null)  // {nro, precioFinal, fila} | null
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
   const [serviciosRecargando, setServiciosRecargando] = useState(false)
   const [ultimosServiciosDelSheet, setUltimosServiciosDelSheet] = useState([])  // para mostrar en UI
 
@@ -261,6 +267,7 @@ export default function Presupuesto() {
         fechaEmision: fechaHoy,
       }))
       setValidez(addDays(fechaHoy, 20))
+      setPresuSheet({ nro: String(p['Columna 1']||''), precioFinal: Math.round(parseMonto(p['Precio Final'])), fila: p.__row || null })
       setLoading(false)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,6 +297,36 @@ export default function Presupuesto() {
   const updAdic = (i,k,v) => setForm(p => ({...p, adicionales:(p.adicionales||[]).map((a,j)=>j===i?{...a,[k]:v}:a)}))
   const addAdic = () => setForm(p => ({...p, adicionales:[...(p.adicionales||[]),{nombre:'',precio:''}]}))
   const delAdic = i => setForm(p => ({...p, adicionales:(p.adicionales||[]).filter((_,j)=>j!==i)}))
+
+  // ---- Precio: redondeo + volver a escribirlo en el presupuesto ----
+  // El "Valor total" de acá es el que ve el cliente en el PDF. Si lo tocás y no lo guardás,
+  // el sistema sigue facturando el viejo. Por eso el aviso + el botón de guardar.
+  const precioNum = Math.round(Number(form.precioTotal) || 0)
+  const opcRedondeo = precioNum > 0
+    ? [10000,50000,100000].map(p => Math.ceil(precioNum/p)*p).filter((v,i,a) => v-precioNum >= 1 && a.indexOf(v) === i)
+    : []
+  const desincronizado = !!(presuSheet?.nro && precioNum > 0 && precioNum !== presuSheet.precioFinal)
+
+  const guardarPrecio = async () => {
+    if (!presuSheet?.nro || !precioNum) return
+    setGuardandoPrecio(true)
+    const post = confirmar => fetch('/api/presupuesto-precio', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ num: presuSheet.nro, precioFinal: precioNum, fila: presuSheet.fila, confirmar }),
+    }).then(r => r.json())
+    try {
+      let j = await post(false)
+      if (j.requiereConfirmar) {
+        if (!window.confirm(j.error + '\n\n¿Guardar igual el precio nuevo en el presupuesto?')) { setGuardandoPrecio(false); return }
+        j = await post(true)
+      }
+      if (!j.ok) { alert(j.error || 'No se pudo guardar'); setGuardandoPrecio(false); return }
+      setPresuSheet(s => ({...s, precioFinal: precioNum}))
+      alert(`Listo — el presupuesto #${presuSheet.nro} ahora vale $${precioNum.toLocaleString('es-AR')}.`
+        + (j.proyecto ? '\nTambién se actualizó el proyecto.' : ''))
+    } catch (e) { alert('Error de conexión') }
+    setGuardandoPrecio(false)
+  }
 
   const S = {
     inp: { background:'#111', border:'0.5px solid #2A2A2A', borderRadius:6, color:'#F0F0F0', fontSize:13, padding:'9px 12px', outline:'none', width:'100%', fontFamily:'inherit', boxSizing:'border-box' },
@@ -691,6 +728,33 @@ export default function Presupuesto() {
               <input style={{...S.inp,border:'0.5px solid #CE263740',fontSize:14,fontFamily:'monospace'}} type="number" value={form.precioTotal} onChange={e=>setF('precioTotal',e.target.value)} placeholder="ej: 2550000"/>
             </label>
             {form.precioTotal&&<div style={{marginTop:8,padding:'7px 10px',background:'#CE263708',border:'0.5px solid #CE263720',borderRadius:6,fontSize:12,color:'#CE2637',fontFamily:'monospace'}}>${fmt$(form.precioTotal)} + IVA</div>}
+
+            {/* Redondeo — para no mandarle al cliente un número raro que salió de los impuestos */}
+            {opcRedondeo.length>0&&<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+              <span style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em'}}>Redondear a</span>
+              {opcRedondeo.map(v=>(
+                <button key={v} onClick={()=>setF('precioTotal',String(v))}
+                  style={{padding:'4px 10px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#F0F0F0',fontSize:12,fontFamily:'monospace',cursor:'pointer'}}>
+                  ${fmt$(v)}
+                </button>
+              ))}
+            </div>}
+
+            {/* El PDF y el sistema no pueden decir precios distintos */}
+            {desincronizado&&<div style={{marginTop:12,padding:'12px 14px',background:'#BA751710',border:'0.5px solid #BA751750',borderRadius:8}}>
+              <div style={{fontSize:12,color:'#BA7517',fontWeight:600,marginBottom:6}}>⚠ Este PDF no coincide con el sistema</div>
+              <div style={{fontSize:12,color:'#999',lineHeight:1.5,marginBottom:10,fontFamily:'monospace'}}>
+                Presupuesto #{presuSheet.nro}: <strong style={{color:'#F0F0F0'}}>${fmt$(presuSheet.precioFinal)}</strong><br/>
+                Este PDF: <strong style={{color:'#CE2637'}}>${fmt$(precioNum)}</strong>
+              </div>
+              <div style={{fontSize:11,color:'#555',lineHeight:1.5,marginBottom:10}}>
+                Si le mandás este PDF, el cliente espera ${fmt$(precioNum)} y el sistema va a facturar ${fmt$(presuSheet.precioFinal)}. Guardalo para que queden iguales — el ajuste se recalcula solo y, si el presu ya está aprobado, también se actualiza el proyecto.
+              </div>
+              <button onClick={guardarPrecio} disabled={guardandoPrecio}
+                style={{padding:'8px 14px',borderRadius:6,border:'none',background:guardandoPrecio?'#333':'#BA7517',color:'#fff',fontSize:12,fontWeight:700,cursor:guardandoPrecio?'wait':'pointer'}}>
+                {guardandoPrecio?'Guardando…':`Guardar $${fmt$(precioNum)} en el presupuesto #${presuSheet.nro}`}
+              </button>
+            </div>}
 
             <div style={{marginTop:14,borderTop:'0.5px solid #1A1A1A',paddingTop:14}}>
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:form.pagoAlt?12:0}}>
