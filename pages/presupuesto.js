@@ -170,6 +170,7 @@ export default function Presupuesto() {
   const [form, setForm] = useState({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
     servicios:[''], adicionales:[], observaciones:'', descripcion:'', precioTotal:'',
+    descPct:'', descMotivo:'',   // descuento comercial que el cliente ve desglosado en el PDF
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'30',  // 30 días por default (reunión 14/08/2026)
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
   })
@@ -301,9 +302,14 @@ export default function Presupuesto() {
   // ---- Precio: redondeo + volver a escribirlo en el presupuesto ----
   // El "Valor total" de acá es el que ve el cliente en el PDF. Si lo tocás y no lo guardás,
   // el sistema sigue facturando el viejo. Por eso el aviso + el botón de guardar.
-  const precioNum = Math.round(Number(form.precioTotal) || 0)
-  const opcRedondeo = precioNum > 0
-    ? [10000,50000,100000].map(p => Math.ceil(precioNum/p)*p).filter((v,i,a) => v-precioNum >= 1 && a.indexOf(v) === i)
+  const precioLista = Math.round(Number(form.precioTotal) || 0)
+  // Descuento comercial: el cliente tiene que ver de cuánto partimos y cuánto le bajamos —
+  // si solo ve el número final, el gesto no existe. Sale de la línea Magma, nunca del staff.
+  const descPct = Math.min(100, Math.max(0, Number(form.descPct) || 0))
+  const descMonto = Math.round(precioLista * descPct / 100)
+  const precioNum = precioLista - descMonto        // lo que paga el cliente = lo que tiene que ir al sheet
+  const opcRedondeo = precioLista > 0
+    ? [10000,50000,100000].map(p => Math.ceil(precioLista/p)*p).filter((v,i,a) => v-precioLista >= 1 && a.indexOf(v) === i)
     : []
   const desincronizado = !!(presuSheet?.nro && precioNum > 0 && precioNum !== presuSheet.precioFinal)
 
@@ -503,10 +509,22 @@ export default function Presupuesto() {
       // VALOR TOTAL — h2 jerarquía
       // ════════════════════════════════════════════════════════════════════
       y += 4
+      // Con descuento: dos renglones chicos arriba (de cuánto se parte y cuánto se baja)
+      if (descMonto > 0) {
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+        doc.text('Subtotal', M, y)
+        doc.text('$' + fmt$(precioLista), W-M, y, {align:'right'})
+        y += 5.5
+        const lblDesc = 'Descuento ' + descPct + '%' + ((form.descMotivo||'').trim() ? ' \u2014 ' + (form.descMotivo||'').trim() : '')
+        doc.setTextColor(...C.magma)
+        doc.text(doc.splitTextToSize(lblDesc, W-M*2-40)[0], M, y)
+        doc.text('- $' + fmt$(descMonto), W-M, y, {align:'right'})
+        y += 7
+      }
       doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...C.black)
       doc.text('Valor total', M, y)
       const totalLabelW = doc.getTextWidth('Valor total')
-      const precioStr = '$' + fmt$(form.precioTotal) + ' + IVA'
+      const precioStr = '$' + fmt$(precioNum) + ' + IVA'
       const precioW = doc.getTextWidth(precioStr)
       doc.setLineWidth(0.5); doc.setDrawColor(...C.black)
       doc.line(M+totalLabelW+4, y-0.5, W-M-precioW-3, y-0.5)
@@ -538,7 +556,7 @@ export default function Presupuesto() {
         doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
         doc.text('Estos servicios se cotizan aparte. Indicanos cuáles querés sumar.', M, y); y += 7
         // Valor total CON adicionales — misma jerarquía que el total
-        const totalConAdic = (Number(form.precioTotal)||0) + sumaAdic
+        const totalConAdic = precioNum + sumaAdic
         doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...C.black)
         doc.text('Valor total con adicionales', M, y)
         const lblW = doc.getTextWidth('Valor total con adicionales')
@@ -727,7 +745,24 @@ export default function Presupuesto() {
               <span style={S.lbl}>Valor total *</span>
               <input style={{...S.inp,border:'0.5px solid #CE263740',fontSize:14,fontFamily:'monospace'}} type="number" value={form.precioTotal} onChange={e=>setF('precioTotal',e.target.value)} placeholder="ej: 2550000"/>
             </label>
-            {form.precioTotal&&<div style={{marginTop:8,padding:'7px 10px',background:'#CE263708',border:'0.5px solid #CE263720',borderRadius:6,fontSize:12,color:'#CE2637',fontFamily:'monospace'}}>${fmt$(form.precioTotal)} + IVA</div>}
+
+            {/* Descuento — el cliente ve de cuánto se parte y cuánto se le baja */}
+            <div style={{marginTop:10,display:'flex',gap:8}}>
+              <label style={{width:110}}>
+                <span style={S.lbl}>Descuento %</span>
+                <input style={{...S.inp,fontFamily:'monospace'}} type="number" min="0" max="100" value={form.descPct} onChange={e=>setF('descPct',e.target.value)} placeholder="ej: 10"/>
+              </label>
+              <label style={{flex:1}}>
+                <span style={S.lbl}>Motivo (lo ve el cliente)</span>
+                <input style={S.inp} value={form.descMotivo} onChange={e=>setF('descMotivo',e.target.value)} placeholder="ej: por primer trabajo juntos"/>
+              </label>
+            </div>
+
+            {form.precioTotal&&<div style={{marginTop:8,padding:'7px 10px',background:'#CE263708',border:'0.5px solid #CE263720',borderRadius:6,fontSize:12,color:'#CE2637',fontFamily:'monospace'}}>
+              {descMonto>0
+                ? <>${fmt$(precioLista)} − ${fmt$(descMonto)} ({descPct}%) = <strong>${fmt$(precioNum)}</strong> + IVA</>
+                : <>${fmt$(precioNum)} + IVA</>}
+            </div>}
 
             {/* Redondeo — para no mandarle al cliente un número raro que salió de los impuestos */}
             {opcRedondeo.length>0&&<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
@@ -844,6 +879,11 @@ export default function Presupuesto() {
 // ════════════════════════════════════════════════════════════════════
 function PreviewPDF({form, clausulas}) {
   const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
+  // Mismo cálculo de descuento que arriba (acá solo llega `form`, no los derivados)
+  const precioLista = Math.round(Number(form.precioTotal) || 0)
+  const descPct = Math.min(100, Math.max(0, Number(form.descPct) || 0))
+  const descMonto = Math.round(precioLista * descPct / 100)
+  const precioNum = precioLista - descMonto
   // Servicios prettified + agrupados
   const svcsLimpios = (form.servicios||[]).map(s => prettifySvc(s)).filter(Boolean)
   const svcsMap = {}
@@ -929,15 +969,24 @@ function PreviewPDF({form, clausulas}) {
     </div>}
 
     {/* VALOR TOTAL */}
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:18, paddingTop:8, gap:10}}>
+    {descMonto > 0 && <>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:16,fontSize:11.5,color:C.texto}}>
+        <span>Subtotal</span><span>${fmt$(precioLista)}</span>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:3,fontSize:11.5,color:C.magma,gap:10}}>
+        <span>Descuento {descPct}%{(form.descMotivo||'').trim() ? ' \u2014 '+(form.descMotivo||'').trim() : ''}</span>
+        <span style={{whiteSpace:'nowrap'}}>- ${fmt$(descMonto)}</span>
+      </div>
+    </>}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:descMonto>0?8:18, paddingTop:8, gap:10}}>
       <div style={{fontWeight:700, fontSize:14, color:C.black}}>Valor total</div>
       <div style={{flex:1, borderTop:'1px solid '+C.black, transform:'translateY(-4px)'}}/>
-      <div style={{fontWeight:700, fontSize:14, color:C.black, whiteSpace:'nowrap'}}>${fmt$(form.precioTotal)} + IVA</div>
+      <div style={{fontWeight:700, fontSize:14, color:C.black, whiteSpace:'nowrap'}}>${fmt$(precioNum)} + IVA</div>
     </div>
     <img src="/branding/linea-total.png" alt="" style={{width:'100%',height:10,objectFit:'fill',display:'block',marginTop:4}} onError={e=>e.target.style.display='none'}/>
 
     {/* ADICIONALES (debajo del total) + total con adicionales */}
-    {(form.adicionales||[]).length > 0 && (()=>{ const suma=form.adicionales.reduce((s,a)=>s+(Number(a.precio)||0),0); const totalAdic=(Number(form.precioTotal)||0)+suma; return <>
+    {(form.adicionales||[]).length > 0 && (()=>{ const suma=form.adicionales.reduce((s,a)=>s+(Number(a.precio)||0),0); const totalAdic=precioNum+suma; return <>
       <div style={{...S.h2,fontSize:11,marginTop:16,marginBottom:6,color:C.azul}}>Adicionales opcionales</div>
       {form.adicionales.map((a,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'3px 0'}}>
         <span style={{fontSize:11.5,color:C.texto}}>{prettifySvc(a.nombre)}</span>
