@@ -5,7 +5,7 @@ const env = Object.fromEntries(readFileSync('.env.local','utf8').split('\n').fil
 const auth = new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets']})
 const sheets = google.sheets({version:'v4',auth})
 const ID='1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
-const APLICAR = process.argv.includes('--aplicar')
+const ESCRIBIR = process.argv.includes('--escribir')
 
 const r = await sheets.spreadsheets.values.get({spreadsheetId:ID, range:'GASTOS_FIJOS!A1:S300'})
 const rows=r.data.values||[]; const H=rows[0]
@@ -13,9 +13,9 @@ const iCat=H.indexOf('Categoria'), iTipo=H.indexOf('Tipo'), iCon=H.indexOf('Conc
 const targets=[]
 rows.forEach((f,i)=>{ if(i && /^puente/i.test(String(f[iCon]||'').trim())) targets.push({fila:i+1, con:f[iCon], cat:f[iCat], tipo:f[iTipo], monto:f[2]}) })
 
-console.log(`\n=== ${APLICAR?'APLICANDO':'PREVIEW'} — ${targets.length} filas ===`)
+console.log(`\n=== ${ESCRIBIR?'ESCRIBIENDO':'PREVIEW'} — ${targets.length} filas ===`)
 targets.forEach(t=>console.log(`  fila ${t.fila}  ${t.con} ($${t.monto})   Categoria: "${t.cat}" → "Financieros"   Tipo: "${t.tipo}" → "financiero"`))
-if(!APLICAR){ console.log('\n(nada escrito — correr con --aplicar)'); process.exit(0) }
+if(!ESCRIBIR){ console.log('\n(nada escrito — correr con --escribir)'); process.exit(0) }
 
 const col=n=>String.fromCharCode(65+n)
 const data=targets.flatMap(t=>[
