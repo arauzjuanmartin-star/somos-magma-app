@@ -3432,6 +3432,11 @@ function Egresos({data, onRefresh, showToast}){
   })
   const porCat={}; gfActivos.forEach(g=>{ const c=g['Categoria']||'Otros'; (porCat[c]=porCat[c]||[]).push(g) })
   const totalGF=gfActivos.reduce((s,g)=>s+parseMonto(g['Monto']),0)
+  // Criterio Mariana: lo financiero (puente de compra de facturas, comisiones SGR) no es costo
+  // de estructura ni de producción — se mira aparte, no ensucia el resultado operativo.
+  const esFinanciero=g=>/financier/i.test(String(g['Categoria']||''))
+  const totalFin=gfActivos.filter(esFinanciero).reduce((s,g)=>s+parseMonto(g['Monto']),0)
+  const totalGFOper=totalGF-totalFin
   // Las tarjetas se ubican por VENCIMIENTO (cuándo se pagan), no por el mes del resumen.
   // Ej: resumen de mayo con vto en junio → aparece en junio. Fallback al mes del resumen si no hay vencimiento.
   const tarjMes=tarj.filter(t=>{ const v=parseD(t['Vencimiento']); if(v) return v.getMonth()+1===mesIdx && v.getFullYear()===anio; return parseInt(t['Mes'])===mesIdx && String(t['Año']).includes(String(anio)) })
@@ -3511,7 +3516,7 @@ function Egresos({data, onRefresh, showToast}){
   return <>
     <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>
     <div style={{display:'flex', gap:14, marginBottom:18}}>
-      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGF)} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
+      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGFOper)}${totalFin>0?` · Financieros ${fmtM(totalFin)}`:''} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:16}}>
       <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
@@ -3521,8 +3526,8 @@ function Egresos({data, onRefresh, showToast}){
       <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
     </div>
     <CuentaSocios showToast={showToast}/>
-    {Object.entries(porCat).map(([cat,items])=>(
-      <Sec key={cat} titulo={`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
+    {Object.entries(porCat).sort((a,b)=>(/financier/i.test(a[0])?1:0)-(/financier/i.test(b[0])?1:0)).map(([cat,items])=>(
+      <Sec key={cat} titulo={/financier/i.test(cat)?`Gastos fijos · ${cat} — fuera del resultado operativo`:`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
     <Sec titulo="Tarjetas">
@@ -3644,7 +3649,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
           </div>
           {g.recurrencia==='unico' && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[gFm-1]} {gFy}</b> (según la fecha que elijas). Lo marcás pagado y se descuenta de la cuenta.</div>}
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
-            <Fld label="Categoría"><input list="ae-cats" value={g.categoria} onChange={e=>setG(s=>({...s,categoria:e.target.value}))} style={inpV2}/><datalist id="ae-cats"><option value="Impuestos"/><option value="Operativos"/><option value="Seguros"/><option value="Software"/><option value="Sueldos"/><option value="Otros"/></datalist></Fld>
+            <Fld label="Categoría"><input list="ae-cats" value={g.categoria} onChange={e=>setG(s=>({...s,categoria:e.target.value}))} style={inpV2}/><datalist id="ae-cats"><option value="Impuestos"/><option value="Operativos"/><option value="Financieros"/><option value="Seguros"/><option value="Software"/><option value="Sueldos"/><option value="Otros"/></datalist></Fld>
             {g.recurrencia==='unico'
               ? <Fld label="Fecha"><input type="date" value={g.fecha} onChange={e=>setG(s=>({...s,fecha:e.target.value}))} style={inpV2}/></Fld>
               : <Fld label="Día de pago"><input value={g.diaPago} onChange={e=>setG(s=>({...s,diaPago:e.target.value}))} placeholder="ej 23" style={inpV2}/></Fld>}
