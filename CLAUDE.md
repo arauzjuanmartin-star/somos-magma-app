@@ -16,6 +16,8 @@ App Next.js para reemplazar el flujo operativo de SOMOS MAGMA (productora audiov
 ## Regla de oro #1 — TODO escribe al sheet
 **Cualquier feature nueva en la app DEBE escribir al sheet de Master Magma.** Si un cambio en la app no queda registrado en sheets, es un bug y hay que avisarle a Juan inmediatamente. El sheet es la red de seguridad.
 
+**Y no alcanza con que la columna exista: los valores tienen que cerrar entre sí.** Que el sheet se vea lleno y prolijo no prueba nada — el IIBB estuvo calculado sobre la base equivocada de enero a junio 2026 con las siete columnas existiendo y escribiéndose. Al tocar cualquier cálculo que se persiste, correr `node scripts/presupuestos-verificar.mjs 30`. Hay un hook (`.claude/hooks/verificar-sheet.mjs`) que lo recuerda solo al editar `pages/api/*`, `lib/sheets.js` o `pages/index.js`.
+
 ## Regla de oro #2 — La app tiene que ser MÁS rápida que el sheet
 Si una operación requiere más clics o pasos en la app que en el sheet, el equipo no migra. Cada flujo nuevo se evalúa contra esto. Mejor un formulario simple que funcione hoy que un módulo perfecto en 2 meses.
 
