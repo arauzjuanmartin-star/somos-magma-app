@@ -1,8 +1,13 @@
-// Chequea que TODO paquete importado por la app (pages/ y lib/) esté declarado en package.json.
-// Atrapa el bug que dejó a Vercel sin poder buildear (imapflow/mailparser instalados pero no commiteados).
-// Uso: node scripts/check-deps.mjs   → sale con código 1 si falta alguno.
-import { readFileSync, readdirSync, statSync } from 'fs'
-import { join } from 'path'
+// Chequea que la app pueda buildear en Vercel. Dos cosas distintas, las dos vividas:
+//   1) todo paquete importado por pages/ y lib/ declarado en package.json
+//      (imapflow/mailparser instalados pero no commiteados: 5 días sin publicar)
+//   2) todo archivo LOCAL importado, existente Y trackeado en git
+//      (lib/slots.js sin trackear el 2026-08-20: el build local pasaba porque el
+//       archivo estaba en disco, pero a Vercel no le habría llegado nunca)
+// Uso: node scripts/check-deps.mjs   → sale con código 1 si falta algo.
+import { readFileSync, readdirSync, statSync, existsSync } from 'fs'
+import { join, dirname, normalize } from 'path'
+import { execSync } from 'child_process'
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const declared = new Set([...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.devDependencies || {})])
@@ -34,9 +39,51 @@ for (const file of files) {
   }
 }
 
+// ---- 2) archivos locales importados: ¿existen y los tiene git? ----
+// El build local NO detecta esto: el archivo está en tu disco, así que compila igual.
+// A Vercel solo le llega lo que está commiteado.
+let enGit = new Set()
+try {
+  enGit = new Set(execSync('git ls-files', { encoding: 'utf8' }).split('\n').filter(Boolean))
+  const staged = execSync('git diff --cached --name-only', { encoding: 'utf8' }).split('\n').filter(Boolean)
+  staged.forEach(f => enGit.add(f))     // lo staged va a entrar en el commit: cuenta como que git lo tiene
+} catch { enGit = null }                 // sin git no podemos opinar
+
+const EXT = ['', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+const sueltos = []
+if (enGit) for (const file of files) {
+  const src = readFileSync(file, 'utf8')
+  for (const m of src.matchAll(/(?:import[^'"]*from|require\(|import\()\s*['"](\.[^'"]+)['"]/g)) {
+    const destino = normalize(join(dirname(file), m[1]))
+    const cands = [...EXT.map(e => destino + e), ...EXT.slice(1).map(e => join(destino, 'index' + e))]
+    const real = cands.find(c => existsSync(c) && statSync(c).isFile())
+    if (!real) sueltos.push({ tipo: 'NO EXISTE', file, imp: m[1], real: '' })
+    else if (!enGit.has(real)) sueltos.push({ tipo: 'SIN TRACKEAR', file, imp: m[1], real })
+  }
+}
+
 const nombres = Object.keys(faltan)
-if (!nombres.length) { console.log('✅ Todas las dependencias importadas están en package.json.'); process.exit(0) }
-console.log('❌ FALTAN en package.json (Vercel no va a poder buildear):')
-for (const n of nombres) console.log(`  · ${n}  → usado en: ${[...new Set(faltan[n])].join(', ')}`)
-console.log('\nArreglá con:  npm install ' + nombres.join(' ') + '  y commiteá package.json + package-lock.json')
-process.exit(1)
+let roto = false
+
+if (nombres.length) {
+  roto = true
+  console.log('❌ FALTAN en package.json (Vercel no va a poder buildear):')
+  for (const n of nombres) console.log(`  · ${n}  → usado en: ${[...new Set(faltan[n])].join(', ')}`)
+  console.log('\nArreglá con:  npm install ' + nombres.join(' ') + '  y commiteá package.json + package-lock.json\n')
+} else {
+  console.log('✅ Todas las dependencias importadas están en package.json.')
+}
+
+if (sueltos.length) {
+  roto = true
+  console.log('❌ ARCHIVOS QUE GIT NO TIENE (el build local pasa igual, Vercel se cae):')
+  const porArchivo = [...new Set(sueltos.filter(x => x.real).map(x => x.real))]
+  for (const s of sueltos) console.log(`  · ${s.file} importa "${s.imp}"` + (s.real ? ` → ${s.real} [${s.tipo}]` : '  [NO EXISTE]'))
+  if (porArchivo.length) console.log('\nArreglá con:  git add ' + porArchivo.join(' '))
+} else if (enGit) {
+  console.log('✅ Todos los archivos locales importados están commiteados.')
+} else {
+  console.log('⚠️  No pude consultar git — no verifiqué los archivos locales.')
+}
+
+process.exit(roto ? 1 : 0)
