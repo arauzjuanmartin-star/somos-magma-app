@@ -59,6 +59,16 @@ export default async function handler(req, res) {
     const ap = await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!A:Q', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
     const filaNum = (() => { const m = String(ap.data.updates?.updatedRange || '').match(/![A-Z]+(\d+)/); return m ? parseInt(m[1]) : null })()
 
+    // "Mes carga" se reescribe como TEXTO con RAW. Si va como número y la celda quedó con
+    // formato de fecha, Sheets lee el 8 como 8/1/1900, devuelve "01-1900" y la app termina
+    // mostrando el gasto en enero (pasó con el IVA del período 05, 20/8/2026).
+    const iMes = headers.indexOf('Mes carga')
+    if (filaNum && iMes >= 0) {
+      try {
+        await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `GASTOS_FIJOS!${colLetra(iMes)}${filaNum}`, valueInputOption: 'RAW', requestBody: { values: [[String(gMes)]] } })
+      } catch (e) { console.error('mes carga como texto:', e.message) }
+    }
+
     // Descontar de la cuenta si se pagó
     if (pagado && cuentaPago) {
       try {
