@@ -36,11 +36,25 @@ for(let i=1;i<fc.length;i++){ const r=fc[i]; if(!r||!r.some(c=>c!==''&&c!=null))
   if(d<=30)aging['0-30']+=final; else if(d<=60)aging['31-60']+=final; else if(d<=90)aging['61-90']+=final; else aging['90+']+=final }
 
 // ===== GASTOS FIJOS (mensualizado ARS, activos) =====
-const gf=await get('GASTOS_FIJOS!A:L'); let gfMes=0; const det=[]
+// Tres bolsas distintas, NO se mezclan:
+//   1. ESTRUCTURA: lo que se paga todos los meses (sueldos, alquiler, contador...). Es el costo fijo real.
+//   2. ÚNICOS: pagos de una sola vez (IVA de un período, un VEP, el balance). Cargarlos como si fueran
+//      mensuales inflaba la estructura ~$8M/mes y subía el punto de equilibrio de mentira.
+//   3. FINANCIEROS: puente de compra de facturas, comisión SGR. Criterio Mariana: van fuera del
+//      resultado operativo, se miran aparte (ver memoria project_puente_compra_facturas).
+const gf=await get('GASTOS_FIJOS!A:L'); let gfMes=0, unicos=0, finMes=0, finUnicos=0; const det=[], detU=[], detF=[]
 for(let i=1;i<gf.length;i++){ const r=gf[i]; if(!r||!yes(r[7]))continue
-  const mo=N(r[2]),mon=String(r[3]||'ARS').toUpperCase(),fr=String(r[4]||'mensual').toLowerCase()
-  if(mon.includes('USD'))continue; let m=mo; if(fr.includes('anual'))m/=12; else if(fr.includes('trimes'))m/=3; else if(fr.includes('semest'))m/=6
-  gfMes+=m; if(m>40000)det.push(`    ${String(r[0]||'').padEnd(11)} ${String(r[1]||'').padEnd(22)} ${M(m)}/mes`) }
+  const cat=String(r[0]||''), con=String(r[1]||''), mo=N(r[2]), mon=String(r[3]||'ARS').toUpperCase(), fr=String(r[4]||'mensual').toLowerCase()
+  if(mon.includes('USD'))continue
+  const esFin=/financier/i.test(cat)
+  if(/[uú]nico/.test(fr)){
+    if(esFin){ finUnicos+=mo; detF.push(`    ${con.padEnd(34)} ${M(mo)}`) }
+    else { unicos+=mo; if(mo>40000)detU.push(`    ${cat.padEnd(11)} ${con.padEnd(34)} ${M(mo)}`) }
+    continue }
+  let m=mo; if(fr.includes('anual'))m/=12; else if(fr.includes('trimes'))m/=3; else if(fr.includes('semest'))m/=6
+  if(esFin){ finMes+=m; detF.push(`    ${con.padEnd(34)} ${M(m)}/mes`) }
+  else { gfMes+=m; if(m>40000)det.push(`    ${cat.padEnd(11)} ${con.padEnd(22)} ${M(m)}/mes`) } }
+const unicosMes=unicos/MES  // promedio real: lo pagado de una vez, repartido en los meses del año
 
 // ===== DEUDA + CAJA =====
 const pr=await get('PRESTAMOS!A:K'); let prP=0,prC=0
@@ -51,6 +65,7 @@ const cu=await get('CUENTAS!A:L'); let caja=0
 for(let i=1;i<cu.length;i++){ const r=cu[i]; if(r&&yes(r[4]))caja+=N(r[5]) }
 
 const resultadoMes=ganMagma/MES-gfMes
+const resultadoConUnicos=resultadoMes-unicosMes
 console.log(`╔══════════════════════════════════════════════════════╗`)
 console.log(`║  SNAPSHOT FINANCIERO SOMOS MAGMA — al ${String(HOY.getDate()).padStart(2,'0')}/${String(HOY.getMonth()+1).padStart(2,'0')}/${HOY.getFullYear()}      ║`)
 console.log(`╚══════════════════════════════════════════════════════╝`)
@@ -66,8 +81,15 @@ console.log(`      0-30 días:  ${M(aging['0-30'])}`)
 console.log(`      31-60 días: ${M(aging['31-60'])}`)
 console.log(`      61-90 días: ${M(aging['61-90'])}`)
 console.log(`      +90 días:   ${M(aging['90+'])}   ← plata vieja, riesgo`)
-console.log(`\n■ ESTRUCTURA DE COSTOS FIJOS: ${M(gfMes)}/mes`)
+console.log(`\n■ ESTRUCTURA DE COSTOS FIJOS: ${M(gfMes)}/mes   ← lo que se paga TODOS los meses`)
 det.sort().forEach(d=>console.log(d))
+console.log(`\n■ PAGOS DE UNA SOLA VEZ 2026: ${M(unicos)} en total = ${M(unicosMes)}/mes de promedio`)
+console.log(`    (IVA de un período, VEPs, el balance... se pagan una vez, NO son estructura)`)
+detU.sort().forEach(d=>console.log(d))
+if(finMes+finUnicos>0){
+  console.log(`\n■ FINANCIEROS: ${M(finMes*MES+finUnicos)}   ← fuera del resultado operativo (criterio Mariana)`)
+  console.log(`    (puente de compra de facturas, comisiones SGR: no es costo de producir ni de estructura)`)
+  detF.sort().forEach(d=>console.log(d)) }
 console.log(`\n■ DEUDA`)
 console.log(`    Préstamos pendientes: ${M(prP)} (${prC} cuotas)`)
 console.log(`    Tarjetas sin pagar:   ${M(tjP)}`)
@@ -76,6 +98,10 @@ console.log(`\n╔════════════════════�
 console.log(`║  EL NÚMERO CLAVE — ¿cuánto deja Magma por mes?        ║`)
 console.log(`╚══════════════════════════════════════════════════════╝`)
 console.log(`    Ganancia Magma/mes:   ${M(ganMagma/MES)}`)
-console.log(`    - Gastos fijos/mes:   ${M(gfMes)}  (incluye sueldos+alquiler+imp.)`)
-console.log(`    = RESULTADO NETO/mes: ${M(resultadoMes)}  ${resultadoMes>=0?'✓ positivo':'✗ NEGATIVO'}`)
+console.log(`    - Estructura fija/mes: ${M(gfMes)}  (sueldos+alquiler+impuestos que se repiten)`)
+console.log(`    = RESULTADO OPERATIVO: ${M(resultadoMes)}  ${resultadoMes>=0?'✓ positivo':'✗ NEGATIVO'}`)
+console.log(`\n    Y si además repartís los pagos de una sola vez (${M(unicosMes)}/mes):`)
+console.log(`    = RESULTADO CON TODO:  ${M(resultadoConUnicos)}  ${resultadoConUnicos>=0?'✓ positivo':'✗ NEGATIVO'}`)
+console.log(`\n    ► Para el punto de equilibrio usá la estructura fija (${M(gfMes)}), no el total:`)
+console.log(`      es lo que tenés que cubrir sí o sí todos los meses.`)
 console.log(`\n    → Rentable en papel, pero ${M(porCobrar)} sin cobrar = problema de CAJA, no de rentabilidad.`)
