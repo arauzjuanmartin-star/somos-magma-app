@@ -9,7 +9,7 @@ async function renombrarEnReferencias(sheets, SHEET_ID, nombreOriginal, nombreNu
   const nuevo = String(nombreNuevo).trim()
   let total = 0
   try {
-    const rP = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
+    const rP = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
     const pRows = rP.data.values || [], pH = pRows[0] || []
     const updP = []
     for (let i = 1; i < pRows.length; i++) pH.forEach((h, c) => {

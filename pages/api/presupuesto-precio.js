@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:BE' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DI' })
     const rows = r.data.values || []
 
     // Hay N° de presupuesto repetidos en el sheet: si el cliente manda la fila, mandamos a esa.

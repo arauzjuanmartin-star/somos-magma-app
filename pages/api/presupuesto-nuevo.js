@@ -1,10 +1,10 @@
-import { getSheets, withSheetsRetry } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
 // 0 Columna 1 | 1 Fecha Evento | 2 PM Interno | 3 Estado | 4 Agencia | 5 Cliente
 // 6 Proyecto | 7 Cant. Fechas | 8 Precio Final | 9 Fecha Presupuesto | 10 Contacto
-// 11-34 Pedido 1..12 + Precio 1..12
+// 11-34 Pedido 1..12 + Precio 1..12 · 57-112 Pedido 13..40 + Precio 13..40 (ver SLOT_PRESU)
 // 35 Otros | 36 Precio (otros) | 37 Descuento | 38 Subtotal | 39 Fee Agencia
 // 40 Impuesto a las ganancias | 41 IIBB | 42 Plazo | 43 Interes %
 // 44 Interes $ | 45 Total | 46 Ajuste
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   if (!p['Proyecto'] || !String(p['Proyecto']).trim()) errs.push('Falta Proyecto')
   if (!p['Fecha Evento'] || !String(p['Fecha Evento']).trim()) errs.push('Falta Fecha Evento')
   if (!p['PM Interno'] || !String(p['PM Interno']).trim()) errs.push('Falta PM Interno')
-  const tieneServicio = [1,2,3,4,5,6,7,8,9,10,11,12].some(i => p[`Pedido ${i}`])
+  const tieneServicio = Array.from({length: MAX_SLOTS}, (_,k) => k+1).some(i => p[`Pedido ${i}`])
   if (!tieneServicio) errs.push('Falta al menos un servicio')
   if (errs.length > 0) {
     console.warn('presupuesto-nuevo bloqueado:', errs.join(', '))
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       const nuevoNum = await calcularSiguienteNumero(sheets, SHEET_ID)
       numeroAsignado = nuevoNum
 
-      const row = new Array(57).fill('')
+      const row = new Array(ANCHO_PRESU).fill('')
       row[0] = nuevoNum  // ← N° asignado por servidor, ignora lo que vino del cliente
       row[1] = p['Fecha Evento'] || ''
       row[2] = p['PM Interno'] || ''
@@ -80,11 +80,12 @@ export default async function handler(req, res) {
       row[10] = p['Contacto'] || ''
 
       let subtotalCalc = 0
-      for (let i = 1; i <= 12; i++) {
+      for (let i = 1; i <= MAX_SLOTS; i++) {
         const svc = p[`Pedido ${i}`] || ''
         const prc = Number(p[`Precio ${i}`]) || 0
-        row[11 + (i - 1) * 2] = svc
-        row[12 + (i - 1) * 2] = prc
+        const col = SLOT_PRESU(i)
+        row[col.pedido] = svc
+        row[col.precio] = prc
         subtotalCalc += prc
       }
 

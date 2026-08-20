@@ -1,4 +1,4 @@
-import { getSheets } from '../../lib/sheets'
+import { getSheets, MAX_SLOTS, SLOT_PRESU, SLOT_PROY, ANCHO_PROY } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 export default async function handler(req, res) {
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
     const r = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'PRESUPUESTOS!A:AZ',
+      range: 'PRESUPUESTOS!A:DI',
     })
     const rows = r.data.values || []
     let rowIndex = -1
@@ -161,10 +161,11 @@ export default async function handler(req, res) {
         }
       }
 
-      // Construir fila completa de PROYECTOS (60 columnas A:BH)
+      // Construir fila completa de PROYECTOS (A:ER)
       // Layout: A Mes, B CargaStaff, C Nro, D FechaEvento, E Agencia, F Cliente, G Proyecto, H Total, I FeeFinal, J Diferencia, K FeeAgencia,
-      // L..AX (12 slots Pedido/Precio/Staff + Otros), AY FechaPresu, AZ PM, BA Subtotal, BB ImpGan, BC IIBB, BD Plazo, BE Int%, BF Int$, BG Total, BH Ajuste
-      const proyRow = new Array(60).fill('')
+      // L..AU (slots 1..12), AV..AX Otros, AY FechaPresu, AZ PM, BA Subtotal, BB ImpGan, BC IIBB, BD Plazo, BE Int%, BF Int$, BG Total, BH Ajuste,
+      // BI..CF (slots 13..20), CG..CJ Días/No facturable, CK..ER (slots 21..40). Ver SLOT_PROY.
+      const proyRow = new Array(ANCHO_PROY).fill('')
       proyRow[0]  = mesStr
       proyRow[1]  = false              // Carga Staff (todavía no)
       proyRow[2]  = nro
@@ -178,19 +179,25 @@ export default async function handler(req, res) {
       proyRow[10] = fee                // Fee Agencia (mismo que Fee Final inicialmente)
       // Pedidos: copiar SOLO los base (no los adicionales opcionales).
       // 'Es Adicional' (col BD, idx 55) es un CSV 1|0 alineado con los slots Pedido.
+      // OJO: 'Es Adicional' es el índice 55. Antes esta ruta leía PRESUPUESTOS!A:AZ
+      // (índices 0..51), así que presuRow[55] SIEMPRE era undefined y el filtro no
+      // filtraba nada: los adicionales que el cliente NO tomó se copiaban igual al
+      // proyecto como costo. Con el rango A:DI ya llega de verdad.
       const esAdicArr = String(presuRow[55]||'').split('|')
       const basePedidos = []
-      for (let j = 0; j < 12; j++) {
-        const ped = presuRow[11 + j*2] || '', prc = presuRow[12 + j*2] || ''
+      for (let j = 0; j < MAX_SLOTS; j++) {
+        const cp = SLOT_PRESU(j + 1)
+        const ped = presuRow[cp.pedido] || '', prc = presuRow[cp.precio] || ''
         if (!ped && !prc) continue
         if (esAdicArr[j] === '1') continue   // adicional no tomado → no va al proyecto
         basePedidos.push({ ped, prc })
       }
       basePedidos.forEach((bp, k) => {
-        if (k >= 12) return
-        proyRow[11 + k*3]     = bp.ped
-        proyRow[11 + k*3 + 1] = bp.prc
-        proyRow[11 + k*3 + 2] = ''
+        if (k >= MAX_SLOTS) return
+        const cy = SLOT_PROY(k + 1)
+        proyRow[cy.pedido] = bp.ped
+        proyRow[cy.precio] = bp.prc
+        proyRow[cy.staff]  = ''
       })
       // Otros (slot 13)
       proyRow[47] = presuRow[35] || ''  // Otros
@@ -221,12 +228,12 @@ export default async function handler(req, res) {
       if (proyRowIdx === -1) {
         const ap = await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID,
-          range: 'PROYECTOS!A:BH',
+          range: 'PROYECTOS!A:ER',
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [proyRow] }
         })
-        // La fila donde cayó, para escribir Días (CG) que está fuera del rango A:BH
+        // La fila donde cayó, para escribir Días (CG)
         const m = String(ap.data?.updates?.updatedRange || '').match(/!\w+?(\d+)/)
         if (m) proyRowIdx = parseInt(m[1])
       } else {

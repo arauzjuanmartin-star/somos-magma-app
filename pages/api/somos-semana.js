@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const { sheets, SHEET_ID } = await getSheets()
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
-      ranges: ['PRESUPUESTOS!A:BE', 'PROYECTOS!A:CF', 'FACTURACION!A:AG', 'PRESTAMOS!A:O', 'PAGOS_STAFF!A:N', 'TARJETAS!A:N', 'MOVIMIENTOS_TARJETA!A:N', 'AGENCIAS!A:L', 'Contactos/agencias!A:Z'],
+      ranges: ['PRESUPUESTOS!A:DI', 'PROYECTOS!A:ER', 'FACTURACION!A:AG', 'PRESTAMOS!A:O', 'PAGOS_STAFF!A:N', 'TARJETAS!A:N', 'MOVIMIENTOS_TARJETA!A:N', 'AGENCIAS!A:L', 'Contactos/agencias!A:Z'],
       valueRenderOption: 'FORMATTED_VALUE',
     }))
     const [PRE, PRO, FAC, PST, PAG, TAR, MOV, AG, CON] = r.data.valueRanges.map(v => v.values || [])

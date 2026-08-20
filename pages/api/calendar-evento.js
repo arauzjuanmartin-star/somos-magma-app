@@ -84,7 +84,7 @@ export default async function handler(req, res) {
   try {
     // Leer datos del presupuesto del sheet (Fecha Evento, Cliente, Agencia, Proyecto, Tipo Fechas, Fechas Adicionales)
     const { sheets, SHEET_ID } = await getSheets()
-    const rPres = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:AX2000' })
+    const rPres = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:DI2000' })
     const headers = rPres.data.values?.[0] || []
     const fila = (rPres.data.values || []).slice(1).find(r => String(r[0]||'').trim() === String(num).trim())
     if (!fila) return res.status(404).json({ error: 'Presupuesto no encontrado' })
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
     // Staff asignado (desde PROYECTOS) — para que en el Calendar se vea quién va
     if (accion === 'aprobar') {
       try {
-        const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CF' })
+        const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
         const pHeaders = rProy.data.values?.[0] || []
         const pCol = pHeaders.indexOf('N° presupuesto')
         const pFila = (rProy.data.values || []).slice(1).find(r => String(r[pCol]||'').trim() === String(num).trim())

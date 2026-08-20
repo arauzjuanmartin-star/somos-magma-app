@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:AZ' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DI' })
     const headers = r.data.values[0]
     const rows = r.data.values
 

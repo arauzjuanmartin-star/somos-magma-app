@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     const sheets = google.sheets({ version: 'v4', auth })
 
     // 1. Leer PROYECTOS para encontrar la fila + headers
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CZ' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
     const rows = r.data.values
     if (!rows || rows.length === 0) return res.status(404).json({ error: 'Hoja vacía' })
     const headers = rows[0]

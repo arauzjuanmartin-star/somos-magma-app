@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
+import { MAX_SLOTS } from '../lib/slots'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -350,9 +351,9 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const facMesTotales = proyMesEvento.reduce((s,p)=>s+parseMonto(p['Total ']||p['Total']),0)
   // Pagos staff: lo que voy gastando en staff por los eventos del mes.
   // NO cuenta "Somos Magma" (esa línea es ganancia de la empresa, no un gasto).
-  const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
+  const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
   // Ganancia Magma del mes = fee + líneas "Somos Magma" + diferencia de los eventos del mes.
-  const ganMagmaMes = proyMesEvento.reduce((s,p)=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma'){ const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(pr2>0) sm+=pr2 } } return s+fee+sm+parseMonto(p['Diferencia']) },0)
+  const ganMagmaMes = proyMesEvento.reduce((s,p)=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma'){ const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(pr2>0) sm+=pr2 } } return s+fee+sm+parseMonto(p['Diferencia']) },0)
   const rentabilidadMes = ganMagmaMes
 
   // --- Conversión + ticket ---
@@ -374,7 +375,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
     const fee = parseMonto((proy?proy['Fee Agencia']:presu['Fee Agencia'])||0)
     if(!proy) return fee
     let somosMagma=0
-    for(let j=1;j<=20;j++){ const staff=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim(); if(staff==='Somos Magma'){ const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); if(precio>0) somosMagma+=precio } }
+    for(let j=1;j<=MAX_SLOTS;j++){ const staff=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim(); if(staff==='Somos Magma'){ const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); if(precio>0) somosMagma+=precio } }
     const diferencia = parseMonto(proy['Diferencia'])
     return fee+somosMagma+diferencia
   }
@@ -870,7 +871,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
 
 function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar}){
   const servicios=[]
-  for(let j=1;j<=12;j++){
+  for(let j=1;j<=MAX_SLOTS;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
     const prc=parseMonto(p['Precio '+j])
     if(ped&&prc>0) servicios.push({nombre:ped, precio:prc})
@@ -964,7 +965,7 @@ const readPedidosOrig = p => {
   const adicFlags=String(p['Es Adicional']||'').split('|')
   const precioCli=String(p['Precio Cliente Manual']||'').split('|')
   const out=[]; let idx=0
-  for(let i=1;i<=12;i++){
+  for(let i=1;i<=MAX_SLOTS;i++){
     const svc=p['Pedido '+i]||(i===1?p['Pedido']:'')||''
     const precio=parseMonto(p['Precio '+i]||(i===1?p['Precio']:''))
     if(svc||precio>0){
@@ -1316,7 +1317,7 @@ function parsePedidosPresu(presu){
   const esAdicCSV = String(presu['Es Adicional']||'').split('|')
   const precioCliCSV = String(presu['Precio Cliente Manual']||'').split('|')
   const peds=[]; let k=0
-  for(let i=1;i<=12;i++){ const svc=presu['Pedido '+i]||(i===1?presu['Pedido']:'')||''; const prc=parseMonto(presu['Precio '+i]||(i===1?presu['Precio']:'')); if(svc||prc>0){ peds.push({k, svc, costo:prc, esAdic:esAdicCSV[k]==='1', precioCliManual:parseMonto(precioCliCSV[k])}); k++ } }
+  for(let i=1;i<=MAX_SLOTS;i++){ const svc=presu['Pedido '+i]||(i===1?presu['Pedido']:'')||''; const prc=parseMonto(presu['Precio '+i]||(i===1?presu['Precio']:'')); if(svc||prc>0){ peds.push({k, svc, costo:prc, esAdic:esAdicCSV[k]==='1', precioCliManual:parseMonto(precioCliCSV[k])}); k++ } }
   return peds
 }
 function presuTieneAdicionales(presu){ return String(presu?.['Es Adicional']||'').split('|').includes('1') }
@@ -1475,7 +1476,7 @@ function Calendario({data, onRefresh, showToast}){
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion})}).catch(()=>{})
     }catch(e){showToast('Error de conexión','err')}
   }
-  const staffDe=p=>{ const out=[]; for(let j=1;j<=20;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; if(s) out.push({persona:s, pedido:ped}) } return out }
+  const staffDe=p=>{ const out=[]; for(let j=1;j<=MAX_SLOTS;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; if(s) out.push({persona:s, pedido:ped}) } return out }
   const esHoy=d=>d&&dayKey(d)===dayKey(now)
 
   return <>
@@ -1647,7 +1648,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const esFreelancerNuevo=v=>{ const n=normTxt(v); return n && n!=='somos magma' && !rrhhMap[n] }
   const [freel,setFreel]=useState(null)  // nombre del freelancer a completar
   const total=parseMonto(p['Total ']||p['Total'])
-  const init=()=>{ const arr=[]; for(let j=1;j<=20;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
+  const init=()=>{ const arr=[]; for(let j=1;j<=MAX_SLOTS;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
   const [items,setItems]=useState(init)
   const [saving,setSaving]=useState(false)
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
@@ -2646,7 +2647,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const personas={}
   proyMes.forEach(proy=>{
     const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', agencia=proy['Agencia']||'', fechaEvento=proy['Fecha Evento']||''
-    for(let j=1;j<=20;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
+    for(let j=1;j<=MAX_SLOTS;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
       if(!staffRaw||staffRaw==='Somos Magma'||!pedido||precio<=0) continue
       const staff=canonStaff(staffRaw), gk=canonKey(staff)
       if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0}
@@ -2903,7 +2904,7 @@ function Freelancers({data, nav, clearNav, onRefresh, showToast}){
   const paidCount={}
   pagos.forEach(r=>{ if(!esPag(r))return; const k=canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
   const stats={}, usedG={}
-  proyectos.forEach(p=>{ for(let j=1;j<=20;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
+  proyectos.forEach(p=>{ for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
     if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
     const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
     stats[k].trabajos++; stats[k].ganado+=pr
@@ -3247,7 +3248,7 @@ function Historico({data}){
   const [anio,setAnio]=useState('2026')
   const [mesF,setMesF]=useState('todos')
   const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
-  const magma2026=p=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=20;j++){ if(String(p['Staff '+j]||'').trim()==='Somos Magma') sm+=parseMonto(p['Precio '+j]) } return fee+sm+parseMonto(p['Diferencia']) }
+  const magma2026=p=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=MAX_SLOTS;j++){ if(String(p['Staff '+j]||'').trim()==='Somos Magma') sm+=parseMonto(p['Precio '+j]) } return fee+sm+parseMonto(p['Diferencia']) }
 
   let filasAll=[]
   if(anio==='2026'){

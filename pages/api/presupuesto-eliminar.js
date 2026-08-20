@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     // 2. Ubicar la fila. Si vino `fila`, se usa esa — pero solo después de confirmar que
     // ahí sigue estando el presupuesto esperado (alguien pudo mover filas desde que cargó
     // la pantalla). Si no coincide, se aborta en vez de borrar a ciegas.
-    const rPre = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:BE' }))
+    const rPre = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DI' }))
     const rows = rPre.data.values || []
     const headers = rows[0] || []
 

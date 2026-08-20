@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:CZ' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
     const headers = r.data.values[0]
     const rows = r.data.values
     const colN = headers.indexOf('N° presupuesto')
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     if (propagarPresupuesto !== false) {
       // Leer headers (col 47/48 incluidas) + col A para buscar fila
       const [rHead, rColA] = await Promise.all([
-        sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:AX1' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:DI1' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:A' }),
       ])
       const presHeaders = rHead.data.values?.[0] || []

@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   try {
     const { sheets, SHEET_ID } = await getSheets()
     const [prR, fcR] = await Promise.all([
-      withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:BE' })),
+      withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DI' })),
       withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AI' })),
     ])
     const pr = prR.data.values || [], ph = (pr[0] || []).map(x => String(x || ''))
