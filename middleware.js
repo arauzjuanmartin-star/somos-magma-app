@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { modulosDe, PAGINAS_PARCIALES } from './lib/roles'
 
 // Rutas públicas (no requieren sesión)
 const PUBLIC_PATHS = [
@@ -32,6 +33,14 @@ export async function middleware(req) {
     }
     const loginUrl = new URL('/login', req.url)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // Acceso parcial (ej: Dani solo Edición + Calendario): las páginas sueltas
+  // (/v1, /semana, /presupuesto…) le quedan fuera. Los endpoints los filtra
+  // requireAuth; acá cerramos las páginas.
+  const modulos = modulosDe(token.email)
+  if (modulos && !pathname.startsWith('/api/') && !PAGINAS_PARCIALES.includes(pathname)) {
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   return NextResponse.next()

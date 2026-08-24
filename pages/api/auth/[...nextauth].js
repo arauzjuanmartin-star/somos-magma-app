@@ -9,8 +9,15 @@ export const ALLOWED_MAILS = [
   'tom@somosmagma.com',
   'admin@somosmagma.com',
   'lulu@somosmagma.com',
+  'dani@somosmagma.com',
   'arauzjuanmartin@gmail.com',
 ]
+
+// Acceso PARCIAL: quién ve solo algunos módulos vive en lib/roles.js (archivo
+// puro, para que el middleware edge lo pueda importar). Dani edita: entra al
+// tablero de Edición y al Calendario, nada más — no ve plata, facturación ni pagos.
+export { MODULOS_POR_MAIL } from '../../../lib/roles'
+import { MODULOS_POR_MAIL as MODS } from '../../../lib/roles'
 
 // Invitados en modo LECTURA: pueden entrar y ver todo, pero no modificar nada. Ej: coach.
 export const READONLY_MAILS = [
@@ -40,6 +47,7 @@ export const authOptions = {
       if (session?.user?.email) {
         session.user.email = session.user.email.toLowerCase().trim()
         session.user.readOnly = READONLY_MAILS.includes(session.user.email)
+        session.user.modulos = MODS[session.user.email] || null  // null = ve todo
       }
       return session
     },
