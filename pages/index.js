@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
+import { T, MONO } from '../lib/ui'
+import Edicion from '../components/Edicion'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -11,24 +13,7 @@ import { MAX_SLOTS } from '../lib/slots'
    que la app actual. No toca nada de la app que funciona.
    ============================================================ */
 
-const MONO = "'Azeret Mono', ui-monospace, monospace"
-
-// --- Paleta clara, sobria. Un acento (Magma) + grises + semántica de plata ---
-const T = {
-  bg:         '#FBFAF8',  // página, blanco cálido
-  surface:    '#FFFFFF',  // cards
-  surfaceAlt: '#F6F4F1',  // hover / filas alternas sutiles
-  border:     '#ECE9E4',  // hairline
-  ink:        '#1A1917',  // texto principal
-  ink2:       '#6F6B63',  // texto secundario
-  ink3:       '#A8A39A',  // muted
-  brand:      '#CE2637',  // Magma — acción + atención
-  brandSoft:  '#FBEAEC',
-  pos:        '#1E8A5A',  // cobrado / rentable
-  posSoft:    '#E7F3EC',
-  warn:       '#B07712',  // en espera / por vencer
-  warnSoft:   '#F8EFDC',
-}
+// Paleta y tipografía: viven en lib/ui.js para que components/ use los mismos colores.
 
 // ---------- helpers (idénticos a la app) ----------
 const parseMonto = v => { if (!v) return 0; const n = parseFloat(String(v).replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n }
@@ -69,6 +54,7 @@ const NAV = [
   {id:'calendario',label:'Calendario'},
   {id:'presupuestos',label:'Presupuestos'},
   {id:'proyectos',label:'Proyectos'},
+  {id:'edicion',label:'Edición'},
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
   {id:'freelancers',label:'Freelancers'},
@@ -98,11 +84,16 @@ export default function V2() {
   const { data: session, status } = useSession()
   const mail = session?.user?.email || ''
   const readOnly = !!session?.user?.readOnly
+  // Acceso parcial: null = ve todo. Ej Dani solo ['edicion','calendario'].
+  const modulos = session?.user?.modulos || null
+  const puede = id => !modulos || modulos.includes(id)
   const [data,setData] = useState(null)
   const [loading,setLoading] = useState(false)
   const [refreshing,setRefreshing] = useState(false)
   const [err,setErr] = useState('')
   const [mod,setMod] = useState('dashboard')
+  // Si el usuario tiene acceso parcial, arrancamos en su primer módulo
+  useEffect(()=>{ if(modulos && !modulos.includes(mod)) setMod(modulos[0]) /* eslint-disable-next-line */ },[modulos])
   const [nav,setNav] = useState(null)  // {mod, filtro?, q?} → al navegar, deja el destino filtrado/buscado
   const goTo = (m, opts) => { setMod(m); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
   const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
@@ -157,11 +148,11 @@ export default function V2() {
           <div style={{fontSize:10, color:T.ink3, marginTop:5, letterSpacing:0.3, fontFamily:MONO}}>productora audiovisual</div>
           {readOnly && <div style={{marginTop:9, fontSize:10, fontWeight:700, color:T.brand, background:T.brandSoft, padding:'5px 8px', borderRadius:6, letterSpacing:0.4, textAlign:'center'}}>👁 MODO LECTURA</div>}
         </div>
-        {!readOnly && <div style={{padding:'0 16px 12px'}}>
+        {!readOnly && puede('presupuestos') && <div style={{padding:'0 16px 12px'}}>
           <button onClick={()=>goTo('presupuestos','__nuevo__')} title="Cargar un presupuesto nuevo, desde donde estés" style={{width:'100%', padding:'10px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>+ Nuevo presupuesto</button>
         </div>}
         <nav style={{flex:1, padding:'4px 12px'}}>
-          {NAV.map(n=>{
+          {NAV.filter(n=>puede(n.id)).map(n=>{
             const active = mod===n.id
             const ready = true
             return <button key={n.id} onClick={()=>setMod(n.id)} style={{
@@ -190,10 +181,10 @@ export default function V2() {
       <main style={{flex:1, overflowY:'auto', background:T.bg}}>
         <div style={{position:'sticky', top:0, zIndex:50, background:T.bg}}>
           <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
-            <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
+            {!modulos && <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
               <span style={{fontSize:13}}>🔍</span><span>Buscar</span>
               <span style={{fontSize:10.5, fontFamily:MONO, padding:'1px 6px', borderRadius:4, background:T.surfaceAlt, color:T.ink3}}>⌘K</span>
-            </button>
+            </button>}
           </div>
         </div>
         <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 80px'}}>
@@ -203,8 +194,9 @@ export default function V2() {
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
               mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast}/>
+            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
+            : mod==='edicion' ? <Edicion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast}/>
@@ -1421,7 +1413,8 @@ const normTxt = s => String(s||'').trim().toLowerCase().normalize('NFD').replace
 const ERR_SHEET = /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/
 const sinErr = v => { const s = String(v||'').trim(); return ERR_SHEET.test(s) ? '' : s }
 
-function Calendario({data, onRefresh, showToast}){
+// soloVer = usuario de acceso parcial (ej Dani): ve la agenda, no aprueba ni edita.
+function Calendario({data, onRefresh, showToast, soloVer=false}){
   const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]
   const now=new Date()
   const [ref,setRef]=useState({a:now.getFullYear(), m:now.getMonth()})
@@ -1527,10 +1520,10 @@ function Calendario({data, onRefresh, showToast}){
                 ? <div style={{fontSize:11.5, color:T.warn, marginTop:6, fontWeight:500}}>⚠ Sin staff cargado todavía</div>
                 : <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}><span style={{color:T.ink3}}>Staff:</span> {staff.map(s=>s.persona).join(', ')}</div>}
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>
-                {presusByNum[String(num).trim()] && <button onClick={()=>setEditando(presusByNum[String(num).trim()])} style={miniBtn}>Editar datos</button>}
+                {!soloVer && <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>}
+                {!soloVer && presusByNum[String(num).trim()] && <button onClick={()=>setEditando(presusByNum[String(num).trim()])} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
+                {!soloVer && <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>}
               </div>
             </div>
           })}
@@ -1543,10 +1536,10 @@ function Calendario({data, onRefresh, showToast}){
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
               <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                <button onClick={()=> presuTieneAdicionales(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>
-                <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>
+                {!soloVer && <button onClick={()=> presuTieneAdicionales(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
+                {!soloVer && <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>
+                {!soloVer && <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>}
               </div>
             </div>
           })}
@@ -1579,8 +1572,11 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
 
   const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
-  const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) facByNum[n]=f })
-  const facDe=p=>facByNum[String(p['N° presupuesto']||'').trim()]
+  // Un proyecto puede tener varias facturas (adelanto + saldo): las juntamos todas.
+  // Antes se guardaba una sola y el chip mostraba solo la última cargada.
+  const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) (facByNum[n]||=[]).push(f) })
+  const facsDe=p=>facByNum[String(p['N° presupuesto']||'').trim()]||[]
+  const facDe=p=>facsDe(p)[0]
   const filtrados=proyectos.filter(p=>{
     const fecha=p['Fecha Evento']||''
     const mMes=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
@@ -1612,8 +1608,12 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
       {filtrados.length===0&&<Empty>Sin resultados</Empty>}
       {filtrados.slice(0,200).map((p,i)=>{
         const num=p['N° presupuesto'], abierto=open===num, ok=tieneStaff(p)
-        const fac=facDe(p), cobrada=fac&&isCobrada(fac)
-        const facInfo = cobrada?{c:T.pos,l:'Cobrada'}:fac?{c:T.warn,l:'Facturada'}:{c:T.brand,l:'Sin fact.'}
+        // Con adelanto + saldo el proyecto tiene 2 facturas: mostramos cuántas se cobraron
+        // ("1/2 cobr.") en vez de decir "Cobrada" porque entró la seña.
+        const facs=facsDe(p), cobradas=facs.filter(isCobrada).length
+        const facInfo = !facs.length ? {c:T.brand,l:'Sin fact.'}
+          : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
+          : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
         return <div key={num+'_'+i}>
           <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
             onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
@@ -1814,8 +1814,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       const fd=new FormData()
       fd.append('file', file, file.name); fd.append('entidad', entidad); fd.append('nroFactura', nro)
       fd.append('presupuestoNum', f['N° Presupuesto']||''); fd.append('mes', String(mes)); fd.append('anio', String(anio))
+      fd.append('fila', String(f.__row||''))   // adelanto + saldo: sin la fila el PDF pisaba la otra factura
       showToast('Subiendo PDF…')
-      try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return} showToast('PDF subido ✓'); if(onRefresh) onRefresh() }
+      try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
+        showToast(j.avisoLink ? 'PDF subido a Drive, pero no quedó linkeado: '+j.avisoLink : 'PDF subido ✓', j.avisoLink?'err':undefined); if(onRefresh) onRefresh() }
       catch(e){ showToast('Error de conexión','err') }
     }
     input.click()
@@ -1825,7 +1827,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   async function borrarFactura(f){
     const numF=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
     if(!window.confirm(`Anular/borrar esta factura?\n#${numF} · ${f['Proyecto']||f['Cliente']||''} · ${fmt(total)}\n\nÚsalo para errores, notas de crédito o duplicados. ¿Seguro?`)) return
-    const post=forzar=>fetch('/api/factura-borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(numF), monto:total, forzar})}).then(r=>r.json())
+    const post=forzar=>fetch('/api/factura-borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(numF), monto:total, fila:f.__row, forzar})}).then(r=>r.json())
     try{ let j=await post(false)
       if(j.requiereForzar){ if(!window.confirm(j.error+'\n\n¿Borrar igual?')) return; j=await post(true) }
       if(!j.ok){ showToast(j.error||'Error','err'); return }
@@ -2062,9 +2064,12 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       const j=await r.json()
       if(r.status===409){ setSaving(false); if(window.confirm((j.mensaje||'N° de factura duplicado')+'\n\n¿Crear igual?')) return crear(true, conMail); return }
       if(!j.ok){ showToast(j.error||'Error','err'); setSaving(false); return }
+      // Fila donde quedó ESTA factura. Con adelanto + saldo hay varias del mismo proyecto:
+      // el PDF y el mail tienen que ir contra esta fila, no contra "la factura del #X".
+      const filaNueva = j.filaVerificada || j.fila || ''
       // 1) Subir PDF si se adjuntó (antes del mail, para que el mail incluya el link)
       if(pdfFile){
-        try{ const fd=new FormData(); fd.append('file',pdfFile,pdfFile.name); fd.append('entidad',entidad); fd.append('nroFactura',nro); fd.append('presupuestoNum',presuNum); fd.append('mes',String(hoy.getMonth()+1)); fd.append('anio',String(hoy.getFullYear()))
+        try{ const fd=new FormData(); fd.append('file',pdfFile,pdfFile.name); fd.append('entidad',entidad); fd.append('nroFactura',nro); fd.append('presupuestoNum',presuNum); fd.append('fila',String(filaNueva)); fd.append('mes',String(hoy.getMonth()+1)); fd.append('anio',String(hoy.getFullYear()))
           showToast('Subiendo PDF…'); const ru=await fetch('/api/factura-upload',{method:'POST',body:fd}); const ju=await ru.json(); if(!ju.ok) showToast('Factura creada, pero el PDF falló: '+(ju.error||''),'err')
         }catch(e){ showToast('Factura creada, el PDF falló','err') }
       }
@@ -2072,14 +2077,14 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       if(conMail){
         // Sale desde admin@somosmagma.com por Gmail (mismo camino que Pagos Staff).
         // Antes abría Outlook con mailto: y el mail quedaba sin mandar.
-        try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum})}); const jm=await rm.json()
+        try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum, fila:filaNueva})}); const jm=await rm.json()
           if(jm.ok){
             // Solo los sugeridos: el contacto del presu y facturación de la agencia.
             // Antes salía a TODOS los contactos de la agencia y quedaban todos en copia.
             const to=(jm.destinatarios||[]).filter(d=>d.sugerido).map(d=>d.mail).filter(Boolean)
             if(!to.length) showToast('Factura creada — sin mail de contacto. Mandala con el botón ✉ de la lista.','err')
             else {
-              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum, adjuntarPDF:!!jm.adjuntarPDF})})
+              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum, fila:filaNueva, adjuntarPDF:!!jm.adjuntarPDF})})
               const je=await re.json()
               if(je.ok) showToast(`Mail enviado a ${to.join(', ')}${je.adjunto?' con la factura adjunta':''} ✓`)
               else showToast('Factura creada — el mail falló: '+(je.error||''),'err')
@@ -2143,7 +2148,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
           </div>
           <div style={{display:'flex', gap:7, alignItems:'center', marginBottom:12, flexWrap:'wrap'}}>
             <span style={{fontSize:11.5, color:T.ink3}}>Facturar:</span>
-            {[['50%',0.5],['Total',1]].map(([l,f])=><button key={l} onClick={()=>setMontoNeto(String(Math.round(sel.pendiente*f)))} style={{padding:'5px 12px', borderRadius:20, fontSize:11.5, fontWeight:600, cursor:'pointer', border:`1px solid ${Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.border}`, background:Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.surface, color:Math.round(neto)===Math.round(sel.pendiente*f)?'#fff':T.ink2}}>{l}</button>)}
+            {[['30% (seña)',0.3],['50%',0.5],['Total',1]].map(([l,f])=><button key={l} onClick={()=>setMontoNeto(String(Math.round(sel.pendiente*f)))} style={{padding:'5px 12px', borderRadius:20, fontSize:11.5, fontWeight:600, cursor:'pointer', border:`1px solid ${Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.border}`, background:Math.round(neto)===Math.round(sel.pendiente*f)?T.ink:T.surface, color:Math.round(neto)===Math.round(sel.pendiente*f)?'#fff':T.ink2}}>{l}</button>)}
             {(()=>{ const restante=Math.max(0, Math.round(sel.pendiente)-Math.round(neto)); return restante>0 ? <span style={{fontSize:11.5, color:T.warn, fontWeight:600, marginLeft:4}}>↳ queda pendiente {fmt(restante)} para facturar después</span> : <span style={{fontSize:11.5, color:T.pos, fontWeight:600, marginLeft:4}}>↳ factura el total, no queda saldo</span> })()}
           </div>
           <div style={{marginBottom:4}}>
@@ -2324,7 +2329,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
   const [mailFactAg,setMailFactAg]=useState('')
   const [recordar,setRecordar]=useState(false)
   useEffect(()=>{ let vivo=true; (async()=>{
-    try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num})}); const j=await r.json()
+    try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num, fila:f.__row})}); const j=await r.json()
       if(!vivo) return
       if(!j.ok){ showToast(j.error||'Error preparando el mail','err'); onClose(); return }
       // Solo vienen tildados los sugeridos (contacto del presu + facturación de la agencia).
@@ -2353,13 +2358,14 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
       const fe=parseD(f['Fecha emision'])||new Date()
       const fd=new FormData()
       fd.append('file', file, file.name); fd.append('entidad', entidad); fd.append('nroFactura', nro)
-      fd.append('presupuestoNum', num||''); fd.append('mes', String(fe.getMonth()+1)); fd.append('anio', String(fe.getFullYear()))
+      fd.append('presupuestoNum', num||''); fd.append('fila', String(f.__row||'')); fd.append('mes', String(fe.getMonth()+1)); fd.append('anio', String(fe.getFullYear()))
       setSubiendo(true)
       try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json()
         if(!j.ok){ showToast(j.error||'Error subiendo el PDF','err'); setSubiendo(false); return }
+        if(j.avisoLink){ showToast('El PDF subió a Drive pero no quedó linkeado: '+j.avisoLink,'err'); setSubiendo(false); return }
         setAdjPDF(true); setSubiendo(false); showToast('PDF subido ✓ ahora va adjunto')
         // El cuerpo cambia según haya PDF o no: lo re-armamos
-        try{ const rp=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num})}); const jp=await rp.json(); if(jp.ok&&jp.cuerpo) setCuerpo(jp.cuerpo) }catch(e){}
+        try{ const rp=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num, fila:f.__row})}); const jp=await rp.json(); if(jp.ok&&jp.cuerpo) setCuerpo(jp.cuerpo) }catch(e){}
         onSent&&onSent()
       }catch(e){ showToast('Error de conexión','err'); setSubiendo(false) }
     }
@@ -2368,7 +2374,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
   async function enviar(){
     if(!seleccionados.length){ showToast('Elegí al menos un destinatario','err'); return }
     setSaving(true)
-    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num, adjuntarPDF:adjPDF})}); const j=await r.json()
+    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num, fila:f.__row, adjuntarPDF:adjPDF})}); const j=await r.json()
       if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
       // Aprender el mail de facturación de la agencia (queda en la solapa AGENCIAS)
       if(recordar && candidatoFact){
@@ -2494,7 +2500,7 @@ function EditarFechasModal({f, onClose, onRefresh, showToast}){
     if(!Object.keys(cambios).length){ showToast('No hay cambios','err'); return }
     setSaving(true)
     try{
-      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ presupuestoNum:String(num), cambios })})
+      const r=await fetch('/api/factura-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ presupuestoNum:String(num), fila:f.__row, cambios })})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
       showToast(`#${num} · fechas actualizadas ✓`); onClose(); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }

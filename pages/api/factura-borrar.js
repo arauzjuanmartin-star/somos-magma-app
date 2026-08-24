@@ -12,7 +12,9 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nroPresupuesto, monto, forzar = false } = req.body || {}
+  // `fila` = __row de FACTURACION. Con adelanto + saldo el desempate por monto puede
+  // errarle (dos facturas del mismo importe): si la UI manda la fila, mandamos esa.
+  const { nroPresupuesto, monto, forzar = false, fila } = req.body || {}
   if (!nroPresupuesto) return res.status(400).json({ error: 'Falta nroPresupuesto' })
 
   try {
@@ -30,7 +32,9 @@ export default async function handler(req, res) {
 
     const montoT = num(monto)
     let pick = null
-    if (montoT > 0) pick = cand.find(i => Math.abs(num(rows[i][iFinal]) - montoT) < 1 || Math.abs(num(rows[i][iNeto]) - montoT) < 1)
+    const nFila = parseInt(fila)
+    if (nFila > 1 && String(rows[nFila-1]?.[iNum]||'').trim() === String(nroPresupuesto).trim()) pick = nFila - 1
+    if (pick == null && montoT > 0) pick = cand.find(i => Math.abs(num(rows[i][iFinal]) - montoT) < 1 || Math.abs(num(rows[i][iNeto]) - montoT) < 1)
     if (pick == null) pick = cand.find(i => !esCob(rows[i]))
     if (pick == null) pick = cand[0]
 

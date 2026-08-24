@@ -3,6 +3,7 @@ import { getSheets, withSheetsRetry } from '../../lib/sheets'
 import Busboy from 'busboy'
 import { Readable } from 'stream'
 import { requireAuth } from '../../lib/auth-helpers'
+import { ubicarFilaFactura } from '../../lib/factura-fila'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -91,6 +92,9 @@ export default async function handler(req, res) {
   const anio = fields.anio || ''
   const nroFactura = fields.nroFactura || ''
   const presupuestoNum = fields.presupuestoNum || ''
+  // Fila exacta de FACTURACION (__row). Con adelanto + saldo hay 2 facturas del mismo
+  // proyecto: sin esto el PDF del saldo pisaba el link del adelanto.
+  const filaFactura = fields.fila || ''
 
   try {
     const auth = getAuth()
@@ -117,29 +121,30 @@ export default async function handler(req, res) {
 
     // Asociar el link a la fila de FACTURACION
     let factualizada = false
-    if (presupuestoNum) {
+    let avisoLink = ''
+    if (presupuestoNum || filaFactura) {
       try {
         const { sheets, SHEET_ID } = await getSheets()
         const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' }))
-        const headers = r.data.values?.[0] || []
-        const idxNro = headers.indexOf('N° Presupuesto')
+        const rows = r.data.values || []
+        const headers = rows[0] || []
         const idxFactura = headers.indexOf('Factura')
-        if (idxNro !== -1 && idxFactura !== -1) {
-          for (let i = 1; i < r.data.values.length; i++) {
-            if (String(r.data.values[i][idxNro]||'').trim() === String(presupuestoNum).trim()) {
-              const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
-              const upd = [{ range: `FACTURACION!${colLetra(idxFactura)}${i+1}`, values: [[fileRes.data.webViewLink]] }]
-              // OJO: subir el PDF NO es enviarlo. Administración carga la factura y a veces
-              // espera el OK para mandarla. "Fecha enviada"/"Fc Enviada" las estampa solo
-              // factura-enviar, cuando el mail sale de verdad.
-              await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: SHEET_ID,
-                requestBody: { valueInputOption: 'USER_ENTERED', data: upd }
-              }))
-              factualizada = true
-              break
-            }
-          }
+        const ubic = ubicarFilaFactura({ rows, fila: filaFactura, presupuestoNum })
+        if (ubic.error) {
+          avisoLink = ubic.error
+        } else if (idxFactura === -1) {
+          avisoLink = 'FACTURACION no tiene la columna "Factura"'
+        } else {
+          const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
+          const upd = [{ range: `FACTURACION!${colLetra(idxFactura)}${ubic.fila}`, values: [[fileRes.data.webViewLink]] }]
+          // OJO: subir el PDF NO es enviarlo. Administración carga la factura y a veces
+          // espera el OK para mandarla. "Fecha enviada"/"Fc Enviada" las estampa solo
+          // factura-enviar, cuando el mail sale de verdad.
+          await withSheetsRetry(() => sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: SHEET_ID,
+            requestBody: { valueInputOption: 'USER_ENTERED', data: upd }
+          }))
+          factualizada = true
         }
 
         // Log de la acción
@@ -148,7 +153,7 @@ export default async function handler(req, res) {
             spreadsheetId: SHEET_ID,
             range: 'LOG!A:F',
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[new Date().toISOString(), mail, 'factura-upload', 'FACTURACION+DRIVE', String(presupuestoNum), `archivo=${fileName} carpeta=${entidadNombre}/${carpetaMes} link=${fileRes.data.webViewLink} actualizada=${factualizada}`]] },
+            requestBody: { values: [[new Date().toISOString(), mail, 'factura-upload', 'FACTURACION+DRIVE', String(presupuestoNum), `archivo=${fileName} carpeta=${entidadNombre}/${carpetaMes} link=${fileRes.data.webViewLink} fila=${ubic.fila||'-'} actualizada=${factualizada}${avisoLink?' aviso='+avisoLink:''}`]] },
           })
         } catch (e) {}
       } catch (e) { console.error('Error guardando link en sheet:', e) }
@@ -161,6 +166,7 @@ export default async function handler(req, res) {
       fileName,
       carpeta: `${entidadNombre} / ${carpetaMes}`,
       factualizada,
+      avisoLink,
     })
   } catch (e) {
     console.error('Error upload (drive):', e)

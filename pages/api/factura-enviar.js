@@ -8,6 +8,7 @@
 import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
+import { ubicarFilaFactura } from '../../lib/factura-fila'
 import { requireAuth } from '../../lib/auth-helpers'
 
 const MAX_ADJUNTO = 20 * 1024 * 1024  // Gmail corta cerca de 25MB con el encoding incluido
@@ -67,7 +68,9 @@ export default async function handler(req, res) {
   // accion/detalle: para que el LOG distinga un envío de factura de un reclamo de cuenta.
   // Sin presupuestoNum NO se marca "Fc Enviada" (un reclamo no re-envía la factura).
   // adjuntarPDF: lo manda el front cuando la factura tiene PDF cargado (lo dice factura-prep-mail).
-  const { to = [], cc = [], asunto, cuerpo, presupuestoNum, accion, detalle, adjuntarPDF = false } = req.body || {}
+  // `fila` = __row de FACTURACION. Con adelanto + saldo, sin la fila se adjuntaba el PDF
+  // de la primera factura y "Fc Enviada" se marcaba en la fila equivocada.
+  const { to = [], cc = [], asunto, cuerpo, presupuestoNum, accion, detalle, adjuntarPDF = false, fila } = req.body || {}
   const dest = (Array.isArray(to) ? to : [to]).map(s => String(s||'').trim()).filter(Boolean)
   if (!dest.length) return res.status(400).json({ error: 'No hay destinatarios' })
   if (!asunto || !cuerpo) return res.status(400).json({ error: 'Falta asunto o cuerpo' })
@@ -86,11 +89,13 @@ export default async function handler(req, res) {
         const { sheets, SHEET_ID } = await getSheets()
         const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' }))
         const rows = r.data.values || [], h = rows[0] || []
-        const iNum = h.indexOf('N° Presupuesto'), iFact = h.indexOf('Factura'), iNro = h.indexOf('Nro de Factura')
-        const fila = rows.find((row, i) => i > 0 && String(row[iNum]||'').trim() === String(presupuestoNum).trim())
-        const link = fila && iFact >= 0 ? String(fila[iFact] || '').trim() : ''
+        const iFact = h.indexOf('Factura'), iNro = h.indexOf('Nro de Factura')
+        const ubic = ubicarFilaFactura({ rows, fila, presupuestoNum })
+        if (ubic.error) throw new Error(ubic.error)
+        const filaF = ubic.row
+        const link = iFact >= 0 ? String(filaF[iFact] || '').trim() : ''
         if (!link) throw new Error('La factura no tiene PDF cargado. Subilo con el botón 📎 y volvé a mandar el mail.')
-        adjunto = await bajarAdjunto(link, fila && iNro >= 0 ? fila[iNro] : '')
+        adjunto = await bajarAdjunto(link, iNro >= 0 ? filaF[iNro] : '')
       } catch (e) {
         console.error('factura-enviar (adjunto):', e)
         return res.status(400).json({ error: `No pude adjuntar el PDF de la factura: ${e.message}` })
@@ -118,16 +123,17 @@ export default async function handler(req, res) {
       if (presupuestoNum) {
         const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
         const rows = r.data.values || [], h = rows[0] || []
-        const iNum = h.indexOf('N° Presupuesto'), iEnv = h.indexOf('Fc Enviada'), iFecha = h.indexOf('Fecha enviada')
-        if (iNum >= 0 && iEnv >= 0) {
-          const idx = rows.findIndex((row, i) => i > 0 && String(row[iNum]||'').trim() === String(presupuestoNum).trim())
-          if (idx > 0) {
+        const iEnv = h.indexOf('Fc Enviada'), iFecha = h.indexOf('Fecha enviada')
+        const ubic = ubicarFilaFactura({ rows, fila, presupuestoNum })
+        if (iEnv >= 0 && !ubic.error) {
+          const nFila = ubic.fila
+          {
             const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)} return s }
-            const upd = [{ range: `FACTURACION!${colLetra(iEnv)}${idx+1}`, values: [[true]] }]
+            const upd = [{ range: `FACTURACION!${colLetra(iEnv)}${nFila}`, values: [[true]] }]
             // Fecha enviada: se estampa la 1ra vez que se manda por mail (si no estaba ya cargada por el upload).
-            if (iFecha >= 0 && !String(rows[idx][iFecha]||'').trim()) {
+            if (iFecha >= 0 && !String(ubic.row[iFecha]||'').trim()) {
               const d = new Date(); const hoy = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()
-              upd.push({ range: `FACTURACION!${colLetra(iFecha)}${idx+1}`, values: [[hoy]] })
+              upd.push({ range: `FACTURACION!${colLetra(iFecha)}${nFila}`, values: [[hoy]] })
             }
             await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: upd } })
           }

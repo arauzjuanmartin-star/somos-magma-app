@@ -3,6 +3,7 @@
 // El frontend usa esto para mostrar el modal pre-poblado.
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
+import { ubicarFilaFactura } from '../../lib/factura-fila'
 
 const num = v => parseFloat(String(v||'0').replace(/[^\d.-]/g,''))||0
 const fmt = n => Math.round(n).toLocaleString('es-AR')
@@ -29,7 +30,9 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { presupuestoNum } = req.body
+  // `fila` = __row de FACTURACION. Sin esto, con adelanto + saldo el mail se armaba
+  // siempre con los datos de la primera factura (monto y N° del adelanto).
+  const { presupuestoNum, fila } = req.body
   if (!presupuestoNum) return res.status(400).json({ error: 'Falta presupuestoNum' })
 
   try {
@@ -46,8 +49,9 @@ export default async function handler(req, res) {
 
     const factHeaders = factR.data.values[0]
     const F = name => factHeaders.indexOf(name)
-    const factura = factR.data.values.slice(1).find(row => String(row[F('N° Presupuesto')]||'').trim() === String(presupuestoNum).trim())
-    if (!factura) return res.status(404).json({ error: 'Factura no encontrada' })
+    const ubicF = ubicarFilaFactura({ rows: factR.data.values, fila, presupuestoNum })
+    if (ubicF.error) return res.status(ubicF.ambigua ? 409 : 404).json({ error: ubicF.error })
+    const factura = ubicF.row
 
     const nroFactura = factura[F('Nro de Factura')] || 's/n'
     const tipoFactura = factura[F('Tipo de Factura')] || ''

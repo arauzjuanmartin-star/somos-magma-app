@@ -70,11 +70,16 @@ export default async function handler(req, res) {
     // VERIFICACIÓN POST-GUARDADO (defensa contra bug de pérdida silenciosa):
     // releemos la fila escrita y confirmamos que existe el presupuestoNum + total esperado
     let filaVerificada = null
+    // Fila donde quedó esta factura. La devolvemos SIEMPRE (aunque la verificación falle):
+    // el PDF y el mail que vienen después tienen que apuntar a ESTA factura y no a
+    // "la primera del proyecto" — con adelanto + saldo hay más de una.
+    let filaCreada = null
     try {
       const updatedRange = appendResult?.data?.updates?.updatedRange  // ej: 'FACTURACION!A140:Y140'
       if (updatedRange) {
         const m = updatedRange.match(/!\D+(\d+)/)
         const filaNum = m ? parseInt(m[1]) : null
+        filaCreada = filaNum || null
         if (filaNum) {
           const check = await withRetry(() => sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID, range: `FACTURACION!B${filaNum}:M${filaNum}`
@@ -109,7 +114,7 @@ export default async function handler(req, res) {
       })
     } catch (e) {}
 
-    res.json({ ok: true, filaVerificada })
+    res.json({ ok: true, filaVerificada, fila: filaCreada })
   } catch(e) {
     console.error('Error factura-nueva:', e)
     const status = e.code || e.response?.status
