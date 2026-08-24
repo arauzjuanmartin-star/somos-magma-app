@@ -62,7 +62,10 @@ export default async function handler(req, res) {
         agencia||'', cliente||'', proyecto||'',
         neto, iva, total,
         'Factura '+tipo, nroFactura||'',
-        fechaEmision||'', true, plazo||'', 0, fechaVenc||'',
+        // Fc Enviada va en FALSE: cargar la factura NO es mandarla. La marca (y la
+        // "Fecha enviada") las estampa factura-enviar cuando el mail sale de verdad.
+        // Antes iba en true y toda factura figuraba como enviada al cliente sin serlo.
+        fechaEmision||'', false, plazo||'', 0, fechaVenc||'',
         0, '', '', '', ''
       ]] }
     }))
