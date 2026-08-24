@@ -3,6 +3,7 @@ import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
 import { T, MONO } from '../lib/ui'
+import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
 
 /* ============================================================
@@ -1817,13 +1818,24 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       fd.append('fila', String(f.__row||''))   // adelanto + saldo: sin la fila el PDF pisaba la otra factura
       showToast('Subiendo PDF…')
       try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
-        showToast(j.avisoLink ? 'PDF subido a Drive, pero no quedó linkeado: '+j.avisoLink : 'PDF subido ✓', j.avisoLink?'err':undefined); if(onRefresh) onRefresh() }
+        showToast(msgUpload(j), (j.avisoLink||j.accionNro==='conflicto')?'err':undefined); if(onRefresh) onRefresh() }
       catch(e){ showToast('Error de conexión','err') }
     }
     input.click()
   }
 
-  // Anular/borrar una factura (errores, nota de crédito, duplicados)
+  // Qué decirle a Flor después de subir un PDF. El N° sale del nombre del archivo
+// de AFIP: si estaba vacío se completa, si estaba mal escrito se corrige, y si el
+// PDF es de OTRA factura no se toca nada y se avisa fuerte.
+function msgUpload(j, base='PDF subido ✓'){
+  if(j.avisoLink) return 'PDF subido a Drive, pero no quedó linkeado: '+j.avisoLink
+  if(j.accionNro==='conflicto') return `⚠ OJO: el PDF es la factura ${j.nroDetectado}, pero acá dice ${j.nroAnterior}. No toqué nada — fijate si adjuntaste el PDF que va.`
+  if(j.accionNro==='completar') return `${base} · N° de factura completado: ${j.nroDetectado}`
+  if(j.accionNro==='corregir') return `${base} · N° corregido: ${j.nroAnterior} → ${j.nroDetectado}`
+  return base
+}
+
+// Anular/borrar una factura (errores, nota de crédito, duplicados)
   async function borrarFactura(f){
     const numF=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
     if(!window.confirm(`Anular/borrar esta factura?\n#${numF} · ${f['Proyecto']||f['Cliente']||''} · ${fmt(total)}\n\nÚsalo para errores, notas de crédito o duplicados. ¿Seguro?`)) return
@@ -2046,6 +2058,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
   const cuitFact = (agRow?.['CUIT'] || ctRow?.['Cuit'] || '').toString().trim()
   const condIVAFact = (agRow?.['Condicion IVA'] || '').toString().trim()
   const fechaInfo = p=>semEvento(p['Fecha Evento'])
+  const [nroAuto,setNroAuto]=useState('')   // de dónde salió el N°: lo puso el PDF, no Flor
   const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState('30'), [conIVA,setConIVA]=useState(true), [montoNeto,setMontoNeto]=useState(initialSel?String(Math.round(initialSel.pendiente)):''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
   const neto = sel ? (parseFloat(montoNeto)||sel.pendiente) : 0
   const iva = conIVA?Math.round(neto*0.21):0
@@ -2139,7 +2152,10 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
           <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
             <div style={{flex:1, minWidth:120}}><label style={lblV2}>Entidad</label><select value={entidad} onChange={e=>setEntidad(e.target.value)} style={inpV2}>{['SRL','Sofia','Lulu','Efectivo'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
             <div style={{width:90}}><label style={lblV2}>Tipo</label><select value={tipo} onChange={e=>setTipo(e.target.value)} style={inpV2}>{['A','B','C'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
-            <div style={{flex:1, minWidth:140}}><label style={lblV2}>N° de factura</label><input value={nro} onChange={e=>setNro(e.target.value)} placeholder="ej 0001-00001234" style={inpV2}/></div>
+            <div style={{flex:1, minWidth:140}}><label style={lblV2}>N° de factura</label>
+              <input value={nro} onChange={e=>{setNro(e.target.value); setNroAuto('')}} placeholder="Adjuntá el PDF y se completa solo" style={{...inpV2, ...(nroAuto&&nro===nroAuto?{borderColor:T.pos, fontFamily:MONO}:{})}}/>
+              {nroAuto&&nro===nroAuto && <div style={{fontSize:10.5, color:T.pos, marginTop:3, fontWeight:600}}>✓ leído del PDF</div>}
+            </div>
           </div>
           <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:8}}>
             <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label><input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/></div>
@@ -2154,7 +2170,13 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
           <div style={{marginBottom:4}}>
             <label style={lblV2}>PDF de la factura (opcional)</label>
             <div style={{display:'flex', alignItems:'center', gap:10}}>
-              <input type="file" accept="application/pdf,image/*" onChange={e=>setPdfFile(e.target.files?.[0]||null)} style={{fontSize:12.5, color:T.ink2}}/>
+              <input type="file" accept="application/pdf,image/*" onChange={e=>{
+                const f=e.target.files?.[0]||null; setPdfFile(f)
+                // El PDF que baja de AFIP se llama CUIT_TIPO_PTOVTA_NRO.pdf: el número
+                // lo sacamos de ahí en vez de que alguien lo tipee.
+                const detectado=f?nroDeNombreArchivo(f.name):null
+                if(detectado){ setNro(detectado); setNroAuto(detectado) } else setNroAuto('')
+              }} style={{fontSize:12.5, color:T.ink2}}/>
               {pdfFile && <span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ {pdfFile.name}</span>}
             </div>
           </div>
@@ -2363,7 +2385,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
       try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json()
         if(!j.ok){ showToast(j.error||'Error subiendo el PDF','err'); setSubiendo(false); return }
         if(j.avisoLink){ showToast('El PDF subió a Drive pero no quedó linkeado: '+j.avisoLink,'err'); setSubiendo(false); return }
-        setAdjPDF(true); setSubiendo(false); showToast('PDF subido ✓ ahora va adjunto')
+        setAdjPDF(true); setSubiendo(false); showToast(msgUpload(j, 'PDF subido ✓ ahora va adjunto'), j.accionNro==='conflicto'?'err':undefined)
         // El cuerpo cambia según haya PDF o no: lo re-armamos
         try{ const rp=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num, fila:f.__row})}); const jp=await rp.json(); if(jp.ok&&jp.cuerpo) setCuerpo(jp.cuerpo) }catch(e){}
         onSent&&onSent()

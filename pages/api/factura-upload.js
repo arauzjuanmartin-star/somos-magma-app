@@ -4,6 +4,8 @@ import Busboy from 'busboy'
 import { Readable } from 'stream'
 import { requireAuth } from '../../lib/auth-helpers'
 import { ubicarFilaFactura } from '../../lib/factura-fila'
+import { nroDeNombreArchivo, compararConPdf } from '../../lib/factura-numero'
+import { nroDesdeElPdf } from '../../lib/factura-leer-pdf'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -122,6 +124,7 @@ export default async function handler(req, res) {
     // Asociar el link a la fila de FACTURACION
     let factualizada = false
     let avisoLink = ''
+    let nroDetectado = '', accionNro = '', nroAnterior = '', leidoPorAI = false
     if (presupuestoNum || filaFactura) {
       try {
         const { sheets, SHEET_ID } = await getSheets()
@@ -137,6 +140,33 @@ export default async function handler(req, res) {
         } else {
           const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
           const upd = [{ range: `FACTURACION!${colLetra(idxFactura)}${ubic.fila}`, values: [[fileRes.data.webViewLink]] }]
+
+          // El N° de factura sale del nombre del PDF de AFIP (CUIT_TIPO_PTOVTA_NRO.pdf).
+          // Lo pone la máquina y no se tipea: de 33 facturas con PDF había 21 con el
+          // número mal escrito y una cargada con el número de otra.
+          const idxNroF = headers.indexOf('Nro de Factura')
+          let delPdf = nroDeNombreArchivo(fileName)
+          // Plan B para los PDFs que alguien renombró a mano ("Latam Ostara.pdf"):
+          // lo lee Claude. Solo si hace falta — si el nombre sirve, no gastamos la llamada.
+          if (!delPdf && idxNroF !== -1 && !String(ubic.row[idxNroF] || '').trim()) {
+            const leido = await nroDesdeElPdf(fileBuffer, fileMime)
+            if (leido.nro) { delPdf = leido.nro; leidoPorAI = true }
+          }
+          if (delPdf && idxNroF !== -1) {
+            const cmp = compararConPdf(ubic.row[idxNroF], delPdf)
+            if (cmp.accion === 'completar' || cmp.accion === 'corregir') {
+              upd.push({ range: `FACTURACION!${colLetra(idxNroF)}${ubic.fila}`, values: [[delPdf]] })
+              nroDetectado = delPdf
+              accionNro = cmp.accion
+              nroAnterior = cmp.antes || ''
+            } else if (cmp.accion === 'conflicto') {
+              // No pisamos: puede ser el PDF equivocado o el número equivocado, y
+              // decidirlo mal en una factura es un problema con el contador.
+              accionNro = 'conflicto'
+              nroDetectado = delPdf
+              nroAnterior = cmp.antes
+            }
+          }
           // OJO: subir el PDF NO es enviarlo. Administración carga la factura y a veces
           // espera el OK para mandarla. "Fecha enviada"/"Fc Enviada" las estampa solo
           // factura-enviar, cuando el mail sale de verdad.
@@ -153,7 +183,7 @@ export default async function handler(req, res) {
             spreadsheetId: SHEET_ID,
             range: 'LOG!A:F',
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[new Date().toISOString(), mail, 'factura-upload', 'FACTURACION+DRIVE', String(presupuestoNum), `archivo=${fileName} carpeta=${entidadNombre}/${carpetaMes} link=${fileRes.data.webViewLink} fila=${ubic.fila||'-'} actualizada=${factualizada}${avisoLink?' aviso='+avisoLink:''}`]] },
+            requestBody: { values: [[new Date().toISOString(), mail, 'factura-upload', 'FACTURACION+DRIVE', String(presupuestoNum), `archivo=${fileName} carpeta=${entidadNombre}/${carpetaMes} link=${fileRes.data.webViewLink} fila=${ubic.fila||'-'} actualizada=${factualizada}${nroDetectado?` nro=${accionNro}:${nroDetectado}${leidoPorAI?'(AI)':''}${nroAnterior?' (antes '+nroAnterior+')':''}`:''}${avisoLink?' aviso='+avisoLink:''}`]] },
           })
         } catch (e) {}
       } catch (e) { console.error('Error guardando link en sheet:', e) }
@@ -167,6 +197,7 @@ export default async function handler(req, res) {
       carpeta: `${entidadNombre} / ${carpetaMes}`,
       factualizada,
       avisoLink,
+      nroDetectado, accionNro, nroAnterior, leidoPorAI,
     })
   } catch (e) {
     console.error('Error upload (drive):', e)
