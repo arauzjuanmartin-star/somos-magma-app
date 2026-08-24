@@ -1,5 +1,6 @@
 import { getSheets, MAX_SLOTS, SLOT_PRESU, SLOT_PROY, ANCHO_PROY } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
+import { asegurarCarpetasProyecto } from '../../lib/drive'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -277,6 +278,23 @@ export default async function handler(req, res) {
       } catch (e) { console.warn('No se pudo propagar Días:', e.message) }
     }
 
+    // 📁 CARPETAS EN DRIVE (best-effort, no bloquea)
+    // Al aprobar, el material ya tiene dónde ir, en las dos unidades madre:
+    //   CRUDO     CR_AGENCIA/CR_CLIENTE/AÑO/NRO_FECHA_Proyecto/{Fotos,Videos}
+    //   ENTREGAS  CLIENTE/AÑO/NRO_FECHA_Proyecto/{Fotos,Videos}
+    // Las subcarpetas salen de lo que se vendió (ver subcarpetasDe). Es idempotente:
+    // si ya existen solo guarda los links. NO comparte con nadie todavía — compartir
+    // con el staff o darle el crudo al cliente son botones explícitos del módulo Edición.
+    let driveResult = null
+    if (estado === 'APROBADO') {
+      try {
+        driveResult = await asegurarCarpetasProyecto({ sheets, SHEET_ID, num, destinos: ['crudo', 'entregas'] })
+      } catch (e) {
+        console.warn('Drive carpeta falló (no bloquea):', e.message)
+        driveResult = { error: e.message }
+      }
+    }
+
     // 🗓 SINCRONIZAR CON CALENDAR MAGMA (best-effort, no bloquea el flujo si falla)
     // Si noCalendar=true, el front lo hace en segundo plano para que el cambio de estado sea rápido.
     let calendarResult = null
@@ -298,7 +316,7 @@ export default async function handler(req, res) {
       console.warn('Calendar sync falló (no bloquea):', e.message)
     }
 
-    res.json({ ok: true, calendar: calendarResult })
+    res.json({ ok: true, calendar: calendarResult, drive: driveResult })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
