@@ -33,7 +33,9 @@ const FIJO=/^(software|seguros|oficina|telefon|internet)/i
 const mov=MOV.filter(m=>/empresa/i.test(String(m['Categoria']||''))&&FIJO.test(String(m['Subcategoria']||'')))
 
 // Cruce con GASTOS_FIJOS por palabras en común (≥3 letras), salteando genéricas
-const STOP=new Set(['OFICINA','MAGMA','POLIZA','PÓLIZA','COBRO','DUPLICADO','REVERSO','TARJETA','GASTOS','AGREGAR','PLAN','PAGO','SALDO','ANUAL','RENOVACION','RENOVACIÓN'])
+const STOP=new Set(['OFICINA','MAGMA','POLIZA','PÓLIZA','COBRO','DUPLICADO','REVERSO','TARJETA','GASTOS','AGREGAR','PLAN','PAGO','SALDO','ANUAL','RENOVACION','RENOVACIÓN',
+  // genéricos: compartirlos no prueba que sea el mismo gasto ("SOFTWARE/ADS USD" no es "Ads (Gloria)")
+  'ADS','SOFTWARE','WEB','USD','ARS','VARIOS','OTROS','SERVICIOS','SERVICIO','COSTOS','COSTO','MENSUAL','SUSCRIPCION','SUSCRIPCIONES'])
 const toks=s=>new Set(String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
   .split(/[^A-Z0-9]+/).filter(t=>t.length>=3&&!STOP.has(t)&&!/^\d+$/.test(t)))
 const gfAct=GF.filter(g=>{const a=String(g['Activo']||'').toUpperCase()
@@ -60,8 +62,11 @@ const lista=Object.values(G).filter(g=>Math.abs(g.neto)>0.5)
 const HEADERS=['Mes','Concepto','Rubro','Tarjeta','Monto ARS','Monto USD','¿Ya está en GASTOS_FIJOS?','Monto en GASTOS_FIJOS','Falta sumar al resultado','Notas']
 const filas=lista.map(g=>{
   const y=yaEnGF(g.com), ars=g.mon==='USD'?'':g.neto, usd=g.mon==='USD'?g.neto:''
-  const notas=[g.rev?'neto de un cobro duplicado + su reverso':'', g.n>1&&!g.rev?`${g.n} cargos en el mes`:''].filter(Boolean).join(' · ')
-  return [`${MESN[g.mes]}-${g.anio}`, g.com, g.sub, g.tarj, ars, usd,
+  const GENERICO=/^(seguros?|software|internet|movilidad|varios( empresa)?|otros)$/i
+  const notas=[g.rev?'neto de un cobro duplicado + su reverso':'',
+    g.n>1&&!g.rev?`${g.n} cargos en el mes`:'',
+    GENERICO.test(g.com)?'⚠ línea agrupada — sin detalle de qué es':''].filter(Boolean).join(' · ')
+  return [`'${MESN[g.mes]}-${g.anio}`, g.com, g.sub, g.tarj, ars, usd,
     y?'SI':'NO', y?y.monto:'', y?'':(g.mon==='USD'?'':g.neto), notas]
 })
 const totArs=lista.filter(g=>g.mon!=='USD').reduce((s,g)=>s+g.neto,0)
@@ -104,7 +109,7 @@ const resumen=meses.map(mk=>{
   const rU=del.filter(g=>g.mon==='USD').reduce((s,g)=>s+g.neto,0)
   const fA=del.filter(g=>g.mon!=='USD'&&!yaEnGF(g.com)).reduce((s,g)=>s+g.neto,0)
   const fU=del.filter(g=>g.mon==='USD'&&!yaEnGF(g.com)).reduce((s,g)=>s+g.neto,0)
-  return [`${MESN[m]}-${a}`, rA, rU, fA, fU, del.length]
+  return [`'${MESN[m]}-${a}`, rA, rU, fA, fU, del.length]
 })
 const TOTAL=[`TOTAL (${meses.length} meses)`,'','','',totArs,totUsd,'','',falta,'']
 await sheets.spreadsheets.values.update({spreadsheetId:ID,range:`${HOJA}!A1`,valueInputOption:'USER_ENTERED',
