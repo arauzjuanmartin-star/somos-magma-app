@@ -3454,6 +3454,10 @@ function Egresos({data, onRefresh, showToast}){
 
   // Un gasto "único" (impuesto/gasto puntual) solo aparece en su mes (Mes carga/Año carga). Los recurrentes (mensual), siempre.
   const gfActivos=gf.filter(g=>{
+    // Los gastos con Categoria "Tarjeta" están en el sheet para que Mariana los vea
+    // y filtre junto al resto, pero NO se suman acá: el resumen de la tarjeta ya entra
+    // entero como egreso del mes, así que sumarlos otra vez duplicaría el gasto.
+    if(/^tarjeta$/i.test(String(g['Categoria']||'').trim())) return false
     const act=esPagado(g['Activo'])||String(g['Activo']||'').trim()===''
     if(!act) return false
     if(/[uú]nico/i.test(String(g['Frecuencia']||''))) return parseInt(g['Mes carga'])===mesIdx && String(g['Año carga']).includes(String(anio))
