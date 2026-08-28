@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     set('Acreedor', acreedor)
     set('Saldado', 'NO')
 
-    await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'PRESTAMOS!A:O', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
+    await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'PRESTAMOS!A:T', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
 
     // Ajustar saldo de la cuenta si corresponde
     if (cuenta && (efecto === 'entra' || efecto === 'sale')) {

@@ -26,14 +26,15 @@ const fecha=v=>{const m=txt(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)re
 const colLetra=c=>{let s='',n=c+1;while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26)}return s}
 const SANT_COMPARTIDO='Santander #810-03510008128/6', SANT_PERSONAL='Santander #810-03510008035/1'
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['SOCIOS_MOVIMIENTOS!A:J','PRESTAMOS!A:Q','GASTOS_FIJOS!A:H'],valueRenderOption:'FORMATTED_VALUE'})
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['SOCIOS_MOVIMIENTOS!A:J','PRESTAMOS!A:T','GASTOS_FIJOS!A:H'],valueRenderOption:'FORMATTED_VALUE'})
 const [SM,PRE,GAS]=R.data.valueRanges.map(v=>v.values||[])
 
 // ── 1) cuotas de agosto que Magma paga por Sofi ──
+const pH=PRE[0]||[], pNom=pH.indexOf('Prestamo'), pVen=pH.indexOf('Vencimiento'), pMon=pH.indexOf('Monto cuota')  // por nombre: la solapa se reordena
 const cuotaAgo=(pres)=>{let v=null
-  PRE.slice(1).forEach(r=>{if(!r||txt(r[0])!==pres)return
-    const f=fecha(r[3]); if(!f||f.getFullYear()!==2026||f.getMonth()+1!==8)return
-    v={monto:num(r[4]), fecha:txt(r[3])}})
+  PRE.slice(1).forEach(r=>{if(!r||txt(r[pNom])!==pres)return
+    const f=fecha(r[pVen]); if(!f||f.getFullYear()!==2026||f.getMonth()+1!==8)return
+    v={monto:num(r[pMon]), fecha:txt(r[pVen])}})
   return v}
 const c1=cuotaAgo(SANT_COMPARTIDO), c2=cuotaAgo(SANT_PERSONAL)
 const yaEsta=(conc,mes)=>SM.slice(1).some(r=>{const f=fecha(r[0]); return f&&f.getMonth()+1===mes&&/sof/i.test(r[1]||'')&&txt(r[3]).includes(conc)})

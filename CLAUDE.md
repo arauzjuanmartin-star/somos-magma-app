@@ -24,6 +24,17 @@ Si una operación requiere más clics o pasos en la app que en el sheet, el equi
 ## Regla de oro #3 — Operaciones destructivas siempre con preview
 Antes de eliminar filas, mover datos masivos, o cualquier cosa irreversible: mostrar preview en consola y pedir OK explícito a Juan. Cero deletes a ciegas.
 
+## Regla de oro #4 — El sheet es una interfaz, no un depósito
+**No todo el equipo usa la app. Mariana (la coach) y varios trabajan directo en el Master Magma porque les resulta más fácil.** Entonces el sheet tiene que estar presentable, no solo correcto: colores que signifiquen algo, tablas legibles, gráficos donde ayuden, columnas auxiliares que eviten laburo manual.
+
+Concreto, al tocar una solapa:
+- **La columna útil va cerca de lo que acompaña**, no colgada al final. Una columna "Mes" sirve al lado de la fecha, no en la S después de siete columnas técnicas.
+- **Columnas derivadas por fórmula**, no valores pegados: las filas nuevas se completan solas. Fórmula **por fila**, no `ARRAYFORMULA` — cualquier `append` de un script escribe vacío en esa celda y una ARRAYFORMULA se rompe entera con `#REF!`.
+- **Al agregar una columna hay que extender el `basicFilter` de la solapa**, si no la columna existe pero no aparece en el desplegable del filtro.
+- **Reordenar columnas rompe todo lo que lee por posición.** Antes de mover una, `grep` de la solapa en `pages/`, `lib/` y `scripts/`: los rangos cortados (`A:O`) dejan columnas afuera y los `row[6]` apuntan a otra cosa. Pasar esos consumidores a leer por nombre de header.
+
+Ejemplo de referencia: `scripts/prestamos-columna-mes.mjs` (preview por default, `--escribir` para aplicar, y verifica la alineación de los datos al terminar).
+
 ## Memoria persistente
 Existe sistema de memoria en `~/.claude/projects/-Users-dronjuan-somos-magma-app/memory/` con info crítica del proyecto. Leer `MEMORY.md` (índice) en cada chat nuevo. Memorias clave:
 

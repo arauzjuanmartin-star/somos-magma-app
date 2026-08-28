@@ -57,8 +57,9 @@ for(let i=1;i<gf.length;i++){ const r=gf[i]; if(!r||!yes(r[7]))continue
 const unicosMes=unicos/MES  // promedio real: lo pagado de una vez, repartido en los meses del año
 
 // ===== DEUDA + CAJA =====
-const pr=await get('PRESTAMOS!A:K'); let prP=0,prC=0
-for(let i=1;i<pr.length;i++){ const r=pr[i]; if(r&&!yes(r[6])){prP+=N(r[4]);prC++} }
+const pr=await get('PRESTAMOS!A:T'); let prP=0,prC=0
+const prH=pr[0]||[], prMon=prH.indexOf('Monto cuota'), prPag=prH.indexOf('Pagado')  // por nombre: la solapa se reordena
+for(let i=1;i<pr.length;i++){ const r=pr[i]; if(r&&!yes(r[prPag])){prP+=N(r[prMon]);prC++} }
 const tj=await get('TARJETAS!A:N'); let tjP=0
 for(let i=1;i<tj.length;i++){ const r=tj[i]; if(r&&!yes(r[7]))tjP+=N(r[4]) }
 const cu=await get('CUENTAS!A:L'); let caja=0

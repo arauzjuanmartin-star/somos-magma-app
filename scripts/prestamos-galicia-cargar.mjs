@@ -146,7 +146,7 @@ if(aBorrar.length){
   await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:reqs}})
   console.log(`\n✓ ${aBorrar.length} filas viejas borradas`)
 }
-await sheets.spreadsheets.values.append({spreadsheetId:ID,range:'PRESTAMOS!A:R',valueInputOption:'RAW',insertDataOption:'INSERT_ROWS',requestBody:{values:nuevas}})
+await sheets.spreadsheets.values.append({spreadsheetId:ID,range:'PRESTAMOS!A:T',valueInputOption:'RAW',insertDataOption:'INSERT_ROWS',requestBody:{values:nuevas}})
 console.log(`✓ ${nuevas.length} cuotas cargadas`)
 await sheets.spreadsheets.values.append({spreadsheetId:ID,range:'GASTOS_FIJOS!A:Z',valueInputOption:'RAW',insertDataOption:'INSERT_ROWS',requestBody:{values:[gcom]}})
 console.log(`✓ comisión Garantizar cargada`)

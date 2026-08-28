@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const { sheets, SHEET_ID } = await getSheets()
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
-      ranges: ['PRESUPUESTOS!A:DI', 'PROYECTOS!A:ER', 'FACTURACION!A:AG', 'PRESTAMOS!A:O', 'PAGOS_STAFF!A:N', 'TARJETAS!A:N', 'MOVIMIENTOS_TARJETA!A:N', 'AGENCIAS!A:L', 'Contactos/agencias!A:Z'],
+      ranges: ['PRESUPUESTOS!A:DI', 'PROYECTOS!A:ER', 'FACTURACION!A:AG', 'PRESTAMOS!A:T', 'PAGOS_STAFF!A:N', 'TARJETAS!A:N', 'MOVIMIENTOS_TARJETA!A:N', 'AGENCIAS!A:L', 'Contactos/agencias!A:Z'],
       valueRenderOption: 'FORMATTED_VALUE',
     }))
     const [PRE, PRO, FAC, PST, PAG, TAR, MOV, AG, CON] = r.data.valueRanges.map(v => v.values || [])
@@ -48,9 +48,11 @@ export default async function handler(req, res) {
     PRO.slice(1).forEach(p => { if (!txt(p[2])) return; const k = txt(p[5]) || txt(p[4]); if (!k || INTERNO.test(k.trim())) return; const fe = fecha(p[3]); if (!fe) return; porCli[k] = porCli[k] || { n: 0, ult: fe, monto: 0 }; porCli[k].n++; porCli[k].monto += num(p[7]); if (fe > porCli[k].ult) porCli[k].ult = fe })
     const churn = Object.entries(porCli).filter(([, d]) => d.n >= 3 && dias(d.ult) > 75 && d.monto >= 1000000).sort((a, b) => b[1].monto - a[1].monto).slice(0, 8).map(([k, d]) => ({ cliente: k, proyectos: d.n, monto: d.monto, dias: dias(d.ult) }))
 
-    // 3. Préstamos
-    const pend = PST.slice(1).filter(row => !esTrue(row[6])).reduce((s, row) => s + num(row[4]), 0)
-    const prox = PST.slice(1).filter(row => { const v = fecha(row[3]); return v && !esTrue(row[6]) && v >= hoy && (v - hoy) / DIA <= 35 }).sort((a, b) => fecha(a[3]) - fecha(b[3])).map(row => ({ prestamo: txt(row[0]), cuota: txt(row[1]).replace(/^cuota\s*/i, ''), venc: txt(row[3]), monto: num(row[4]) }))
+    // 3. Préstamos — por nombre de header, no por posición: la solapa se reordena
+    const pH = PST[0] || [], pcol = n => pH.indexOf(n)
+    const iNom = pcol('Prestamo'), iCuo = pcol('Cuota nro'), iVen = pcol('Vencimiento'), iMon = pcol('Monto cuota'), iPag = pcol('Pagado')
+    const pend = PST.slice(1).filter(row => !esTrue(row[iPag])).reduce((s, row) => s + num(row[iMon]), 0)
+    const prox = PST.slice(1).filter(row => { const v = fecha(row[iVen]); return v && !esTrue(row[iPag]) && v >= hoy && (v - hoy) / DIA <= 35 }).sort((a, b) => fecha(a[iVen]) - fecha(b[iVen])).map(row => ({ prestamo: txt(row[iNom]), cuota: txt(row[iCuo]).replace(/^cuota\s*/i, ''), venc: txt(row[iVen]), monto: num(row[iMon]) }))
     const prestamos = { pendiente: pend, proximas: prox }
 
     // 4. Deuda Juan/Sofi
