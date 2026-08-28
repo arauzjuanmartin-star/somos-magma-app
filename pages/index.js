@@ -3506,6 +3506,9 @@ function Egresos({data, onRefresh, showToast}){
 
   // Los GASTOS_FIJOS (sueldos, alquiler…) son recurrentes: se marcan PAGADOS por mes guardando la lista
   // de meses en "Meses pagados" (ej "7/2026, 8/2026"). Así cada mes es independiente. Tarjetas/préstamos = fila puntual.
+  // Acordeón: openSec pisa el default por sección (id -> true/false). Se limpia al cambiar de mes.
+  const [openSec,setOpenSec]=useState({}), [todoAbierto,setTodoAbierto]=useState(false)
+  const idsSec=[...Object.keys(porCat),'tarjetas','prestamos','socios','cuotas','movimientos']
   const mesKey=`${mesIdx}/${anio}`
   const estaPagado=(hoja,it)=>{ const k=hoja+':'+it.__row; if(k in override) return override[k]
     if(hoja==='GASTOS_FIJOS'){ return String(it['Meses pagados']||'').split(',').map(s=>s.trim()).includes(mesKey) }
@@ -3540,7 +3543,60 @@ function Egresos({data, onRefresh, showToast}){
         : <span onClick={()=>setEditM(x=>({...x,[k]:true}))} title="Tocá para editar el monto" style={{fontSize:13, fontFamily:MONO, color:T.ink, minWidth:90, textAlign:'right', cursor:'pointer', borderBottom:`1px dashed ${T.border}`}}>{fmt(monto)}</span>}
     </div>
   }
-  const Sec=({titulo, children})=> children && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}><CardHead>{titulo}</CardHead>{children}</div>
+  // Cada bloque es un acordeón: el título ya dice el total y cuánto falta pagar, así que
+  // no hace falta abrirlo para saber si hay algo pendiente. Arranca abierto solo si queda
+  // algo por pagar — lo que ya se pagó se guarda solo y deja de ocupar pantalla.
+  const campoMonto=h=>h==='PRESTAMOS'?'Monto cuota':'Monto'
+  // Cuándo vence cada cosa dentro del mes que estás viendo: los gastos fijos guardan
+  // "Dia pago" (un día del mes), tarjetas y préstamos guardan la fecha entera.
+  const vencDe=(hoja,it)=>{ if(hoja==='GASTOS_FIJOS'){ const d=parseInt(it['Dia pago']); return d>=1&&d<=31?new Date(anio,mesIdx-1,d):null } return parseD(it['Vencimiento']) }
+  const hoy0=new Date(now.getFullYear(),now.getMonth(),now.getDate())
+  const diasPara=(hoja,it)=>{ const v=vencDe(hoja,it); if(!v) return null; return Math.round((new Date(v.getFullYear(),v.getMonth(),v.getDate())-hoy0)/86400000) }
+  const cuando=d=>d===0?'hoy':d===1?'mañana':`en ${d} días`
+  const Sec=({id, titulo, children, items, hoja, total, sub})=>{
+    if(!children) return null
+    const its=items||[]
+    const suma=a=>a.reduce((x,it)=>x+parseMonto(it[campoMonto(hoja)]),0)
+    const pend=hoja?its.filter(it=>!estaPagado(hoja,it)):[]
+    const montoPend=suma(pend), tot=total!=null?total:suma(its), montoPag=Math.max(0,tot-montoPend)
+    const hayTot=total!=null||its.length>0
+    // Lo que ya se pasó de fecha (rojo) vs lo que vence dentro de la semana (amarillo).
+    // Solo mira lo pendiente: lo pagado no vence.
+    const vencidos=pend.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d<0})
+    const porVencer=pend.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d>=0&&d<=7})
+    const proximo=porVencer.map(it=>diasPara(hoja,it)).sort((a,b)=>a-b)[0]
+    const pct=tot>0?Math.min(100,Math.round(montoPag/tot*100)):0
+    // Default: cerrado. La barra y los montos del título ya dicen cómo viene la categoría,
+    // no hace falta abrir para saberlo. 'Abrir todo' devuelve la vista larga de siempre.
+    const abierta=id in openSec ? openSec[id] : false
+    return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
+      <div onClick={()=>setOpenSec(o=>({...o,[id]:!abierta}))} style={{padding:'12px 18px 13px', cursor:'pointer', background:abierta?T.surfaceAlt:'transparent'}}
+        onMouseEnter={e=>{if(!abierta)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierta)e.currentTarget.style.background='transparent'}}>
+        <div style={{display:'flex', alignItems:'center', gap:9}}>
+          <span style={{fontSize:9, color:T.ink3, display:'inline-block', width:9, transform:abierta?'rotate(90deg)':'none', transition:'transform .15s'}}>▶</span>
+          <span style={{fontSize:12.5, fontWeight:600, color:T.ink}}>{titulo}</span>
+          {sub && <span style={{fontSize:11, color:T.ink3}}>{sub}</span>}
+          <div style={{flex:1, minWidth:20}}/>
+          {hayTot && <span style={{fontSize:15, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmt(tot)}</span>}
+        </div>
+        {hoja && tot>0 && <div style={{marginLeft:18, marginTop:9}}>
+          <div style={{display:'flex', height:7, borderRadius:5, overflow:'hidden', background:T.border}}>
+            <div style={{width:`${pct}%`, background:T.pos}}/>
+            <div style={{width:`${100-pct}%`, background:T.brand}}/>
+          </div>
+          <div style={{display:'flex', gap:13, flexWrap:'wrap', marginTop:7, fontSize:11.5, alignItems:'center'}}>
+            <span style={{color:T.pos, fontWeight:700}}>✓ {fmt(montoPag)} pagado</span>
+            {montoPend>0
+              ? <span style={{color:T.brand, fontWeight:700}}>● {fmt(montoPend)} sin pagar</span>
+              : <span style={{color:T.pos, fontWeight:700, background:T.posSoft, padding:'2px 9px', borderRadius:20}}>todo pagado ✓</span>}
+            {vencidos.length>0 && <span style={{color:T.brand, fontWeight:700, background:T.brandSoft, padding:'2px 9px', borderRadius:20}}>🔴 {fmt(suma(vencidos))} vencido{vencidos.length>1?'s':''}</span>}
+            {porVencer.length>0 && <span style={{color:T.warn, fontWeight:700, background:T.warnSoft, padding:'2px 9px', borderRadius:20}}>⚠️ {fmt(suma(porVencer))} vence {cuando(proximo)}</span>}
+          </div>
+        </div>}
+      </div>
+      {abierta && children}
+    </div>
+  }
 
   return <>
     <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>
@@ -3548,18 +3604,19 @@ function Egresos({data, onRefresh, showToast}){
       <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGFOper)}${totalFin>0?` · Financieros ${fmtM(totalFin)}`:''} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:16}}>
-      <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
+      <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} style={navBtn}>←</button>
       <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:120, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
-      <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a) }} style={navBtn}>→</button>
+      <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} style={navBtn}>→</button>
       <div style={{flex:1}}/>
+      <button onClick={()=>{ const v=!todoAbierto; setTodoAbierto(v); setOpenSec(Object.fromEntries(idsSec.map(id=>[id,v]))) }} style={{fontSize:12, fontWeight:600, padding:'9px 14px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>{todoAbierto?'Cerrar todo':'Abrir todo'}</button>
       <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
     </div>
     <CuentaSocios showToast={showToast}/>
     {Object.entries(porCat).sort((a,b)=>(/financier/i.test(a[0])?1:0)-(/financier/i.test(b[0])?1:0)).map(([cat,items])=>(
-      <Sec key={cat} titulo={/financier/i.test(cat)?`Gastos fijos · ${cat} — fuera del resultado operativo`:`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
+      <Sec key={cat} id={cat} items={items} hoja="GASTOS_FIJOS" titulo={/financier/i.test(cat)?`Gastos fijos · ${cat} — fuera del resultado operativo`:`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
     <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
-    <Sec titulo="Tarjetas">
+    <Sec id="tarjetas" titulo="Tarjetas" items={tarjMes} hoja="TARJETAS">
       {totalTarjUsd>0 && <div style={{padding:'0 18px 8px', display:'flex', gap:8, alignItems:'center', fontSize:12}}>
         <span style={{color:T.ink2}}>💵 Dólares a pagar este mes: <b style={{fontFamily:MONO}}>US$ {fmt(totalTarjUsd)}</b></span>
         {totalTarjUsdPend>0 ? <span style={{fontSize:11, color:T.warn, background:T.warnSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>pendiente US$ {fmt(totalTarjUsdPend)}</span> : <span style={{fontSize:11, color:T.pos, background:T.posSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>todo pagado ✓</span>}
@@ -3574,8 +3631,8 @@ function Egresos({data, onRefresh, showToast}){
         ? <div style={{padding:'0 18px 9px 18px', display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', fontSize:11.5, color:T.ink3}}><span>🏢 Empresa {fmt(sp.emp)}{sp.eusd?` +US$${Math.round(sp.eusd)}`:''}</span><span>👨 Juan {fmt(sp.juan)}</span><span>👩 Sofi {fmt(sp.sofi)}</span><button onClick={()=>setDetalle(t)} style={{fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>Ver detalle ›</button></div>
         : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
     </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
-    <Sec titulo="Préstamos">{prestBancoMes.length?prestBancoMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
-    {prestSocio.length>0 && <Sec titulo="Deudas entre socios">
+    <Sec id="prestamos" titulo="Préstamos" items={prestBancoMes} hoja="PRESTAMOS">{prestBancoMes.length?prestBancoMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
+    {prestSocio.length>0 && <Sec id="socios" titulo="Deudas entre socios" sub={`${prestSocio.length} sin saldar`} total={prestSocio.reduce((a,p)=>a+parseMonto(p['Monto cuota']),0)}>
       {prestSocio.map((p,i)=>{ const deudor=p['Deudor']||'', acreedor=p['Acreedor']||'', magmaDebe=/magma/i.test(deudor); const ic=n=>/juan/i.test(n)?'👤':/sof/i.test(n)?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:13, color:T.ink}}>{ic(deudor)} <b>{deudor}</b> le debe a {ic(acreedor)} <b>{acreedor}</b></div>
@@ -3585,7 +3642,7 @@ function Egresos({data, onRefresh, showToast}){
         <button onClick={()=>saldarSocio(p)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:`1px solid ${T.border}`, cursor:'pointer', background:T.surface, color:T.ink2, fontWeight:600}}>Marcar saldada</button>
       </div> })}
     </Sec>}
-    {cuotasAll.length>0 && <Sec titulo="Cuotas de tarjeta a futuro (ya comprometidas)">
+    {cuotasAll.length>0 && <Sec id="cuotas" titulo="Cuotas de tarjeta a futuro (ya comprometidas)" sub={`este mes ${fmtM(proxCuotas[0].tot)}`} total={totFutCuota('Juan')+totFutCuota('Sofi')+totFutCuota('Magma')}>
       <div style={{padding:'6px 18px 2px'}}>
         <div style={{display:'flex', gap:6, overflowX:'auto', paddingBottom:8}}>
           {proxCuotas.map((mm,i)=><div key={i} style={{minWidth:100, flex:'0 0 auto', background:i===0?T.brandSoft:T.surfaceAlt, borderRadius:9, padding:'8px 10px'}}>
@@ -3604,7 +3661,7 @@ function Egresos({data, onRefresh, showToast}){
         </div>
       })}
     </Sec>}
-    {movMes.length>0 && <Sec titulo="Movimientos del mes (cambios de plata, no gastos)">
+    {movMes.length>0 && <Sec id="movimientos" titulo="Movimientos del mes (cambios de plata, no gastos)" sub={`${movMes.length} movimiento${movMes.length===1?'':'s'}`}>
       {movMes.map((m,i)=>{ const mo=String(m['Moneda origen']||'ARS').toUpperCase(), md=String(m['Moneda destino']||'ARS').toUpperCase(); const showM=(v,cur)=>cur==='USD'?`US$ ${fmt(parseMonto(v))}`:fmt(parseMonto(v)); return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 18px', borderTop:`1px solid ${T.border}`}}>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:13, color:T.ink}}>{m['Tipo']}{m['Descripción']?` · ${m['Descripción']}`:''}</div>
