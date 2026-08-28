@@ -1,6 +1,7 @@
 /**
  * Columna "Mes" en la solapa PRESTAMOS, derivada de Vencimiento.
- * Formato "2026-08 ago": ordena cronológico y se lee en castellano.
+ * Formato "Ago-2026": corto, como lo pidió Juan. Ojo: el desplegable del filtro
+ * lo ordena alfabético (Abr, Ago, Dic…), no cronológico.
  * Va pegada a los datos que importan (entre "Cuotas total" y "Vencimiento")
  * porque Mariana trabaja en el sheet y filtra desde ahí, no desde la app.
  *
@@ -53,7 +54,7 @@ orden.splice(DESTINO,0,'Mes')
 console.log(`QUEDA:  ${orden.map((h,i)=>`${colLetra(i)}:${h}`).join(' · ')}`)
 const LM = colLetra(DESTINO), LV = colLetra(orden.findIndex(h=>String(h).trim().toLowerCase()==='vencimiento'))
 console.log(`\nColumna ${LM} = "Mes", fórmula por fila desde ${LV} (Vencimiento)`)
-console.log(`Ejemplo: ${LM}2 = =IF($${LV}2="","",TEXT($${LV}2,"YYYY-MM")&" "&TEXT($${LV}2,"mmm"))`)
+console.log(`Ejemplo: ${LM}2 = =IF($${LV}2="","",PROPER(TEXT($${LV}2,"mmm-yyyy")))`)
 
 if (!ESCRIBIR) { console.log('\n--- PREVIEW. Nada escrito. Correr con --escribir para aplicar. ---'); process.exit(0) }
 
@@ -85,7 +86,7 @@ await sheets.spreadsheets.batchUpdate({ spreadsheetId: ID, requestBody:{ request
 // Fórmula por fila (no ARRAYFORMULA): si un script appendea una fila, escribe vacío
 // en esta celda y listo — una ARRAYFORMULA se rompería entera con #REF!
 const vals = [['Mes'], ...Array.from({length:nDatos},(_,k)=>[
-  `=IF($${LV}${k+2}="","",TEXT($${LV}${k+2},"YYYY-MM")&" "&TEXT($${LV}${k+2},"mmm"))`])]
+  `=IF($${LV}${k+2}="","",PROPER(TEXT($${LV}${k+2},"mmm-yyyy")))`])]
 await sheets.spreadsheets.values.update({ spreadsheetId: ID, range:`PRESTAMOS!${LM}1:${LM}${nDatos+1}`,
   valueInputOption:'USER_ENTERED', requestBody:{ values: vals } })
 
