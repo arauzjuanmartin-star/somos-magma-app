@@ -39,6 +39,10 @@ const STOP=new Set(['OFICINA','MAGMA','POLIZA','PÓLIZA','COBRO','DUPLICADO','RE
 const toks=s=>new Set(String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
   .split(/[^A-Z0-9]+/).filter(t=>t.length>=3&&!STOP.has(t)&&!/^\d+$/.test(t)))
 const gfAct=GF.filter(g=>{const a=String(g['Activo']||'').toUpperCase()
+  // Las filas Categoria="Tarjeta" SON estos mismos gastos, cargados para que Mariana los
+  // vea junto al resto. Cruzarlos contra sí mismos marcaría todo como "ya contado" y la
+  // columna "falta sumar" daría cero: la solapa se autoanularía.
+  if(/^tarjeta$/i.test(String(g['Categoria']||'').trim())) return false
   return (a===''||a==='SI'||a==='SÍ'||a==='TRUE')&&!/[uú]nico/i.test(String(g['Frecuencia']))&&num(g['Monto'])>0})
   .map(g=>({con:String(g['Concepto']||''),monto:num(g['Monto']),tk:toks(g['Concepto'])}))
 const yaEnGF=c=>{const t=toks(c);return gfAct.find(g=>[...t].some(x=>g.tk.has(x)))}
