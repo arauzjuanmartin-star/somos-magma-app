@@ -50,6 +50,13 @@ const yaEnGF=c=>{const t=toks(c);return gfAct.find(g=>[...t].some(x=>g.tk.has(x)
 // Agrupar por mes + comercio base: el sufijo entre paréntesis separa la póliza de
 // su cobro duplicado y su reverso, que tienen que netearse entre sí
 const base=s=>String(s||'').replace(/\s*\([^)]*\)\s*/g,' ').replace(/\s+/g,' ').trim().toUpperCase()||'(sin comercio)'
+
+// Frecuencia declarada a mano en GASTOS_FIJOS (filas Categoria="Tarjeta"): si alguien
+// marca ahí "anual", manda sobre lo que se infiera de los movimientos.
+const gfTodas=GF.filter(g=>{const a=String(g['Activo']||'').toUpperCase()
+  return (a===''||a==='SI'||a==='SÍ'||a==='TRUE')&&String(g['Concepto']||'').trim()})
+  .map(g=>({con:String(g['Concepto']),frec:String(g['Frecuencia']||'').trim().toLowerCase(),tk:toks(g['Concepto'])}))
+const frecDe=c=>{const t=toks(c); const m=gfTodas.find(g=>[...t].some(x=>g.tk.has(x))); return m?m.frec:''}
 const G={}
 mov.forEach(m=>{
   const mes=Number(m['Mes'])||0, anio=Number(String(m['Año']).match(/\d{4}/)?.[0])||0
@@ -60,22 +67,55 @@ mov.forEach(m=>{
   g.neto+=num(m['Monto']); g.n++
   if(/reverso|duplicad/i.test(String(m['Comercio']))) g.rev=true
 })
+// Un gasto "de todos los meses" se reconoce por el RUBRO, no por el comercio: el mismo
+// seguro figura como "SEGUROS" en los meses viejos y como "LA SEGUNDA CIA0460990" en julio.
+const mesesPorRubro={}
+Object.values(G).forEach(g=>{const k=g.sub; (mesesPorRubro[k]=mesesPorRubro[k]||new Set()).add(`${g.anio}-${g.mes}`)})
+const nMeses=new Set(Object.values(G).map(g=>`${g.anio}-${g.mes}`)).size
+const salePorMes=g=>{
+  const dec=frecDe(g.com)
+  if(dec==='anual'||dec==='unico'||dec==='único') return 'NO'
+  if(dec==='mensual') return 'SI'
+  const n=(mesesPorRubro[g.sub]||new Set()).size
+  if(n>=Math.ceil(nMeses*0.6)) return 'SI'
+  if(n<=1) return 'NO'
+  return '?'
+}
 const lista=Object.values(G).filter(g=>Math.abs(g.neto)>0.5)
   .sort((a,b)=> (b.anio-a.anio)||(b.mes-a.mes)||(a.mon===b.mon? b.neto-a.neto : a.mon==='ARS'?-1:1))
 
-const HEADERS=['Mes','Concepto','Rubro','Tarjeta','Monto ARS','Monto USD','¿Ya está en GASTOS_FIJOS?','Monto en GASTOS_FIJOS','Falta sumar al resultado','Notas']
+// El mes de referencia es el último cargado: es el que tiene el detalle fino.
+const ultimoMes=Math.max(...lista.map(g=>g.anio*12+g.mes))
+const delUltimo=lista.filter(g=>g.anio*12+g.mes===ultimoMes)
+const mensuales=delUltimo.filter(g=>salePorMes(g)==='SI')
+
+// Desvíos: por rubro, cuánto se gastó de más en un mes contra la mediana de los demás.
+const mediana=a=>{const x=[...a].sort((p,q)=>p-q); return x.length%2?x[(x.length-1)/2]:(x[x.length/2-1]+x[x.length/2])/2}
+const desvios=[]
+;[...new Set(lista.filter(g=>g.mon!=='USD').map(g=>g.sub))].forEach(sub=>{
+  const porMes={}
+  lista.filter(g=>g.sub===sub&&g.mon!=='USD').forEach(g=>{const k=`${g.anio}-${String(g.mes).padStart(2,'0')}`; porMes[k]=(porMes[k]||0)+g.neto})
+  const vals=Object.values(porMes); if(vals.length<3) return
+  const med=mediana(vals); if(med<=0) return
+  Object.entries(porMes).forEach(([mk,v])=>{ if(v>med*1.5)
+    desvios.push({sub, mk, v, med, extra:v-med, veces:v/med}) })
+})
+desvios.sort((x,y)=>y.extra-x.extra)
+const mensualArs=mensuales.filter(g=>g.mon!=='USD').reduce((a,g)=>a+g.neto,0)
+const mensualUsd=mensuales.filter(g=>g.mon==='USD').reduce((a,g)=>a+g.neto,0)
+const HEADERS=['Mes','Concepto','Rubro','Tarjeta','Monto ARS','Monto USD','¿Sale todos los meses?','¿Ya está en GASTOS_FIJOS?','Monto en GASTOS_FIJOS','Falta sumar al resultado','Notas']
 const filas=lista.map(g=>{
   const y=yaEnGF(g.com), ars=g.mon==='USD'?'':g.neto, usd=g.mon==='USD'?g.neto:''
   const GENERICO=/^(seguros?|software|internet|movilidad|varios( empresa)?|otros)$/i
   const notas=[g.rev?'neto de un cobro duplicado + su reverso':'',
     g.n>1&&!g.rev?`${g.n} cargos en el mes`:'',
     GENERICO.test(g.com)?'⚠ línea agrupada — sin detalle de qué es':''].filter(Boolean).join(' · ')
-  return [`'${MESN[g.mes]}-${g.anio}`, g.com, g.sub, g.tarj, ars, usd,
+  return [`'${MESN[g.mes]}-${g.anio}`, g.com, g.sub, g.tarj, ars, usd, salePorMes(g),
     y?'SI':'NO', y?y.monto:'', y?'':(g.mon==='USD'?'':g.neto), notas]
 })
 const totArs=lista.filter(g=>g.mon!=='USD').reduce((s,g)=>s+g.neto,0)
 const totUsd=lista.filter(g=>g.mon==='USD').reduce((s,g)=>s+g.neto,0)
-const falta=filas.reduce((s,f)=>s+(Number(f[8])||0),0)
+const falta=filas.reduce((s,f)=>s+(Number(f[9])||0),0)
 const faltaUsd=lista.filter(g=>g.mon==='USD'&&!yaEnGF(g.com)).reduce((s,g)=>s+g.neto,0)
 
 console.log(`\nSolapa "${HOJA}" · ${filas.length} filas · meses ${[...new Set(lista.map(g=>`${MESN[g.mes]}-${g.anio}`))].join(', ')}`)
@@ -115,10 +155,18 @@ const resumen=meses.map(mk=>{
   const fU=del.filter(g=>g.mon==='USD'&&!yaEnGF(g.com)).reduce((s,g)=>s+g.neto,0)
   return [`'${MESN[m]}-${a}`, rA, rU, fA, fU, del.length]
 })
-const TOTAL=[`TOTAL (${meses.length} meses)`,'','','',totArs,totUsd,'','',falta,'']
+const TOTAL=[`TOTAL (${meses.length} meses)`,'','','',totArs,totUsd,'','','',falta,'']
 await sheets.spreadsheets.values.update({spreadsheetId:ID,range:`${HOJA}!A1`,valueInputOption:'USER_ENTERED',
   requestBody:{values:[HEADERS,...filas,[],TOTAL,
-    [],['RESUMEN POR MES — este es el número que va al estado de resultados'],
+    [],['CUÁNTO SALE POR MES — lo que hay que tener todos los meses'],
+    ['','Concepto','Rubro','ARS','USD','Tarjeta','¿Ya está en GASTOS_FIJOS?'],
+    ...mensuales.map(g=>['', g.com, g.sub, g.mon==='USD'?'':g.neto, g.mon==='USD'?g.neto:'', g.tarj, yaEnGF(g.com)?'SI':'NO']),
+    ['','TOTAL QUE SALE TODOS LOS MESES','',mensualArs,mensualUsd,''],
+    [],['LO QUE NO SALE TODOS LOS MESES — meses que se fueron por encima de lo normal'],
+    ['','Rubro','Mes','Lo normal (mediana)','Lo que se pagó','De más','Cuántas veces'],
+    ...desvios.map(d=>['', d.sub, `'${MESN[Number(d.mk.split('-')[1])]}-${d.mk.split('-')[0]}`, d.med, d.v, d.extra, `${d.veces.toFixed(1)}x`]),
+    ...(desvios.length?[]:[['','(ningún mes se desvió del patrón)','','','','','']]),
+    [],['RESUMEN POR MES — todo lo que pasó por la tarjeta, mes a mes'],
     ['Mes','Total ARS','Total USD','Falta sumar ARS','Falta sumar USD','Conceptos'],
     ...resumen,
     [],['Cómo leerlo:'],
@@ -133,7 +181,10 @@ await sheets.spreadsheets.values.update({spreadsheetId:ID,range:`${HOJA}!A1`,val
 // ── formato: que se vea bien, no solo que esté (Regla de oro #4) ──
 const NEG={red:.035,green:.035,blue:.035}, BLANCO={red:1,green:1,blue:1}
 const fin=filas.length+1, filaTot=filas.length+3
-const resIni=filas.length+6, resFin=resIni+resumen.length   // bloque "resumen por mes" (0-based para la API)
+const bloqIni=filas.length+6, mensIni=bloqIni                      // "CUÁNTO SALE POR MES"
+const noIni=mensIni+mensuales.length+1+3                            // "LO QUE NO SALE TODOS LOS MESES"
+const bloqFin=noIni+Math.max(1,desvios.length)
+const resIni=bloqFin+3, resFin=resIni+resumen.length                // "RESUMEN POR MES"   // bloque "resumen por mes" (0-based para la API)
 const money={numberFormat:{type:'NUMBER',pattern:'"$"#,##0'}}
 const reqs=[
   {repeatCell:{range:{sheetId,startRowIndex:0,endRowIndex:1},
@@ -142,19 +193,35 @@ const reqs=[
   {updateSheetProperties:{properties:{sheetId,gridProperties:{frozenRowCount:1}},fields:'gridProperties.frozenRowCount'}},
   {repeatCell:{range:{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:4,endColumnIndex:6},
     cell:{userEnteredFormat:money},fields:'userEnteredFormat.numberFormat'}},
-  {repeatCell:{range:{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:7,endColumnIndex:9},
+  {repeatCell:{range:{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:8,endColumnIndex:10},
     cell:{userEnteredFormat:money},fields:'userEnteredFormat.numberFormat'}},
-  {repeatCell:{range:{sheetId,startRowIndex:filaTot-1,endRowIndex:filaTot,startColumnIndex:0,endColumnIndex:10},
+  {repeatCell:{range:{sheetId,startRowIndex:filaTot-1,endRowIndex:filaTot,startColumnIndex:0,endColumnIndex:11},
     cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.96,green:.95,blue:.93},...money}},
     fields:'userEnteredFormat(textFormat,backgroundColor,numberFormat)'}},
   // lo que falta sumar, en rojo Magma: es lo que Mariana tiene que agregar
-  {addConditionalFormatRule:{rule:{ranges:[{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:6,endColumnIndex:7}],
+  {addConditionalFormatRule:{rule:{ranges:[{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:7,endColumnIndex:8}],
     booleanRule:{condition:{type:'TEXT_EQ',values:[{userEnteredValue:'NO'}]},
       format:{backgroundColor:{red:.984,green:.918,blue:.925},textFormat:{foregroundColor:{red:.808,green:.149,blue:.216},bold:true}}}},index:0}},
-  {addConditionalFormatRule:{rule:{ranges:[{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:6,endColumnIndex:7}],
+  {addConditionalFormatRule:{rule:{ranges:[{sheetId,startRowIndex:1,endRowIndex:fin,startColumnIndex:7,endColumnIndex:8}],
     booleanRule:{condition:{type:'TEXT_EQ',values:[{userEnteredValue:'SI'}]},
       format:{textFormat:{foregroundColor:{red:.66,green:.64,blue:.60}}}}},index:1}},
-  {setBasicFilter:{filter:{range:{sheetId,startRowIndex:0,endRowIndex:fin,startColumnIndex:0,endColumnIndex:10}}}},
+  {setBasicFilter:{filter:{range:{sheetId,startRowIndex:0,endRowIndex:fin,startColumnIndex:0,endColumnIndex:11}}}},
+  // los dos bloques de "sale / no sale por mes"
+  ...[[bloqIni,bloqFin]].flatMap(([a,b])=>[
+    {repeatCell:{range:{sheetId,startRowIndex:a,endRowIndex:b,startColumnIndex:3,endColumnIndex:4},
+      cell:{userEnteredFormat:money},fields:'userEnteredFormat.numberFormat'}},
+    {repeatCell:{range:{sheetId,startRowIndex:a,endRowIndex:b,startColumnIndex:4,endColumnIndex:5},
+      cell:{userEnteredFormat:{numberFormat:{type:'NUMBER',pattern:'"US$ "#,##0.00'}}},fields:'userEnteredFormat.numberFormat'}}]),
+  {repeatCell:{range:{sheetId,startRowIndex:bloqIni-2,endRowIndex:bloqIni-1,startColumnIndex:0,endColumnIndex:11},
+    cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:11,foregroundColor:{red:.118,green:.541,blue:.353}}}},fields:'userEnteredFormat.textFormat'}},
+  {repeatCell:{range:{sheetId,startRowIndex:mensIni+mensuales.length,endRowIndex:mensIni+mensuales.length+1,startColumnIndex:0,endColumnIndex:11},
+    cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.906,green:.953,blue:.925}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}},
+  {repeatCell:{range:{sheetId,startRowIndex:noIni-1,endRowIndex:noIni,startColumnIndex:0,endColumnIndex:11},
+    cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:11,foregroundColor:{red:.69,green:.467,blue:.071}}}},fields:'userEnteredFormat.textFormat'}},
+  {repeatCell:{range:{sheetId,startRowIndex:noIni,endRowIndex:noIni+Math.max(1,desvios.length),startColumnIndex:3,endColumnIndex:6},
+    cell:{userEnteredFormat:money},fields:'userEnteredFormat.numberFormat'}},
+  {repeatCell:{range:{sheetId,startRowIndex:noIni,endRowIndex:noIni+Math.max(1,desvios.length),startColumnIndex:5,endColumnIndex:6},
+    cell:{userEnteredFormat:{textFormat:{bold:true,foregroundColor:{red:.808,green:.149,blue:.216}}}},fields:'userEnteredFormat.textFormat'}},
   // bloque "resumen por mes"
   {repeatCell:{range:{sheetId,startRowIndex:resIni-2,endRowIndex:resIni-1,startColumnIndex:0,endColumnIndex:10},
     cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:11,foregroundColor:{red:.808,green:.149,blue:.216}}}},fields:'userEnteredFormat.textFormat'}},
@@ -165,14 +232,14 @@ const reqs=[
   {repeatCell:{range:{sheetId,startRowIndex:resIni,endRowIndex:resFin,startColumnIndex:3,endColumnIndex:5},
     cell:{userEnteredFormat:{textFormat:{bold:true,foregroundColor:{red:.808,green:.149,blue:.216}}}},fields:'userEnteredFormat.textFormat'}},
 ]
-;[[0,70],[1,210],[2,190],[3,110],[4,105],[5,90],[6,120],[7,130],[8,140],[9,230]].forEach(([c,px])=>
+;[[0,70],[1,210],[2,190],[3,110],[4,105],[5,90],[6,130],[7,120],[8,130],[9,140],[10,230]].forEach(([c,px])=>
   reqs.push({updateDimensionProperties:{range:{sheetId,dimension:'COLUMNS',startIndex:c,endIndex:c+1},properties:{pixelSize:px},fields:'pixelSize'}}))
 await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:reqs}})
 
 // ── verificar releyendo ──
-const v=await sheets.spreadsheets.values.get({spreadsheetId:ID,range:`${HOJA}!A1:J${filaTot}`,valueRenderOption:'UNFORMATTED_VALUE'})
+const v=await sheets.spreadsheets.values.get({spreadsheetId:ID,range:`${HOJA}!A1:K${filaTot}`,valueRenderOption:'UNFORMATTED_VALUE'})
 const V=v.data.values||[]
-const leidoTot=Number(V[filaTot-1]?.[4]||0), leidoFalta=Number(V[filaTot-1]?.[8]||0)
+const leidoTot=Number(V[filaTot-1]?.[4]||0), leidoFalta=Number(V[filaTot-1]?.[9]||0)
 console.log(`✓ ${V.length-1} filas escritas`)
 console.log(`✓ total ARS en el sheet ${fmt(leidoTot)} ${Math.abs(leidoTot-totArs)<1?'= calculado ✓':'≠ CALCULADO '+fmt(totArs)+' ✗'}`)
 console.log(`✓ falta sumar en el sheet ${fmt(leidoFalta)} ${Math.abs(leidoFalta-falta)<1?'= calculado ✓':'≠ CALCULADO '+fmt(falta)+' ✗'}`)
