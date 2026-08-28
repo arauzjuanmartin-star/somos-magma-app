@@ -2855,10 +2855,10 @@ function Egresos({data,mail,onRefresh}){
 
   // Filtrar gastos fijos del mes seleccionado: usamos los activos (Mes carga puede ser referencia, pero tomamos todos los activos)
   const gfActivos=gastosFijos.filter(g=>{
-    // Los gastos con Categoria "Tarjeta" están en el sheet para que Mariana los vea
-    // y filtre junto al resto, pero NO se suman acá: el resumen de la tarjeta ya entra
-    // entero como egreso del mes, así que sumarlos otra vez duplicaría el gasto.
-    if(/^tarjeta$/i.test(String(g['Categoria']||'').trim())) return false
+    // La Categoria dice QUÉ es el gasto; "Medio de pago" dice CÓMO se paga. Lo que se
+    // paga con tarjeta NO se suma acá: ya viene dentro del resumen de la tarjeta, que
+    // se cuenta entero más abajo. Sumarlo también acá es contar el mismo gasto dos veces.
+    if(/^tarjeta$/i.test(String(g['Medio de pago']||'').trim())) return false
     const activo=String(g['Activo']||'').toUpperCase().match(/SI|SÍ|TRUE/)
     if(!activo)return false
     return true
