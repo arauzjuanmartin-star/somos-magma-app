@@ -109,5 +109,29 @@ ps.forEach((r,i)=>{if(i===0)return;const n=String(r[sF]||'').trim();if(n&&!n.inc
 const ap=Object.entries(apodos).filter(([k,v])=>v>0)
 if(ap.length) warn(`Apodos nuevos sin mapear: ${ap.map(([k,v])=>k+'('+v+')').join(', ')} → agregar al mapa STAFF_CANON_MAP`); else ok('Sin apodos nuevos sin unificar')
 
+// 7) CALENDAR · eventos fantasma (presu eliminado o desaprobado que dejó el evento vivo)
+H('CALENDAR · eventos de presupuestos que ya no existen')
+try{
+  const CAL='5gc9hdvh4vi28bf8uemr2vfnn4@group.calendar.google.com'
+  const calAuth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/calendar'],clientOptions:{subject:env.CALENDAR_AS||'sofi@somosmagma.com'}})
+  const cal=google.calendar({version:'v3',auth:calAuth})
+  const pres=await g('PRESUPUESTOS!A:G')
+  const estados=new Map(pres.slice(1).filter(r=>String(r[0]||'').trim()).map(r=>[String(r[0]).trim(),String(r[3]||'').trim()]))
+  const d1=new Date(); d1.setMonth(d1.getMonth()-6)
+  const d2=new Date(); d2.setMonth(d2.getMonth()+18)
+  let tok, evs=[]
+  do{ const r=await cal.events.list({calendarId:CAL,timeMin:d1.toISOString(),timeMax:d2.toISOString(),maxResults:250,singleEvents:true,orderBy:'startTime',pageToken:tok}); evs.push(...(r.data.items||[])); tok=r.data.nextPageToken }while(tok)
+  const fantasmas=[]
+  for(const e of evs){
+    const m=String(e.description||'').match(/\[SOMOS_MAGMA_PRESU:([^\]]+)\]/)
+    if(!m) continue
+    const n=m[1].trim(), est=estados.get(n)
+    if(est===undefined) fantasmas.push(`${(e.start?.date||e.start?.dateTime||'').slice(0,10)} ${e.summary} (presu eliminado)`)
+    else if(/DESAPROBADO|REPRESUPUESTADO/i.test(est)) fantasmas.push(`${(e.start?.date||e.start?.dateTime||'').slice(0,10)} ${e.summary} (${est})`)
+  }
+  if(fantasmas.length){ warn(`${fantasmas.length} evento(s) fantasma → node scripts/calendar-huerfanos-audit.mjs --borrar`); fantasmas.forEach(f=>console.log(`      ${f}`)) }
+  else ok('Sin eventos fantasma en el Calendar')
+}catch(e){ console.log(`  \x1b[33m·\x1b[0m No se pudo leer el Calendar (${e.message})`) }
+
 console.log(`\n\x1b[1m${'─'.repeat(50)}\x1b[0m`)
 console.log(ALERTAS===0?`\x1b[32m\x1b[1m✓ TODO OK — 0 alertas\x1b[0m`:`\x1b[31m\x1b[1m⚠ ${ALERTAS} alerta(s) para revisar\x1b[0m`)

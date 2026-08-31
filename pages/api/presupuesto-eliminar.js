@@ -106,6 +106,21 @@ export default async function handler(req, res) {
       }] },
     }))
 
+    // 5. Sacar el evento del Calendar Somos Magma (best-effort, no bloquea).
+    //    Antes esto lo hacía SOLO el front. Si el navegador se cerraba o el fetch fallaba,
+    //    el evento quedaba huérfano en el calendario para siempre (5 fantasmas al 31/08/2026).
+    //    Ahora también lo hace el backend: el front puede repetirlo sin problema (es idempotente).
+    try {
+      const cookie = req.headers.cookie || ''
+      const host = req.headers.host
+      const proto = host?.includes('localhost') ? 'http' : 'https'
+      await fetch(`${proto}://${host}/api/calendar-evento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ num: nro, accion: 'borrar' }),
+      })
+    } catch (e) { console.warn('No se pudo borrar el evento del Calendar (no bloquea):', e.message) }
+
     res.json({ ok: true, nro, fila, resumen })
   } catch (e) {
     console.error(e)

@@ -82,6 +82,29 @@ export default async function handler(req, res) {
   if (!num || !accion) return res.status(400).json({ error: 'Falta num o accion' })
 
   try {
+    // BORRAR va PRIMERO y no toca el sheet. El front llama con accion='borrar' justo
+    // DESPUÉS de eliminar la fila del presupuesto (presupuesto-eliminar): si acá leíamos
+    // el presu antes, el 404 de "Presupuesto no encontrado" cortaba el flujo y el evento
+    // quedaba huérfano en el Calendar para siempre. Bug encontrado 2026-08-31 con el
+    // #2147 Cabify/Telefe/Popstars (5 eventos fantasma en total).
+    if (accion === 'borrar') {
+      const calDel = google.calendar({ version: 'v3', auth: getCalendarAuth() })
+      const ev = await buscarEventoPorPresu(calDel, num)
+      if (!ev) return res.json({ ok: true, accion: 'no-existia' })
+      // sendUpdates:'all' → si había staff invitado le llega la cancelación
+      await calDel.events.delete({ calendarId: CALENDAR_ID, eventId: ev.id, sendUpdates: 'all' })
+      try {
+        const { sheets: sh, SHEET_ID: SID } = await getSheets()
+        await sh.spreadsheets.values.append({
+          spreadsheetId: SID,
+          range: 'LOG!A:F',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `borrado ${ev.summary || ''}`]] },
+        })
+      } catch (e) {}
+      return res.json({ ok: true, accion: 'borrado', eventId: ev.id })
+    }
+
     // Leer datos del presupuesto del sheet (Fecha Evento, Cliente, Agencia, Proyecto, Tipo Fechas, Fechas Adicionales)
     const { sheets, SHEET_ID } = await getSheets()
     const rPres = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A1:DI2000' })
@@ -108,14 +131,6 @@ export default async function handler(req, res) {
 
     // Buscar evento existente por tag
     const existing = await buscarEventoPorPresu(cal, num)
-
-    if (accion === 'borrar') {
-      if (existing) {
-        await cal.events.delete({ calendarId: CALENDAR_ID, eventId: existing.id })
-        return res.json({ ok: true, accion: 'borrado', eventId: existing.id })
-      }
-      return res.json({ ok: true, accion: 'no-existia' })
-    }
 
     // Necesitamos fecha para crear/actualizar
     if (!fechaEv) return res.status(400).json({ error: 'Presupuesto sin Fecha Evento — no puedo agendar' })

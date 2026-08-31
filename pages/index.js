@@ -809,7 +809,11 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
       showToast(`#${id} guardado`)
       onSaved(id, cambios)
       // 3. Resincronizar el Calendar en segundo plano (Google es lento)
-      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: aprobado?'aprobar':'pendiente'})}).catch(()=>{})
+      // Un presu DESAPROBADO/REPRESUPUESTADO no vuelve al Calendar: editarlo mandaba
+      // 'pendiente' y le resucitaba el evento en amarillo. Fixed 2026-08-31.
+      const estCal=String(form['Estado']||p['Estado']||'').toUpperCase()
+      const accionCal=(estCal==='DESAPROBADO'||estCal==='REPRESUPUESTADO')?'borrar':(aprobado?'aprobar':'pendiente')
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: accionCal})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
