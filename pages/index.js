@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
@@ -773,9 +773,9 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   const [ctNew,setCtNew]=useState({mail:'',telefono:'',cargo:'',cuit:''})
   const id = p['Columna 1'] || p['N° presupuesto']
   const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
-  const clis=[...new Set([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))].filter(Boolean))].sort()
-  const cts=[...new Set([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))].filter(Boolean))].sort()
-  const pms=[...new Set((data?.presupuestos||[]).map(x=>x['PM Interno']).filter(Boolean))].sort()
+  const clis=dedupCI([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))])
+  const cts=dedupCI([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))])
+  const pms=dedupCI((data?.presupuestos||[]).map(x=>x['PM Interno']))
   const dl = tipo => tipo==='ag'?ags:tipo==='cl'?clis:tipo==='ct'?cts:null
   const nrm=v=>String(v||'').trim().toLowerCase()
   const agSet=new Set(ags.map(nrm)), clSet=new Set(clis.map(nrm)), ctSet=new Set(cts.map(nrm))
@@ -1007,7 +1007,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ags=dedupCI([...(data?.agencias||[]).map(a=>a['Nombre']),...(data?.listado?.agencias||[]),...((data?.presupuestos||[]).map(p=>p['Agencia']))])
   const clis=dedupCI([...(data?.listado?.clientes||[]),...(data?.clientes||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Contacto']))])
-  const pms=[...new Set([...['Juan','Sofi','Lulu','Tomi'],...((data?.presupuestos||[]).map(p=>p['PM Interno']))].filter(Boolean))]
+  const pms=dedupCI([...['Juan','Sofi','Lulu','Tomi'],...((data?.presupuestos||[]).map(p=>p['PM Interno']))])
   // detección de nuevos (no están en la lista)
   const nrm=v=>String(v||'').trim().toLowerCase()
   const agSet=new Set(ags.map(nrm)), clSet=new Set(clis.map(nrm)), ctSet=new Set(cts.map(nrm))
@@ -1408,7 +1408,10 @@ function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
   return out
 }
 const dayKey = d => d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
-const normTxt = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+// Normaliza para comparar. Saca los espacios invisibles que el sheet arrastra al copiar y pegar
+// (NBSP, zero-width), colapsa los espacios de mas, baja a minuscula y saca tildes. Sin esto
+// "Somos Magma" y "Somos  Magma" se ven identicos en pantalla pero cuentan como dos personas.
+const normTxt = s => String(s||'').replace(/[\u00a0\u200b-\u200d\ufeff]/g,' ').trim().replace(/\s+/g,' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 // Una celda rota del sheet (#ERROR!, #N/A, #REF!...) no es un dato: se trata como vacía.
 // Pasa cuando el valor arranca con "+" y Sheets lo interpreta como fórmula (ej: teléfonos +54 9 11...).
 const ERR_SHEET = /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/
@@ -1647,6 +1650,19 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const esSvcNuevo=v=>v && !svcSet.has(svcKey(v))
   const rrhhMap={}; rrhh.forEach(r=>{ const n=normTxt(r['Nombre Apellido']||r['Nombre']); if(n) rrhhMap[n]=r })
   const esFreelancerNuevo=v=>{ const n=normTxt(v); return n && n!=='somos magma' && !rrhhMap[n] }
+  // La lista del desplegable sale de RRHH (ahi vive "Somos Magma" como una fila mas) y se dedupe
+  // por nombre normalizado: dos escrituras de la misma persona son UNA sola opcion. "Somos Magma"
+  // va primera por ser la mas usada; si alguien borrara su fila de RRHH se agrega igual.
+  const opcionesStaff = useMemo(()=>{
+    const m=new Map()
+    ;(rrhhNames||[]).forEach(n=>{ const k=normTxt(n); if(k && !m.has(k)) m.set(k, String(n).replace(/\s+/g,' ').trim()) })
+    if(!m.has('somos magma')) m.set('somos magma','Somos Magma')
+    const magma=m.get('somos magma'); m.delete('somos magma')
+    return [magma, ...[...m.values()].sort((a,b)=>a.localeCompare(b,'es'))]
+  },[rrhhNames])
+  // id propio por editor abierto: dos <datalist> con el mismo id en la pagina es lo que
+  // hace que el navegador muestre el mismo nombre repetido.
+  const dlStaff = 'rrhh-'+useId().replace(/:/g,'')
   const [freel,setFreel]=useState(null)  // nombre del freelancer a completar
   const total=parseMonto(p['Total ']||p['Total'])
   const init=()=>{ const arr=[]; for(let j=1;j<=MAX_SLOTS;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
@@ -1715,16 +1731,14 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
         </div>
         <div>
-          <input list="v2-rrhh" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
+          <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
         <button onClick={()=>delRow(i)} title="Quitar línea" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:17, padding:0, alignSelf:'center'}}>×</button>
       </div>
     ))}
-    {/* "Somos Magma" salía dos veces: estaba hardcodeado acá Y cargado en RRHH (fila 36).
-        Ahora se dedupe por nombre normalizado — sirve igual para los repetidos del sheet. */}
-    <datalist id="v2-rrhh">{[...new Map([['somos magma','Somos Magma'], ...rrhhNames.map(n=>[normTxt(n),n])]).values()].map(n=><option key={n} value={n}/>)}</datalist>
+    <datalist id={dlStaff}>{opcionesStaff.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
