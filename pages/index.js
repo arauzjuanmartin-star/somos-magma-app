@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
+import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { T, MONO } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
@@ -37,6 +38,12 @@ const esDelMes = (s,m,a) => { const d=parseD(s); return !!d && d.getMonth()+1===
 // Dedup case-insensitive: une variantes ("No soup media" / "No Soup Media") en una sola,
 // quedándose con la de mejor escritura (más mayúsculas). Para datalists de agencias/clientes.
 const dedupCI = arr => { const m=new Map(); arr.map(v=>String(v||'').trim()).filter(Boolean).forEach(v=>{ const k=v.toLowerCase(); const caps=s=>(s.match(/[A-ZÁÉÍÓÚÑ]/g)||[]).length; const cur=m.get(k); if(!cur||caps(v)>caps(cur)) m.set(k,v) }); return [...m.values()].sort((a,b)=>a.localeCompare(b,'es')) }
+// Margen Magma = costo del staff × este multiplicador. Estuvo en 1 (margen = costo)
+// hasta el 02/09/2026; Juan lo subió para actualizar precios por inflación.
+// OJO: subir esto 5% NO sube el precio final 5% — Ganancias e IIBB se calculan sobre el
+// margen, así que el total se mueve menos. Total = costo × (1 + 1,39 × MULT_MARGEN).
+// 1,086 es el número que da +5,0% al cliente (de $525.800 a $552.099 sobre costo $220.000).
+const MULT_MARGEN = 1.086
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -1055,7 +1062,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // ---- CÁLCULO ---- el margen (fee) lo decide el tilde "Fee" de cada servicio, no si hay agencia
   const baseList=peds.filter(p=>!p.adicional), adicList=peds.filter(p=>p.adicional)
   const subtotal=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
-  const fee=baseList.reduce((s,p)=>p.feeAg?s+(parseFloat(p.precio)||0):s,0)
+  const fee=baseList.reduce((s,p)=>p.feeAg?s+(parseFloat(p.precio)||0)*MULT_MARGEN:s,0)
   const base=subtotal+fee
   const gan=form.gan?fee*0.35:0
   const iibb=form.iibb?fee*0.04:0
@@ -1560,7 +1567,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
           <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Cargar staff · #{staffModal.proy['N° presupuesto']}</div>
           <button onClick={()=>setStaffModal(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
+        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
       </div>
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
@@ -1638,7 +1645,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               <span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span>
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
         </div>
       })}
     </div>
@@ -1646,7 +1653,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, onRefresh, showToast, onClose, onEditarDatos}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], onRefresh, showToast, onClose, onEditarDatos}){
   // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
   // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
   // matcheaban y TODO servicio ya existente salía marcado como "+ servicio nuevo".
@@ -1672,6 +1679,41 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const init=()=>{ const arr=[]; for(let j=1;j<=MAX_SLOTS;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
   const [items,setItems]=useState(init)
   const [saving,setSaving]=useState(false)
+
+  // ── Aviso de jornadas (Lucho, Juani) ────────────────────────────────────────
+  // Las condiciones salen de la solapa ACUERDOS, no de acá. Al poner a alguien con
+  // acuerdo vigente aparece "6/10 del mes · $190.000" y, si el monto está vacío, se
+  // completa con la tarifa que corresponde a ESA jornada (dentro del mínimo o extra).
+  const acVig = useMemo(()=>acuerdosVigentes(acuerdos, parseD(p['Fecha Evento'])||new Date()), [acuerdos, p])
+  const acDe = useCallback(nombre=>{ const k=normTxt(nombre); return acVig.find(a=>a.keys.includes(k))||null }, [acVig])
+  // Lo que ya está en el sheet para el mes del evento, sin contar este proyecto
+  // (sus líneas se cuentan abajo desde el formulario, así el número se mueve al tipear).
+  const feEv = parseD(p['Fecha Evento'])
+  const previasSheet = useMemo(()=>{
+    if(!feEv) return {}
+    const out={}; acVig.forEach(a=>{ out[a.key]=jornadasDelMes(proyectos, a.keys, feEv.getMonth()+1, feEv.getFullYear(), num) })
+    return out
+  }, [proyectos, acVig, feEv, num])
+  // Por línea: cuántas lleva esa persona contando las de arriba en este mismo formulario.
+  const avisos = useMemo(()=>{
+    if(!feEv) return []
+    const corridas={}
+    return items.map(it=>{
+      const a=acDe(it.quien); if(!a || !esJornada(it.pedido)) return null
+      const previas=(previasSheet[a.key]||0)+(corridas[a.key]||0)
+      corridas[a.key]=(corridas[a.key]||0)+1
+      return avisoJornada(a, previas)
+    })
+  }, [items, acDe, previasSheet, feEv])
+
+  // Al elegir a alguien con acuerdo, si el monto está vacío se completa con su tarifa.
+  const setQuien=(i,val)=>setItems(it=>it.map((x,j)=>{
+    if(j!==i) return x
+    const a=acDe(val)
+    if(!a || Number(x.precio)>0 || !esJornada(x.pedido)) return {...x, quien:val}
+    const previas=(previasSheet[a.key]||0)+it.filter((y,k)=>k<j && a.keys.includes(normTxt(y.quien)) && esJornada(y.pedido)).length
+    return {...x, quien:val, precio:avisoJornada(a, previas).precio}
+  }))
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
   const hOrig=parseHorarioStr(presu?.['Horario'])
   const [horaIni,setHoraIni]=useState(hOrig.h1), [horaFin,setHoraFin]=useState(hOrig.h2), [ubicacion,setUbicacion]=useState(presu?.['Ubicación']||'')
@@ -1735,7 +1777,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
         </div>
         <div>
-          <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>upd(i,'quien',e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
+          <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>setQuien(i,e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
+          {avisos[i] && <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
+            {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
+          </span>}
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
@@ -2910,7 +2955,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
           <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar staff · #{staffModalPS.proy['N° presupuesto']}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Corregí montos o agregá líneas (viáticos, horas extra…)</div></div>
           <button onClick={()=>setStaffModalPS(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
+        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
       </div>
     </div>}
     {selList.length>0 && <div style={{position:'fixed', left:0, right:0, bottom:0, zIndex:850, padding:'0 16px 14px', pointerEvents:'none'}}>
