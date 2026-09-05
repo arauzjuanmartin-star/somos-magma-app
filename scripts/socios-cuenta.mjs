@@ -5,6 +5,14 @@
  *   - NETO = (sueldo + extras) − (haberes + tarjeta personal) + (VEPs que pagó)
  * Atribución de tarjeta: columna Descripción (Juan/Sofi/Magma). Solo lectura.
  */
+// ⛔ OBSOLETO — usa criterios viejos ($3.200.000 desde abril) y cuenta los préstamos
+// personales de Sofi como retiros de Magma. Lo reemplaza scripts/cuenta-socios.mjs
+// (ojo el nombre invertido), que es el que comparte criterios con pages/api/socios-cuenta.js.
+console.error('\n  ⛔ Este script quedó obsoleto (sueldo $3,2M desde abril).')
+console.error('     Usá:  node scripts/cuenta-socios.mjs        ← panorama Juan + Sofi')
+console.error('           node scripts/juan-mes-a-mes.mjs       ← mes a mes de Juan\n')
+process.exit(1)
+
 import { google } from 'googleapis'
 import { readFileSync } from 'fs'
 const env=Object.fromEntries(readFileSync('.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return [l.slice(0,i).trim(),v]}))

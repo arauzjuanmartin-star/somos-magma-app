@@ -1,0 +1,4530 @@
+{
+ "borrar": [
+  {
+   "md5Checksum": "7c59fd2aa6ae0889e59787b67947269f",
+   "mimeType": "image/jpeg",
+   "size": "15504712",
+   "id": "1H020iY1OnNP1hqde9wscKfzZqagnSJj6",
+   "name": "CASE.construccion-65.jpg",
+   "createdTime": "2026-08-26T14:53:04.021Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-65.jpg (14:52:16)"
+  },
+  {
+   "md5Checksum": "48016f168be977f83ba6b5f18e609d82",
+   "mimeType": "image/jpeg",
+   "size": "16325811",
+   "id": "1GxzR4p_RvtONTBc_h5KNASxYb-sWeA-Q",
+   "name": "CASE.construccion-63.jpg",
+   "createdTime": "2026-08-26T14:53:22.767Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-63.jpg (14:52:23)"
+  },
+  {
+   "md5Checksum": "90d6c8169acaad492a4025bf03a2ac09",
+   "mimeType": "image/jpeg",
+   "size": "15819359",
+   "id": "14y0n-LLbYWsVxOcBczjzYnf7j4c_Zyps",
+   "name": "CASE.construccion-64.jpg",
+   "createdTime": "2026-08-26T14:53:09.644Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-64.jpg (14:52:44)"
+  },
+  {
+   "md5Checksum": "71c04aac45d70c62a1bef55ce4dab345",
+   "mimeType": "image/jpeg",
+   "size": "18355712",
+   "id": "1v24OKQk0yA0hdFkBC4Iu9T5MkcF5mdCt",
+   "name": "CASE.construccion-59.jpg",
+   "createdTime": "2026-08-26T14:52:47.109Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-59.jpg (14:51:47)"
+  },
+  {
+   "md5Checksum": "042419af2e395454247cdb320f2d779d",
+   "mimeType": "image/jpeg",
+   "size": "16334670",
+   "id": "1HhxNQXHci8q5tjEc8UGhkYkIvhoRp70s",
+   "name": "CASE.construccion-61.jpg",
+   "createdTime": "2026-08-26T14:52:53.529Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-61.jpg (14:51:41)"
+  },
+  {
+   "md5Checksum": "bdfb7fb40e4be76b45ccca533cbd45b3",
+   "mimeType": "image/jpeg",
+   "size": "18343864",
+   "id": "16rVcyuz-sH4EHUT1DyqTbGL_YQuzXT3n",
+   "name": "CASE.construccion-60.jpg",
+   "createdTime": "2026-08-26T14:52:42.369Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-60.jpg (14:52:11)"
+  },
+  {
+   "md5Checksum": "735830226973a0bf6c66ca7938af4d39",
+   "mimeType": "image/jpeg",
+   "size": "16229283",
+   "id": "1fQtrzXPy9lwZnEUredgUGIheTKhqRLvt",
+   "name": "CASE.construccion-62.jpg",
+   "createdTime": "2026-08-26T14:53:17.997Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-62.jpg (14:52:36)"
+  },
+  {
+   "md5Checksum": "14956f892548f3a5cf364e2db5825351",
+   "mimeType": "image/jpeg",
+   "size": "17662167",
+   "id": "10v3lKxiJUDPs6rAnzjY9bu1FX_3I0Q_c",
+   "name": "CASE.construccion-58.jpg",
+   "createdTime": "2026-08-26T14:52:37.763Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-58.jpg (14:52:02)"
+  },
+  {
+   "md5Checksum": "9713df69dcd8843a21dd0827589e3e9f",
+   "mimeType": "image/jpeg",
+   "size": "7794959",
+   "id": "1jIrpYEoDTlzeWg9URRaST25QYJmOa-rc",
+   "name": "CASE.construccion-57.jpg",
+   "createdTime": "2026-08-26T14:52:29.432Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-57.jpg (14:51:52)"
+  },
+  {
+   "md5Checksum": "cad8a67cc51a95e941032ae8ab591706",
+   "mimeType": "image/jpeg",
+   "size": "8256660",
+   "id": "1SPBclH7gJHp8rJSrNveW4UAqoqljc8tG",
+   "name": "CASE.construccion-56.jpg",
+   "createdTime": "2026-08-26T14:52:33.258Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-56.jpg (14:51:32)"
+  },
+  {
+   "md5Checksum": "2cbbf102b84c545a0d6e3ab23ea5aabd",
+   "mimeType": "image/jpeg",
+   "size": "8402218",
+   "id": "1aHZ-4zi_9pMhnv_z2vMMpLgmvVhFso-f",
+   "name": "CASE.construccion-54.jpg",
+   "createdTime": "2026-08-26T14:52:25.458Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-54.jpg (14:51:36)"
+  },
+  {
+   "md5Checksum": "b00f7629f2a864f1480dc30268f3bb10",
+   "mimeType": "image/jpeg",
+   "size": "8450432",
+   "id": "1AylVSXgB8L0ulJArlqPouQvKmACrlW7p",
+   "name": "CASE.construccion-55.jpg",
+   "createdTime": "2026-08-26T14:52:58.378Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-55.jpg (14:51:28)"
+  },
+  {
+   "md5Checksum": "e8086781113fc06a68a8f00ea1a164c7",
+   "mimeType": "image/jpeg",
+   "size": "8782148",
+   "id": "1XurrDnuv6Za7fREff4Gmkh_mJUYzaYsR",
+   "name": "CASE.construccion-50.jpg",
+   "createdTime": "2026-08-26T14:51:35.042Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-50.jpg (14:50:49)"
+  },
+  {
+   "md5Checksum": "f6b27ddfe24c52cf6a46f787b3609cdb",
+   "mimeType": "image/jpeg",
+   "size": "8988103",
+   "id": "1p23Gtbt0faWzq1xwp55ex1Y4Fg5M_RCW",
+   "name": "CASE.construccion-49.jpg",
+   "createdTime": "2026-08-26T14:52:17.727Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-49.jpg (14:51:05)"
+  },
+  {
+   "md5Checksum": "f9f7ba87bd2728e3568c989f5f25dca3",
+   "mimeType": "image/jpeg",
+   "size": "8832969",
+   "id": "1GzaGJsvf2zoGDFWww0lbO0A4KKcaVFp0",
+   "name": "CASE.construccion-52.jpg",
+   "createdTime": "2026-08-26T14:52:21.574Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-52.jpg (14:52:06)"
+  },
+  {
+   "md5Checksum": "e585835fd21853310f0f0ca602856122",
+   "mimeType": "image/jpeg",
+   "size": "8725670",
+   "id": "1VCpq9sSmuqZTV98frzrKiZnRxHBzliqe",
+   "name": "CASE.construccion-51.jpg",
+   "createdTime": "2026-08-26T14:52:13.779Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-51.jpg (14:51:24)"
+  },
+  {
+   "md5Checksum": "ae0511724e8c4ba3487e5c2397543f59",
+   "mimeType": "image/jpeg",
+   "size": "8907490",
+   "id": "1VkqESKgApR_vGsUJtEk2lSU6kHZ1wCzv",
+   "name": "CASE.construccion-53.jpg",
+   "createdTime": "2026-08-26T14:53:13.970Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-53.jpg (14:51:56)"
+  },
+  {
+   "md5Checksum": "e7040e868e4e2b3c11d2007d44456091",
+   "mimeType": "image/jpeg",
+   "size": "7890651",
+   "id": "1OZCyh-j2wnJKIluePkSgC0YC6nyCLo_H",
+   "name": "CASE.construccion-44.jpg",
+   "createdTime": "2026-08-26T14:52:09.892Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-44.jpg (14:50:45)"
+  },
+  {
+   "md5Checksum": "3cf4e44661bcac522db20a9ca07551a7",
+   "mimeType": "image/jpeg",
+   "size": "8923125",
+   "id": "1tkMAdf09E2Xze7HY8pPEIEQY3MIeljqb",
+   "name": "CASE.construccion-48.jpg",
+   "createdTime": "2026-08-26T14:51:42.808Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-48.jpg (14:51:16)"
+  },
+  {
+   "md5Checksum": "148450b9ad44fd74f2e51e11286b5116",
+   "mimeType": "image/jpeg",
+   "size": "8390673",
+   "id": "1hijH5zfLNi6l2e3rRL4SHN0uBReL4NRo",
+   "name": "CASE.construccion-46.jpg",
+   "createdTime": "2026-08-26T14:51:31.246Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-46.jpg (14:50:54)"
+  },
+  {
+   "md5Checksum": "2de4a72903d7d5077717d4d2309f567f",
+   "mimeType": "image/jpeg",
+   "size": "7855066",
+   "id": "15CdIq0JExMK9g13T2ykf4LY5it_J0Lqt",
+   "name": "CASE.construccion-45.jpg",
+   "createdTime": "2026-08-26T14:51:23.345Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-45.jpg (14:51:02)"
+  },
+  {
+   "md5Checksum": "222da1399c0819fc0e85185e1e8b2a4f",
+   "mimeType": "image/jpeg",
+   "size": "8746933",
+   "id": "1nSTftHGaNuv9cVrPPLtG6YVtr3vUIcDL",
+   "name": "CASE.construccion-47.jpg",
+   "createdTime": "2026-08-26T14:51:27.490Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-47.jpg (14:51:20)"
+  },
+  {
+   "md5Checksum": "5727924830aa4f72465457be19d7e0d3",
+   "mimeType": "image/jpeg",
+   "size": "7555559",
+   "id": "15GiXpz3q_298WeqVn38e3yp38M7QJhRl",
+   "name": "CASE.construccion-42.jpg",
+   "createdTime": "2026-08-26T14:52:06.521Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-42.jpg (14:50:57)"
+  },
+  {
+   "md5Checksum": "bc42e1c08ba8dcdd69a5fa6af512d429",
+   "mimeType": "image/jpeg",
+   "size": "8084621",
+   "id": "1nnvjH-fyw_YA0y60od3ns0f5wG75TE2b",
+   "name": "CASE.construccion-41.jpg",
+   "createdTime": "2026-08-26T14:51:05.267Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-41.jpg (14:50:32)"
+  },
+  {
+   "md5Checksum": "faedbd73905a97024118e8ec6a655999",
+   "mimeType": "image/jpeg",
+   "size": "7659389",
+   "id": "1XUPgjj8t6A4s41fm6Z164ZkoUhFeH5sC",
+   "name": "CASE.construccion-43.jpg",
+   "createdTime": "2026-08-26T14:51:57.378Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-43.jpg (14:51:12)"
+  },
+  {
+   "md5Checksum": "5f6c3d5f29b0bec3c2ae166ed3b52d26",
+   "mimeType": "image/jpeg",
+   "size": "7897578",
+   "id": "1kjcwT9xubYLJzk_f0jkNFJ1a939d_rU2",
+   "name": "CASE.construccion-37.jpg",
+   "createdTime": "2026-08-26T14:50:48.884Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-37.jpg (14:50:36)"
+  },
+  {
+   "md5Checksum": "25bb43e3eedc4d1ead9acdfe07a54838",
+   "mimeType": "image/jpeg",
+   "size": "8105762",
+   "id": "1CdbSdMcpnM8aIO6NBdg8VJfAl-IPJiN5",
+   "name": "CASE.construccion-36.jpg",
+   "createdTime": "2026-08-26T14:50:28.001Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-36.jpg (14:50:19)"
+  },
+  {
+   "md5Checksum": "c3c4b5b6d347e63680e08243d2cf5af8",
+   "mimeType": "image/jpeg",
+   "size": "8157895",
+   "id": "1qrZ5zcqO_gIb8ZdvlZIz222vmo0RM0TG",
+   "name": "CASE.construccion-38.jpg",
+   "createdTime": "2026-08-26T14:51:39.022Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-38.jpg (14:50:07)"
+  },
+  {
+   "md5Checksum": "e8bc9aa9b5011f00c79cf8c309ada37c",
+   "mimeType": "image/jpeg",
+   "size": "8139838",
+   "id": "1CE9OENP5SygLHmDIiLo0sr0LJwLaA0Kx",
+   "name": "CASE.construccion-39.jpg",
+   "createdTime": "2026-08-26T14:51:47.575Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-39.jpg (14:50:23)"
+  },
+  {
+   "md5Checksum": "283c7ba4b28c9e0dbe0fe64d277aefcc",
+   "mimeType": "image/jpeg",
+   "size": "8193962",
+   "id": "13e5gcFreg84TV2psSHt-_mcCvaL80atP",
+   "name": "CASE.construccion-40.jpg",
+   "createdTime": "2026-08-26T14:52:02.346Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-40.jpg (14:50:41)"
+  },
+  {
+   "md5Checksum": "937fb958668000c1587fa871c67292e8",
+   "mimeType": "image/jpeg",
+   "size": "8987962",
+   "id": "1W6ZfcfRtczUOMyTwrujKyziRhBREdxPL",
+   "name": "CASE.construccion-34.jpg",
+   "createdTime": "2026-08-26T14:50:19.652Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-34.jpg (14:50:15)"
+  },
+  {
+   "md5Checksum": "4bdc76005872b46ca4a7cf3fb7fb1755",
+   "mimeType": "image/jpeg",
+   "size": "8506468",
+   "id": "1m7iNTCB9Ar97_C2fL04sz5l-ZPR1Bdp-",
+   "name": "CASE.construccion-31.jpg",
+   "createdTime": "2026-08-26T14:50:03.941Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-31.jpg (14:49:54)"
+  },
+  {
+   "md5Checksum": "bcf97923af609e404bbc78b955d7bae2",
+   "mimeType": "image/jpeg",
+   "size": "8374475",
+   "id": "1gdWD6gHK5S7c1i_x8zW3iv_I8QyQjMzL",
+   "name": "CASE.construccion-32.jpg",
+   "createdTime": "2026-08-26T14:50:44.645Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-32.jpg (14:50:03)"
+  },
+  {
+   "md5Checksum": "6c92dd69425a6bfec854cb95acd38763",
+   "mimeType": "image/jpeg",
+   "size": "8731573",
+   "id": "1cMV_GAdqeKN1nuV6cpWKz3EdzQOvJ766",
+   "name": "CASE.construccion-35.jpg",
+   "createdTime": "2026-08-26T14:50:11.636Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-35.jpg (14:50:11)"
+  },
+  {
+   "md5Checksum": "defe046ccf04c6faf97a2a503ce4daec",
+   "mimeType": "image/jpeg",
+   "size": "8964032",
+   "id": "1nLbR6bX6znYjIU2FXQ8GjNlgwfe5JpcZ",
+   "name": "CASE.construccion-33.jpg",
+   "createdTime": "2026-08-26T14:50:40.457Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-33.jpg (14:50:14)"
+  },
+  {
+   "md5Checksum": "515c42b818ab50971a787eb0a722c2ee",
+   "mimeType": "image/jpeg",
+   "size": "8297519",
+   "id": "1hbGl9AnnWh8fsRbzb6GZei6BluBqOs5X",
+   "name": "CASE.construccion-28.jpg",
+   "createdTime": "2026-08-26T14:50:07.868Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-28.jpg (14:49:42)"
+  },
+  {
+   "md5Checksum": "3b246325653564236f35b4e47afdf5a3",
+   "mimeType": "image/jpeg",
+   "size": "7936301",
+   "id": "1pgv9cfSyXtS4lsqlGg5NwqBjZncYXASm",
+   "name": "CASE.construccion-26.jpg",
+   "createdTime": "2026-08-26T14:49:46.553Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-26.jpg (14:49:41)"
+  },
+  {
+   "md5Checksum": "7ee2c830bd7c79fa3daa39372ee9cdec",
+   "mimeType": "image/jpeg",
+   "size": "8010428",
+   "id": "1OnunHx2A7J_R6SB2TVSG7LBAXNFSh3yG",
+   "name": "CASE.construccion-27.jpg",
+   "createdTime": "2026-08-26T14:49:59.706Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-27.jpg (14:49:45)"
+  },
+  {
+   "md5Checksum": "9a321b7135bc5faa408d75b99b6abaf4",
+   "mimeType": "image/jpeg",
+   "size": "9233274",
+   "id": "1q660hTDsxwjW7GCYNwI3knSDk_imCNlD",
+   "name": "CASE.construccion-29.jpg",
+   "createdTime": "2026-08-26T14:51:19.350Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-29.jpg (14:49:32)"
+  },
+  {
+   "md5Checksum": "5e886b2e9cb45f7112a3992ccd25c598",
+   "mimeType": "image/jpeg",
+   "size": "8235421",
+   "id": "11rUoLpB-jPgykOjM7M8RCLxaP5j1SLI5",
+   "name": "CASE.construccion-30.jpg",
+   "createdTime": "2026-08-26T14:51:01.295Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-30.jpg (14:49:50)"
+  },
+  {
+   "md5Checksum": "b2ed7b9919054bdf975206c1b12d45ec",
+   "mimeType": "image/jpeg",
+   "size": "16251903",
+   "id": "1FBKcdeEuyD2-YyzLgObZNQu9zjpSwOY0",
+   "name": "CASE.construccion-22.jpg",
+   "createdTime": "2026-08-26T14:49:59.281Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-22.jpg (14:49:37)"
+  },
+  {
+   "md5Checksum": "aa4f3945c59fe3be21b7686e6d0e6efe",
+   "mimeType": "image/jpeg",
+   "size": "16804591",
+   "id": "1y75fx8GcJiddMdMK7xG1XRrDw60S1j2F",
+   "name": "CASE.construccion-24.jpg",
+   "createdTime": "2026-08-26T14:49:49.506Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-24.jpg (14:49:22)"
+  },
+  {
+   "md5Checksum": "aead7d360161c093f0134254bf723c17",
+   "mimeType": "image/jpeg",
+   "size": "16394409",
+   "id": "17EWGIunBtp-ar1xydt9xt6jfaD3lTJbh",
+   "name": "CASE.construccion-23.jpg",
+   "createdTime": "2026-08-26T14:49:32.362Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-23.jpg (14:49:16)"
+  },
+  {
+   "md5Checksum": "4c3bfe30cb558c1cc7fa9e1b86ec5cfe",
+   "mimeType": "image/jpeg",
+   "size": "17300250",
+   "id": "1Sra1VJkFe_1SIKujiqhB_45X1Qe6Siam",
+   "name": "CASE.construccion-21.jpg",
+   "createdTime": "2026-08-26T14:49:26.711Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-21.jpg (14:48:23)"
+  },
+  {
+   "md5Checksum": "542ecf342ff04889340bb7cc2d4d115d",
+   "mimeType": "image/jpeg",
+   "size": "8142682",
+   "id": "1AjQI0vj-b3WZVk3DhWtGJLwn4ezW3BaX",
+   "name": "CASE.construccion-25.jpg",
+   "createdTime": "2026-08-26T14:49:37.362Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-25.jpg (14:49:27)"
+  },
+  {
+   "md5Checksum": "8372c3f07a9a5926075a0dedd41f438b",
+   "mimeType": "image/jpeg",
+   "size": "20273795",
+   "id": "12iLqmq7N8qkkSbVtwlDcN92kP1wdeD_t",
+   "name": "CASE.construccion-20.jpg",
+   "createdTime": "2026-08-26T14:50:25.150Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-20.jpg (14:48:45)"
+  },
+  {
+   "md5Checksum": "49ac2062d0a8e3eb6046556f036fbc44",
+   "mimeType": "image/jpeg",
+   "size": "17930525",
+   "id": "1OHBwBJQl2Kw0nnGe_yzn4pTqd9jvTS6k",
+   "name": "CASE.construccion-18.jpg",
+   "createdTime": "2026-08-26T14:49:20.921Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-18.jpg (14:49:09)"
+  },
+  {
+   "md5Checksum": "6c1657126154f1891f5e595af327da80",
+   "mimeType": "image/jpeg",
+   "size": "20245477",
+   "id": "1aomuHpaUFl71Fu8JbK21jzv7EqjcmlNg",
+   "name": "CASE.construccion-19.jpg",
+   "createdTime": "2026-08-26T14:49:09.534Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-19.jpg (14:48:29)"
+  },
+  {
+   "md5Checksum": "09618f4789394923ba9d512419ac7974",
+   "mimeType": "image/jpeg",
+   "size": "17423823",
+   "id": "11xRb7j_dZ41gSH54pXV8Tdkk7wLrW6Fh",
+   "name": "CASE.construccion-17.jpg",
+   "createdTime": "2026-08-26T14:48:59.291Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-17.jpg (14:48:58)"
+  },
+  {
+   "md5Checksum": "20cbe4df994f6f73935bd2a83319cfb6",
+   "mimeType": "image/jpeg",
+   "size": "19283456",
+   "id": "16wIB3fo3XANx2tzZx4q9iiRONVf6wp2e",
+   "name": "CASE.construccion-15.jpg",
+   "createdTime": "2026-08-26T14:50:57.359Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-15.jpg (14:48:34)"
+  },
+  {
+   "md5Checksum": "a10829efe13ab1fc715123bb0652998c",
+   "mimeType": "image/jpeg",
+   "size": "19824107",
+   "id": "1Kk4FYlgjlxu6SD6LawHpjm9nI6PYul1U",
+   "name": "CASE.construccion-16.jpg",
+   "createdTime": "2026-08-26T14:50:30.679Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-16.jpg (14:48:40)"
+  },
+  {
+   "md5Checksum": "eb3c0af8ad626d94955b054941777a0a",
+   "mimeType": "image/jpeg",
+   "size": "17971139",
+   "id": "1YV-fYNKU8GyaJDb-mVvsfFUUxNXDNOI0",
+   "name": "CASE.construccion-14.jpg",
+   "createdTime": "2026-08-26T14:49:15.110Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-14.jpg (14:48:06)"
+  },
+  {
+   "md5Checksum": "799c3a0a97daa3d9ab1aa2ea2cf144fc",
+   "mimeType": "image/jpeg",
+   "size": "17985168",
+   "id": "1Wd-9ZboMXL2jRwdxj6gk0eUWbJyn0u5k",
+   "name": "CASE.construccion-13.jpg",
+   "createdTime": "2026-08-26T14:51:10.786Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-13.jpg (14:47:58)"
+  },
+  {
+   "md5Checksum": "04925dc6d9e747fde2cb59ed1b33401e",
+   "mimeType": "image/jpeg",
+   "size": "20955491",
+   "id": "1Vj5l3PkxChx7MNFQx3ORXfL8PH4EfNUD",
+   "name": "CASE.construccion-11.jpg",
+   "createdTime": "2026-08-26T14:48:48.093Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-11.jpg (14:47:15)"
+  },
+  {
+   "md5Checksum": "b589c9afedcc98ac82028e33ac3be2cb",
+   "mimeType": "image/jpeg",
+   "size": "21049222",
+   "id": "1XjqXmJZhDFrsLunKdpaW2XDhPWCrxGLp",
+   "name": "CASE.construccion-12.jpg",
+   "createdTime": "2026-08-26T14:51:52.992Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-12.jpg (14:48:18)"
+  },
+  {
+   "md5Checksum": "bc6771f5d3c9eedc2119aa1acea817e3",
+   "mimeType": "image/jpeg",
+   "size": "18464836",
+   "id": "1WRg3Sa1SyFk_9q1NddNIAZsX2oGZb_wf",
+   "name": "CASE.construccion-8.jpg",
+   "createdTime": "2026-08-26T14:48:43.179Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-8.jpg (14:47:23)"
+  },
+  {
+   "md5Checksum": "104e11982d2f92c7d64a3405004f7aab",
+   "mimeType": "image/jpeg",
+   "size": "18594274",
+   "id": "1TusA-_9ePe5NjVFkKNHqFQ-Ecb7Rk8MH",
+   "name": "CASE.construccion-7.jpg",
+   "createdTime": "2026-08-26T14:48:38.197Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-7.jpg (14:47:41)"
+  },
+  {
+   "md5Checksum": "a5a773673d2cac75483a438c07ffeaa0",
+   "mimeType": "image/jpeg",
+   "size": "17330814",
+   "id": "1A2XyyOQHYxL7_mZJxC6810T11_gFYwfX",
+   "name": "CASE.construccion-9.jpg",
+   "createdTime": "2026-08-26T14:49:53.987Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-9.jpg (14:47:08)"
+  },
+  {
+   "md5Checksum": "c9b102821bb854b21af832da4ab9d0e4",
+   "mimeType": "image/jpeg",
+   "size": "16869609",
+   "id": "1VfCAVBzapAt1sUIp6pCPbfa1OlVnlL5t",
+   "name": "CASE.construccion-10.jpg",
+   "createdTime": "2026-08-26T14:48:53.204Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-10.jpg (14:47:29)"
+  },
+  {
+   "md5Checksum": "5c832a96bffa97134761aa8d4b077d8f",
+   "mimeType": "image/jpeg",
+   "size": "17727063",
+   "id": "1fx7b7139ac5gmn6ow4giMM8fY1XGlae_",
+   "name": "CASE.construccion-6.jpg",
+   "createdTime": "2026-08-26T14:48:33.189Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-6.jpg (14:47:36)"
+  },
+  {
+   "md5Checksum": "646ee5b2165dd62db99926a4949c81a5",
+   "mimeType": "image/jpeg",
+   "size": "16608142",
+   "id": "1hDRrvdDn1NOA61Mvg6XSLGGJPnLXuNJN",
+   "name": "CASE.construccion-4.jpg",
+   "createdTime": "2026-08-26T14:50:53.070Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-4.jpg (14:47:49)"
+  },
+  {
+   "md5Checksum": "340ebb65c551f4acfdec660f5e2abf09",
+   "mimeType": "image/jpeg",
+   "size": "16237847",
+   "id": "1qrcpRlxY1fX8SGj1oJKyrwFxcpnoFzPY",
+   "name": "CASE.construccion-3.jpg",
+   "createdTime": "2026-08-26T14:51:15.069Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-3.jpg (14:46:56)"
+  },
+  {
+   "md5Checksum": "4b5b10d5dcb49863d5417f8202152279",
+   "mimeType": "image/jpeg",
+   "size": "16576422",
+   "id": "1CLBvn2jvIsLt2H9rj6MPfO1BxuuczMWI",
+   "name": "CASE.construccion-5.jpg",
+   "createdTime": "2026-08-26T14:48:28.222Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-5.jpg (14:47:03)"
+  },
+  {
+   "md5Checksum": "e375d2a1d5f00d5ae4cf2ab6cb28f862",
+   "mimeType": "image/jpeg",
+   "size": "14628392",
+   "id": "1gNi1McUcPEr2-byLjEaIOo126tf7-3dB",
+   "name": "CASE.construccion.jpg",
+   "createdTime": "2026-08-26T14:53:32.653Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion.jpg (14:52:31)"
+  },
+  {
+   "md5Checksum": "b129d6d4f8292d3c13ae887620a7deea",
+   "mimeType": "image/jpeg",
+   "size": "15845003",
+   "id": "1kG-cg--lPxycO_R0JphMIqy-7Rp8l6m6",
+   "name": "CASE.construccion-2.jpg",
+   "createdTime": "2026-08-26T14:50:36.033Z",
+   "carpeta": "Fotos",
+   "seQueda": "CASE.construccion-2.jpg (14:46:50)"
+  },
+  {
+   "md5Checksum": "f674b4adc23b4eb21c4ad598fa1a33a3",
+   "mimeType": "video/mp4",
+   "size": "268716047",
+   "id": "1lKckgn3f1jmG024_A7bCRjReyoMWipFT",
+   "name": "07_AAD_CAMdos9790.MP4",
+   "createdTime": "2026-08-26T14:53:15.169Z",
+   "carpeta": "Clips",
+   "seQueda": "07_AAD_CAMdos9790.MP4 (14:48:24)"
+  }
+ ],
+ "renombrar": [
+  {
+   "id": "1n6WgJ1WbIlA1QUsgSz-NYAbVTS2ZJBZE",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_001.jpg"
+  },
+  {
+   "id": "1osMmwFaE7_LfQczmYwJKCwx0nem36b1g",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-2.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_002.jpg"
+  },
+  {
+   "id": "1XWlEkM2CI8xMA4wTaK33cccjHJ_Ydp44",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-3.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_003.jpg"
+  },
+  {
+   "id": "1k9HlOxdA9iQVTVTzC4yNOQicIp4OW46u",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-4.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_004.jpg"
+  },
+  {
+   "id": "1tMBTZc34NVFBTRHezFpgHyUm0DmOp__v",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-5.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_005.jpg"
+  },
+  {
+   "id": "10srS2A7ZEmm9pz8NFKSzY7CzmsALLaJg",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-6.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_006.jpg"
+  },
+  {
+   "id": "1TcRYPzufjkMBfBcifpNOm2W07mOHYPsh",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-7.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_007.jpg"
+  },
+  {
+   "id": "1r7D0AIoE_7tXPvWuWfuYqZxbcKeS5bl-",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-8.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_008.jpg"
+  },
+  {
+   "id": "1r8lHOhCBVZ7DvtSdxUGZciZQpSlczex6",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-9.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_009.jpg"
+  },
+  {
+   "id": "1-CFkwF9owgI1QOxqkijYf5WTi-9LcPDb",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-10.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_010.jpg"
+  },
+  {
+   "id": "1CpSh2yYG7kHA4dNSakDHkpJSpLhiIBwJ",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-11.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_011.jpg"
+  },
+  {
+   "id": "1cZkOaKLKznmC3bo4_OYXIUHNRlpddhPS",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-12.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_012.jpg"
+  },
+  {
+   "id": "1hjJ5mBcUtbB0e247ZlszxoYh8CxJaHN8",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-13.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_013.jpg"
+  },
+  {
+   "id": "1Uoa38MKFNDFyzbmlV3h21eV-jhEpnBdL",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-14.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_014.jpg"
+  },
+  {
+   "id": "19LQtoXA31Ifnn2MHymoWesnXo9UNhnFK",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-15.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_015.jpg"
+  },
+  {
+   "id": "1FVl4tiQxuSuYRFkAcUdQH4IzWe5e5wQx",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-16.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_016.jpg"
+  },
+  {
+   "id": "1mRa8jBppCFg_m3otTPWnFwS5ZE7f7nrO",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-17.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_017.jpg"
+  },
+  {
+   "id": "1ooJgTvhqWMdBzt3pU-b4znoncTIN1N0D",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-18.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_018.jpg"
+  },
+  {
+   "id": "1TbJ7PuNLALDjWKgGibUzrDmk-JWvJoVN",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-19.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_019.jpg"
+  },
+  {
+   "id": "1vfMQc-C6m2G6bvoCx1OZli9ixsg5--e7",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-20.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_020.jpg"
+  },
+  {
+   "id": "1CIb549VrFCv7sKx8r-y0vxMxJPpQ2Vaf",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-21.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_021.jpg"
+  },
+  {
+   "id": "13CXDxvBQxTAzjUVemZfgt_h0P3AYIE7V",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-22.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_022.jpg"
+  },
+  {
+   "id": "1atWddhYQ8fUyaNcloaEUGxMveIiqx0gJ",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-23.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_023.jpg"
+  },
+  {
+   "id": "12Pl2VUiNDLD7a2AUBvlAEcO9UPiYqnbo",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-24.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_024.jpg"
+  },
+  {
+   "id": "15fXee-99uPyFFV5MQCyxVTQWj5-kEAOe",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-25.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_025.jpg"
+  },
+  {
+   "id": "11JvLloshHKCTdEwRL6G36HOcyi1qRS1s",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-26.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_026.jpg"
+  },
+  {
+   "id": "1sUDUM5QJLXIe015XgVCYQi-mJhPDSSTS",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-27.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_027.jpg"
+  },
+  {
+   "id": "1nFE_kh9_G5Ilq_erCBObNWDe7CwV_pgG",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-28.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_028.jpg"
+  },
+  {
+   "id": "1YedlUk9kC_0swTH9OT9CWxsuPk5lG9_q",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-29.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_029.jpg"
+  },
+  {
+   "id": "1z5hDKPBOxZrqr8q7bXPlK4qN9dsJ1p90",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-30.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_030.jpg"
+  },
+  {
+   "id": "1Vgxri8Ha83WFEHmKUzK6fnb8a0s1dR6e",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-31.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_031.jpg"
+  },
+  {
+   "id": "13XeNxVMvKiewBJQXcBUSKVubJm0BFQjx",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-32.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_032.jpg"
+  },
+  {
+   "id": "1E1dKlZsAmqWSir3Vtht1FCYRqVaZ-JVX",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-33.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_033.jpg"
+  },
+  {
+   "id": "1QweV_1wdPBhS9qDOYX9sL3IR5dpKJwQy",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-34.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_034.jpg"
+  },
+  {
+   "id": "1cDlRpEB5WG5ZaaOxTjrZ9Txr5U26zZtL",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-35.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_035.jpg"
+  },
+  {
+   "id": "1A5mFx7yh-fEwEL8yqjV0yu63f35ZctQR",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-36.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_036.jpg"
+  },
+  {
+   "id": "1qllrqJrJPqqgHgEpwh2Uq99LQc4jRubm",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-37.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_037.jpg"
+  },
+  {
+   "id": "14Ds0RmPXxTKithD4PY-X3ffWFksPf2Dj",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-38.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_038.jpg"
+  },
+  {
+   "id": "1XeIgohe3t5jOhZSBPNyRrq1Sa5qGR4j-",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-39.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_039.jpg"
+  },
+  {
+   "id": "13-JSx91HnnmBwKJzXFrWhE-ykwhptHIM",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-40.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_040.jpg"
+  },
+  {
+   "id": "1ejxGaZNMZQ39tkYNPr4wINGnxIcvkZRE",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-41.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_041.jpg"
+  },
+  {
+   "id": "1uZmhrDQxmzX7IuPm8SYv01MU5lmT_CDZ",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-42.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_042.jpg"
+  },
+  {
+   "id": "1ZA5E0oMZ8wHRCiCpjeBu208RQsOvfWH_",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-43.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_043.jpg"
+  },
+  {
+   "id": "1iL4yznijTQhtTbueOOFl1Cm82NLk0ohY",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-44.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_044.jpg"
+  },
+  {
+   "id": "1wcSIkLTMdfhpyiE9yfW3GlQoaoANCf6l",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-45.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_045.jpg"
+  },
+  {
+   "id": "10JcVo_n_1LMGijGiU16RlQKurNTfuct2",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-46.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_046.jpg"
+  },
+  {
+   "id": "1xANYOj_SQtR2f__iYpEVl3ZBVbWpWNX0",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-47.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_047.jpg"
+  },
+  {
+   "id": "1c-njUgZ9hfMYi5v9FIOPdcz5bbGzmOMk",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-48.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_048.jpg"
+  },
+  {
+   "id": "1RuZoUj8vLyZMlThulzwDaIG3S8msPSRj",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-49.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_049.jpg"
+  },
+  {
+   "id": "17Yu8ttLK07nRfSOlqY2wqO6kJBWjFN7r",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-50.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_050.jpg"
+  },
+  {
+   "id": "1Z7vmI29tl0tW7WBF_H-bw38iFkwyS1tf",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-51.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_051.jpg"
+  },
+  {
+   "id": "1kLcTOP7XIz2OjdULbdimNVPF1LCz057d",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-52.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_052.jpg"
+  },
+  {
+   "id": "1nlLtQwcOYdI3Fint27hrQyMHAEOQHidQ",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-53.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_053.jpg"
+  },
+  {
+   "id": "1GQZ7r7gG1tRVj6DJuseCW_JvwTQqwiFY",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-54.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_054.jpg"
+  },
+  {
+   "id": "1JEDh3Us32hORgwkTJfp0LPXDu8etArJp",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-55.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_055.jpg"
+  },
+  {
+   "id": "11sITlyalSEuBLQqxqP6u_molm6Ve68xp",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-56.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_056.jpg"
+  },
+  {
+   "id": "1w3FwvKeEMAOXeknW8TYhP39Thnmwo8GP",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-57.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_057.jpg"
+  },
+  {
+   "id": "1iBJL1PjFMVmeYknJO06cQgQtCYE7wGvt",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-58.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_058.jpg"
+  },
+  {
+   "id": "1vsu9pSWaLCUabVgua2_f9PCPaRyTpaI2",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-59.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_059.jpg"
+  },
+  {
+   "id": "1DlHcp2DSIDhJXgELH8-hBFGJMZ25Gp5b",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-60.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_060.jpg"
+  },
+  {
+   "id": "1Csy1wR0As9I_-zN1Qu7FQagCKjy5hEJ9",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-61.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_061.jpg"
+  },
+  {
+   "id": "1N8eACTz5zU_lzqx40jK8EZl4B7IyEdaZ",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-62.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_062.jpg"
+  },
+  {
+   "id": "1Cv273RLZhBgFU6k_pFIfXWICgt98yy3k",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-63.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_063.jpg"
+  },
+  {
+   "id": "1KGqSW2-Iq-EGorEi_PcJKGkLroio-tcD",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-64.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_064.jpg"
+  },
+  {
+   "id": "1ucgh6k6g36ytKJfQyn8V1509ClF1yOxe",
+   "carpeta": "Fotos",
+   "viejo": "CASE.construccion-65.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_065.jpg"
+  },
+  {
+   "id": "1SR6m-2RWyVdsAUQAuQZZovJyuS4TnnTD",
+   "carpeta": "Fotos",
+   "viejo": "DSC09144.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_066.jpg"
+  },
+  {
+   "id": "18AChbLUQNQNycOW3Is7rvqZv-w7GtyEd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09145.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_067.jpg"
+  },
+  {
+   "id": "1YmCDDtxEHpt2x-CMg9hXpbtnAsh5dbS6",
+   "carpeta": "Fotos",
+   "viejo": "DSC09146.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_068.jpg"
+  },
+  {
+   "id": "16m07HEQoJdNHw3JR8_1BSYClX_tmV2_k",
+   "carpeta": "Fotos",
+   "viejo": "DSC09147.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_069.jpg"
+  },
+  {
+   "id": "1EOjqehiZKTSBE3owgTI2UtXWBJTu_GYX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09148.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_070.jpg"
+  },
+  {
+   "id": "158i48eEHI098cYqXpKtr3i0UGgsGtOsi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09149.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_071.jpg"
+  },
+  {
+   "id": "1DYzLB4nf364SbstFhl4K3bd-SkQUu84E",
+   "carpeta": "Fotos",
+   "viejo": "DSC09150.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_072.jpg"
+  },
+  {
+   "id": "1wYN0datezfGXx9XaZsQ2y1hTOBtxNtP-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09152.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_073.jpg"
+  },
+  {
+   "id": "1-oeoo7dCdWTXA4T_oMyDcfaa-RACnlWl",
+   "carpeta": "Fotos",
+   "viejo": "DSC09153.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_074.jpg"
+  },
+  {
+   "id": "1xOqrxI4IgAyjegFkxA0nSpg6TJAH5DqO",
+   "carpeta": "Fotos",
+   "viejo": "DSC09154.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_075.jpg"
+  },
+  {
+   "id": "1HU3xLjav6MQyZGuziBdF-HMscHhrwrWR",
+   "carpeta": "Fotos",
+   "viejo": "DSC09155.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_076.jpg"
+  },
+  {
+   "id": "1TweVJtKru3-V2f8Sb4r-w1no80HMLxga",
+   "carpeta": "Fotos",
+   "viejo": "DSC09156.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_077.jpg"
+  },
+  {
+   "id": "1WKiPUBok008y7f3aj5HrQMImXQkHGCeG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09157.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_078.jpg"
+  },
+  {
+   "id": "1YQpbHd9lulgX5M95NJlDY8CCe9-2LlKe",
+   "carpeta": "Fotos",
+   "viejo": "DSC09158.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_079.jpg"
+  },
+  {
+   "id": "1NIoYEshKDEkW_8XSLhXU1uoScwKKCkIa",
+   "carpeta": "Fotos",
+   "viejo": "DSC09159.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_080.jpg"
+  },
+  {
+   "id": "1wqXCFPh-n4HBIAMIlU_yJ5u8hSboB1C7",
+   "carpeta": "Fotos",
+   "viejo": "DSC09160.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_081.jpg"
+  },
+  {
+   "id": "1TSf6AmGm3xIhkrWT0SVlmTJdDeQl5eXN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09161.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_082.jpg"
+  },
+  {
+   "id": "1Kj38dTRHT3Ph8KXbp_3i0gud5TxflBJ0",
+   "carpeta": "Fotos",
+   "viejo": "DSC09162.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_083.jpg"
+  },
+  {
+   "id": "15wLRNfu38-n5BKLlDRr8k768XraCpRK1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09163.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_084.jpg"
+  },
+  {
+   "id": "12GJTIJIYf6qTy-c7lkkKwZdKVrqsCryu",
+   "carpeta": "Fotos",
+   "viejo": "DSC09164.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_085.jpg"
+  },
+  {
+   "id": "1uXE1FhujXXS_o7YgnqXtVmDQztHqb7jC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09165.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_086.jpg"
+  },
+  {
+   "id": "1qcWKzVCr_6dO_S2fH4IF_PXuTSvP-zPe",
+   "carpeta": "Fotos",
+   "viejo": "DSC09166.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_087.jpg"
+  },
+  {
+   "id": "1LWvaKsYE6cO5PEEk3FLzLpqUQdzx6e71",
+   "carpeta": "Fotos",
+   "viejo": "DSC09167.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_088.jpg"
+  },
+  {
+   "id": "1-FNYOzllOYTS4FPXOeLUFhQztpXZyY_9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09168.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_089.jpg"
+  },
+  {
+   "id": "1jwoaOiRITe48qT7HpxdtmUVKELq_JICI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09169.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_090.jpg"
+  },
+  {
+   "id": "1N9IAh-DBgvZieH_4LJLj3NtgGW0AevhK",
+   "carpeta": "Fotos",
+   "viejo": "DSC09170.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_091.jpg"
+  },
+  {
+   "id": "1XIktDdQz-I-7jLcZ1VyHTJCjh_QKDNqb",
+   "carpeta": "Fotos",
+   "viejo": "DSC09171.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_092.jpg"
+  },
+  {
+   "id": "1YdiUQ4frPidBIvFUUBOYkYPWD33QOgNF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09172.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_093.jpg"
+  },
+  {
+   "id": "1RqBNtFTVqqnt-kt6_UhS8vd3vMXexUUt",
+   "carpeta": "Fotos",
+   "viejo": "DSC09173.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_094.jpg"
+  },
+  {
+   "id": "1gSDz5gYthzOupqDNXccXqp6fnW3RF7LJ",
+   "carpeta": "Fotos",
+   "viejo": "DSC09174.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_095.jpg"
+  },
+  {
+   "id": "1O9ZXNRyfPf-ufBhfaTOXi2oxXp0MJE-4",
+   "carpeta": "Fotos",
+   "viejo": "DSC09176.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_096.jpg"
+  },
+  {
+   "id": "1F09utoXwlNJVlOhoIpXPpNArgXa-I4zH",
+   "carpeta": "Fotos",
+   "viejo": "DSC09178.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_097.jpg"
+  },
+  {
+   "id": "1dzedZrETSWeoJfH1Nxs97Mgf5TsSPiBK",
+   "carpeta": "Fotos",
+   "viejo": "DSC09182.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_098.jpg"
+  },
+  {
+   "id": "14Z8NjtIrrmdpERBLan2aBlwRbN18d86q",
+   "carpeta": "Fotos",
+   "viejo": "DSC09184.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_099.jpg"
+  },
+  {
+   "id": "1iumqvtcvxYicNMGqLHyc2FrcUhvsVOYA",
+   "carpeta": "Fotos",
+   "viejo": "DSC09185.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_100.jpg"
+  },
+  {
+   "id": "1_rm_SA2ZzN48S10FNA9FcBFwTApHZg9X",
+   "carpeta": "Fotos",
+   "viejo": "DSC09186.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_101.jpg"
+  },
+  {
+   "id": "1ft9y2PPRgHSC-9BPdN08z1ncv2WG8sf7",
+   "carpeta": "Fotos",
+   "viejo": "DSC09187.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_102.jpg"
+  },
+  {
+   "id": "1Gz1D79xH_dbKFVgR9-RK9AkwgR4R_QVj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09188.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_103.jpg"
+  },
+  {
+   "id": "1bkXQrbJTi4cc5gOLrmscOxM1nDeBRwFC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09189.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_104.jpg"
+  },
+  {
+   "id": "1iqEtXhiNMipMhQmFSaXBSF0nkwcs3zk4",
+   "carpeta": "Fotos",
+   "viejo": "DSC09190.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_105.jpg"
+  },
+  {
+   "id": "1QjoxNHbv8MVofZBUqfJVNrwYTtThp8vH",
+   "carpeta": "Fotos",
+   "viejo": "DSC09192.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_106.jpg"
+  },
+  {
+   "id": "1yGiWXmnoquCEKLGQ1w_2zLLTKzgSDpBi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09193.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_107.jpg"
+  },
+  {
+   "id": "1wGsq1JP9Ci_jjY3WHX5rEscP4V-th42E",
+   "carpeta": "Fotos",
+   "viejo": "DSC09194.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_108.jpg"
+  },
+  {
+   "id": "1tSjRnm84aXr6zHXqbNhJ8brG27CfNWrH",
+   "carpeta": "Fotos",
+   "viejo": "DSC09195.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_109.jpg"
+  },
+  {
+   "id": "1Bw-V7YuaNQJ7i4tTclNXDRnjsfbPp72S",
+   "carpeta": "Fotos",
+   "viejo": "DSC09196.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_110.jpg"
+  },
+  {
+   "id": "1jOj9PseRqzzal2BlrWUyrUD_F5mmPXDm",
+   "carpeta": "Fotos",
+   "viejo": "DSC09197.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_111.jpg"
+  },
+  {
+   "id": "1wNK0-fnG3iqr1KpaO2b46Op7l9tC1FLB",
+   "carpeta": "Fotos",
+   "viejo": "DSC09198.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_112.jpg"
+  },
+  {
+   "id": "1mQ6ZVuFJbn0t9bkxhUL8u4tYWzEbb91J",
+   "carpeta": "Fotos",
+   "viejo": "DSC09199.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_113.jpg"
+  },
+  {
+   "id": "1Om-gdWJXgpWxcMmwTvMHEh_hKTTaqVII",
+   "carpeta": "Fotos",
+   "viejo": "DSC09200.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_114.jpg"
+  },
+  {
+   "id": "1KRwBYXrBbF5MUNj0t9JBU27g1lrXRlTg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09201.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_115.jpg"
+  },
+  {
+   "id": "1DQU7CfbeqWf1iAVAE4LsHmg57f6hYHyq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09202.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_116.jpg"
+  },
+  {
+   "id": "1PF92JzDA0S0mo0qRiZT2oCvrgcTYYgw9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09203.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_117.jpg"
+  },
+  {
+   "id": "1eLi64YU1R-z169eSyyuc2eFfDIV1ZNoC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09206.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_118.jpg"
+  },
+  {
+   "id": "1be4CsVgBCTjWy_DUlGWYz7G21XZEgmYq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09207.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_119.jpg"
+  },
+  {
+   "id": "1A8hMjdzgNEGltXWV8b71QVl7MkaZia4B",
+   "carpeta": "Fotos",
+   "viejo": "DSC09208.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_120.jpg"
+  },
+  {
+   "id": "1esi_rl2zWtEgho6vNTHFBYA8C8rmQfid",
+   "carpeta": "Fotos",
+   "viejo": "DSC09209.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_121.jpg"
+  },
+  {
+   "id": "10eLsEoxrJgZF2miB3WD5ZxLmBcj8-wK_",
+   "carpeta": "Fotos",
+   "viejo": "DSC09212.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_122.jpg"
+  },
+  {
+   "id": "1XiS0JDUqY-MIjnrE0o4RxWpsE2_A0m8R",
+   "carpeta": "Fotos",
+   "viejo": "DSC09213.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_123.jpg"
+  },
+  {
+   "id": "1IJ2zD-lQRHrw9wMX6imZUhoe9ZQqKwG4",
+   "carpeta": "Fotos",
+   "viejo": "DSC09214.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_124.jpg"
+  },
+  {
+   "id": "12WMzWDtoC8D90KQ0Vd6NznRvrJh8bmJt",
+   "carpeta": "Fotos",
+   "viejo": "DSC09215.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_125.jpg"
+  },
+  {
+   "id": "1H14bR0be4dcEMWFpHXpxa8Hlk0d8lU-i",
+   "carpeta": "Fotos",
+   "viejo": "DSC09216.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_126.jpg"
+  },
+  {
+   "id": "1Ceq9CRQ_5IiU7XEKbDSGUsQWit8wj3Lx",
+   "carpeta": "Fotos",
+   "viejo": "DSC09217.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_127.jpg"
+  },
+  {
+   "id": "1HaOBldJx0CVFnLULv9l-FoPhmgOH9RKu",
+   "carpeta": "Fotos",
+   "viejo": "DSC09218.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_128.jpg"
+  },
+  {
+   "id": "1k2zwAKeZAd6FaagwfwpkbzLsbogUSDC9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09219.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_129.jpg"
+  },
+  {
+   "id": "1Rtk6-ujJxbAXB-cSZ2YonjIMBxeDXXPs",
+   "carpeta": "Fotos",
+   "viejo": "DSC09220.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_130.jpg"
+  },
+  {
+   "id": "1ePpDAOmiTkT1Q-OCQr5MvrwSeMBnh44k",
+   "carpeta": "Fotos",
+   "viejo": "DSC09221.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_131.jpg"
+  },
+  {
+   "id": "1vXiAjcLQz5D9JQGECija9v3mNMwjhZlF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09222.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_132.jpg"
+  },
+  {
+   "id": "1k18T4KC7By8bDSooWgWAmVUTnevhq-Ey",
+   "carpeta": "Fotos",
+   "viejo": "DSC09223.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_133.jpg"
+  },
+  {
+   "id": "12s9IO1Z4EaYugGyreDP-V9tzvpZH8C4O",
+   "carpeta": "Fotos",
+   "viejo": "DSC09224.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_134.jpg"
+  },
+  {
+   "id": "1KdZsjZEcY5Nrks5eah8jsrblZxeXIt-F",
+   "carpeta": "Fotos",
+   "viejo": "DSC09225.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_135.jpg"
+  },
+  {
+   "id": "1dRHYX-uYbFGfg6Z_4EoW7hoxwCgKaqsX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09226.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_136.jpg"
+  },
+  {
+   "id": "1_oxgOA2sgq4F4ZNNbPJsr0ZbY6UVRWUY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09227.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_137.jpg"
+  },
+  {
+   "id": "173hPpnlAcAljQnbIJfcPo_h1RK-xPK8p",
+   "carpeta": "Fotos",
+   "viejo": "DSC09228.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_138.jpg"
+  },
+  {
+   "id": "1EeGMqppsUJD8vicVB3fD3RxCu0k2AWv4",
+   "carpeta": "Fotos",
+   "viejo": "DSC09229.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_139.jpg"
+  },
+  {
+   "id": "1-UhWQC-EyJUrhtk5YKdaAA3s1DNKTuPc",
+   "carpeta": "Fotos",
+   "viejo": "DSC09230.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_140.jpg"
+  },
+  {
+   "id": "1O0klUS8FoZSzWyE83-O7RblVKqOlWvdh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09231.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_141.jpg"
+  },
+  {
+   "id": "1y4U2-SI15hDRd0U4wbUdAae0qAmiyRyJ",
+   "carpeta": "Fotos",
+   "viejo": "DSC09232.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_142.jpg"
+  },
+  {
+   "id": "1eljqcE_5_oKiNB6kWj412V6bhYHV_C5u",
+   "carpeta": "Fotos",
+   "viejo": "DSC09233.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_143.jpg"
+  },
+  {
+   "id": "1Off_Z8nGWfJgzng88uEctX1-UVlhlEAg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09234.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_144.jpg"
+  },
+  {
+   "id": "163WAhBjCeQM5B4JBc0ZoOvWgW6SKuWW_",
+   "carpeta": "Fotos",
+   "viejo": "DSC09235.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_145.jpg"
+  },
+  {
+   "id": "1e4BDc9TFY1me3yp2-6_ucepWBnaTHw73",
+   "carpeta": "Fotos",
+   "viejo": "DSC09236.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_146.jpg"
+  },
+  {
+   "id": "1zKomNDyscXvsRO6j6jvaq0mzu7MXmXAB",
+   "carpeta": "Fotos",
+   "viejo": "DSC09237.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_147.jpg"
+  },
+  {
+   "id": "1zeasF3neeYkYeyOUFG-P62QfRtwcHMlR",
+   "carpeta": "Fotos",
+   "viejo": "DSC09238.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_148.jpg"
+  },
+  {
+   "id": "1uSKDDX1YXLxF-270O-p_RBi2QEXuVKvG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09239.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_149.jpg"
+  },
+  {
+   "id": "1YR5Fcksoj4k3rBOD96O4e5uM7YYTQSYD",
+   "carpeta": "Fotos",
+   "viejo": "DSC09240.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_150.jpg"
+  },
+  {
+   "id": "130INNT47O814OEDYoMVFB5UDavmbANkc",
+   "carpeta": "Fotos",
+   "viejo": "DSC09241.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_151.jpg"
+  },
+  {
+   "id": "1PGSPGPVA0921eNnQdut6yoGMjNQ1J_XW",
+   "carpeta": "Fotos",
+   "viejo": "DSC09242.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_152.jpg"
+  },
+  {
+   "id": "1vAFm1bcP4cP796Fke80_sbRPu_eBtrDs",
+   "carpeta": "Fotos",
+   "viejo": "DSC09243.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_153.jpg"
+  },
+  {
+   "id": "1cRhlA5PwBe0It47DtYqqpb43y1y2MXZd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09244.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_154.jpg"
+  },
+  {
+   "id": "1kTRheuEXErgfxpB6oQX5tqIWUrjttEQM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09245.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_155.jpg"
+  },
+  {
+   "id": "1UESJPGG6qa5ft6z3GTvwWXCAwyL1cHXd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09246.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_156.jpg"
+  },
+  {
+   "id": "15mPK82cWidSNpJ8c3y7S1syJOGYHMQMn",
+   "carpeta": "Fotos",
+   "viejo": "DSC09247.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_157.jpg"
+  },
+  {
+   "id": "1_r8NOFoBKjydK99qTqRJ5XAQcovMmWPI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09248.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_158.jpg"
+  },
+  {
+   "id": "1h_kD8bReAMqhrq71RXYZb3Twov1TI1aY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09249.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_159.jpg"
+  },
+  {
+   "id": "1v7TxjCPobi0njOd6tT0vwwDYrg1iBXrS",
+   "carpeta": "Fotos",
+   "viejo": "DSC09250.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_160.jpg"
+  },
+  {
+   "id": "1u2oo2hntlqHOOpchwrfCjEuWd54Eq8gi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09251.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_161.jpg"
+  },
+  {
+   "id": "1QMXAMDtrYVNLx7flH-zbibSkXfJZrghp",
+   "carpeta": "Fotos",
+   "viejo": "DSC09252.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_162.jpg"
+  },
+  {
+   "id": "1OH51KMrrtFVncdOGXw_nQGzzDHrKRF-D",
+   "carpeta": "Fotos",
+   "viejo": "DSC09253.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_163.jpg"
+  },
+  {
+   "id": "1lau9kGvahwefDHRUo4VrZAtKQGUnpJe-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09254.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_164.jpg"
+  },
+  {
+   "id": "1Ma-DjDatjELLA0QGXDU-pjmpTzYATnRf",
+   "carpeta": "Fotos",
+   "viejo": "DSC09255.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_165.jpg"
+  },
+  {
+   "id": "1F7T-GfwfZadorGoIRgLLkaqoT1WhZg5O",
+   "carpeta": "Fotos",
+   "viejo": "DSC09256.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_166.jpg"
+  },
+  {
+   "id": "1zfAEhepD3LN8BdPZgmEJ0oZF3t_K2gBL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09257.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_167.jpg"
+  },
+  {
+   "id": "1IRgRJnWVj_6lym3ENgAppSYvPXuuQQff",
+   "carpeta": "Fotos",
+   "viejo": "DSC09258.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_168.jpg"
+  },
+  {
+   "id": "1TlncAxC27ZdWfhoX7J6MVjiwCJvgFFSN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09259.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_169.jpg"
+  },
+  {
+   "id": "1KKHHs2HE2d-ExOjZj8wbonjizFRTYcC0",
+   "carpeta": "Fotos",
+   "viejo": "DSC09260.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_170.jpg"
+  },
+  {
+   "id": "18OxVlxPpregsZ9vbq6jGnd4g-LH0fQ34",
+   "carpeta": "Fotos",
+   "viejo": "DSC09261.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_171.jpg"
+  },
+  {
+   "id": "1rKngonsNHVLRE4KKy9QoDF0mw72cWcKr",
+   "carpeta": "Fotos",
+   "viejo": "DSC09262.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_172.jpg"
+  },
+  {
+   "id": "17yQggeCdDGVjd8x86Sn46e5nRrvOeGWt",
+   "carpeta": "Fotos",
+   "viejo": "DSC09263.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_173.jpg"
+  },
+  {
+   "id": "1ji_8Epec0ki_Z1tTXbBrBGNp_6m6Ug7C",
+   "carpeta": "Fotos",
+   "viejo": "DSC09264.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_174.jpg"
+  },
+  {
+   "id": "1OLOv1S4NYfoKS_wtKsJkIBOK1zPqizER",
+   "carpeta": "Fotos",
+   "viejo": "DSC09265.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_175.jpg"
+  },
+  {
+   "id": "1_ugQ5jLm10TInT3_lw_DFvTcS46kZb9p",
+   "carpeta": "Fotos",
+   "viejo": "DSC09266.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_176.jpg"
+  },
+  {
+   "id": "15QhTKmQpf_Rj99P3XFB2CCcazlIG-Tts",
+   "carpeta": "Fotos",
+   "viejo": "DSC09267.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_177.jpg"
+  },
+  {
+   "id": "1AoNIBoTF4yj2mKXFETf-Wi86rv8GyZCM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09268.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_178.jpg"
+  },
+  {
+   "id": "1NiLOF-AoeHXUzheia_kHxzn1em_vrphC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09269.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_179.jpg"
+  },
+  {
+   "id": "1ZheVjYmQ9imhCp30dAg_lJMtsKjxBdOV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09270.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_180.jpg"
+  },
+  {
+   "id": "1cc7l9SI1Icicg0aSaHROpgLZ2K3Ic3BE",
+   "carpeta": "Fotos",
+   "viejo": "DSC09271.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_181.jpg"
+  },
+  {
+   "id": "1CEkoaCUIJGIFEdvVw5iWSDI2lf1zV_ki",
+   "carpeta": "Fotos",
+   "viejo": "DSC09272.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_182.jpg"
+  },
+  {
+   "id": "1HAbj67dK_i-E1XzuqlimRAHrJVLuiGQx",
+   "carpeta": "Fotos",
+   "viejo": "DSC09273.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_183.jpg"
+  },
+  {
+   "id": "1im8r816qx4gZdz27MMMpWsFfNlPUdjSm",
+   "carpeta": "Fotos",
+   "viejo": "DSC09276.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_184.jpg"
+  },
+  {
+   "id": "1tTcXY0vxbf29vXZHMdDRKIE8J6-Gsgis",
+   "carpeta": "Fotos",
+   "viejo": "DSC09277.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_185.jpg"
+  },
+  {
+   "id": "12ggOxpW-Y7e_HazGRMeYqHNTAfKb7tgm",
+   "carpeta": "Fotos",
+   "viejo": "DSC09278.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_186.jpg"
+  },
+  {
+   "id": "12h_XiXfcTOynRanujJwZIHdBwuwKMJbB",
+   "carpeta": "Fotos",
+   "viejo": "DSC09279.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_187.jpg"
+  },
+  {
+   "id": "1DAhgPa9xX_rL55xpjQ3j2cON_La40etG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09280.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_188.jpg"
+  },
+  {
+   "id": "18_6TB4cqa8d3FRurVXI51SSL4jgq6spL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09281.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_189.jpg"
+  },
+  {
+   "id": "158Neu_Ivp0zivrJbE8rWOdl21hBI9_a6",
+   "carpeta": "Fotos",
+   "viejo": "DSC09282.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_190.jpg"
+  },
+  {
+   "id": "1efX3P0GCsaIdyc-yNpU1QCmEO1jw0kQU",
+   "carpeta": "Fotos",
+   "viejo": "DSC09283.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_191.jpg"
+  },
+  {
+   "id": "1djaWYVQ4pzAFPKW7YCThueDthjZ6Irmh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09284.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_192.jpg"
+  },
+  {
+   "id": "1Vh3e5cFn9iQrApodUVzOtEDsbbTkaYNL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09285.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_193.jpg"
+  },
+  {
+   "id": "1TXdlCXzYYqFsFY-7LdmLy1XvbeGmLIJ1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09286.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_194.jpg"
+  },
+  {
+   "id": "1VCWP-xDt-Dqb-bruAyDU9iWSzIT3i1S5",
+   "carpeta": "Fotos",
+   "viejo": "DSC09287.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_195.jpg"
+  },
+  {
+   "id": "1MjSJS3agIaFF8aHlgrcSJbUNZrEGiW0I",
+   "carpeta": "Fotos",
+   "viejo": "DSC09288.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_196.jpg"
+  },
+  {
+   "id": "1SlVJyk8InKMHVXtNWda3AcSLzbnCxtEL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09289.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_197.jpg"
+  },
+  {
+   "id": "1DUW5yZht8U0CqoTFcDL-2A-1WviL_n4M",
+   "carpeta": "Fotos",
+   "viejo": "DSC09290.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_198.jpg"
+  },
+  {
+   "id": "1QWQyUxkZGCUlq6yqYNzDpp19SCKxyBEB",
+   "carpeta": "Fotos",
+   "viejo": "DSC09291.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_199.jpg"
+  },
+  {
+   "id": "18IMg_XUGSmKfFwcyzpu1rNcf9BmaYv-F",
+   "carpeta": "Fotos",
+   "viejo": "DSC09292.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_200.jpg"
+  },
+  {
+   "id": "1AVwwMiAUDFF5zVprijycZL7g0Fo_lmG9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09293.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_201.jpg"
+  },
+  {
+   "id": "1Sfbm3h2XcIGfNgtS1PdG92F0dAn2-Fii",
+   "carpeta": "Fotos",
+   "viejo": "DSC09294.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_202.jpg"
+  },
+  {
+   "id": "13v_1XFNgiuuxjcgvBF3hW9N7dxxEefBj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09295.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_203.jpg"
+  },
+  {
+   "id": "10zlyTsytD28rjWqtrj3bMJ2DGNYvMGxP",
+   "carpeta": "Fotos",
+   "viejo": "DSC09296.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_204.jpg"
+  },
+  {
+   "id": "1RocTLZNkhzJ2k6eT9dbLjlhqPZHn3rom",
+   "carpeta": "Fotos",
+   "viejo": "DSC09297.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_205.jpg"
+  },
+  {
+   "id": "1y9bLQSW8W2d-KCnQntCiYuvaBCfbumXA",
+   "carpeta": "Fotos",
+   "viejo": "DSC09298.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_206.jpg"
+  },
+  {
+   "id": "1hARG7l6Ue0hn6gf0qLt-g-me4ws33Nwo",
+   "carpeta": "Fotos",
+   "viejo": "DSC09299.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_207.jpg"
+  },
+  {
+   "id": "17DnCxPodsvmz8R4kaPkMouSpBvt6zjjl",
+   "carpeta": "Fotos",
+   "viejo": "DSC09300.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_208.jpg"
+  },
+  {
+   "id": "19AHonO-cCfxOumhxQrBP1MNvawiijq0C",
+   "carpeta": "Fotos",
+   "viejo": "DSC09301.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_209.jpg"
+  },
+  {
+   "id": "1zp_Q-MoOJ2SZlapXZiMmWeUUW_kUhIi5",
+   "carpeta": "Fotos",
+   "viejo": "DSC09302.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_210.jpg"
+  },
+  {
+   "id": "1NsmrQD5WtbWDQyTcr2-vXSWvjx-0SkNV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09303.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_211.jpg"
+  },
+  {
+   "id": "1DWf6SMTAlBf_-SQQNd_KTTLwnbZmIjKe",
+   "carpeta": "Fotos",
+   "viejo": "DSC09304.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_212.jpg"
+  },
+  {
+   "id": "1xwaBIKBenagku_w1gzLf1fPU5WtLs7f1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09305.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_213.jpg"
+  },
+  {
+   "id": "1Ru8CC1-JLuutX8pG_4BtqSTo-vq_08nX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09306.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_214.jpg"
+  },
+  {
+   "id": "19jm7sRVzoEuedVQvHotkPJYYxMhjtrjl",
+   "carpeta": "Fotos",
+   "viejo": "DSC09307.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_215.jpg"
+  },
+  {
+   "id": "1aLPdPjeTbZBWgELODzC6LmK9ETMx_Yh1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09308.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_216.jpg"
+  },
+  {
+   "id": "11HqPyFHNFpMUEsP39m34yV9L-Fj2V0zk",
+   "carpeta": "Fotos",
+   "viejo": "DSC09309.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_217.jpg"
+  },
+  {
+   "id": "1Tcn26VNwe6-pzNbZPDxb14U4FLc1rmlK",
+   "carpeta": "Fotos",
+   "viejo": "DSC09310.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_218.jpg"
+  },
+  {
+   "id": "1rxDc0nM7R1r5FkyxVracs5V4gX1hT_l-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09311.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_219.jpg"
+  },
+  {
+   "id": "1hHA_aJ48yCBnzLU1mDFa2BvU4n-ORxCq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09312.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_220.jpg"
+  },
+  {
+   "id": "1d9_DiXDnFwgh1o7lJKNd1MF5Ya1rhyxd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09313.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_221.jpg"
+  },
+  {
+   "id": "16pgIwlSuvCQIf6cDAn5hdXJHhP-21Zr2",
+   "carpeta": "Fotos",
+   "viejo": "DSC09314.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_222.jpg"
+  },
+  {
+   "id": "1pKItrBAsHXpZaDMFpIJMvzeP07NbcDom",
+   "carpeta": "Fotos",
+   "viejo": "DSC09315.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_223.jpg"
+  },
+  {
+   "id": "1ETGg-EczVXHlSkEy8DYQlgm7n-lsptQh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09316.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_224.jpg"
+  },
+  {
+   "id": "1rsiSCPuLST_Th2XLJmUwE3IVpb6i2iz6",
+   "carpeta": "Fotos",
+   "viejo": "DSC09317.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_225.jpg"
+  },
+  {
+   "id": "1DC77TBYrSkV8pUckHry9z-Hb6AuaLv1p",
+   "carpeta": "Fotos",
+   "viejo": "DSC09318.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_226.jpg"
+  },
+  {
+   "id": "149bY9G7UAarWXzmZDZEtsmYbwB31os5n",
+   "carpeta": "Fotos",
+   "viejo": "DSC09319.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_227.jpg"
+  },
+  {
+   "id": "1ydVRWaYoXC9ClJpkq_QjJuAGTG0ZP7Gg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09320.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_228.jpg"
+  },
+  {
+   "id": "1eTpiZr8zOIi1x_zVnehHyFxyrRPgLDrb",
+   "carpeta": "Fotos",
+   "viejo": "DSC09321.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_229.jpg"
+  },
+  {
+   "id": "1ixszVeCLM9JvzWBF-1pYZzviJz7jK4GM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09322.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_230.jpg"
+  },
+  {
+   "id": "1D35xHIVGgBW3fJFzRuRCzWhWWkWOaY3C",
+   "carpeta": "Fotos",
+   "viejo": "DSC09323.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_231.jpg"
+  },
+  {
+   "id": "1Zde3DIov9M1IqUOC6k_gZyyrNa0JLgbJ",
+   "carpeta": "Fotos",
+   "viejo": "DSC09324.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_232.jpg"
+  },
+  {
+   "id": "1krHXJ1bueezMazJtICGntwjihdfmtbII",
+   "carpeta": "Fotos",
+   "viejo": "DSC09325.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_233.jpg"
+  },
+  {
+   "id": "1JLucydW9dVh4fPTlY440eYwSY-AAPmQJ",
+   "carpeta": "Fotos",
+   "viejo": "DSC09326.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_234.jpg"
+  },
+  {
+   "id": "1u-cMTn9tsaYzJsD8z0lIKvLaa0f6g_W-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09327.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_235.jpg"
+  },
+  {
+   "id": "1iU8O706tCnArMciuCZdzSt14k1Z6BYX1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09328.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_236.jpg"
+  },
+  {
+   "id": "1j4cC17HVB9yzcHJMEbH8HzffuKAUZBCO",
+   "carpeta": "Fotos",
+   "viejo": "DSC09330.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_237.jpg"
+  },
+  {
+   "id": "1ckwr3RT2rLyjvIlbjUX1x55Rdzfrm4MM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09331.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_238.jpg"
+  },
+  {
+   "id": "1L1nP4ELRbiCIa5OS8lq1YmPYDcyUIVNi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09332.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_239.jpg"
+  },
+  {
+   "id": "1YfMvhuHSuWyq-oVFool1AR6ID7EoeoFF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09333.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_240.jpg"
+  },
+  {
+   "id": "1_N1EeXiTtTnQ6e-6bgSwps5MF2Mzm2mj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09334.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_241.jpg"
+  },
+  {
+   "id": "18LhdemcvTCNIbwsp6crWWUwWovdkgohb",
+   "carpeta": "Fotos",
+   "viejo": "DSC09335.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_242.jpg"
+  },
+  {
+   "id": "1oyDtpvVV5YExh0Ewg7jJ7hyAxEJdEguB",
+   "carpeta": "Fotos",
+   "viejo": "DSC09336.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_243.jpg"
+  },
+  {
+   "id": "1nIV3MNB56azquqJSTE6gAIkXwmwb3zEd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09337.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_244.jpg"
+  },
+  {
+   "id": "1rLTf-_A8p_7yxsjTA1rT6gq4Rep2n1oS",
+   "carpeta": "Fotos",
+   "viejo": "DSC09338.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_245.jpg"
+  },
+  {
+   "id": "1oYNrFW_LXA2YwBdbjvQiI-5Yv3vvAY2f",
+   "carpeta": "Fotos",
+   "viejo": "DSC09339.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_246.jpg"
+  },
+  {
+   "id": "1ndy2v6EbVbTrLDzpase_Zt00le9cmtqY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09340.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_247.jpg"
+  },
+  {
+   "id": "1b-26arLp2qWHlAx57vzj4jt3Ly3Uy9nM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09341.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_248.jpg"
+  },
+  {
+   "id": "1wLvvwqvOjo2g4fhRPgPFQ7DUde4JiOkD",
+   "carpeta": "Fotos",
+   "viejo": "DSC09342.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_249.jpg"
+  },
+  {
+   "id": "1IzGwOQ8we-rSBn3QYmUGc02SjbolvdRL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09343.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_250.jpg"
+  },
+  {
+   "id": "1xleCi4KPbyv_M4oL111iiyQ7ompLdKlC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09344.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_251.jpg"
+  },
+  {
+   "id": "1JtQCruk_H_a2DCCA0tiR09iKvaARq1Q-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09345.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_252.jpg"
+  },
+  {
+   "id": "1WqFl3qzxfY3pdZEUfcGs6oBYo01cwtz4",
+   "carpeta": "Fotos",
+   "viejo": "DSC09346.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_253.jpg"
+  },
+  {
+   "id": "1b5Ss96LMeyy7A9OIdIkAN5x8XN4vdeNy",
+   "carpeta": "Fotos",
+   "viejo": "DSC09347.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_254.jpg"
+  },
+  {
+   "id": "1RPQTZ5INBapNKyu5He5lEw1y7Y_ArX8-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09348.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_255.jpg"
+  },
+  {
+   "id": "1ZQr3lzIj_wzrC33GbddpiSXrMB0UGh4n",
+   "carpeta": "Fotos",
+   "viejo": "DSC09350.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_256.jpg"
+  },
+  {
+   "id": "1-Fibep_3_a07cme4GNoJLX2rNgSj35uc",
+   "carpeta": "Fotos",
+   "viejo": "DSC09351.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_257.jpg"
+  },
+  {
+   "id": "1VOeuFLvtwMc6N1_L0Ig6mRWh12d6heqM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09352.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_258.jpg"
+  },
+  {
+   "id": "16NOPxQUk2ze6HGTg4g7sv0Pex81zXFbb",
+   "carpeta": "Fotos",
+   "viejo": "DSC09353.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_259.jpg"
+  },
+  {
+   "id": "1e8ojFFSbAC9fXYdbIOCZ4K_hMfmVwsNr",
+   "carpeta": "Fotos",
+   "viejo": "DSC09354.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_260.jpg"
+  },
+  {
+   "id": "17Pj7xvlcJod9MvPX9CAMBeiAZtJDOY2P",
+   "carpeta": "Fotos",
+   "viejo": "DSC09355.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_261.jpg"
+  },
+  {
+   "id": "1ColRn7wgWxT1O-SE0r7KniEmSUEShj9D",
+   "carpeta": "Fotos",
+   "viejo": "DSC09356.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_262.jpg"
+  },
+  {
+   "id": "1cZKpd3kKrMKRLA-17Gwx5GTBof6Dm8eu",
+   "carpeta": "Fotos",
+   "viejo": "DSC09357.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_263.jpg"
+  },
+  {
+   "id": "1_yxXHkypKiINp8ryRmtbF0lU3sH7MD_P",
+   "carpeta": "Fotos",
+   "viejo": "DSC09358.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_264.jpg"
+  },
+  {
+   "id": "1LbpdtYIigcjueIQP-vMo3yZfy6vfbjNn",
+   "carpeta": "Fotos",
+   "viejo": "DSC09359.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_265.jpg"
+  },
+  {
+   "id": "1PaMxemG3nGRbuNnfGxQ1l1MgsJOs_117",
+   "carpeta": "Fotos",
+   "viejo": "DSC09360.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_266.jpg"
+  },
+  {
+   "id": "1mQ1Nyc4t_18ZuBOdsHmTo0mj-u1-Ycjp",
+   "carpeta": "Fotos",
+   "viejo": "DSC09362.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_267.jpg"
+  },
+  {
+   "id": "1F8CSR-psO9dz_c41p5RGp0TkkJaxDec3",
+   "carpeta": "Fotos",
+   "viejo": "DSC09363.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_268.jpg"
+  },
+  {
+   "id": "1GoCyVDCcAcn_Nr4vvSQ47oxv3aok-trp",
+   "carpeta": "Fotos",
+   "viejo": "DSC09364.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_269.jpg"
+  },
+  {
+   "id": "1LnlIKBbXGOGnbAkAlzwb1b78z_Izfd7h",
+   "carpeta": "Fotos",
+   "viejo": "DSC09365.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_270.jpg"
+  },
+  {
+   "id": "1Rmv8yz71ggNya2cQ9FPQUXKTlqB8YPyD",
+   "carpeta": "Fotos",
+   "viejo": "DSC09366.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_271.jpg"
+  },
+  {
+   "id": "1I54LYfNrNrDp7miRvk3iUqYHqyrPYSi1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09367.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_272.jpg"
+  },
+  {
+   "id": "1bbG8NsUNo6QYj22oCJmU-AF4P62tz_e6",
+   "carpeta": "Fotos",
+   "viejo": "DSC09368.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_273.jpg"
+  },
+  {
+   "id": "1tZgJ09YoWDgRPnk73AeAZ-RI4RdpjXGG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09369.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_274.jpg"
+  },
+  {
+   "id": "1kOIGnPSwrWaVKK9H1-qZ5mlBV_BC5FZn",
+   "carpeta": "Fotos",
+   "viejo": "DSC09370.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_275.jpg"
+  },
+  {
+   "id": "1JTemtdfpLyG1zvCy_yVy-pTqcbxIARCe",
+   "carpeta": "Fotos",
+   "viejo": "DSC09371.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_276.jpg"
+  },
+  {
+   "id": "1jkTQu9Zmzwk0q1lC4vkZUH2LnHIHFz8a",
+   "carpeta": "Fotos",
+   "viejo": "DSC09372.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_277.jpg"
+  },
+  {
+   "id": "1yNpmddm46uP0uyr7-8aM49mUcP8oUTsy",
+   "carpeta": "Fotos",
+   "viejo": "DSC09373.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_278.jpg"
+  },
+  {
+   "id": "19pmig634gLB2WZs5PKvwghI1o8wQNQIv",
+   "carpeta": "Fotos",
+   "viejo": "DSC09374.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_279.jpg"
+  },
+  {
+   "id": "1Q6qekLfb0YXC83qjaIT94DlPOB8bIEd9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09375.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_280.jpg"
+  },
+  {
+   "id": "1WliQ5sJ5R7fQZfrhfuUm-0GVTEM4jvvh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09376.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_281.jpg"
+  },
+  {
+   "id": "1-1p36VkKJy660fn3eFax2Ra_Lqgd7z-l",
+   "carpeta": "Fotos",
+   "viejo": "DSC09377.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_282.jpg"
+  },
+  {
+   "id": "14NFBS39zdfIXdYq_FUuMjk2V0X1QFsZ6",
+   "carpeta": "Fotos",
+   "viejo": "DSC09378.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_283.jpg"
+  },
+  {
+   "id": "1kQlaMIJb6sp9poYUVIfAy8ymzfL8Qtmq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09379.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_284.jpg"
+  },
+  {
+   "id": "1_qRj8f22duNrylJvtUCf6XnBW_6DSZho",
+   "carpeta": "Fotos",
+   "viejo": "DSC09380.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_285.jpg"
+  },
+  {
+   "id": "1ADLzXambhU4riZuIF4X32QuTxkzO_XHN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09381.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_286.jpg"
+  },
+  {
+   "id": "1_bcKab6eRYuflMUT0ksJCXhtxYNZhBbX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09382.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_287.jpg"
+  },
+  {
+   "id": "1vCrAYFU4ihhIyCv8Jt1vavIpjB-CFQhF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09383.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_288.jpg"
+  },
+  {
+   "id": "1cOuvJe8RbXYzXNmMivTE2wQCXWN7Pz1n",
+   "carpeta": "Fotos",
+   "viejo": "DSC09384.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_289.jpg"
+  },
+  {
+   "id": "1syiqzBwDp0HaOxa0zGAcMhiO4dOPmMrF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09385.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_290.jpg"
+  },
+  {
+   "id": "165BeRfKDWCem8l0UGvYXNLtOovswAbym",
+   "carpeta": "Fotos",
+   "viejo": "DSC09386.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_291.jpg"
+  },
+  {
+   "id": "1X-5aFtJv7gblIH2Wvfehugz1WrpdZEBI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09387.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_292.jpg"
+  },
+  {
+   "id": "1N2WFc4BpjGVOzrPdxZGWTmVoiuQCfFJa",
+   "carpeta": "Fotos",
+   "viejo": "DSC09388.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_293.jpg"
+  },
+  {
+   "id": "1Hc3Cbi6NGTwSteH3zWH8ypM91TUovWTN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09389.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_294.jpg"
+  },
+  {
+   "id": "1VUs7I1hviAsA2fciSKIYTyHPaltEYiMy",
+   "carpeta": "Fotos",
+   "viejo": "DSC09390.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_295.jpg"
+  },
+  {
+   "id": "1UlzAAQWDoc5mii0BoE1ruVTmKD56H4v7",
+   "carpeta": "Fotos",
+   "viejo": "DSC09391.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_296.jpg"
+  },
+  {
+   "id": "1xHUpjZHBmJiOXSdpaNrWG6pPsDLk1c9k",
+   "carpeta": "Fotos",
+   "viejo": "DSC09392.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_297.jpg"
+  },
+  {
+   "id": "1kGVITRfeClCyEZgl6FU0Xphuo5PHnJGX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09393.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_298.jpg"
+  },
+  {
+   "id": "1mvm09vi4WJFPKFA838U7_qR0_5Y6iPzg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09394.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_299.jpg"
+  },
+  {
+   "id": "16GbY5II9Em5esEgHZS4-dTt4TtEN0zFW",
+   "carpeta": "Fotos",
+   "viejo": "DSC09395.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_300.jpg"
+  },
+  {
+   "id": "1hg09aEqxndKjphB1Fk0XHiaeBfTUdHqU",
+   "carpeta": "Fotos",
+   "viejo": "DSC09396.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_301.jpg"
+  },
+  {
+   "id": "1cSk3s1ljD48THf-a9XaHArZBYz2CdSl9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09397.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_302.jpg"
+  },
+  {
+   "id": "1DUZSgueFE4ALcN9k-F6bDqtN1jilONXi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09398.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_303.jpg"
+  },
+  {
+   "id": "1GZT-FxAUl11fAqxS1dH89rpD43nxoyv9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09399.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_304.jpg"
+  },
+  {
+   "id": "1BEltWZhsa7-8QPYO1MNFyt-M6XIYb2Ov",
+   "carpeta": "Fotos",
+   "viejo": "DSC09400.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_305.jpg"
+  },
+  {
+   "id": "1zd6-bndc5Dp0apj3TYWXaAjOrX7lu_pf",
+   "carpeta": "Fotos",
+   "viejo": "DSC09401.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_306.jpg"
+  },
+  {
+   "id": "1tMtMdSyVpgjINNCTNh8u5yWFFv4vBCdh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09402.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_307.jpg"
+  },
+  {
+   "id": "1L7eX-03V67iUrb8OdHheHL_Huft6muB0",
+   "carpeta": "Fotos",
+   "viejo": "DSC09403.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_308.jpg"
+  },
+  {
+   "id": "1du7-ny33CeZy0_sfoDOI99xx3-buUuOP",
+   "carpeta": "Fotos",
+   "viejo": "DSC09404.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_309.jpg"
+  },
+  {
+   "id": "1gRPT6m1D7x5s1otgLWt3fnk7pDqL8w2D",
+   "carpeta": "Fotos",
+   "viejo": "DSC09405.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_310.jpg"
+  },
+  {
+   "id": "19sXHLVIgcIyMEiS07xclh14SttRszHSZ",
+   "carpeta": "Fotos",
+   "viejo": "DSC09406.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_311.jpg"
+  },
+  {
+   "id": "175HzNOnuvgPb-dXKSxZPVfMxolld4bgc",
+   "carpeta": "Fotos",
+   "viejo": "DSC09407.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_312.jpg"
+  },
+  {
+   "id": "17bKW9QPGAjaP1RyyQATEhpKX4j0W1SJ-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09408.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_313.jpg"
+  },
+  {
+   "id": "13VImPUGEy7WKbHVDk_P-o_O1UUJlwfYx",
+   "carpeta": "Fotos",
+   "viejo": "DSC09409.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_314.jpg"
+  },
+  {
+   "id": "1wv4RWaw5wIpLrsrCtP4Q3XzEJdosLlYi",
+   "carpeta": "Fotos",
+   "viejo": "DSC09410.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_315.jpg"
+  },
+  {
+   "id": "1LyZjX36UrDRCH5I6wgSBFjqt70n39dTX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09411.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_316.jpg"
+  },
+  {
+   "id": "1b57p8wCLH62y8ZNsQqrABFL-MPVOxtMM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09412.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_317.jpg"
+  },
+  {
+   "id": "1Cww3mEu2EcygQM96yJ6NQdtbuSKepSj8",
+   "carpeta": "Fotos",
+   "viejo": "DSC09413.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_318.jpg"
+  },
+  {
+   "id": "1LT7ZTO0CoYTZUu_G-z4DVphOzIddiXw2",
+   "carpeta": "Fotos",
+   "viejo": "DSC09414.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_319.jpg"
+  },
+  {
+   "id": "1UK56NqeKPD_ig_IpTW42-zI_6faL27eq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09415.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_320.jpg"
+  },
+  {
+   "id": "1PrF-HhBanWTdG5cC6wSgAkOpcobu15Kh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09416.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_321.jpg"
+  },
+  {
+   "id": "1OllSxP37RWND8VzgTrcGpFG0DeOpVzfK",
+   "carpeta": "Fotos",
+   "viejo": "DSC09417.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_322.jpg"
+  },
+  {
+   "id": "1gOso_sxv90PqI6shAUMVAmw9cwNH8JJr",
+   "carpeta": "Fotos",
+   "viejo": "DSC09418.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_323.jpg"
+  },
+  {
+   "id": "1qapP0X2NBys-RIT3l9szAS4ItCn-rMVP",
+   "carpeta": "Fotos",
+   "viejo": "DSC09419.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_324.jpg"
+  },
+  {
+   "id": "1lUgyohGB5hqphewQeq2QI-5mRsKGBJ_0",
+   "carpeta": "Fotos",
+   "viejo": "DSC09420.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_325.jpg"
+  },
+  {
+   "id": "1jCROti-zOP7q4T4CG6H0jCUGEglTKAjI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09421.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_326.jpg"
+  },
+  {
+   "id": "1M2Vb6DZ2tfSCkJ1iqBEZfF-rgF-xRpac",
+   "carpeta": "Fotos",
+   "viejo": "DSC09422.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_327.jpg"
+  },
+  {
+   "id": "17PvXGeyd1_NSTq9PFJL_ogNpxU2FCU2K",
+   "carpeta": "Fotos",
+   "viejo": "DSC09423.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_328.jpg"
+  },
+  {
+   "id": "1yg2oPudoVUJbk5Rl7ugy-eXbxs-O7Pk8",
+   "carpeta": "Fotos",
+   "viejo": "DSC09424.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_329.jpg"
+  },
+  {
+   "id": "1K-cK7_yzcUtV0L9M7UxkOjgHmqUh4WqD",
+   "carpeta": "Fotos",
+   "viejo": "DSC09425.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_330.jpg"
+  },
+  {
+   "id": "1euSGaJhYbQTOyKE0qsgBMyrGPH8CYc1j",
+   "carpeta": "Fotos",
+   "viejo": "DSC09426.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_331.jpg"
+  },
+  {
+   "id": "12iK2X6pEGZsiQ1cv2qtlZ8kFHSSLMl89",
+   "carpeta": "Fotos",
+   "viejo": "DSC09427.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_332.jpg"
+  },
+  {
+   "id": "1m187fKdot-_2QEFuGyG-S-2KmJKMz0bf",
+   "carpeta": "Fotos",
+   "viejo": "DSC09428.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_333.jpg"
+  },
+  {
+   "id": "12rKgZg-lPGAf3hiZbR3oRUnVXUow7jeU",
+   "carpeta": "Fotos",
+   "viejo": "DSC09429.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_334.jpg"
+  },
+  {
+   "id": "15dedJdRNQoZsHyrXAl61MbVijXe7ezQN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09430.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_335.jpg"
+  },
+  {
+   "id": "1h4MXdUymimNY2vVLKU3Syz_15pIWcDt0",
+   "carpeta": "Fotos",
+   "viejo": "DSC09431.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_336.jpg"
+  },
+  {
+   "id": "14RNAsUfhztopSoTN6uS6gGZzJkwKZn_L",
+   "carpeta": "Fotos",
+   "viejo": "DSC09432.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_337.jpg"
+  },
+  {
+   "id": "193cdLO8d0dujWrcRahEbW9CJygPbLX19",
+   "carpeta": "Fotos",
+   "viejo": "DSC09433.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_338.jpg"
+  },
+  {
+   "id": "1m2MPTCCQUYuGS0UVe6s1QzmLqNct7vHl",
+   "carpeta": "Fotos",
+   "viejo": "DSC09435.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_339.jpg"
+  },
+  {
+   "id": "1Wts5UQ0jVuLwTSESF8XtwL4-tapOnjo3",
+   "carpeta": "Fotos",
+   "viejo": "DSC09436.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_340.jpg"
+  },
+  {
+   "id": "1nbbwFSWgORB0BU1I2rrSN_kGo84JzUjI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09437.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_341.jpg"
+  },
+  {
+   "id": "1EMSlXqz7TsMRj1fccVToA3MywyqksDxW",
+   "carpeta": "Fotos",
+   "viejo": "DSC09438.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_342.jpg"
+  },
+  {
+   "id": "1s-NIgrIFGQ6CMmu1HvqbDStK9nvNHRvL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09439.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_343.jpg"
+  },
+  {
+   "id": "17P8YDKWv3BAyv3RtLKcds6b_ddJOMWkL",
+   "carpeta": "Fotos",
+   "viejo": "DSC09440.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_344.jpg"
+  },
+  {
+   "id": "1Mgb-rXOw_C-3bbZtQjDZWzr8-QYCxZ6L",
+   "carpeta": "Fotos",
+   "viejo": "DSC09441.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_345.jpg"
+  },
+  {
+   "id": "11gtju0dpBm5hN5Xa-gLGra7Sl4q0ByQ1",
+   "carpeta": "Fotos",
+   "viejo": "DSC09442.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_346.jpg"
+  },
+  {
+   "id": "1v0kIuVWduIrV4lIhrwrrhbNVGKEUYDmF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09443.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_347.jpg"
+  },
+  {
+   "id": "16OCgGEt4fg2_ALFk8-Ph_MCpbxxWkras",
+   "carpeta": "Fotos",
+   "viejo": "DSC09444.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_348.jpg"
+  },
+  {
+   "id": "1iURUhIt6GMExgS6y42FR0z6v42Qnwk3D",
+   "carpeta": "Fotos",
+   "viejo": "DSC09445.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_349.jpg"
+  },
+  {
+   "id": "16B4_xWdSBzkMpLi67f2aRCa78qG9W_NM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09446.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_350.jpg"
+  },
+  {
+   "id": "1zNI9DjMUoMSzU5vKqTF2LimtfLaTwitG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09447.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_351.jpg"
+  },
+  {
+   "id": "1oNTiYkna6ACj55MZ-seW0j8A4fKiLT3j",
+   "carpeta": "Fotos",
+   "viejo": "DSC09448.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_352.jpg"
+  },
+  {
+   "id": "1Zngpdj9sjAI3NJ4ag0gA_-8n0HxLGvzd",
+   "carpeta": "Fotos",
+   "viejo": "DSC09449.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_353.jpg"
+  },
+  {
+   "id": "1SxvSVOhYq4s-wUHnAEDk3_gBhl0le-Nm",
+   "carpeta": "Fotos",
+   "viejo": "DSC09450.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_354.jpg"
+  },
+  {
+   "id": "1lSJzBgpHXahTQaiwd_XaYHlQI7tlONgV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09451.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_355.jpg"
+  },
+  {
+   "id": "1BWhXFNZPE6g-CHKg8iQ7CW8OAZRAdcwl",
+   "carpeta": "Fotos",
+   "viejo": "DSC09452.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_356.jpg"
+  },
+  {
+   "id": "1qcafFiUVufoPI9YxkOMQlmTIuEAy7tnf",
+   "carpeta": "Fotos",
+   "viejo": "DSC09453.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_357.jpg"
+  },
+  {
+   "id": "1HWJifkXgWET0HHMnxD3NSvROT5LQ0AOC",
+   "carpeta": "Fotos",
+   "viejo": "DSC09458.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_358.jpg"
+  },
+  {
+   "id": "1fW5xxjA_dS7ao0RD5fJHPn8YnFmLAHRr",
+   "carpeta": "Fotos",
+   "viejo": "DSC09459.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_359.jpg"
+  },
+  {
+   "id": "18k6K8dIAlCkmygeIH1Fysp4ntVBYj2JG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09460.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_360.jpg"
+  },
+  {
+   "id": "1i1_ZgWstqEvZRbzZnSYxhsuFYA5uNdse",
+   "carpeta": "Fotos",
+   "viejo": "DSC09461.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_361.jpg"
+  },
+  {
+   "id": "1xicDlx58vZQYetJPnJa8Yg_OYZVDghl2",
+   "carpeta": "Fotos",
+   "viejo": "DSC09462.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_362.jpg"
+  },
+  {
+   "id": "1o0PGGbqQa7oIjchZWPz8fZYNepWUxQ1H",
+   "carpeta": "Fotos",
+   "viejo": "DSC09463.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_363.jpg"
+  },
+  {
+   "id": "1YAvDfbTJ8LCymH-8oi9G_z6xA4r3_CBt",
+   "carpeta": "Fotos",
+   "viejo": "DSC09464.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_364.jpg"
+  },
+  {
+   "id": "1Cp8ctFKoyhvTKLeFM4NRnK5bICn1_x9W",
+   "carpeta": "Fotos",
+   "viejo": "DSC09465.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_365.jpg"
+  },
+  {
+   "id": "1O9G3ENzxPJL__L6PM0wD0xtSHOl6D9yo",
+   "carpeta": "Fotos",
+   "viejo": "DSC09466.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_366.jpg"
+  },
+  {
+   "id": "1HTNaIOMcn4A5JhLC6kRpuSfSee_Xwuwj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09467.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_367.jpg"
+  },
+  {
+   "id": "13pBza19Fq4YM8qho49kHGVi3iLMrMNVa",
+   "carpeta": "Fotos",
+   "viejo": "DSC09468.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_368.jpg"
+  },
+  {
+   "id": "1ikM522BuXVZopoPjEutZLppN3_aobuiV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09469.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_369.jpg"
+  },
+  {
+   "id": "1eGxWmYTjlpsE8M6DdzR9VDlm33oWOPqr",
+   "carpeta": "Fotos",
+   "viejo": "DSC09470.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_370.jpg"
+  },
+  {
+   "id": "1WQpLUEaxBfeYXd47TM2EtkJJSnx19cC3",
+   "carpeta": "Fotos",
+   "viejo": "DSC09471.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_371.jpg"
+  },
+  {
+   "id": "1hHgjdqOwpGP0jb1A5dEK3mFmT7lxBsTs",
+   "carpeta": "Fotos",
+   "viejo": "DSC09472.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_372.jpg"
+  },
+  {
+   "id": "12A2EyQX_jrTf1xN3o5ovQdq7oeedrG4x",
+   "carpeta": "Fotos",
+   "viejo": "DSC09473.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_373.jpg"
+  },
+  {
+   "id": "1x0vxWwWCz7iRyCmNm5i_KD51pWo3yk19",
+   "carpeta": "Fotos",
+   "viejo": "DSC09474.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_374.jpg"
+  },
+  {
+   "id": "1xU-iW1nj0mt0ll3-ck-q8a0plW6LOncc",
+   "carpeta": "Fotos",
+   "viejo": "DSC09475.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_375.jpg"
+  },
+  {
+   "id": "1dSpNNxLEle1yVq_weQPYy5n2ykTdlZQW",
+   "carpeta": "Fotos",
+   "viejo": "DSC09476.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_376.jpg"
+  },
+  {
+   "id": "1oZM7R2frQ2dT-DGGRoIqb16p6FIrDXRY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09477.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_377.jpg"
+  },
+  {
+   "id": "1P7gkDEGGflSoHSrq7yFUnz_goGB6iGrn",
+   "carpeta": "Fotos",
+   "viejo": "DSC09478.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_378.jpg"
+  },
+  {
+   "id": "1RplrlwBTpJKgbjDl14hrlWMMKftYalKG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09479.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_379.jpg"
+  },
+  {
+   "id": "1wr1sVxyfbdPlJfytl14ETI3NXd-gwgtN",
+   "carpeta": "Fotos",
+   "viejo": "DSC09480.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_380.jpg"
+  },
+  {
+   "id": "1a_HsWbhozt3R0GjfmUQLeHOU594nps7T",
+   "carpeta": "Fotos",
+   "viejo": "DSC09481.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_381.jpg"
+  },
+  {
+   "id": "1F7isZKKhxQn8UvnVIkT94Dego2B9dqOj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09482.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_382.jpg"
+  },
+  {
+   "id": "1DLfF0fbhmWBPwBiHARcbReYU4_wbTc8c",
+   "carpeta": "Fotos",
+   "viejo": "DSC09483.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_383.jpg"
+  },
+  {
+   "id": "1GEfHxFxK9O_K-_-vgAOxYJebzlGJZX2x",
+   "carpeta": "Fotos",
+   "viejo": "DSC09484.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_384.jpg"
+  },
+  {
+   "id": "1nDrzNb4bGFuBjyjoZcshMHsi4Y3nHmKG",
+   "carpeta": "Fotos",
+   "viejo": "DSC09485.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_385.jpg"
+  },
+  {
+   "id": "15Beb90f5qROGrAmtgggYLzJImuzOzYjP",
+   "carpeta": "Fotos",
+   "viejo": "DSC09486.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_386.jpg"
+  },
+  {
+   "id": "1k1XqjGHbgdrv--aR7xFzBRJcHf29pRV-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09487.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_387.jpg"
+  },
+  {
+   "id": "19IYXJlq0zMdCwVUq3cuUgO9oB92zSHLv",
+   "carpeta": "Fotos",
+   "viejo": "DSC09488.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_388.jpg"
+  },
+  {
+   "id": "15RajYUfCrb6BKiGtlWMGpQz7YteAQ3cE",
+   "carpeta": "Fotos",
+   "viejo": "DSC09489.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_389.jpg"
+  },
+  {
+   "id": "128rU0Bwva7HJY9lsE7FLzeiwwO6eB6o2",
+   "carpeta": "Fotos",
+   "viejo": "DSC09490.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_390.jpg"
+  },
+  {
+   "id": "15BODgsqHiO7Y8PtdIPP64CDPv5MXIss8",
+   "carpeta": "Fotos",
+   "viejo": "DSC09491.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_391.jpg"
+  },
+  {
+   "id": "1npXa3mrvkrifVcTQX7BQFtYFNUJnCm5w",
+   "carpeta": "Fotos",
+   "viejo": "DSC09492.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_392.jpg"
+  },
+  {
+   "id": "1iA-Nb1kXlQPbWhP8T8oMOUBgbiyc_yK9",
+   "carpeta": "Fotos",
+   "viejo": "DSC09493.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_393.jpg"
+  },
+  {
+   "id": "1t2CGcOjblzWSuz-9bTyCLQlzjY2Dvopg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09494.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_394.jpg"
+  },
+  {
+   "id": "15ZQJRmoKMsd_pAfF_kKycSo3eSYqSNJX",
+   "carpeta": "Fotos",
+   "viejo": "DSC09495.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_395.jpg"
+  },
+  {
+   "id": "1M8cbWAAh5TlYbhVcLXTTA1Ugt1lcjEj3",
+   "carpeta": "Fotos",
+   "viejo": "DSC09496.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_396.jpg"
+  },
+  {
+   "id": "1NCXVX4qRQvYvi8Vanb200WcGGEH6yh3L",
+   "carpeta": "Fotos",
+   "viejo": "DSC09497.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_397.jpg"
+  },
+  {
+   "id": "1rzzl92EaagjUbJ95j_f3uw_CgR54M8IV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09498.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_398.jpg"
+  },
+  {
+   "id": "1PCJzpgXgJFxMtB--0_i6pkFOt-hKbCTR",
+   "carpeta": "Fotos",
+   "viejo": "DSC09499.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_399.jpg"
+  },
+  {
+   "id": "1MppE0Q8dd6jzR0W7CE0WUpZG8OlfJzcY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09500.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_400.jpg"
+  },
+  {
+   "id": "1FT4dOel63JWqhGHWliT2XNtpVFh6xxaI",
+   "carpeta": "Fotos",
+   "viejo": "DSC09501.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_401.jpg"
+  },
+  {
+   "id": "1Kooz0WeVbuYziDfwhC_7py3xNPPzdTrq",
+   "carpeta": "Fotos",
+   "viejo": "DSC09502.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_402.jpg"
+  },
+  {
+   "id": "1YXEQZ0x6zlv1G1TGWnN-hs2TB8Yplm9D",
+   "carpeta": "Fotos",
+   "viejo": "DSC09503.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_403.jpg"
+  },
+  {
+   "id": "1jC2P1izYXK-ep_2NJ9IrX1v7xz5yWI_l",
+   "carpeta": "Fotos",
+   "viejo": "DSC09504.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_404.jpg"
+  },
+  {
+   "id": "1ql4j0EWuQPFPrQEsXMdJNEJXLJAQns5s",
+   "carpeta": "Fotos",
+   "viejo": "DSC09505.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_405.jpg"
+  },
+  {
+   "id": "1gmTmjqpUy6hV2MFgyz726rImekI64TUu",
+   "carpeta": "Fotos",
+   "viejo": "DSC09506.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_406.jpg"
+  },
+  {
+   "id": "1Vd0qgkxCdsm3S6A5hMhwhu6Mq1Qhvn1C",
+   "carpeta": "Fotos",
+   "viejo": "DSC09507.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_407.jpg"
+  },
+  {
+   "id": "1NdK7T1fY7B5Kr-dUgky9_II1XcKnVRzE",
+   "carpeta": "Fotos",
+   "viejo": "DSC09508.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_408.jpg"
+  },
+  {
+   "id": "1P5u_l_lxFbvW3RPShYvTZPrwX_xCMkNe",
+   "carpeta": "Fotos",
+   "viejo": "DSC09509.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_409.jpg"
+  },
+  {
+   "id": "15eX9iYI3L-TVvpn6fU95LjCzyiQgcnYV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09510.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_410.jpg"
+  },
+  {
+   "id": "1bEd8IHLT26hh0iE3mHytlEgat9pmDxQ-",
+   "carpeta": "Fotos",
+   "viejo": "DSC09511.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_411.jpg"
+  },
+  {
+   "id": "1lcn_HFb4Oq2N4R40u8xvD4VE5Bg9rFNu",
+   "carpeta": "Fotos",
+   "viejo": "DSC09512.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_412.jpg"
+  },
+  {
+   "id": "1BMWJ4lzfmxj0LJ3vDGCSilvLaetRteox",
+   "carpeta": "Fotos",
+   "viejo": "DSC09513.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_413.jpg"
+  },
+  {
+   "id": "1A6JVzyucPWBQW20IcDT54r5azT7ZJhhh",
+   "carpeta": "Fotos",
+   "viejo": "DSC09514.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_414.jpg"
+  },
+  {
+   "id": "1gIMvkX9UK1DBtb3gd0LvqlZkSIT8qcVk",
+   "carpeta": "Fotos",
+   "viejo": "DSC09515.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_415.jpg"
+  },
+  {
+   "id": "1HrIaIwB9sMcYJfkbqGVBWCa2cCX3jfFz",
+   "carpeta": "Fotos",
+   "viejo": "DSC09516.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_416.jpg"
+  },
+  {
+   "id": "147FLAJxMoDPVsF4NRa8W-x2f4mQiOuob",
+   "carpeta": "Fotos",
+   "viejo": "DSC09517.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_417.jpg"
+  },
+  {
+   "id": "1tj06qiOdOw1evvwxSexlWRrtGoapxZs3",
+   "carpeta": "Fotos",
+   "viejo": "DSC09518.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_418.jpg"
+  },
+  {
+   "id": "1ljwjOI750vh3ynypmJirAQMtIDygKBFM",
+   "carpeta": "Fotos",
+   "viejo": "DSC09519.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_419.jpg"
+  },
+  {
+   "id": "1rWtt2oMtaXF66TuSy8utLPEbd6MMxxk7",
+   "carpeta": "Fotos",
+   "viejo": "DSC09520.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_420.jpg"
+  },
+  {
+   "id": "1Zk1AX9z2fLPL3oqoNdvB7szwKrnJKL4a",
+   "carpeta": "Fotos",
+   "viejo": "DSC09521.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_421.jpg"
+  },
+  {
+   "id": "1svOWopofMvSXY0lRXp9E_T3RBRwyisjV",
+   "carpeta": "Fotos",
+   "viejo": "DSC09522.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_422.jpg"
+  },
+  {
+   "id": "1Oac-e_9bjAeEHziYRwxDImTEFmEbUfss",
+   "carpeta": "Fotos",
+   "viejo": "DSC09523.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_423.jpg"
+  },
+  {
+   "id": "1PW0k53vadRwyjxaycSvaYYJCp5ysLxAg",
+   "carpeta": "Fotos",
+   "viejo": "DSC09524.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_424.jpg"
+  },
+  {
+   "id": "1F41JT8JeEPxAFthhwld5AX7anUFNhWCj",
+   "carpeta": "Fotos",
+   "viejo": "DSC09525.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_425.jpg"
+  },
+  {
+   "id": "1GZ3l-Wlsf6iEZqSUQYoNTTl8Uks_OtVY",
+   "carpeta": "Fotos",
+   "viejo": "DSC09526.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_426.jpg"
+  },
+  {
+   "id": "1mQhRkkd40eliLjFFi-YEN1ep7BHc9OvF",
+   "carpeta": "Fotos",
+   "viejo": "DSC09527.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_427.jpg"
+  },
+  {
+   "id": "1ofJBOcb6lLaMlVOTiDcSZ__ta1QH3BSH",
+   "carpeta": "Fotos",
+   "viejo": "DSC09528.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_428.jpg"
+  },
+  {
+   "id": "1ZJb2OkLzVkudbywoY9skmlGpuNBODPRH",
+   "carpeta": "Fotos",
+   "viejo": "DSC09529.jpg",
+   "nuevo": "S.Magma-CaseConstruccion_Foto_429.jpg"
+  },
+  {
+   "id": "18Jo6wDKumAZMX90qyUS0QIy1EGA8F8Py",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9708.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_001.MP4"
+  },
+  {
+   "id": "18T77uAeCahw1_59_BVCMZate_BRGA1hG",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9709.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_002.MP4"
+  },
+  {
+   "id": "1w0PXqquSMne7vAqQ3-FQIFZTrZZYnUTb",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9710.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_003.MP4"
+  },
+  {
+   "id": "1CuqwofHOWPbH0XL10BXljMF2zinyxIAt",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9712.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_004.MP4"
+  },
+  {
+   "id": "1iXyiSFsifSJZMs97jiBVPsvaceh7rqvj",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9713.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_005.MP4"
+  },
+  {
+   "id": "1Nj1oqdeJTFT9UJo1AyVuvxUk8XDfgO8l",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9714.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_006.MP4"
+  },
+  {
+   "id": "1MvM9753ktPL_d1llLTlWqA-tG7jAb4vk",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9715.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_007.MP4"
+  },
+  {
+   "id": "1c7v92NhooiCNQ5UBCEyvtnpAxPtGdP_1",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9716.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_008.MP4"
+  },
+  {
+   "id": "10iB4RD7EuQNRsGH1nJtuLQ84aAho1gtK",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9717.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_009.MP4"
+  },
+  {
+   "id": "1qP9wVRywqx5DtmWKACODkXE_PbUuO4uD",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9718.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_010.MP4"
+  },
+  {
+   "id": "1Bn4gwQcbpAq_80I1W_o6V81AaBv2JjB9",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9719.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_011.MP4"
+  },
+  {
+   "id": "1-fd_2a6e6sncGTLU6ymU0vEOFuuHuHp1",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9720.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_012.MP4"
+  },
+  {
+   "id": "17J_1IzspYKPb8NjaoLfozR34bt4S8VCa",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9721.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_013.MP4"
+  },
+  {
+   "id": "1i3BHRnmeXCTAMaCDR98ilRfeaEnoh2Hs",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9722.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_014.MP4"
+  },
+  {
+   "id": "1wRzh6RXPg45cGJvYhgKbVt2n1-wxFvq4",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9723.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_015.MP4"
+  },
+  {
+   "id": "1XfEKnDRWL4KrLJ_w2YiEJINthOOCex8R",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9724.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_016.MP4"
+  },
+  {
+   "id": "1L5JgHb0qz0fFjRCHEgkzPKxrmbW69H0_",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9725.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_017.MP4"
+  },
+  {
+   "id": "1CYMSWYXfXGxheink7qhIkYNClpN_61YO",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9726.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_018.MP4"
+  },
+  {
+   "id": "1SkPvIVf26mH8LdxccUddIaEe2H7nY3s8",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9727.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_019.MP4"
+  },
+  {
+   "id": "1w9R5RR1gHadBxpFPcHqEscR0iRLVMwO-",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9728.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_020.MP4"
+  },
+  {
+   "id": "1fMsegF3pU4gDg4PBagxmBU6M6Vcl9O0l",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9729.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_021.MP4"
+  },
+  {
+   "id": "1Bmp0DilWKPcgFahkAwLiDGM2R1pcIPy3",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9730.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_022.MP4"
+  },
+  {
+   "id": "1tXfJ-gjIWjcDlOMC92cURRx9WpYKt9b8",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9731.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_023.MP4"
+  },
+  {
+   "id": "1XmsOo0vTOivnfhUz7n1CxOrCrOIxjuVE",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9732.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_024.MP4"
+  },
+  {
+   "id": "1FrxlQxAYNLmr0XfadYaIVNUnRaDur4pM",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9733.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_025.MP4"
+  },
+  {
+   "id": "1dTfpr9mXooGA8Yjt1GgVc0qc-ec2Gugh",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9734.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_026.MP4"
+  },
+  {
+   "id": "1msvfTRaytBxN6tw_a9ZRZCrS4Sn_mCAB",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9735.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_027.MP4"
+  },
+  {
+   "id": "1z57tucpfEzDDDjiXlqhmhhN4yOiYv257",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9736.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_028.MP4"
+  },
+  {
+   "id": "1CVVA9mSbulLUX2mjIe6-y3i7f42V8gcF",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9737.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_029.MP4"
+  },
+  {
+   "id": "1N1FA8Ik3Ars1wusyMPXFAg7LU8kTlENy",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9738.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_030.MP4"
+  },
+  {
+   "id": "1p4qzxb45cDRuUSnUI4ddKRAIcbFQvgi0",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9739.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_031.MP4"
+  },
+  {
+   "id": "187BKOvc-q4VDui6vC_wD7jQMll4pt6kO",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9740.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_032.MP4"
+  },
+  {
+   "id": "11BOdAEkFRtnh8DEBTAGHp1gb3PN7EAU1",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9741.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_033.MP4"
+  },
+  {
+   "id": "1wfp7V_muaKek2zb4bAnRFRcOjf1DNb2S",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9742.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_034.MP4"
+  },
+  {
+   "id": "1WYA6VoUl4xBMABk2NSnUOceUXF0YC25y",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9743.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_035.MP4"
+  },
+  {
+   "id": "1bkBckqOMH3US4IUE4xChWiSip1d_Fvor",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9744.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_036.MP4"
+  },
+  {
+   "id": "1Y2mKY1-B-Xc0i5Ce3DTNpaL6aUtngzvd",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9745.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_037.MP4"
+  },
+  {
+   "id": "1FGBXchyPleHJEVZjVj1l6xmpfRokkrVK",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9746.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_038.MP4"
+  },
+  {
+   "id": "1LJzu6yQ_mglGNxPnDTaVPEWDxlOzBwF9",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9747.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_039.MP4"
+  },
+  {
+   "id": "1GD4cTwdRy82j7MCW_N4DJ9bhw4Q6VdVD",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9748.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_040.MP4"
+  },
+  {
+   "id": "1jhkndYyashR4jJgYug_IhWOo9bFuweIK",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9749.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_041.MP4"
+  },
+  {
+   "id": "1ZjXPG0xJ_HROzoOSxbOBAlR0pDb2tTnz",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9750.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_042.MP4"
+  },
+  {
+   "id": "1p4eqSrVph8rDBGj5WsSQOHdv1arcjJsn",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9751.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_043.MP4"
+  },
+  {
+   "id": "1ehthvRoYabcD2gQhKQcL6VIgd4ospkg_",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9752.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_044.MP4"
+  },
+  {
+   "id": "1EgRs5HdqBCnUylOE3RAi6RFKKsjnTlxk",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9753.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_045.MP4"
+  },
+  {
+   "id": "14Jo848RE_exxNNMfQzsFNZTVZWW2bceN",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9754.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_046.MP4"
+  },
+  {
+   "id": "1fbw2jsPF3YAKkeqQBhe9qKXvsKAwQoRp",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9755.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_047.MP4"
+  },
+  {
+   "id": "1HILhpCCrFw7lgIdEFA_PH-majvSfCtPy",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9756.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_048.MP4"
+  },
+  {
+   "id": "1TilWOj8SN1syez2hyuZaDvnJ2iqiBVcN",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9757.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_049.MP4"
+  },
+  {
+   "id": "1-9bJ1kH66nlNfvLfq6Ohyh30UKKG_KQv",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9758.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_050.MP4"
+  },
+  {
+   "id": "1j8u-JegYoNSmGktPfkikQMTWDguPK5Cd",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9759.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_051.MP4"
+  },
+  {
+   "id": "1WUy8Gc9XE3DXMdQBeAdqd2hBDf8_GnPA",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9760.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_052.MP4"
+  },
+  {
+   "id": "1L1TdC25-ZrDV0P-HtmBEQOCiPPjXeeca",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9761.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_053.MP4"
+  },
+  {
+   "id": "1mY4bbglWqeoiM9zi-DACwtUnfMMrYBZQ",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9762.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_054.MP4"
+  },
+  {
+   "id": "1qvyOe_C-jVnE7x0xiGynWSQ9fLXXzdN4",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9763.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_055.MP4"
+  },
+  {
+   "id": "1yXVqkDHnugf97MrFKsIJfn99x71OoSMc",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9764.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_056.MP4"
+  },
+  {
+   "id": "18IGnfWmDgrZ9mV3i_MclAsF7PF_SBuQo",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9765.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_057.MP4"
+  },
+  {
+   "id": "1weKNZldEuT6ZR8x2AZEwWz3O661NUfNr",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9766.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_058.MP4"
+  },
+  {
+   "id": "1Vi7tVSCca0FT6_1c4XDQhhN9rYNCHwos",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9767.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_059.MP4"
+  },
+  {
+   "id": "1gqqfjYDLQOGk5tKSmoH3NxwxEMxAbfz6",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9768.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_060.MP4"
+  },
+  {
+   "id": "11MJmzNtuPe6TnXPkN-VfCjFkdBOjFEXo",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9769.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_061.MP4"
+  },
+  {
+   "id": "1D1-aU9CGFhlMLu9cmNQRrXTsrymdG4XY",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9770.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_062.MP4"
+  },
+  {
+   "id": "1XvU_EgudgUX57VPBofT3FBVDb9uVIhN_",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9771.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_063.MP4"
+  },
+  {
+   "id": "1uUy9YbVxlAFH76SI18zOKfCoqIijX8yo",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9772.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_064.MP4"
+  },
+  {
+   "id": "1KRvm4I64J8RgfwMCTAmLHctdotS_vGuw",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9773.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_065.MP4"
+  },
+  {
+   "id": "11OKmevHkKpsG_AWdTNA0QZxSKxe8hSQB",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9774.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_066.MP4"
+  },
+  {
+   "id": "11OWh9JTsFur-gcX3eoo2HlfnADRWzhVN",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9775.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_067.MP4"
+  },
+  {
+   "id": "1tfYHMWUt0z9Pr3hqm-7brV2OrggnDN0R",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9776.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_068.MP4"
+  },
+  {
+   "id": "1rq_10ey-RATJgQHijsfYom00Pk4zcQZI",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9777.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_069.MP4"
+  },
+  {
+   "id": "1Z2WL9hnk5PsSs4BtPSNtzCG7xrT6t804",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9780.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_070.MP4"
+  },
+  {
+   "id": "1RRshCbpbmeEHW9lNR7yY-ADkn7frPnLT",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9781.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_071.MP4"
+  },
+  {
+   "id": "1QO_nH4Kl9l63LIapzjATotj3-qZx4cic",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9782.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_072.MP4"
+  },
+  {
+   "id": "1trDzWWuTmcay_OlFulz41M_VlZt8RGQs",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9783.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_073.MP4"
+  },
+  {
+   "id": "1WsJRhoqZ2nBkZnlq5vJ-bdqCH8AUPoju",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9784.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_074.MP4"
+  },
+  {
+   "id": "1LhA_uj8JdliKo0ukzvxbtmncgfTufStN",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9785.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_075.MP4"
+  },
+  {
+   "id": "1m65qOKITbrt7pEzkK-pPwEYjURiYT4uL",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9786.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_076.MP4"
+  },
+  {
+   "id": "13NL3Ymwj6ACZ9Hj4iZJVctz_E7n8E66t",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9787.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_077.MP4"
+  },
+  {
+   "id": "1LSA6EG0COBmbGYTgmgaGkQcVqu9j0woY",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9788.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_078.MP4"
+  },
+  {
+   "id": "1VGv2tnWiHUaJI_m0i9Nm2piYVi4N3AYe",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9789.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_079.MP4"
+  },
+  {
+   "id": "1i3RgpJMSD6dwWzMKqFYK24WgSJ5omjFm",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9790.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_080.MP4"
+  },
+  {
+   "id": "15CFT04w1nvKx7buojtSVr3FgxBCM1J2m",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9791.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_081.MP4"
+  },
+  {
+   "id": "1NAoqfESyMf3wcLD0wvH0oX472jzEHoYU",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9792.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_082.MP4"
+  },
+  {
+   "id": "1wRTxLAFo4FoEknEfn6TSPjzee34uw8AL",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9793.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_083.MP4"
+  },
+  {
+   "id": "1JtChPx4TOirh1VaiYkZelD7uQ8PqpzB9",
+   "carpeta": "Clips",
+   "viejo": "07_AAD_CAMdos9794.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_084.MP4"
+  },
+  {
+   "id": "16Hg2cl3vElq0tLxYzwP3i4H7hOObLfca",
+   "carpeta": "Clips",
+   "viejo": "C0672.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_085.MP4"
+  },
+  {
+   "id": "1WHn2eJn4xfEb7M4nJWBtW7e8941d7ail",
+   "carpeta": "Clips",
+   "viejo": "C0673.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_086.MP4"
+  },
+  {
+   "id": "1F1UY-F0q_y55N27IbxYpXT_OEBqVYBmd",
+   "carpeta": "Clips",
+   "viejo": "C0674.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_087.MP4"
+  },
+  {
+   "id": "1pk3frod-8gfKCvjk0ln1rBiBWg_tR4Rf",
+   "carpeta": "Clips",
+   "viejo": "C0675.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_088.MP4"
+  },
+  {
+   "id": "1FDleqssDiMAMgZRFsUIvikJAIPznecl1",
+   "carpeta": "Clips",
+   "viejo": "C0676.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_089.MP4"
+  },
+  {
+   "id": "1BXw425M5CsBppyAMOvOSj_iJmTl2Wi6h",
+   "carpeta": "Clips",
+   "viejo": "C0677.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_090.MP4"
+  },
+  {
+   "id": "1DzWFUcGvU_zvT1sadkxQ_bJgkLzrNTmu",
+   "carpeta": "Clips",
+   "viejo": "C0678.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_091.MP4"
+  },
+  {
+   "id": "1QW8OfX29PbSAgyXNeu11121aVx83AWxH",
+   "carpeta": "Clips",
+   "viejo": "C0679.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_092.MP4"
+  },
+  {
+   "id": "1teQZAopSlNgGkvi8JAzHvsFuqYziXg2W",
+   "carpeta": "Clips",
+   "viejo": "C0680.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_093.MP4"
+  },
+  {
+   "id": "1JFV5uThBDmJRokQXnaHuWdTrz7g7z8XG",
+   "carpeta": "Clips",
+   "viejo": "C0681.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_094.MP4"
+  },
+  {
+   "id": "1KGvznOqCGHzWAsX9YlhuLGavFaBWZdUd",
+   "carpeta": "Clips",
+   "viejo": "C0682.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_095.MP4"
+  },
+  {
+   "id": "1Hx-OJBJmYFlYkr3mv3i2iEUyr8lJsaA7",
+   "carpeta": "Clips",
+   "viejo": "C0683.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_096.MP4"
+  },
+  {
+   "id": "1tIJnMhia-1JJl6cG287fGjyy1Gy4G683",
+   "carpeta": "Clips",
+   "viejo": "C0684.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_097.MP4"
+  },
+  {
+   "id": "1blxiqyBnJHTuNoGpb2klkLyYYgQDj0d1",
+   "carpeta": "Clips",
+   "viejo": "C0685.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_098.MP4"
+  },
+  {
+   "id": "1xLxo2ZuMExb9zMvuyMJJMmhx98PtpE6-",
+   "carpeta": "Clips",
+   "viejo": "C0686.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_099.MP4"
+  },
+  {
+   "id": "1BVpCJgeAgZwXfBFhKiQ4rOA8bqrxp9Eo",
+   "carpeta": "Clips",
+   "viejo": "C0687.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_100.MP4"
+  },
+  {
+   "id": "1R9azLzXFx16Rp5LdzHPpGS4YskxLcYxG",
+   "carpeta": "Clips",
+   "viejo": "C0688.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_101.MP4"
+  },
+  {
+   "id": "1dxKZallRynj13PrW7vsuXGa2ThTzxXYH",
+   "carpeta": "Clips",
+   "viejo": "C0689.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_102.MP4"
+  },
+  {
+   "id": "1HjkpoN7dMSox0YexcYXm9d1nSohqYZEi",
+   "carpeta": "Clips",
+   "viejo": "C0690.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_103.MP4"
+  },
+  {
+   "id": "11y48PwJxW_jxZ6wsxNN4fog2qp15OEYb",
+   "carpeta": "Clips",
+   "viejo": "C0691.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_104.MP4"
+  },
+  {
+   "id": "10qUgYBNzrUYp3SQIRqxRLWFOOX_WWjnA",
+   "carpeta": "Clips",
+   "viejo": "C0692.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_105.MP4"
+  },
+  {
+   "id": "19yrdK_9uFeJSh3hwNBiTtK1fr3O6YsIl",
+   "carpeta": "Clips",
+   "viejo": "C0693.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_106.MP4"
+  },
+  {
+   "id": "1exeEbtb-Uc-9PnTh3PfdeZn6Kf0at1Mg",
+   "carpeta": "Clips",
+   "viejo": "C0694.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_107.MP4"
+  },
+  {
+   "id": "1Q1Qd4nxFL7U4YMNS2OAkSj2QAo48uV1T",
+   "carpeta": "Clips",
+   "viejo": "C0695.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_108.MP4"
+  },
+  {
+   "id": "1v_f0M7U7OX5w5BN_hVj6dYZdcDtRaPSK",
+   "carpeta": "Clips",
+   "viejo": "C0696.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_109.MP4"
+  },
+  {
+   "id": "1CtDTjyVd7FNa3vWInJXfNcHR11FFtJij",
+   "carpeta": "Clips",
+   "viejo": "C0697.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_110.MP4"
+  },
+  {
+   "id": "1CSKIyDGgAYhXnQf4w0k9Q6j88z9uqJEP",
+   "carpeta": "Clips",
+   "viejo": "C0698.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_111.MP4"
+  },
+  {
+   "id": "1CVWJhjy0Ie0BWFpze_DtieG-2dleoj4R",
+   "carpeta": "Clips",
+   "viejo": "C0699.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_112.MP4"
+  },
+  {
+   "id": "1VTOkqdUY5ZD9cEC1BTf_7T1jbUwMY9a6",
+   "carpeta": "Clips",
+   "viejo": "C0700.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_113.MP4"
+  },
+  {
+   "id": "1MgOYqSsEvDf6_SG86Gtd1KerYxSTDOAm",
+   "carpeta": "Clips",
+   "viejo": "C0701.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_114.MP4"
+  },
+  {
+   "id": "1LJ6l1bz8cnE_Xf9ChUqvYmkndxYdFtMC",
+   "carpeta": "Clips",
+   "viejo": "C0702.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_115.MP4"
+  },
+  {
+   "id": "1usQUg23H7ETkm4CRuFROhM_IKS6G5pSO",
+   "carpeta": "Clips",
+   "viejo": "C0703.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_116.MP4"
+  },
+  {
+   "id": "10IlAznAsxHGZVNacpf1Mr5LKRCe9r53Q",
+   "carpeta": "Clips",
+   "viejo": "C0704.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_117.MP4"
+  },
+  {
+   "id": "1fZo_IMmGtVgsOKTC0ZsDLCUjN7oo0eiQ",
+   "carpeta": "Clips",
+   "viejo": "C0705.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_118.MP4"
+  },
+  {
+   "id": "1vigD6K1P5xGEjXESG_ID1UEaKqncElz1",
+   "carpeta": "Clips",
+   "viejo": "C0706.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_119.MP4"
+  },
+  {
+   "id": "1c-BkmtiVykqfpmI1cXipfdrwwppg7qXz",
+   "carpeta": "Clips",
+   "viejo": "C0707.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_120.MP4"
+  },
+  {
+   "id": "1Nq3NmeWOIvWsgDZsThyWg_GAk_eSD7PD",
+   "carpeta": "Clips",
+   "viejo": "C0708.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_121.MP4"
+  },
+  {
+   "id": "1SpCvCKOMzcKL9HhKMwqA5YOnS8PBCT4R",
+   "carpeta": "Clips",
+   "viejo": "C0709.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_122.MP4"
+  },
+  {
+   "id": "1ERL2HhaZfL8ykbyNe2Ms5VwfpN7W_an9",
+   "carpeta": "Clips",
+   "viejo": "C0710.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_123.MP4"
+  },
+  {
+   "id": "16bn7xyi9OO8SS6b7IZSMUHDcn6b3IsHL",
+   "carpeta": "Clips",
+   "viejo": "C0711.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_124.MP4"
+  },
+  {
+   "id": "11c_ryirFbJX7xuhk477kFgofO-KY7QWO",
+   "carpeta": "Clips",
+   "viejo": "C0712.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_125.MP4"
+  },
+  {
+   "id": "1aHr3Svz7kBCi3GvEmhQ_oJIO5yKq_Obr",
+   "carpeta": "Clips",
+   "viejo": "C0713.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_126.MP4"
+  },
+  {
+   "id": "1JS5Zcudcb_hTpb9Sh3TWthGO1jVBoE_H",
+   "carpeta": "Clips",
+   "viejo": "C0714.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_127.MP4"
+  },
+  {
+   "id": "1Xz6lNmUsEpoA_zNFfM_8TJ-a3WdFoE2j",
+   "carpeta": "Clips",
+   "viejo": "C0715.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_128.MP4"
+  },
+  {
+   "id": "1gvSdd7ZNd9Du24ihmLMYjqZc5rf2Hj9c",
+   "carpeta": "Clips",
+   "viejo": "C0716.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_129.MP4"
+  },
+  {
+   "id": "1CbCMUHpTb84Snt2hyJHejZHm4iH8av7f",
+   "carpeta": "Clips",
+   "viejo": "C0717.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_130.MP4"
+  },
+  {
+   "id": "1I7eCjAFlypt3uxjjEz-JBSrK9QwoxApo",
+   "carpeta": "Clips",
+   "viejo": "C0718.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_131.MP4"
+  },
+  {
+   "id": "1tPAa8vc-klsHTdfOC_-E_6d5ObOSNnMu",
+   "carpeta": "Clips",
+   "viejo": "C0719.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_132.MP4"
+  },
+  {
+   "id": "1v91yBLDaj6Fs-S78K1Y4m_J3zUjaN7WB",
+   "carpeta": "Clips",
+   "viejo": "C0720.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_133.MP4"
+  },
+  {
+   "id": "1DkgjUXLYi9lmPM81WyesKrMLeqx4qiLd",
+   "carpeta": "Clips",
+   "viejo": "C0721.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_134.MP4"
+  },
+  {
+   "id": "1yqalvPSkdWlUJueKUc_XLjOAN8amRj0u",
+   "carpeta": "Clips",
+   "viejo": "C0722.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_135.MP4"
+  },
+  {
+   "id": "1slhNDVEFIHnqaDo3mbMpbEvBoD0Q8UTD",
+   "carpeta": "Clips",
+   "viejo": "C0723.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_136.MP4"
+  },
+  {
+   "id": "1VkkQCVzYD0gaaKcoOfbqSWlqP4E07P6y",
+   "carpeta": "Clips",
+   "viejo": "C0724.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_137.MP4"
+  },
+  {
+   "id": "1M2edvXvEgMrXN40MjPnD-BeznjLOWtt3",
+   "carpeta": "Clips",
+   "viejo": "C0725.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_138.MP4"
+  },
+  {
+   "id": "1QlSJwFhpr-zlbCPvQQP9vJDjyWg1ULKe",
+   "carpeta": "Clips",
+   "viejo": "C0726.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_139.MP4"
+  },
+  {
+   "id": "1TiSkpcB9k5G3t180Dz8eOiBTt3ObSaZH",
+   "carpeta": "Clips",
+   "viejo": "C0727.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_140.MP4"
+  },
+  {
+   "id": "1bJ_JEv9WXM4N-Hr80Zg5EvZ-eqRv1u45",
+   "carpeta": "Clips",
+   "viejo": "C0728.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_141.MP4"
+  },
+  {
+   "id": "1tkqk8vIVA7ZECDdGqhYglTP28y5W8nEK",
+   "carpeta": "Clips",
+   "viejo": "C0729.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_142.MP4"
+  },
+  {
+   "id": "15YOm61IP4K-bW88WMwoMV6s7t4yXTcap",
+   "carpeta": "Clips",
+   "viejo": "C0730.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_143.MP4"
+  },
+  {
+   "id": "1zL0iJ3iHxgtBOynKNHAm6eVqGfQ5ghbQ",
+   "carpeta": "Clips",
+   "viejo": "C0731.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_144.MP4"
+  },
+  {
+   "id": "12iALvDg8fD5qBI_fq7BK7Er6cgN9__cG",
+   "carpeta": "Clips",
+   "viejo": "C0732.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_145.MP4"
+  },
+  {
+   "id": "1AdGP1Py8mKF4oV5wGXbvMiSnlQZ_et0l",
+   "carpeta": "Clips",
+   "viejo": "C0733.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_146.MP4"
+  },
+  {
+   "id": "1csH_7i4-ahE1fwzgPb_jLP3aUf0bmHJU",
+   "carpeta": "Clips",
+   "viejo": "C0734.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_147.MP4"
+  },
+  {
+   "id": "1Hq7DHvL89Qh5vrn8WHqi99apXC-2m6iz",
+   "carpeta": "Clips",
+   "viejo": "C0735.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_148.MP4"
+  },
+  {
+   "id": "1wnLoXv3y6rIzSBsd6629_qhkDJPq1RMk",
+   "carpeta": "Clips",
+   "viejo": "C0736.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_149.MP4"
+  },
+  {
+   "id": "1Xo65mLj6ZDL9x9-8atz8qCxU5pfBWePq",
+   "carpeta": "Clips",
+   "viejo": "C0737.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_150.MP4"
+  },
+  {
+   "id": "1uKhFAkfKo7lMoVzzsIU2k0E-6jt-YlGt",
+   "carpeta": "Clips",
+   "viejo": "C0738.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_151.MP4"
+  },
+  {
+   "id": "12kqCJbt6n0R3ApfYUq5gAyOLayc_p0-7",
+   "carpeta": "Clips",
+   "viejo": "C0739.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_152.MP4"
+  },
+  {
+   "id": "1zYlFwav46iAa5N59Axecfvp9e5GOC5gU",
+   "carpeta": "Clips",
+   "viejo": "C0740.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_153.MP4"
+  },
+  {
+   "id": "1Dyd2qvtTVPDzojZllBfXGkpB04NCAhvt",
+   "carpeta": "Clips",
+   "viejo": "C0741.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_154.MP4"
+  },
+  {
+   "id": "14KnVMAt75XnUJAL0fycfsHyRt3-sjs44",
+   "carpeta": "Clips",
+   "viejo": "C0742.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_155.MP4"
+  },
+  {
+   "id": "1GKk2HxJmdue27LWen6Zk9nSz-o4vDZtn",
+   "carpeta": "Clips",
+   "viejo": "C0743.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_156.MP4"
+  },
+  {
+   "id": "1fbzEJqfwAD7mNfEzMy6X3bH1ueI_jLp1",
+   "carpeta": "Clips",
+   "viejo": "C0744.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_157.MP4"
+  },
+  {
+   "id": "1DZcrqTCxBPXBZvtK3gMyPCOarsrkowHn",
+   "carpeta": "Clips",
+   "viejo": "C0745.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_158.MP4"
+  },
+  {
+   "id": "1V5-j9166QHCfTJIOFX9tmTlgMgy1ROE5",
+   "carpeta": "Clips",
+   "viejo": "C0746.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_159.MP4"
+  },
+  {
+   "id": "19emfG-k99zl93KsEfSG_05FsPchUTf4P",
+   "carpeta": "Clips",
+   "viejo": "C0747.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_160.MP4"
+  },
+  {
+   "id": "1tmtjwjyfzkgchcliayNB_fm4kYo7_F-w",
+   "carpeta": "Clips",
+   "viejo": "C0748.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_161.MP4"
+  },
+  {
+   "id": "1nz2E-Z_7xZES_iEoh3-tHdTA9w4MeOWq",
+   "carpeta": "Clips",
+   "viejo": "C0749.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_162.MP4"
+  },
+  {
+   "id": "1rgokpnzUX5ekpe850evVNzlUV-raGoUU",
+   "carpeta": "Clips",
+   "viejo": "C0750.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_163.MP4"
+  },
+  {
+   "id": "1Dg9i5it_OJcWVw6Ur-TNBr5I7EZ6pE_z",
+   "carpeta": "Clips",
+   "viejo": "C0751.MP4",
+   "nuevo": "S.Magma-CaseConstruccion_Clip_164.MP4"
+  },
+  {
+   "id": "1NL_DWy2qHyMb0AI978jh2JlqJJgn0nW_",
+   "carpeta": "Drone",
+   "viejo": "DJI_0790.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_001.MOV"
+  },
+  {
+   "id": "1XC_ppYENI0hh-a1Rwtpy92bHIGAO89FQ",
+   "carpeta": "Drone",
+   "viejo": "DJI_0794.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_002.MOV"
+  },
+  {
+   "id": "1854dxlxXk8LOzpPSONcytOLF1zCedpW-",
+   "carpeta": "Drone",
+   "viejo": "DJI_0795.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_003.MOV"
+  },
+  {
+   "id": "1UGSs9-Q4ILKjpuL0JTbIDNizigqSJkWb",
+   "carpeta": "Drone",
+   "viejo": "DJI_0796.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_004.MOV"
+  },
+  {
+   "id": "1cdNNgVt-S91GgyeqLhhy5Upb8r-OGVtl",
+   "carpeta": "Drone",
+   "viejo": "DJI_0797.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_005.MOV"
+  },
+  {
+   "id": "1hNWu3F2ReUYqX3Rn8kN9O8a-YHlmPqkU",
+   "carpeta": "Drone",
+   "viejo": "DJI_0798.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_006.MOV"
+  },
+  {
+   "id": "1IoD2mi-QTnk-5MP7UKJikW-jYdubzljw",
+   "carpeta": "Drone",
+   "viejo": "DJI_0799.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_007.MOV"
+  },
+  {
+   "id": "1seuJP_-1YxV6C3X-v3_mKnN6Db69qYzq",
+   "carpeta": "Drone",
+   "viejo": "DJI_0805.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_008.MOV"
+  },
+  {
+   "id": "1yVqq6CniM5uy5wpmIn1fN1692M6MAGis",
+   "carpeta": "Drone",
+   "viejo": "DJI_0806.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_009.MOV"
+  },
+  {
+   "id": "1llRxRdGw85TqIeU5SUVWRu9CglE-jlze",
+   "carpeta": "Drone",
+   "viejo": "DJI_0807.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_010.MOV"
+  },
+  {
+   "id": "1xjeThuTDEPHZ6NoqK6PKyHw84FB0aK-5",
+   "carpeta": "Drone",
+   "viejo": "DJI_0814.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_011.MOV"
+  },
+  {
+   "id": "1AwHh1h0KXtFgyuS_d2l2raHFf-Ejx35s",
+   "carpeta": "Drone",
+   "viejo": "DJI_0815.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_012.MOV"
+  },
+  {
+   "id": "1iKuF-BTobf2tGne8J9-mA04NpYLY7tW2",
+   "carpeta": "Drone",
+   "viejo": "DJI_0816.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_013.MOV"
+  },
+  {
+   "id": "1h1jtZQVYfdmhQ2uhvJeAcOmdIsih88qN",
+   "carpeta": "Drone",
+   "viejo": "DJI_0819.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_014.MOV"
+  },
+  {
+   "id": "1WCr8bNRbvr4XlilBjCI7MTvpYKALIzcs",
+   "carpeta": "Drone",
+   "viejo": "DJI_0820.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_015.MOV"
+  },
+  {
+   "id": "1JfeMJ9sfAAf3b_Nkvid-Zqc9YjPPblgC",
+   "carpeta": "Drone",
+   "viejo": "DJI_0821.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_016.MOV"
+  },
+  {
+   "id": "1EGIDrRfOhhanyhptNF-wHefxsVcXYwIY",
+   "carpeta": "Drone",
+   "viejo": "DJI_0822.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_017.MOV"
+  },
+  {
+   "id": "1e-_jH6f4e4jWsNg2nR75Ayfg2xIggbT3",
+   "carpeta": "Drone",
+   "viejo": "DJI_0825.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_018.MOV"
+  },
+  {
+   "id": "1LQayS2ce3fz3mdBI9K9HL2ixjkVK6kG0",
+   "carpeta": "Drone",
+   "viejo": "DJI_0826.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_019.MOV"
+  },
+  {
+   "id": "1gcnnppyX2q3SPNQzi8zSIte4sGSDBzXe",
+   "carpeta": "Drone",
+   "viejo": "DJI_0827.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_020.MOV"
+  },
+  {
+   "id": "1pWhmOo3sZF0HPOIsrzUDHLc5VMYBsoXz",
+   "carpeta": "Drone",
+   "viejo": "DJI_0832.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_021.MOV"
+  },
+  {
+   "id": "1kpWacSQW9Y9KGsEvm9m7gibamc-J8h6c",
+   "carpeta": "Drone",
+   "viejo": "DJI_0833.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_022.MOV"
+  },
+  {
+   "id": "1Y0Fz1ujj_iO17In4aDkomyGzK2aZTRNh",
+   "carpeta": "Drone",
+   "viejo": "DJI_0834.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_023.MOV"
+  },
+  {
+   "id": "1T58nKV_sovkBSgh7l9LWC7e-4SGVccoA",
+   "carpeta": "Drone",
+   "viejo": "DJI_0838.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_024.MOV"
+  },
+  {
+   "id": "1WxFJ9Eg1mwIK8aeLIhcDw84ezjSnxO33",
+   "carpeta": "Drone",
+   "viejo": "DJI_0839.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_025.MOV"
+  },
+  {
+   "id": "1z_CsXznLlq0ePc2nKQCllfCMg0fHs_dK",
+   "carpeta": "Drone",
+   "viejo": "DJI_0840.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_026.MOV"
+  },
+  {
+   "id": "1O50tgDkuaNII7d-f-75PAaesDoJne_WP",
+   "carpeta": "Drone",
+   "viejo": "DJI_0841.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_027.MOV"
+  },
+  {
+   "id": "17LqC-0jNIuDyM_9axNOrWMYsRimFTa59",
+   "carpeta": "Drone",
+   "viejo": "DJI_0842.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_028.MOV"
+  },
+  {
+   "id": "1qK6SL7i_R_Af1c2P2dwvnlfyLaBhdLIY",
+   "carpeta": "Drone",
+   "viejo": "DJI_0843.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_029.MOV"
+  },
+  {
+   "id": "1fVexV4xcs6Y_Vi9dWi-y3KOgLwkcTLC4",
+   "carpeta": "Drone",
+   "viejo": "DJI_0844.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_030.MOV"
+  },
+  {
+   "id": "1a3Jdq9_W9v7o3PRGolXkZcabZLfkf-4J",
+   "carpeta": "Drone",
+   "viejo": "DJI_0845.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_031.MOV"
+  },
+  {
+   "id": "1p8H0fcAsDtW6mMy9qKRaTmzpP70JEvD0",
+   "carpeta": "Drone",
+   "viejo": "DJI_0846.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_032.MOV"
+  },
+  {
+   "id": "1B1bJJecebTtWhVLblgiR4R3Mz8b07Wph",
+   "carpeta": "Drone",
+   "viejo": "DJI_0847.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_033.MOV"
+  },
+  {
+   "id": "1VJ3K4SlP_OV25P-vDLMEv6ffnx9c0AFD",
+   "carpeta": "Drone",
+   "viejo": "DJI_0848.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_034.MOV"
+  },
+  {
+   "id": "1xR2fj811DwCE6DEiSjj94dZ5PvEtkr6u",
+   "carpeta": "Drone",
+   "viejo": "DJI_0849.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_035.MOV"
+  },
+  {
+   "id": "1mEUt9G8QWQQ2K0EyLoZr9Cw4b0P0ifg6",
+   "carpeta": "Drone",
+   "viejo": "DJI_0850.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_036.MOV"
+  },
+  {
+   "id": "10DzVj1hAoAXISKeShg-jD3MLp_ZN6lir",
+   "carpeta": "Drone",
+   "viejo": "DJI_0851.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_037.MOV"
+  },
+  {
+   "id": "1CHu6JzJjyQzmA7yysQIQ7L2AC9CK8AsR",
+   "carpeta": "Drone",
+   "viejo": "DJI_0852.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_038.MOV"
+  },
+  {
+   "id": "1lPqJUORTyluwkMr8zwMFMJR9SBblPXkb",
+   "carpeta": "Drone",
+   "viejo": "DJI_0853.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_039.MOV"
+  },
+  {
+   "id": "1R02xdhmQFvzfIB9eJlECpvNMvJWuwICt",
+   "carpeta": "Drone",
+   "viejo": "DJI_0854.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_040.MOV"
+  },
+  {
+   "id": "1FB6OnL-ArAPtX9hMEwypl-zeMOShlN2e",
+   "carpeta": "Drone",
+   "viejo": "DJI_0855.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_041.MOV"
+  },
+  {
+   "id": "1vLG9zkFcoscJ-CJNiZwEIp5ccT_tAWKr",
+   "carpeta": "Drone",
+   "viejo": "DJI_0856.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_042.MOV"
+  },
+  {
+   "id": "1AX-5BhhOSUrb4LMZR3dremtp0NkMxA8u",
+   "carpeta": "Drone",
+   "viejo": "DJI_0857.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_043.MOV"
+  },
+  {
+   "id": "1Yri1cXywMHstNefxZEFzQ-fh40xJbZXK",
+   "carpeta": "Drone",
+   "viejo": "DJI_0858.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_044.MOV"
+  },
+  {
+   "id": "1Owzvc9Jukc9eH1WL9PQ49ypMI7XfIVOX",
+   "carpeta": "Drone",
+   "viejo": "DJI_0859.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_045.MOV"
+  },
+  {
+   "id": "1iQ2NmOCr6X2Ax0PkbN2V2Nv6Ur_c0-v_",
+   "carpeta": "Drone",
+   "viejo": "DJI_0860.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_046.MOV"
+  },
+  {
+   "id": "1C98mQ5RfhUYW-BOwSiPwIVWaD5_0HU03",
+   "carpeta": "Drone",
+   "viejo": "DJI_0861.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_047.MOV"
+  },
+  {
+   "id": "1xlv8J3zYXDktFGuZhMEymaNIYFf8yPuv",
+   "carpeta": "Drone",
+   "viejo": "DJI_0862.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_048.MOV"
+  },
+  {
+   "id": "1BZj5E7q9EiCaEb4walOzn65s0b3ULumQ",
+   "carpeta": "Drone",
+   "viejo": "DJI_0863.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_049.MOV"
+  },
+  {
+   "id": "1W7GWZubkt3n1TCTI0A7wRe1zdofOFKtF",
+   "carpeta": "Drone",
+   "viejo": "DJI_0864.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_050.MOV"
+  },
+  {
+   "id": "1k709ycop-4LTbx6ctV9prCGY3eoHMk1E",
+   "carpeta": "Drone",
+   "viejo": "DJI_0870.MOV",
+   "nuevo": "S.Magma-CaseConstruccion_Drone_051.MOV"
+  }
+ ]
+}

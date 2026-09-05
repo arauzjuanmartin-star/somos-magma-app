@@ -54,13 +54,18 @@ const NM=meses.size||1
 const margen=prod?gan/prod:0
 const ticket=tickets.length?tickets.reduce((a,b)=>a+b,0)/tickets.length:0
 const necesario=margen?estructura/margen:0
+// La brecha se mide en PRODUCCIÓN, no en eventos. necesario/ticket contaba como evento
+// también la producción que no viene de eventos (ediciones sueltas) e inflaba el faltante.
+const brecha=Math.max(0,necesario-prod/NM)
+const eventosFaltan=ticket?brecha/ticket:0
 const out={
   generado:ahora.toISOString().slice(0,10), meses_cerrados:NM,
   estructura_mensual:estructura, por_categoria:cat, conceptos:fijos,
   produccion_mes:prod/NM, costo_staff_mes:costoStaff/NM,
   margen, margen_bruto_no_usar:prod?(prod-costoStaff)/prod:0,
   ticket_evento:ticket, eventos_reales:tickets.length/NM,
-  produccion_para_empatar:necesario, eventos_para_empatar:ticket?necesario/ticket:0,
+  produccion_para_empatar:necesario, brecha_produccion:brecha,
+  eventos_para_empatar:tickets.length/NM+eventosFaltan, eventos_faltan:eventosFaltan,
   equipo:Object.fromEntries(Object.keys(SUELDO).map(k=>[k,{fijo:SUELDO[k],extras_mes:(ext[k]?.$||0)/NM,cobra:SUELDO[k]+(ext[k]?.$||0)/NM}]))
 }
 if(JSONOUT){console.log(JSON.stringify(out,null,2));process.exit(0)}
@@ -83,9 +88,9 @@ console.log('   margen Magma    ',(margen*100).toFixed(0)+'%   (Fee + Somos Magm
 console.log('   ticket de evento',M(ticket).padStart(14))
 console.log('   para empatar    ',M(necesario).padStart(14),'/mes =',out.eventos_para_empatar.toFixed(0),'eventos/mes')
 console.log('   ritmo real      ',out.eventos_reales.toFixed(0),'eventos/mes  →',
-  (out.eventos_para_empatar-out.eventos_reales)>0
-    ? `\x1b[31mFALTAN ${Math.ceil(out.eventos_para_empatar-out.eventos_reales)}\x1b[0m`
-    : `\x1b[32msobran ${Math.abs(Math.floor(out.eventos_para_empatar-out.eventos_reales))}\x1b[0m`)
+  eventosFaltan>0
+    ? `\x1b[31mFALTAN ${Math.ceil(eventosFaltan)} = ${M(brecha)}/mes de producción\x1b[0m`
+    : `\x1b[32mempatado\x1b[0m`)
 console.log('   \x1b[2mno usar el margen bruto de '+(out.margen_bruto_no_usar*100).toFixed(0)+'% (producción − freelancers): no descuenta Ganancias ni IIBB\x1b[0m')
 console.log('\n── CONCEPTOS QUE SE CITAN SEGUIDO')
 ;['CM (María)','Alquiler oficina','Contador','ADOBE','Ads (Gloria)','IIBB Magma','Monotributo Lulu'].forEach(c=>

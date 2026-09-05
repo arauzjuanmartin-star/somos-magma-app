@@ -46,9 +46,12 @@ const prodMes=prod/nm, evMes=tickets.length/nm
 console.log(`\n${'█'.repeat(76)}\n  PUNTO DE EQUILIBRIO — con la estructura separada\n${'█'.repeat(76)}`)
 console.log(`\n  Margen real de Magma: ${(margen*100).toFixed(0)}%  ·  ticket promedio de evento: ${M(ticketProm)}`)
 console.log(`  Ritmo actual: ${M(prodMes)}/mes de producción · ${evMes.toFixed(0)} eventos/mes (promedio ene–jul, ${nm} meses cerrados)\n`)
-const linea=(lbl,est)=>{ const necesita=est/margen, ev=necesita/ticketProm
-  const dif=ev-evMes
-  console.log(`  ${lbl.padEnd(38)}${M(est).padStart(15)}  →  producir ${M(necesita).padStart(15)}  =  ${ev.toFixed(0).padStart(3)} eventos/mes  ${dif>0?`\x1b[31m(faltan ${Math.ceil(dif)})\x1b[0m`:`\x1b[32m(sobran ${Math.abs(Math.floor(dif))})\x1b[0m`}`) }
+// La brecha se mide en PRODUCCIÓN y recién ahí se pasa a eventos. Dividir la producción
+// necesaria por el ticket de evento cuenta como evento también lo que no lo es (ediciones
+// sueltas): inflaba el faltante. eventos para empatar = los que ya se hacen + los que faltan.
+const linea=(lbl,est)=>{ const necesita=est/margen
+  const brecha=necesita-prodMes, dif=brecha/ticketProm, ev=evMes+dif
+  console.log(`  ${lbl.padEnd(38)}${M(est).padStart(15)}  →  producir ${M(necesita).padStart(15)}  =  ${ev.toFixed(0).padStart(3)} eventos/mes  ${dif>0?`\x1b[31m(faltan ${Math.ceil(dif)} = ${M(brecha)}/mes)\x1b[0m`:`\x1b[32m(sobran ${Math.abs(Math.floor(dif))})\x1b[0m`}`) }
 linea('Estructura que se repite todos los meses', mensual)
 linea('+ los pagos de una vez (prorrateados)', mensual+unico)
 console.log(`\n  De los ${M(mensual+unico)} que figuran como estructura, \x1b[1m${M(unico)} son pagos únicos\x1b[0m`)
