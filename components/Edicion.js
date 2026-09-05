@@ -184,7 +184,7 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') })
   }
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel }
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -306,6 +306,100 @@ function FirmarFotos({ num }) {
       <button onClick={() => pedir(true)} disabled={yendo || !plan.aRenombrar} style={{ ...btnPri, opacity: plan.aRenombrar ? 1 : 0.5 }}>{yendo ? 'Firmando…' : `Firmar ${plan.aRenombrar}`}</button>
       <button onClick={() => setPlan(null)} style={btn}>Cancelar</button>
     </div>
+  </div>
+}
+
+// ---------------------------------------------------- el OK del PM
+// El paso que faltaba: antes de que algo salga al cliente, alguien de Magma lo
+// mira. Aprobar hace las tres cosas de una —mueve el archivo a Finales, le da
+// acceso al cliente y marca la fecha real— porque hoy son tres pasos sueltos y
+// alguno siempre se olvida. Pedir cambios los cuenta aparte de los del cliente:
+// muchas vueltas internas es un problema de edición, muchas del cliente es de brief.
+function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
+  const [modo, setModo] = useState(null)      // null | 'aprobar' | 'cambios'
+  const [texto, setTexto] = useState('')
+  const [mails, setMails] = useState((mailsCliente || []).join(', '))
+  const [plan, setPlan] = useState(null)
+  const [yendo, setYendo] = useState(false)
+  const link = String(f['Link pre-entrega'] || '').trim()
+
+  const pedirPlan = async () => {
+    setModo('aprobar'); setYendo(true)
+    try {
+      const r = await fetch('/api/edicion-aprobar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: f.ID, mailsCliente: mails.split(/[,;\s]+/).filter(x => /@/.test(x)) }) })
+      const j = await r.json()
+      if (!j.ok) showToast(j.error || 'No se pudo', 'err'); else setPlan(j)
+    } catch (e) { showToast('Error de conexión', 'err') }
+    setYendo(false)
+  }
+
+  const aprobar = async () => {
+    setYendo(true)
+    try {
+      const r = await fetch('/api/edicion-aprobar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: f.ID, mailsCliente: mails.split(/[,;\s]+/).filter(x => /@/.test(x)), confirmar: true }) })
+      const j = await r.json()
+      if (!j.ok) { showToast(j.error || 'No se pudo', 'err'); setYendo(false); return }
+      showToast(j.movido ? 'Entregado ✓ el archivo pasó a Finales' : 'Marcado como entregado ✓')
+      guardar(f.ID, { Estado: 'Entregado' })
+      setModo(null); setPlan(null)
+    } catch (e) { showToast('Error de conexión', 'err') }
+    setYendo(false)
+  }
+
+  const pedirCambios = () => {
+    const t = texto.trim()
+    guardar(f.ID, {
+      Estado: 'Cambios internos',
+      Notas: (t ? `[${new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}] ✏️ cambios internos: ${t}\n` : '') + String(f.Notas || ''),
+    })
+    setModo(null); setTexto('')
+  }
+
+  return <div style={{ border: `1px solid ${T.brand}40`, background: T.brandSoft, borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Esperando tu OK</div>
+    <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 11 }}>
+      {f.Editor || 'El editor'} subió una versión. Si va, se la mandamos al cliente; si no, vuelve sin que él se entere.
+    </div>
+
+    {link
+      ? <a href={link} target="_blank" rel="noreferrer" style={{
+          display: 'block', textAlign: 'center', padding: cel ? '16px' : '12px', borderRadius: 9,
+          background: T.surface, border: `1px solid ${T.border}`, color: T.ink, textDecoration: 'none',
+          fontSize: 14, fontWeight: 600, marginBottom: 11,
+        }}>▶ Ver la versión</a>
+      : <div style={{ fontSize: 12, color: T.brand, marginBottom: 11 }}>No hay link de pre-entrega cargado — pedíselo antes de aprobar.</div>}
+
+    {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
+      <button onClick={pedirPlan} style={{ ...btnPri, flex: 1, padding: '11px', background: '#1E8A5A' }}>Aprobar y entregar</button>
+      <button onClick={() => setModo('cambios')} style={{ ...btn, flex: 1, padding: '11px' }}>Pedir cambios</button>
+    </div>}
+
+    {modo === 'cambios' && <div>
+      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
+        placeholder="Qué hay que corregir — queda en la bitácora y le llega al editor"
+        style={{ ...inp, width: '100%', resize: 'vertical', marginBottom: 8 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={pedirCambios} style={btnPri}>Mandar los cambios</button>
+        <button onClick={() => setModo(null)} style={btn}>Cancelar</button>
+      </div>
+    </div>}
+
+    {modo === 'aprobar' && <div>
+      <label style={lbl}>Mails del cliente que reciben la entrega</label>
+      <input value={mails} onChange={e => setMails(e.target.value)} placeholder="mail@cliente.com, otro@cliente.com"
+        style={{ ...inp, width: '100%', marginBottom: 9, fontSize: 12.5 }} />
+      {plan && <div style={{ fontSize: 12, color: T.ink2, marginBottom: 10, lineHeight: 1.6 }}>
+        {plan.moverArchivo ? '· El archivo pasa a la carpeta Finales' : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
+        {plan.compartirCon?.length ? `· Se le da acceso a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo a Finales, no al resto` : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
+        · Queda marcado como entregado con la fecha de hoy
+      </div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={aprobar} disabled={yendo} style={{ ...btnPri, background: '#1E8A5A' }}>{yendo ? 'Entregando…' : 'Confirmar entrega'}</button>
+        <button onClick={() => { setModo(null); setPlan(null) }} style={btn}>Cancelar</button>
+      </div>
+    </div>}
   </div>
 }
 
@@ -464,7 +558,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
@@ -488,7 +582,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />)}
   </div>
 }
 
@@ -521,7 +615,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -542,16 +636,18 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <select value={String(f.Estado || 'Sin material')} onChange={e => guardar(f.ID, { Estado: e.target.value })} style={{ ...inp, padding: '4px 8px', fontSize: 12, width: 138, cursor: 'pointer' }}>
         {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
       </select>
-      {siguiente && !cerrado && <button onClick={() => guardar(f.ID, { Estado: siguiente })} title={`Pasar a "${siguiente}"`} style={{ ...btn, padding: '4px 9px', fontSize: 11.5 }}>→</button>}
+      {esperaAlPM(f.Estado)
+        ? <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>
+        : siguiente && !cerrado && <button onClick={() => guardar(f.ID, { Estado: siguiente })} title={`Pasar a "${siguiente}"`} style={{ ...btn, padding: '4px 9px', fontSize: 11.5 }}>→</button>}
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -596,6 +692,8 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel }) {
         <input defaultValue={String(f.Editor || '')} onBlur={e => { if (e.target.value !== String(f.Editor || '')) guardar(f.ID, { Editor: e.target.value }) }} placeholder="Quién lo hace" style={{ ...inp, width: '100%' }} />
       </div>
     </div>
+
+    {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
 
     <Plegable titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
       <Campos f={f} campos={CAMPOS_PIEZA} guardar={guardar} cols={cel ? 1 : 3} />
