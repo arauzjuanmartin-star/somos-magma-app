@@ -766,12 +766,49 @@ function EstadoSelect({value, onChange}){
   </span>
 }
 
+// El horario se escribía a mano y era donde más se confundían los freelancers.
+// Dos relojes de 24hs, y si todavía no se sabe que lo diga — mejor "a confirmar"
+// que un campo vacío que cada uno interpreta a su manera.
+function CampoHorario({valor, onChange}){
+  const m = String(valor||'').match(/(\d{1,2})[:.]?(\d{0,2})\s*(?:a|hasta|-)\s*(\d{1,2})[:.]?(\d{0,2})/i)
+  const pad = n => String(n).padStart(2,'0')
+  const ini = m ? pad(parseInt(m[1]))+':'+(m[2]?pad(parseInt(m[2])):'00') : ''
+  const fin = m ? pad(parseInt(m[3]))+':'+(m[4]?pad(parseInt(m[4])):'00') : ''
+  const aConfirmar = /confirmar/i.test(String(valor||''))
+  const set = (a,b) => onChange(a && b ? `${a} a ${b} hs` : '')
+  return <div>
+    <div style={{display:'flex', gap:8, alignItems:'center'}}>
+      <input type="time" value={ini} disabled={aConfirmar} onChange={e=>set(e.target.value, fin||'18:00')} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
+      <span style={{fontSize:12, color:T.ink3}}>a</span>
+      <input type="time" value={fin} disabled={aConfirmar} onChange={e=>set(ini||'09:00', e.target.value)} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
+    </div>
+    <label style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:T.ink2, marginTop:6, cursor:'pointer'}}>
+      <input type="checkbox" checked={aConfirmar} onChange={e=>onChange(e.target.checked?'A confirmar':'')}/>
+      Todavía no se sabe — poner “a confirmar” en la citación
+    </label>
+  </div>
+}
+
+// La ubicación viaja al Calendar y ahí Google la geocodifica: si está bien
+// escrita, el freelancer abre la invitación y toca para que le arme el viaje.
+function CampoUbicacion({valor, onChange}){
+  const q = String(valor||'').trim()
+  return <div>
+    <input value={valor||''} onChange={e=>onChange(e.target.value)} placeholder="Dirección completa, como la buscarías en Maps" style={inpV2}/>
+    <div style={{display:'flex', gap:10, marginTop:6, alignItems:'center'}}>
+      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q||'Buenos Aires')}`} target="_blank" rel="noreferrer"
+         style={{fontSize:11.5, color:T.brand, textDecoration:'none', fontWeight:600}}>📍 {q?'Ver en Maps':'Buscar en Maps'}</a>
+      <span style={{fontSize:11, color:T.ink3}}>Comprobá que caiga donde tiene que caer antes de guardar</span>
+    </div>
+  </div>
+}
+
 function EditarModal({p, data, onClose, onSaved, showToast}){
   const campos = [
     ['PM Interno','PM',false], ['Fecha Evento','Fecha evento (DD/MM/AAAA)',false],
     ['Proyecto','Proyecto',false], ['Agencia','Agencia','ag'], ['Cliente','Cliente','cl'],
-    ['Contacto','Contacto','ct'], ['Horario','Horario (ej 8:00 a 18:00)',false],
-    ['Ubicación','Ubicación',false], ['Contacto Lugar','Contacto en el lugar',false],
+    ['Contacto','Contacto','ct'], ['Horario','Horario de la jornada','hora'],
+    ['Ubicación','Ubicación','mapa'], ['Contacto Lugar','Contacto en el lugar',false],
     ['Observaciones','Observaciones (salen en el PDF)','area'],
   ]
   const [form,setForm]=useState(()=>{ const o={}; campos.forEach(([k])=>o[k]=p[k]||''); return o })
@@ -834,7 +871,11 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         {campos.map(([k,label,tipo])=>(
           <div key={k}>
             <label style={{fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5}}>{label}</label>
-            {tipo==='area'
+            {tipo==='hora'
+              ? <CampoHorario valor={form[k]} onChange={v=>setForm(f=>({...f,[k]:v}))}/>
+              : tipo==='mapa'
+              ? <CampoUbicacion valor={form[k]} onChange={v=>setForm(f=>({...f,[k]:v}))}/>
+              : tipo==='area'
               ? <textarea value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} rows={3} style={{...inpV2, resize:'vertical'}}/>
               : k==='PM Interno'
                 ? <input list="v2-pm" value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/>

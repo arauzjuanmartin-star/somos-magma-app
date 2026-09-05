@@ -161,8 +161,11 @@ export default async function handler(req, res) {
       `PM: ${pm || '—'}`,
     ]
     // Datos operativos del día (lo que pide el equipo) — SIN el presupuesto ($) porque se invita a freelancers
-    if (horario) descripcionPartes.push(`⏰ Horario: ${horario}`)
+    // Sin horario los chicos no saben ni si es a la mañana. Decirlo es mejor que
+    // dejar el campo afuera y que cada uno suponga.
+    descripcionPartes.push(horario ? `⏰ Horario: ${horario}` : '⏰ Horario: A CONFIRMAR — te avisamos apenas lo tengamos')
     if (ubicacion) descripcionPartes.push(`📍 Ubicación: ${ubicacion}`)
+    else descripcionPartes.push('📍 Ubicación: A CONFIRMAR')
     if (contacto) descripcionPartes.push(`📞 Contacto: ${contacto}`)
     if (contactoLugar) descripcionPartes.push(`👤 Contacto en el lugar: ${contactoLugar}`)
 
@@ -196,7 +199,29 @@ export default async function handler(req, res) {
         }
       } catch (e) { /* no bloquea */ }
     }
+    // Dónde sube el material el que filma. Sin esto la citación le dice cuándo y
+    // dónde ir, pero no qué hacer con lo que graba — y termina por WhatsApp.
+    if (accion === 'aprobar') {
+      try {
+        const rP2 = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ET' })
+        const rows2 = rP2.data.values || [], h2 = rows2[0] || []
+        const f2 = rows2.slice(1).find(r => String(r[h2.indexOf('N° presupuesto')] || '').trim() === String(num).trim())
+        const crudo = f2 ? String(f2[h2.indexOf('Drive Crudo')] || '').trim() : ''
+        const entrega = f2 ? String(f2[h2.indexOf('Drive Entrega')] || '').trim() : ''
+        if (crudo || entrega) {
+          descripcionPartes.push('', '— DÓNDE SUBIR EL MATERIAL —')
+          if (crudo) descripcionPartes.push(`📤 Video crudo: ${crudo}`)
+          if (entrega) descripcionPartes.push(`📸 Fotos ya editadas: ${entrega}`)
+          descripcionPartes.push(
+            'Entrás con tu propio mail, el mismo al que te llegó esta invitación.',
+            'No hace falta la contraseña de nadie y no te ocupa espacio en tu Drive.',
+          )
+        }
+      } catch (e) { /* si falla, la citación sale igual */ }
+    }
+
     descripcionPartes.push(
+      '',
       `Estado: ${accion === 'aprobar' ? 'APROBADO ✓' : 'EN ESPERA'}`,
       '',
       tagPresu(num),

@@ -5,6 +5,7 @@
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
+import { armarAviso, mandarAviso } from '../../lib/edicion-avisos'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT_COL = colLetra(HEADERS_EDICION.length - 1)
@@ -113,7 +114,24 @@ export default async function handler(req, res) {
       })
     } catch (e) {}
 
-    res.json({ ok: true, cambios })
+    // Aviso a quien le toca mover la ficha. Va después de guardar y nunca frena
+    // la respuesta: si el mail falla, el cambio ya quedó en el sheet igual.
+    let aviso = null
+    if (campos.Estado && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()) {
+      try {
+        const fila = {}
+        hE.forEach((h, i) => { fila[h] = actual[i] ?? '' })
+        Object.assign(fila, campos)
+        const rrhh = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:D' })).data.values || []
+        const hR = rrhh[0] || []
+        const lista = rrhh.slice(1).map(r => Object.fromEntries(hR.map((k, i) => [k, r[i]])))
+        const a = armarAviso({ fila, estadoNuevo: campos.Estado, rrhh: lista, mailQuienCambio: mail })
+        const env = await mandarAviso(a)
+        aviso = env.ok ? { avisado: env.para } : null
+      } catch (e) { console.error('aviso:', e.message) }
+    }
+
+    res.json({ ok: true, cambios, aviso })
   } catch (e) {
     console.error('edicion-guardar:', e)
     res.status(500).json({ error: e.message })
