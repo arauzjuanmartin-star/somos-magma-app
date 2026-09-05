@@ -16,7 +16,7 @@ const auth = new google.auth.GoogleAuth({
   scopes:['https://www.googleapis.com/auth/spreadsheets'],
 })
 const sheets = google.sheets({ version:'v4', auth })
-const r = await sheets.spreadsheets.values.get({ spreadsheetId:'1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc', range:'EDICION!A:R' })
+const r = await sheets.spreadsheets.values.get({ spreadsheetId:'1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc', range:'EDICION!A:AL' })
 const rows = r.data.values || [], h = rows[0]
 const filas = rows.slice(1).filter(x=>x.some(Boolean)).map(x=>Object.fromEntries(h.map((k,i)=>[k,x[i]||''])))
 filas.forEach(f => f.__sem = semaforo(f))

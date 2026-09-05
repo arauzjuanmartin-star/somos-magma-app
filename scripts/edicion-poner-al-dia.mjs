@@ -33,7 +33,7 @@ const MIN_DIAS = parseInt(process.argv.slice(2).find(a => /^\d+$/.test(a))) || 7
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 
-const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['EDICION!A:R','FACTURACION!A:AG'] })
+const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['EDICION!A:AL','FACTURACION!A:AG'] })
 const [ed, fac] = b.data.valueRanges.map(v => v.values || [])
 const hE = ed[0], hF = fac[0]
 const iId = hE.indexOf('ID'), iNum = hE.indexOf('N° presupuesto'), iFe = hE.indexOf('Fecha Evento')

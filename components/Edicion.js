@@ -11,10 +11,12 @@
 // hace que React los remonte en cada tecla y los inputs pierdan el foco.
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { T, MONO } from '../lib/ui'
+import { T, MONO, useEsCelular } from '../lib/ui'
 import {
   ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX,
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero,
+  CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
+  textoPedirBrief, textoParaElEditor, esperaAlPM,
 } from '../lib/edicion'
 
 // ---------------------------------------------------------------- estilos
@@ -27,6 +29,7 @@ const lbl = { fontSize: 10.5, color: T.ink3, letterSpacing: 0.4, textTransform: 
 const COLOR_PRIO = { Urgente: T.brand, Normal: T.ink3, Baja: T.ink3 }
 const FILTROS = [
   { id: 'activos',  label: 'Todo lo abierto' },
+  { id: 'revisar',  label: 'Esperan tu OK' },
   { id: 'rojo',     label: 'Atrasado' },
   { id: 'naranja',  label: 'Vence hoy' },
   { id: 'amarillo', label: 'Esta semana' },
@@ -47,6 +50,8 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
   const [abierto, setAbierto] = useState(null)
   const [sincro, setSincro] = useState(false)
   const [drive, setDrive] = useState({})
+  const [nueva, setNueva] = useState(false)
+  const cel = useEsCelular()
 
   const crudas = data?.edicion || []
   const hoy = hoyCero()
@@ -71,8 +76,11 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     const nq = norm(q.trim())
     return filas.filter(f => {
       const nivel = f.__sem.nivel
-      if (filtro === 'activos' && nivel === 'listo') return false
-      if (filtro !== 'activos' && filtro !== nivel) return false
+      if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
+      else {
+        if (filtro === 'activos' && nivel === 'listo') return false
+        if (filtro !== 'activos' && filtro !== nivel) return false
+      }
       if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
@@ -95,8 +103,8 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
   }, [visibles])
 
   const cuenta = useMemo(() => {
-    const c = { activos: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
-    filas.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++ })
+    const c = { activos: 0, revisar: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
+    filas.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++ })
     return c
   }, [filas])
 
@@ -107,6 +115,17 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
       const j = await r.json()
       if (!j.ok) showToast(j.error || 'No se pudo guardar', 'err')
     } catch (e) { showToast('Error de conexión', 'err') }
+  }
+
+  async function crearTarea(datos) {
+    try {
+      const r = await fetch('/api/edicion-nuevo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) })
+      const j = await r.json()
+      if (!j.ok) { showToast(j.error || 'No se pudo crear', 'err'); return false }
+      showToast(j.creadas === 1 ? 'Tarea agregada ✓' : `${j.creadas} tareas agregadas ✓`)
+      setNueva(false); onRefresh && onRefresh()
+      return true
+    } catch (e) { showToast('Error de conexión', 'err'); return false }
   }
 
   async function sincronizar() {
@@ -165,7 +184,7 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') })
   }
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder }
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -197,11 +216,11 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
         : <>
           {consultas.length > 0 && <Consultas consultas={consultas} responder={responder} setAbierto={setAbierto} />}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: cel ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
             <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} />
             <Kpi n={cuenta.naranja} l="vencen hoy" c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} />
             <Kpi n={cuenta.amarillo} l="esta semana" c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} />
-            <Kpi n={cuenta.verde} l="en fecha" c={COLOR_SEM.verde.fg} onClick={() => setFiltro('verde')} activo={filtro === 'verde'} />
+            <Kpi n={cuenta.revisar} l="esperan tu OK" c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} />
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
@@ -217,9 +236,12 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
               <option value="todos">Todos</option>
               {personas.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: '6px 10px', fontSize: 12, width: 190 }} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: '6px 10px', fontSize: 12, width: cel ? '100%' : 190 }} />
             <button onClick={sincronizar} disabled={sincro} title="Trae los entregables nuevos desde Proyectos" style={{ ...btn, padding: '6px 11px', fontSize: 12 }}>{sincro ? '…' : '↻ Actualizar'}</button>
+            <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: '6px 12px', fontSize: 12 }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
+
+          {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas} />}
 
           {!grupos.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {filtro !== 'activos' && <button onClick={() => setFiltro('activos')} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
@@ -232,6 +254,138 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
 const lineaBitacora = (mail, texto) => {
   const d = new Date()
   return `[${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${nombreDe(mail)}] ${texto}`
+}
+
+// Copiar al portapapeles con feedback. `texto` es una función para no armar el
+// mensaje en cada render (son varios por fila).
+function BotonCopiar({ texto, etiqueta }) {
+  const [ok, setOk] = useState(false)
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(typeof texto === 'function' ? texto() : texto); setOk(true); setTimeout(() => setOk(false), 2000) } catch (e) {}
+  }
+  return <button onClick={copiar} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>{ok ? '✓ Copiado' : etiqueta}</button>
+}
+
+// ------------------------------------------------- qué es la pieza y qué necesita
+// Dos capas a propósito: lo de arriba se contesta al presupuestar (y es lo único
+// que hace falta para MEDIR, porque hoy el 44% de la post se llama "Edit 60s");
+// lo de abajo al aprobar, que es cuando tiene sentido pedirle archivos al cliente.
+function Campos({ f, campos, guardar, cols = 3 }) {
+  const visibles = campos.filter(c => !c.soloSi || c.soloSi(f))
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
+    {visibles.map(c => {
+      const valor = String(f[c.campo] || '')
+      const ancho = c.tipo === 'largo' ? { gridColumn: '1/-1' } : {}
+      return <div key={c.campo} style={ancho}>
+        <label style={lbl}>{c.label || c.pregunta}</label>
+        {c.opciones
+          ? <select value={valor} onChange={e => guardar(f.ID, { [c.campo]: e.target.value })}
+              style={{ ...inp, width: '100%', cursor: 'pointer', borderColor: valor ? T.border : `${T.brand}55` }}>
+              <option value="">— sin definir —</option>
+              {c.opciones.filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          : c.tipo === 'largo'
+            ? <textarea defaultValue={valor} rows={2} placeholder={c.ph}
+                onBlur={e => { if (e.target.value !== valor) guardar(f.ID, { [c.campo]: e.target.value }) }}
+                style={{ ...inp, width: '100%', resize: 'vertical', borderColor: valor ? T.border : `${T.brand}55` }} />
+            : <input defaultValue={valor} placeholder={c.ph}
+                onBlur={e => { if (e.target.value !== valor) guardar(f.ID, { [c.campo]: e.target.value }) }}
+                style={{ ...inp, width: '100%', borderColor: valor ? T.border : `${T.brand}55` }} />}
+        {c.ayuda && <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 3 }}>{c.ayuda}</div>}
+      </div>
+    })}
+  </div>
+}
+
+function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = false }) {
+  const [abierto, setAbierto] = useState(abiertoPorDefecto)
+  return <div style={{ border: `1px solid ${alerta ? `${T.brand}55` : T.border}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
+    <button onClick={() => setAbierto(a => !a)} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer',
+      background: alerta ? T.brandSoft : T.surfaceAlt, border: 'none', textAlign: 'left', fontFamily: 'inherit',
+    }}>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, flex: 1 }}>{titulo}</span>
+      <span style={{ fontSize: 11.5, fontFamily: MONO, color: alerta ? T.brand : T.ink3 }}>{contador}</span>
+      <span style={{ fontSize: 11, color: T.ink3 }}>{abierto ? '▲' : '▼'}</span>
+    </button>
+    {abierto && <div style={{ padding: '12px', background: T.surface }}>{children}</div>}
+  </div>
+}
+
+// ---------------------------------------------------------------- alta a mano
+// Lo que no sale de una línea del presupuesto: "cambiar la placa", "3 videos
+// Raid", "cambios". Con cantidad, porque una línea del presu suele ser varias
+// piezas reales. Componente a nivel de módulo: si va adentro, los inputs
+// pierden el foco a cada tecla.
+function NuevaTarea({ onCrear, onCancelar, proyectos, personas }) {
+  const [num, setNum] = useState('')
+  const [titulo, setTitulo] = useState('')
+  const [cantidad, setCantidad] = useState(1)
+  const [editor, setEditor] = useState('')
+  const [prioridad, setPrioridad] = useState('Normal')
+  const [compromiso, setCompromiso] = useState('')
+  const [notas, setNotas] = useState('')
+  const [yendo, setYendo] = useState(false)
+
+  const proy = useMemo(() => {
+    const n = String(num).trim()
+    if (!n) return null
+    return proyectos.find(p => String(p['N° presupuesto'] || '').trim() === n) || null
+  }, [num, proyectos])
+
+  const enviar = async () => {
+    if (!titulo.trim()) return
+    setYendo(true)
+    await onCrear({ num: num.trim(), titulo: titulo.trim(), cantidad: +cantidad || 1, editor, prioridad, compromiso, notas })
+    setYendo(false)
+  }
+
+  return <div style={{ ...card, borderColor: T.brand, padding: '14px 16px', marginBottom: 14 }}>
+    <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 12 }}>Agregar una tarea de edición</div>
+    <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px', gap: 10, marginBottom: 10 }}>
+      <div>
+        <label style={lbl}>N° de presu</label>
+        <input value={num} onChange={e => setNum(e.target.value)} placeholder="2256" style={{ ...inp, width: '100%', fontFamily: MONO }} />
+      </div>
+      <div>
+        <label style={lbl}>Qué hay que hacer</label>
+        <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
+          placeholder="Cambiar la placa del video largo" style={{ ...inp, width: '100%' }} />
+      </div>
+      <div>
+        <label style={lbl}>Cuántas</label>
+        <input type="number" min="1" max="20" value={cantidad} onChange={e => setCantidad(e.target.value)} style={{ ...inp, width: '100%', fontFamily: MONO }} />
+      </div>
+    </div>
+    {num.trim() && <div style={{ fontSize: 12, color: proy ? T.ink2 : T.brand, marginBottom: 10 }}>
+      {proy ? `${proy.Cliente || proy.Agencia} · ${proy.Proyecto || ''} · ${proy['Fecha Evento'] || ''}` : `No encontré el proyecto #${num.trim()}`}
+    </div>}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+      <div>
+        <label style={lbl}>Quién lo hace</label>
+        <input list="personas-edicion" value={editor} onChange={e => setEditor(e.target.value)} placeholder="sin asignar" style={{ ...inp, width: '100%' }} />
+        <datalist id="personas-edicion">{(personas || []).map(x => <option key={x} value={x} />)}</datalist>
+      </div>
+      <div>
+        <label style={lbl}>Prioridad</label>
+        <select value={prioridad} onChange={e => setPrioridad(e.target.value)} style={{ ...inp, width: '100%', cursor: 'pointer' }}>
+          {PRIORIDADES.map(x => <option key={x} value={x}>{x}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={lbl}>Entregar el</label>
+        <input type="date" value={compromiso} onChange={e => setCompromiso(e.target.value)} style={{ ...inp, width: '100%' }} />
+      </div>
+    </div>
+    <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Nota para el editor (opcional)" style={{ ...inp, width: '100%', marginBottom: 11 }} />
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <button onClick={enviar} disabled={yendo || !titulo.trim()} style={{ ...btnPri, opacity: titulo.trim() ? 1 : 0.5 }}>
+        {yendo ? 'Agregando…' : cantidad > 1 ? `Agregar ${cantidad} tareas` : 'Agregar'}
+      </button>
+      <button onClick={onCancelar} style={btn}>Cancelar</button>
+      {cantidad > 1 && <span style={{ fontSize: 11.5, color: T.ink3 }}>Se numeran solas: “{titulo || 'Tarea'} 1”, “{titulo || 'Tarea'} 2”…</span>}
+    </div>
+  </div>
 }
 
 // ---------------------------------------------------------------- pedazos
@@ -267,7 +421,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
@@ -291,7 +445,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} />)}
   </div>
 }
 
@@ -320,7 +474,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -346,15 +500,14 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder }
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
-  const [copiado, setCopiado] = useState(false)
   useEffect(() => { setNotas(String(f.Notas || '')) }, [f.Notas])
 
   const compromiso = String(f['Fecha compromiso'] || '').trim() || aAR(fechaSugerida(f['Fecha Evento'], f.Entregable))
@@ -366,16 +519,6 @@ function Detalle({ f, g, guardar, mail, preguntar, responder }) {
     setNotas(n); setNueva(''); guardar(f.ID, { Notas: n })
   }
 
-  const mensaje = [
-    `🎬 #${f['N° presupuesto']} · ${f.Cliente || f.Agencia || ''}${f.Proyecto ? ' — ' + f.Proyecto : ''}`,
-    `Entregable: ${limpiarPedido(f.Entregable)}`,
-    f['Fecha Evento'] ? `Filmado: ${f['Fecha Evento']}` : '',
-    compromiso ? `Entrega: ${compromiso}` : '',
-    (f['Link crudo'] || g.linkCrudo) ? `Material: ${f['Link crudo'] || g.linkCrudo}` : 'Material: (falta subir el crudo)',
-    notas.trim() ? `\nNotas:\n${notas.trim()}` : '',
-  ].filter(Boolean).join('\n')
-
-  const copiar = async () => { try { await navigator.clipboard.writeText(mensaje); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch (e) {} }
 
   return <div style={{ padding: '14px 16px 16px 17px', background: T.bg, borderLeft: `3px solid ${T.border}` }}>
     {hayConsulta && <div style={{ background: T.brandSoft, border: `1px solid ${T.brand}30`, borderRadius: 9, padding: '10px 12px', marginBottom: 14 }}>
@@ -387,7 +530,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder }) {
       </div>
     </div>}
 
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
         <label style={lbl}>Entregar el</label>
         <input type="date" defaultValue={aISO(parseFechaAR(compromiso))}
@@ -407,14 +550,47 @@ function Detalle({ f, g, guardar, mail, preguntar, responder }) {
       </div>
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+    <Plegable titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
+      <Campos f={f} campos={CAMPOS_PIEZA} guardar={guardar} cols={cel ? 1 : 3} />
+      <div style={{ fontSize: 11, color: T.ink3, marginTop: 9, lineHeight: 1.5 }}>
+        Esto se contesta al presupuestar. Está acá para completar lo que falte — es lo que después permite saber cuánto tarda cada clase de trabajo.
+      </div>
+    </Plegable>
+
+    <Plegable titulo="Lo que necesita el editor" contador={`${briefLleno(f)}/${briefTotal(f)}`} alerta={briefLleno(f) < briefTotal(f)}>
+      <Campos f={f} campos={CAMPOS_BRIEF} guardar={guardar} cols={cel ? 1 : 2} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <BotonCopiar texto={() => textoPedirBrief(f)} etiqueta="✉️ Copiar el pedido para el cliente" />
+        <BotonCopiar texto={() => textoPedirBrief(f, { porWhatsapp: true })} etiqueta="💬 Para WhatsApp" />
+        {String(f['Brief pedido'] || '').trim()
+          ? <span style={{ fontSize: 11.5, color: T.ink3 }}>pedido el {f['Brief pedido']}</span>
+          : <button onClick={() => guardar(f.ID, { 'Brief pedido': aAR(new Date()) })} style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>Marcar como pedido hoy</button>}
+      </div>
+    </Plegable>
+
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
         <label style={lbl}>Link del material (crudo)</label>
         <input defaultValue={String(f['Link crudo'] || '')} onBlur={e => { if (e.target.value !== String(f['Link crudo'] || '')) guardar(f.ID, { 'Link crudo': e.target.value }) }} placeholder="https://drive.google.com/…" style={{ ...inp, width: '100%', fontSize: 12 }} />
       </div>
       <div>
-        <label style={lbl}>Link de la entrega</label>
+        <label style={lbl}>Link de la pre-entrega</label>
+        <input defaultValue={String(f['Link pre-entrega'] || '')} onBlur={e => { if (e.target.value !== String(f['Link pre-entrega'] || '')) guardar(f.ID, { 'Link pre-entrega': e.target.value }) }} placeholder="La versión que va a revisión" style={{ ...inp, width: '100%', fontSize: 12 }} />
+      </div>
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
+      <div>
+        <label style={lbl}>Link de la entrega final</label>
         <input defaultValue={String(f['Link entrega'] || '')} onBlur={e => { if (e.target.value !== String(f['Link entrega'] || '')) guardar(f.ID, { 'Link entrega': e.target.value }) }} placeholder="Drive / WeTransfer / Frame.io" style={{ ...inp, width: '100%', fontSize: 12 }} />
+      </div>
+      <div>
+        <label style={lbl}>Vueltas hasta ahora</label>
+        <div style={{ ...inp, display: 'flex', gap: 14, alignItems: 'center', fontFamily: MONO, fontSize: 12.5, color: T.ink2 }}>
+          <span>internas <strong style={{ color: T.ink }}>{parseInt(f['Rondas internas']) || 0}</strong></span>
+          <span>del cliente <strong style={{ color: (parseInt(f['Rondas cliente']) || 0) > 2 ? T.brand : T.ink }}>{parseInt(f['Rondas cliente']) || 0}</strong></span>
+          {(parseInt(f['Rondas cliente']) || 0) > 2 && <span style={{ fontSize: 11, color: T.brand }}>se pasó de las 2 del manual</span>}
+        </div>
       </div>
     </div>
 
@@ -428,7 +604,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder }) {
       rows={Math.min(10, Math.max(3, notas.split('\n').length + 1))} style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.55, fontSize: 12.5 }} />
 
     <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-      <button onClick={copiar} style={btn}>{copiado ? '✓ Copiado' : '📋 Copiar mensaje para el editor'}</button>
+      <BotonCopiar texto={() => textoParaElEditor({ ...f, Notas: notas, 'Link crudo': f['Link crudo'] || g.linkCrudo })} etiqueta="📋 Copiar el brief para el editor" />
       {!hayConsulta && <>
         <input value={pregunta} onChange={e => setPregunta(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { preguntar(f, pregunta); setPregunta('') } }}
           placeholder="🙋 Preguntar algo de este trabajo" style={{ ...inp, width: 300, fontSize: 12.5 }} />
