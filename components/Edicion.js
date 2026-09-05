@@ -266,6 +266,49 @@ function BotonCopiar({ texto, etiqueta }) {
   return <button onClick={copiar} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>{ok ? '✓ Copiado' : etiqueta}</button>
 }
 
+// Le pone el nombre de Magma a las fotos de la carpeta de entrega. Muestra el
+// preview antes de tocar nada — son archivos que el cliente ya puede estar
+// mirando. Solo renombra lo que todavía no tiene la firma, así se puede correr
+// de nuevo sin renumerar lo ya entregado.
+function FirmarFotos({ num }) {
+  const [plan, setPlan] = useState(null)
+  const [yendo, setYendo] = useState(false)
+  const [listo, setListo] = useState('')
+
+  const pedir = async (confirmar) => {
+    setYendo(true)
+    try {
+      const r = await fetch('/api/drive-renombrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num, confirmar }) })
+      const j = await r.json()
+      if (!j.ok) { setListo(j.error || 'No se pudo'); setPlan(null) }
+      else if (j.preview) { setPlan(j); setListo('') }
+      else { setListo(`${j.renombradas} fotos firmadas ✓`); setPlan(null) }
+    } catch (e) { setListo('Error de conexión') }
+    setYendo(false)
+  }
+
+  if (listo) return <div style={{ fontSize: 12, color: T.ink2 }}>{listo}</div>
+  if (!plan) return <div>
+    <button onClick={() => pedir(false)} disabled={yendo} style={{ ...btn, width: '100%' }}>{yendo ? 'Mirando la carpeta…' : '📸 Ver qué fotos hay para firmar'}</button>
+    <div style={{ fontSize: 11, color: T.ink3, marginTop: 5, lineHeight: 1.45 }}>Les pone Cliente_Proyecto_001_@somosmagma_ar. Primero te muestra qué va a cambiar.</div>
+  </div>
+
+  return <div>
+    <div style={{ fontSize: 12.5, color: T.ink, marginBottom: 8 }}>
+      {plan.total} fotos en la carpeta · <strong>{plan.aRenombrar} para firmar</strong>
+      {plan.yaFirmadas > 0 && <span style={{ color: T.ink3 }}> · {plan.yaFirmadas} ya estaban firmadas, no se tocan</span>}
+    </div>
+    {plan.plan.length > 0 && <div style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', maxHeight: 130, overflowY: 'auto', fontFamily: MONO, fontSize: 11, lineHeight: 1.7, marginBottom: 9 }}>
+      {plan.plan.slice(0, 6).map((p, i) => <div key={i} style={{ color: T.ink2 }}>{p.antes} <span style={{ color: T.ink3 }}>→</span> <span style={{ color: T.ink }}>{p.despues}</span></div>)}
+      {plan.aRenombrar > 6 && <div style={{ color: T.ink3 }}>y {plan.aRenombrar - 6} más…</div>}
+    </div>}
+    <div style={{ display: 'flex', gap: 8 }}>
+      <button onClick={() => pedir(true)} disabled={yendo || !plan.aRenombrar} style={{ ...btnPri, opacity: plan.aRenombrar ? 1 : 0.5 }}>{yendo ? 'Firmando…' : `Firmar ${plan.aRenombrar}`}</button>
+      <button onClick={() => setPlan(null)} style={btn}>Cancelar</button>
+    </div>
+  </div>
+}
+
 // ------------------------------------------------- qué es la pieza y qué necesita
 // Dos capas a propósito: lo de arriba se contesta al presupuestar (y es lo único
 // que hace falta para MEDIR, porque hoy el 44% de la post se llama "Edit 60s");
@@ -458,6 +501,10 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   }
   const conStaff = async () => { setYendo('staff'); await carpeta(g.num, ['crudo'], true); setYendo('') }
   return <div style={{ padding: '12px 14px', background: T.bg, borderBottom: `1px solid ${T.border}`, display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16 }}>
+    <div style={{ gridColumn: '1/-1', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${T.border}` }}>
+      <div style={lbl}>Firmar las fotos entregadas</div>
+      <FirmarFotos num={g.num} />
+    </div>
     <div>
       <div style={lbl}>Al equipo que filma y edita</div>
       <button onClick={conStaff} disabled={yendo === 'staff'} style={{ ...btn, width: '100%' }}>{yendo === 'staff' ? 'Compartiendo…' : 'Dar acceso al staff asignado'}</button>

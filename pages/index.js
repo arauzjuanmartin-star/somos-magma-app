@@ -3,9 +3,10 @@ import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
 import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos'
-import { T, MONO } from '../lib/ui'
+import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
+import Novedades from '../components/Novedades'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -54,6 +55,7 @@ const USER_NAME = {
   'sofi@somosmagma.com':        {nombre:'Sofi', nombres:['sofi','sofia'], verTodo:true},
   'lulu@somosmagma.com':        {nombre:'Lulu', nombres:['lulu','lucia'], verTodo:false},
   'tom@somosmagma.com':         {nombre:'Tom',  nombres:['tom','tomi','tomas','tomás'], verTodo:false},
+  'dani@somosmagma.com':        {nombre:'Dani', nombres:['dani','daniela'], verTodo:false},
   'admin@somosmagma.com':       {nombre:'Flor', nombres:['flor'], verTodo:true, admin:true},
 }
 
@@ -107,6 +109,8 @@ export default function V2() {
   const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)
   const [showSearch,setShowSearch] = useState(false)
+  const cel = useEsCelular()
+  const [menuAbierto,setMenuAbierto] = useState(false)
   const [toast,setToast] = useState(null)  // {msg, tipo:'ok'|'err'}
   const showToast = (msg,tipo='ok') => { setToast({msg,tipo}); setTimeout(()=>setToast(null), 3200) }
 
@@ -145,9 +149,35 @@ export default function V2() {
   if(status==='unauthenticated'||!mail) return <Shell><Center><button onClick={()=>signIn('google',{callbackUrl:'/'})} style={btnPrimary}>Ingresar con Google</button></Center></Shell>
 
   return <Shell>
-    <div style={{display:'flex', height:'100vh', overflow:'hidden'}}>
+    <div style={{display:'flex', flexDirection: cel?'column':'row', height:'100vh', overflow:'hidden'}}>
       {/* Sidebar claro y minimal */}
-      <aside style={{width:228, flexShrink:0, background:T.surface, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column'}}>
+      {/* En celular la barra lateral no entra: pasa a ser un encabezado con el
+          menú desplegable. Misma información, apilada. */}
+      {cel
+        ? <div style={{position:'sticky', top:0, zIndex:60, background:T.surface, borderBottom:`1px solid ${T.border}`}}>
+            <div style={{display:'flex', alignItems:'center', gap:10, padding:'11px 14px'}}>
+              <span style={{width:9, height:9, borderRadius:9, background:T.brand, flexShrink:0}}/>
+              <span style={{fontSize:12.5, fontWeight:700, letterSpacing:1.2, color:T.ink}}>SOMOS MAGMA</span>
+              <div style={{flex:1}}/>
+              {readOnly && <span style={{fontSize:9.5, fontWeight:700, color:T.brand, background:T.brandSoft, padding:'3px 7px', borderRadius:5}}>LECTURA</span>}
+              <button onClick={()=>load(true)} disabled={refreshing} style={{padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, cursor:'pointer'}}>{refreshing?'…':'↻'}</button>
+              <button onClick={()=>setMenuAbierto(m=>!m)} style={{padding:'6px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:menuAbierto?T.ink:T.surface, color:menuAbierto?'#fff':T.ink, fontSize:13, fontWeight:600, cursor:'pointer'}}>
+                {NAV.find(n=>n.id===mod)?.label || 'Menú'} {menuAbierto?'▲':'▼'}
+              </button>
+            </div>
+            {menuAbierto && <div style={{padding:'0 10px 12px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, borderTop:`1px solid ${T.border}`, paddingTop:10}}>
+              {NAV.filter(n=>puede(n.id)).map(n=>(
+                <button key={n.id} onClick={()=>{setMod(n.id); setMenuAbierto(false)}} style={{
+                  padding:'11px 12px', borderRadius:9, border:`1px solid ${mod===n.id?T.brand:T.border}`, cursor:'pointer',
+                  background: mod===n.id?T.brandSoft:T.surface, color: mod===n.id?T.brand:T.ink2,
+                  fontSize:13, fontWeight: mod===n.id?700:500, textAlign:'left', fontFamily:'inherit',
+                }}>{n.label}</button>
+              ))}
+              {!readOnly && puede('presupuestos') && <button onClick={()=>{goTo('presupuestos','__nuevo__'); setMenuAbierto(false)}} style={{gridColumn:'1/-1', padding:'11px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>+ Nuevo presupuesto</button>}
+              <div style={{gridColumn:'1/-1', fontSize:10.5, color:T.ink3, textAlign:'center', marginTop:4}}>{mail}</div>
+            </div>}
+          </div>
+        : <aside style={{width:228, flexShrink:0, background:T.surface, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column'}}>
         <div style={{padding:'22px 22px 18px'}}>
           <div style={{display:'flex', alignItems:'center', gap:9}}>
             <span style={{width:9, height:9, borderRadius:9, background:T.brand, display:'inline-block'}}/>
@@ -184,19 +214,21 @@ export default function V2() {
           <a href="/v1" style={{fontSize:11, color:T.ink3, textDecoration:'none', marginTop:6, display:'inline-block'}}>ver versión anterior</a>
         </div>
       </aside>
+      }
 
       {/* Main */}
-      <main style={{flex:1, overflowY:'auto', background:T.bg}}>
+      <main style={{flex:1, overflowY:'auto', background:T.bg, minWidth:0}}>
         <div style={{position:'sticky', top:0, zIndex:50, background:T.bg}}>
-          <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
+          <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'10px 14px 0':'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
             {!modulos && <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
               <span style={{fontSize:13}}>🔍</span><span>Buscar</span>
               <span style={{fontSize:10.5, fontFamily:MONO, padding:'1px 6px', borderRadius:4, background:T.surfaceAlt, color:T.ink3}}>⌘K</span>
             </button>}
           </div>
         </div>
-        <div style={{maxWidth:1180, margin:'0 auto', padding:'14px 36px 80px'}}>
+        <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'12px 14px 60px':'14px 36px 80px'}}>
           {err && <div style={{background:T.brandSoft, color:T.brand, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 16px', fontSize:13, marginBottom:18}}>{err}</div>}
+          {data && puede('edicion') && <Novedades data={data} mail={mail} persona={USER_NAME[mail]} goTo={goTo} cel={cel}/>}
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
