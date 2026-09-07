@@ -47,6 +47,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [filtro, setFiltro] = useState('activos')
   const [q, setQ] = useState('')
   const [personaF, setPersonaF] = useState('todos')
+  // Filtrar por PM es distinto de filtrar por editor: el editor es quien lo hace, el PM
+  // es quien responde por el trabajo ante el cliente. Cada PM tiene que poder ver sus
+  // trabajos sin leer los de los otros tres.
+  const [pmF, setPmF] = useState('todos')
   // Filtrar por estado es distinto de filtrar por plazo: los chips de arriba
   // ordenan por CUÁNDO vence, esto por EN QUÉ ANDA. Hacía falta porque al pasar
   // algo a "Material listo" la fila se recalcula, cambia de chip y se pierde de
@@ -66,7 +70,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   useEffect(() => {
     const id = nav?.abrir
     if (!id) return
-    setFiltro('activos'); setPersonaF('todos'); setEstadoF('todos'); setQ('')
+    setFiltro('activos'); setPersonaF('todos'); setPmF('todos'); setEstadoF('todos'); setQ('')
     setAbierto(id)
     clearNav && clearNav()
     setTimeout(() => {
@@ -102,6 +106,18 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
   }, [filas])
   const sinAsignar = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.Editor || '').trim()).length, [filas])
+  // Los PM que tienen trabajo abierto, con cuánto. El PM sale de PROYECTOS y lo copia
+  // el sync; las filas viejas sin PM se agrupan en "Sin PM" para que no desaparezcan.
+  const pms = useMemo(() => {
+    const cuenta = new Map()
+    filas.forEach(f => {
+      if (estaCerrado(f.Estado)) return
+      const p = String(f.PM || '').trim()
+      if (p) cuenta.set(p, (cuenta.get(p) || 0) + 1)
+    })
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
+  }, [filas])
+  const sinPM = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.PM || '').trim()).length, [filas])
   const consultas = useMemo(() => filas.filter(f => String(f.Consulta || '').trim()), [filas])
 
   const visibles = useMemo(() => {
@@ -117,10 +133,12 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       if (estadoF !== 'todos' && (String(f.Estado || '').trim() || 'Sin material') !== estadoF) return false
       if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
       else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
+      if (pmF === '__sin__') { if (String(f.PM || '').trim()) return false }
+      else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return false
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [filas, filtro, q, personaF, estadoF, abierto])
+  }, [filas, filtro, q, personaF, pmF, estadoF, abierto])
 
   // Cuántos hay en cada estado, para no tener que elegir a ciegas en el desplegable.
   // Cuenta sobre lo que dejó pasar el chip de plazo y el filtro de persona: si estás
@@ -133,11 +151,13 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       else if (filtro !== f.__sem.nivel) return
       if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return }
       else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return
+      if (pmF === '__sin__') { if (String(f.PM || '').trim()) return }
+      else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return
       const e = String(f.Estado || '').trim() || 'Sin material'
       c[e] = (c[e] || 0) + 1
     })
     return c
-  }, [filas, filtro, personaF])
+  }, [filas, filtro, personaF, pmF])
 
   const grupos = useMemo(() => {
     const m = new Map()
@@ -299,7 +319,12 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               <option value="todos">Cualquier estado</option>
               {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
             </select>
-            <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
+            <select value={pmF} onChange={e => setPmF(e.target.value)} title="Quién responde por el trabajo ante el cliente (distinto del editor)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 180, borderColor: pmF !== 'todos' ? T.ink : T.border, fontWeight: pmF !== 'todos' ? 600 : 400 }}>
+              <option value="todos">Cualquier PM</option>
+              {sinPM > 0 && <option value="__sin__">Sin PM ({sinPM})</option>}
+              {pms.map(([p, n]) => <option key={p} value={p}>PM {p} ({n})</option>)}
+            </select>
+            <select value={personaF} onChange={e => setPersonaF(e.target.value)} title="Quién lo edita" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
               <option value="todos">Todo el equipo</option>
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
