@@ -69,7 +69,20 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     return m
   }), [crudas, local]) // eslint-disable-line
 
-  const personas = useMemo(() => [...new Set(filas.map(f => String(f.Editor || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')), [filas])
+  // Solo quien tenga trabajo ABIERTO. Si listamos a todos los que alguna vez
+  // aparecieron, el desplegable arrastra fotógrafos y editores viejos con todo
+  // entregado, y hay que buscar el nombre propio entre gente que no está
+  // trabajando. Ordenado por carga: el que más tiene, primero.
+  const personas = useMemo(() => {
+    const cuenta = new Map()
+    filas.forEach(f => {
+      if (estaCerrado(f.Estado)) return
+      const e = String(f.Editor || '').trim()
+      if (e) cuenta.set(e, (cuenta.get(e) || 0) + 1)
+    })
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
+  }, [filas])
+  const sinAsignar = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.Editor || '').trim()).length, [filas])
   const consultas = useMemo(() => filas.filter(f => String(f.Consulta || '').trim()), [filas])
 
   const visibles = useMemo(() => {
@@ -81,7 +94,8 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
         if (filtro === 'activos' && nivel === 'listo') return false
         if (filtro !== 'activos' && filtro !== nivel) return false
       }
-      if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
+      if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
+      else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
@@ -232,16 +246,17 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
               }}>{f.label} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 3 }}>{cuenta[f.id]}</span></button>
             })}
             <div style={{ flex: 1 }} />
-            <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: '6px 9px', fontSize: 12 }}>
-              <option value="todos">Todos</option>
-              {personas.map(e => <option key={e} value={e}>{e}</option>)}
+            <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: '6px 9px', fontSize: 12, maxWidth: cel ? '100%' : 230 }}>
+              <option value="todos">Todo el equipo</option>
+              {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
+              {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
             </select>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: '6px 10px', fontSize: 12, width: cel ? '100%' : 190 }} />
             <button onClick={sincronizar} disabled={sincro} title="Trae los entregables nuevos desde Proyectos" style={{ ...btn, padding: '6px 11px', fontSize: 12 }}>{sincro ? '…' : '↻ Actualizar'}</button>
             <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: '6px 12px', fontSize: 12 }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
-          {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas} />}
+          {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas.map(([e]) => e)} />}
 
           {!grupos.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {filtro !== 'activos' && <button onClick={() => setFiltro('activos')} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
