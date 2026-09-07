@@ -783,7 +783,8 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
       <div>
         <label style={lbl}>Link de la pre-entrega</label>
-        <input defaultValue={String(f['Link pre-entrega'] || '')} onBlur={e => { if (e.target.value !== String(f['Link pre-entrega'] || '')) guardar(f.ID, { 'Link pre-entrega': e.target.value }) }} placeholder="La versión que va a revisión" style={{ ...inp, width: '100%', fontSize: 12 }} />
+        <input defaultValue={String(f['Link pre-entrega'] || '')} onBlur={e => { if (e.target.value !== String(f['Link pre-entrega'] || '')) guardar(f.ID, { 'Link pre-entrega': e.target.value }) }} placeholder="Se completa solo al mandar a revisar" style={{ ...inp, width: '100%', fontSize: 12 }} />
+        <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>Si subiste el archivo a la carpeta de Pre-entregas, lo busca solo. Pegalo a mano únicamente si está en otro lado.</div>
       </div>
     </div>
 

@@ -6,6 +6,7 @@ import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
 import { armarAviso, mandarAviso } from '../../lib/edicion-avisos'
+import { ultimaVersion } from '../../lib/edicion-version'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT_COL = colLetra(HEADERS_EDICION.length - 1)
@@ -77,6 +78,19 @@ export default async function handler(req, res) {
       if (antes === ahora) continue
       data.push({ range: `EDICION!${colLetra(col)}${sheetRow}`, values: [[ahora]] })
       cambios.push(`${k}: "${antes}" → "${ahora}"`)
+    }
+
+    // Al mandar algo a revisar, si nadie pegó el link, lo buscamos en la carpeta
+    // de Pre-entregas: el editor ya subió el archivo ahí, pedirle además que
+    // copie la dirección es un paso de más justo cuando terminó de exportar.
+    if (String(campos.Estado || '').trim() === 'Para revisar'
+        && !String(campos['Link pre-entrega'] || '').trim()
+        && !String(actual[cE('Link pre-entrega')] || '').trim()) {
+      const v = await ultimaVersion({ sheets, SHEET_ID, num: String(actual[cE('N° presupuesto')] || '').trim() })
+      if (v?.link) {
+        data.push({ range: `EDICION!${colLetra(cE('Link pre-entrega'))}${sheetRow}`, values: [[v.link]] })
+        cambios.push(`Link pre-entrega: encontrado solo (${v.nombre})`)
+      }
     }
 
     // Cada vez que algo se rebota se suma una ronda al contador que corresponde.
