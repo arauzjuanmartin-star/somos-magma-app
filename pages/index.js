@@ -220,7 +220,7 @@ export default function V2() {
       <main style={{flex:1, overflowY:'auto', background:T.bg, minWidth:0}}>
         <div style={{position:'sticky', top:0, zIndex:50, background:T.bg}}>
           <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'10px 14px 0':'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
-            {!modulos && <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
+            {!modulos && !cel && <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
               <span style={{fontSize:13}}>🔍</span><span>Buscar</span>
               <span style={{fontSize:10.5, fontFamily:MONO, padding:'1px 6px', borderRadius:4, background:T.surfaceAlt, color:T.ink3}}>⌘K</span>
             </button>}

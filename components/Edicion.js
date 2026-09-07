@@ -198,7 +198,7 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') })
   }
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast }
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -230,30 +230,35 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
         : <>
           {consultas.length > 0 && <Consultas consultas={consultas} responder={responder} setAbierto={setAbierto} />}
 
-          <div style={{ display: 'grid', gridTemplateColumns: cel ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
-            <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} />
-            <Kpi n={cuenta.naranja} l="vencen hoy" c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} />
-            <Kpi n={cuenta.amarillo} l="esta semana" c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} />
-            <Kpi n={cuenta.revisar} l="esperan tu OK" c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: cel ? 6 : 10, marginBottom: cel ? 12 : 16 }}>
+            <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
+            <Kpi n={cuenta.naranja} l={cel ? 'hoy' : 'vencen hoy'} c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} cel={cel} />
+            <Kpi n={cuenta.amarillo} l={cel ? 'semana' : 'esta semana'} c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} cel={cel} />
+            <Kpi n={cuenta.revisar} l={cel ? 'tu OK' : 'esperan tu OK'} c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-            {FILTROS.map(f => {
+            {/* Siete chips en un teléfono son tres renglones antes del primer
+                trabajo. En celular van como un solo desplegable. */}
+            {cel && <select value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...inp, flex: '1 1 100%', fontSize: 13, padding: '9px 10px', cursor: 'pointer' }}>
+              {FILTROS.map(f => <option key={f.id} value={f.id}>{f.label} ({cuenta[f.id]})</option>)}
+            </select>}
+            {!cel && FILTROS.map(f => {
               const activo = filtro === f.id
               return <button key={f.id} onClick={() => setFiltro(f.id)} style={{
                 ...btn, padding: '6px 11px', fontSize: 12,
                 border: `1px solid ${activo ? T.ink : T.border}`, background: activo ? T.ink : T.surface, color: activo ? '#fff' : T.ink2, fontWeight: activo ? 600 : 500,
               }}>{f.label} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 3 }}>{cuenta[f.id]}</span></button>
             })}
-            <div style={{ flex: 1 }} />
-            <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: '6px 9px', fontSize: 12, maxWidth: cel ? '100%' : 230 }}>
+            {!cel && <div style={{ flex: 1 }} />}
+            <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
               <option value="todos">Todo el equipo</option>
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
             </select>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: '6px 10px', fontSize: 12, width: cel ? '100%' : 190 }} />
-            <button onClick={sincronizar} disabled={sincro} title="Trae los entregables nuevos desde Proyectos" style={{ ...btn, padding: '6px 11px', fontSize: 12 }}>{sincro ? '…' : '↻ Actualizar'}</button>
-            <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: '6px 12px', fontSize: 12 }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '6px 10px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 190 }} />
+            <button onClick={sincronizar} disabled={sincro} title="Trae los entregables nuevos desde Proyectos" style={{ ...btn, padding: cel ? '9px 12px' : '6px 11px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{sincro ? '…' : '↻ Actualizar'}</button>
+            <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: cel ? '9px 14px' : '6px 12px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas.map(([e]) => e)} />}
@@ -541,10 +546,10 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas }) {
 }
 
 // ---------------------------------------------------------------- pedazos
-function Kpi({ n, l, c, onClick, activo }) {
-  return <button onClick={onClick} style={{ ...card, padding: '13px 15px', textAlign: 'left', cursor: 'pointer', borderColor: activo ? c : T.border, borderWidth: activo ? 1.5 : 1 }}>
-    <div style={{ fontSize: 25, fontWeight: 700, color: n ? c : T.ink3, fontFamily: MONO, lineHeight: 1.1 }}>{n}</div>
-    <div style={{ fontSize: 11.5, color: T.ink2, marginTop: 3 }}>{l}</div>
+function Kpi({ n, l, c, onClick, activo, cel }) {
+  return <button onClick={onClick} style={{ ...card, padding: cel ? '8px 6px' : '13px 15px', textAlign: cel ? 'center' : 'left', cursor: 'pointer', borderColor: activo ? c : T.border, borderWidth: activo ? 1.5 : 1 }}>
+    <div style={{ fontSize: cel ? 19 : 25, fontWeight: 700, color: n ? c : T.ink3, fontFamily: MONO, lineHeight: 1.1 }}>{n}</div>
+    <div style={{ fontSize: cel ? 10 : 11.5, color: T.ink2, marginTop: 2 }}>{l}</div>
   </button>
 }
 
@@ -573,7 +578,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
@@ -581,14 +586,17 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
   const [panel, setPanel] = useState(false)
 
   return <div style={{ ...card, marginBottom: 10, overflow: 'hidden' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '11px 14px', background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: 'wrap' }}>
       <Punto nivel={peor.nivel} />
-      <span style={{ fontFamily: MONO, fontSize: 12, color: T.ink2 }}>#{g.num}</span>
-      <span style={{ fontSize: 13.5, fontWeight: 600, color: T.ink }}>{g.cliente || g.agencia || '—'}</span>
-      {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2 }}>· {g.proyecto}</span>}
-      <span style={{ fontSize: 11.5, color: T.ink3, fontFamily: MONO }}>{g.fecha}</span>
+      <span style={{ fontFamily: MONO, fontSize: cel ? 11 : 12, color: T.ink2 }}>#{g.num}</span>
+      <span style={{ fontSize: cel ? 13 : 13.5, fontWeight: 600, color: T.ink }}>{g.cliente || g.agencia || '—'}</span>
+      {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2, ...(cel ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } : {}) }}>· {g.proyecto}</span>}
+      {!cel && <span style={{ fontSize: 11.5, color: T.ink3, fontFamily: MONO }}>{g.fecha}</span>}
       <div style={{ flex: 1 }} />
-      {(linkCrudo || g.linkEntrega) ? <>
+      {/* En el celular los botones de Drive se comen la pantalla antes del primer
+          trabajo: van adentro, cuando se abre la fila. */}
+      {cel ? (linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ fontSize: 15, textDecoration: 'none' }}>📁</a>)
+      : (linkCrudo || g.linkEntrega) ? <>
         {linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Crudo</a>}
         {g.linkEntrega && <a href={g.linkEntrega} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📤 Entrega</a>}
         <button onClick={() => setPanel(p => !p)} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: panel ? T.ink : T.surface, color: panel ? '#fff' : T.ink2 }}>Compartir…</button>
@@ -597,7 +605,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} />)}
   </div>
 }
 
@@ -630,7 +638,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -639,6 +647,40 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   const siguiente = idx < ESTADOS.length - 1 ? ESTADOS[idx + 1] : null
   const prio = String(f.Prioridad || 'Normal').trim()
   const hayConsulta = !!String(f.Consulta || '').trim()
+
+  // En el teléfono la fila de escritorio se parte y lo que se corta es justo lo
+  // que hay que ver: el estado y para cuándo. Acá va apilada, con el estado y el
+  // plazo juntos en la última línea y todo el bloque tocable para abrir.
+  if (cel) {
+    return <div style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
+      <div onClick={() => setAbierto(abierta ? null : f.ID)} style={{
+        display: 'flex', flexDirection: 'column', gap: 7, padding: '11px 13px',
+        borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: 'pointer',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+          <span style={{ fontSize: 14, color: T.ink, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{limpiarPedido(f.Entregable)}</span>
+          {hayConsulta && <span style={{ fontSize: 13 }}>🙋</span>}
+          {prio === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>URGENTE</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <select value={String(f.Estado || 'Sin material')} onChange={e => guardar(f.ID, { Estado: e.target.value })}
+              style={{ ...inp, padding: '6px 8px', fontSize: 12.5, cursor: 'pointer', maxWidth: 168 }}>
+              {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11.5, color: T.ink3 }}>{abierta ? 'cerrar ▲' : 'abrir ▼'}</span>
+        </div>
+        {personaF === 'todos' && <div style={{ fontSize: 11.5, color: T.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {String(f.Editor || '').trim() || <em style={{ color: T.brand, fontStyle: 'normal' }}>sin asignar</em>}
+          {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
+        </div>}
+      </div>
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />}
+    </div>
+  }
 
   return <div style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1 }}>
