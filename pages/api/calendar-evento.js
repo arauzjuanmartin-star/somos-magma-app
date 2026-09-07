@@ -94,6 +94,10 @@ async function buscarEventosPorPresu(cal, num) {
 // El día en el que cae un evento — la llave con la que se cruza con las fechas del sheet
 const diaDeEvento = e => e.start?.date || String(e.start?.dateTime||'').slice(0,10)
 
+// Sincronizar un trabajo de varias fechas son varias llamadas a Google + tres
+// lecturas del sheet: los 10s que da Vercel por defecto no alcanzan.
+export const config = { maxDuration: 60 }
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const auth = await requireAuth(req, res)
@@ -296,11 +300,11 @@ export default async function handler(req, res) {
     const porDia = new Map()
     existentes.forEach(e => { const k = diaDeEvento(e); if (k && !porDia.has(k)) porDia.set(k, e) })
     const usados = new Set()
+    slots.forEach(s => { const prev = porDia.get(s.desde); if (prev) usados.add(prev.id) })
     let result = null, invitados = false, creados = 0, actualizados = 0
 
-    for (const slot of slots) {
+    const guardarSlot = async (slot) => {
       const prev = porDia.get(slot.desde)
-      if (prev) usados.add(prev.id)
       const base = armarBody(slot)
       const guardar = (conInvitados) => {
         const body = prev ? { ...prev, ...base } : { ...base }
@@ -311,24 +315,37 @@ export default async function handler(req, res) {
         return cal.events.insert(params)
       }
       try {
-        result = await guardar(true)
-        if (base.attendees.length) invitados = true
+        return { r: await guardar(true), prev, conInvitados: base.attendees.length > 0 }
       } catch (e) {
         // Google bloquea invitados si no está habilitado Domain-Wide Delegation → guardamos el evento igual, sin invitar
-        result = await guardar(false)
+        return { r: await guardar(false), prev, conInvitados: false }
       }
-      if (prev) actualizados++; else creados++
+    }
+    // Los días no dependen entre sí, así que van de a 5 en paralelo: en fila, un
+    // trabajo de 12 jornadas eran 12 viajes a Google y el request se comía los 10
+    // segundos que da Vercel a mitad de camino, dejando días sin agendar.
+    for (let i = 0; i < slots.length; i += 5) {
+      const tanda = await Promise.all(slots.slice(i, i + 5).map(guardarSlot))
+      tanda.forEach(({ r, prev, conInvitados }) => {
+        result = r
+        if (conInvitados) invitados = true
+        if (prev) actualizados++; else creados++
+      })
     }
 
     // Los días que ya no están en el sheet se van del Calendar (con cancelación al staff).
     // Lo ya pasado NO se toca: si un presu quedó mal cargado, borrarle la cobertura que
     // realmente se hizo sería perder el registro de lo que pasó. Se limpia la agenda futura.
     const hoyISO = new Date().toISOString().slice(0,10)
-    let borrados = 0, viejosIntactos = 0
-    for (const e of existentes) {
-      if (usados.has(e.id)) continue
-      if (diaDeEvento(e) < hoyISO) { viejosIntactos++; continue }
-      try { await cal.events.delete({ calendarId: CALENDAR_ID, eventId: e.id, sendUpdates: 'all' }); borrados++ } catch (err) {}
+    const sobrantes = existentes.filter(e => !usados.has(e.id))
+    const viejosIntactos = sobrantes.filter(e => diaDeEvento(e) < hoyISO).length
+    const aBorrar = sobrantes.filter(e => diaDeEvento(e) >= hoyISO)
+    let borrados = 0
+    for (let i = 0; i < aBorrar.length; i += 5) {
+      const tanda = await Promise.all(aBorrar.slice(i, i + 5).map(async e => {
+        try { await cal.events.delete({ calendarId: CALENDAR_ID, eventId: e.id, sendUpdates: 'all' }); return 1 } catch (err) { return 0 }
+      }))
+      borrados += tanda.reduce((a, b) => a + b, 0)
     }
     const accionFinal = actualizados ? 'actualizado' : 'creado'
 
