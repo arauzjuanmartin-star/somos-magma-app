@@ -5,7 +5,7 @@
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
-import { armarAviso, mandarAviso } from '../../lib/edicion-avisos'
+import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { ultimaVersion } from '../../lib/edicion-version'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
@@ -29,7 +29,11 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { id, campos, borrar } = req.body || {}
+  // `nota`: el texto que se acaba de sumar a la bitácora. Viene aparte de
+  // `campos.Notas` (que es la bitácora entera) porque es lo que se avisa y lo que
+  // va destacado arriba del mail. Sin `nota` no sale aviso: editar el textarea a
+  // mano no le tiene que mandar un mail a nadie.
+  const { id, campos, borrar, nota } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Falta id' })
   if (!borrar && (!campos || typeof campos !== 'object')) return res.status(400).json({ error: 'Falta id o campos' })
 
@@ -130,8 +134,14 @@ export default async function handler(req, res) {
 
     // Aviso a quien le toca mover la ficha. Va después de guardar y nunca frena
     // la respuesta: si el mail falla, el cambio ya quedó en el sheet igual.
+    //
+    // Dos motivos, UN solo mail: cambió el estado, o alguien escribió en la
+    // bitácora. Cuando pasan las dos juntas (pedir cambios escribe nota y estado)
+    // manda el del estado, que ya lleva la nota adentro — no van dos mails.
     let aviso = null
-    if (campos.Estado && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()) {
+    const cambioEstado = !!campos.Estado && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()
+    const hayNota = !!String(nota || '').trim() && String(campos.Notas ?? '') !== String(actual[cE('Notas')] || '')
+    if (cambioEstado || hayNota) {
       try {
         const fila = {}
         hE.forEach((h, i) => { fila[h] = actual[i] ?? '' })
@@ -139,9 +149,11 @@ export default async function handler(req, res) {
         const rrhh = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:D' })).data.values || []
         const hR = rrhh[0] || []
         const lista = rrhh.slice(1).map(r => Object.fromEntries(hR.map((k, i) => [k, r[i]])))
-        const a = armarAviso({ fila, estadoNuevo: campos.Estado, rrhh: lista, mailQuienCambio: mail })
+        const a = (cambioEstado && armarAviso({ fila, estadoNuevo: campos.Estado, rrhh: lista, mailQuienCambio: mail }))
+          || (hayNota && armarAvisoNota({ fila, nota, rrhh: lista, mailQuienEscribio: mail }))
+          || null
         const env = await mandarAviso(a)
-        aviso = env.ok ? { avisado: env.para } : null
+        aviso = env.ok ? { avisado: env.para } : { fallo: env.motivo }
       } catch (e) { console.error('aviso:', e.message) }
     }
 

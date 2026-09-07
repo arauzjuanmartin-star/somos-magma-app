@@ -16,7 +16,7 @@ import {
   ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX,
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
-  textoPedirBrief, textoParaElEditor, esperaAlPM,
+  textoPedirBrief, textoParaElEditor, esperaAlPM, ES_MAGMA,
 } from '../lib/edicion'
 
 // ---------------------------------------------------------------- estilos
@@ -160,12 +160,18 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return c
   }, [filas])
 
-  async function guardar(id, campos) {
+  // `extra.nota` = el texto que se acaba de sumar a la bitácora. Es lo que hace
+  // que salga el mail: sin eso, guardar un campo no le escribe a nadie. Y el
+  // toast dice a quién le llegó — antes uno escribía el cambio y no sabía si
+  // había salido algo (spoiler: no salía).
+  async function guardar(id, campos, extra) {
     setLocal(l => ({ ...l, [id]: { ...(l[id] || {}), ...campos } }))
     try {
-      const r = await fetch('/api/edicion-guardar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, campos }) })
+      const r = await fetch('/api/edicion-guardar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, campos, ...(extra || {}) }) })
       const j = await r.json()
-      if (!j.ok) showToast(j.error || 'No se pudo guardar', 'err')
+      if (!j.ok) return showToast(j.error || 'No se pudo guardar', 'err')
+      if (j.aviso?.avisado) showToast(`Le llegó el mail a ${nombreDe(j.aviso.avisado)} ✓`)
+      else if (extra?.nota) showToast('Anotado, pero no salió mail: nadie asignado o sin mail en RRHH', 'err')
     } catch (e) { showToast('Error de conexión', 'err') }
   }
 
@@ -229,11 +235,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // Preguntar / responder: la consulta queda pegada al entregable y lo sube al tope.
   const preguntar = (f, texto) => {
     const t = texto.trim(); if (!t) return
-    guardar(f.ID, { Consulta: `${nombreDe(mail)}: ${t}`, Notas: lineaBitacora(mail, '🙋 ' + t) + (String(f.Notas || '').trim() ? '\n' + f.Notas : '') })
+    guardar(f.ID, { Consulta: `${nombreDe(mail)}: ${t}`, Notas: lineaBitacora(mail, '🙋 ' + t) + (String(f.Notas || '').trim() ? '\n' + f.Notas : '') }, { nota: '🙋 ' + t })
   }
   const responder = (f, texto) => {
     const t = texto.trim()
-    guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') })
+    guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') }, t ? { nota: '💬 ' + t } : undefined)
   }
 
   const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF }
@@ -757,11 +763,15 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
   const compromiso = String(f['Fecha compromiso'] || '').trim() || aAR(fechaSugerida(f['Fecha Evento'], f.Entregable))
   const hayConsulta = !!String(f.Consulta || '').trim()
 
-  const agregarNota = () => {
+  // Sumar una nota ES avisarle al editor: ese era el agujero. El cambio quedaba
+  // escrito en el tablero y del otro lado no se enteraba nadie, salvo que además
+  // le movieras el estado. "Solo anotar" queda para el recordatorio propio.
+  const agregarNota = (avisar = true) => {
     const t = nueva.trim(); if (!t) return
     const n = lineaBitacora(mail, t) + (notas.trim() ? '\n' + notas : '')
-    setNotas(n); setNueva(''); guardar(f.ID, { Notas: n })
+    setNotas(n); setNueva(''); guardar(f.ID, { Notas: n }, avisar ? { nota: t } : undefined)
   }
+  const aQuienLeLlega = ES_MAGMA(f.Editor) ? '' : String(f.Editor || '').trim()
 
 
   return <div style={{ padding: '14px 16px 16px 17px', background: T.bg, borderLeft: `3px solid ${T.border}` }}>
@@ -846,10 +856,17 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     </div>
 
     <label style={lbl}>Bitácora — lo que se pidió, los cambios, las referencias</label>
-    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-      <input value={nueva} onChange={e => setNueva(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarNota() } }}
-        placeholder="Sumar una nota y Enter — queda fechada y firmada" style={{ ...inp, flex: 1 }} />
-      <button onClick={agregarNota} style={btnPri}>Sumar</button>
+    <div style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
+      <input value={nueva} onChange={e => setNueva(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarNota(true) } }}
+        placeholder={aQuienLeLlega ? `Escribí el cambio y Enter — le llega por mail a ${aQuienLeLlega.split(' ')[0]}` : 'Sumar una nota y Enter — queda fechada y firmada'}
+        style={{ ...inp, flex: 1, minWidth: 220 }} />
+      <button onClick={() => agregarNota(true)} style={btnPri}>{aQuienLeLlega ? 'Sumar y avisar' : 'Sumar'}</button>
+      {aQuienLeLlega && <button onClick={() => agregarNota(false)} style={btn} title="Queda en la bitácora sin mandarle mail a nadie">Solo anotar</button>}
+    </div>
+    <div style={{ fontSize: 10.5, color: T.ink3, marginBottom: 9, lineHeight: 1.45 }}>
+      {aQuienLeLlega
+        ? `El mail sale a ${aQuienLeLlega} con el pedido arriba y abajo el trabajo completo: la ficha, el brief, los links y toda la bitácora. No hace falta cambiar el estado para que se entere.`
+        : 'No hay nadie a cargo todavía: la nota queda anotada pero no le llega a nadie. Cargá quién lo hace en “A cargo”.'}
     </div>
     <textarea value={notas} onChange={e => setNotas(e.target.value)} onBlur={() => { if (notas !== String(f.Notas || '')) guardar(f.ID, { Notas: notas }) }}
       rows={Math.min(10, Math.max(3, notas.split('\n').length + 1))} style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.55, fontSize: 12.5 }} />
