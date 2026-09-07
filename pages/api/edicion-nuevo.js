@@ -35,7 +35,9 @@ export default async function handler(req, res) {
     const { sheets, SHEET_ID } = await getSheets()
     const batch = await sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
-      ranges: [`EDICION!A:${ULT_COL}`, 'PROYECTOS!A:AA'],
+      // Hasta ET: el PM está en la 51 y Drive Crudo más allá. Con A:AA (lo que
+      // había) el indexOf daba -1 y la tarea nacía sin PM y sin link al material.
+      ranges: [`EDICION!A:${ULT_COL}`, 'PROYECTOS!A:ET'],
     })
     const rows = batch.data.valueRanges[0].values || []
     const proy = batch.data.valueRanges[1].values || []
@@ -61,6 +63,8 @@ export default async function handler(req, res) {
       }
       const iCrudo = hP.indexOf('Drive Crudo')
       if (iCrudo > -1) base['Link crudo'] = String(fila[iCrudo] || '')
+      const iPM = hP.indexOf('PM')
+      if (iPM > -1) base['PM'] = String(fila[iPM] || '')
     }
 
     // Próximo sufijo M libre para este número (o para las sueltas, prefijo LIBRE)
@@ -101,6 +105,7 @@ export default async function handler(req, res) {
       set('Prioridad', prioridad)
       set('Fecha compromiso', fc)
       set('Link crudo', base['Link crudo'] || '')
+      set('PM', base['PM'] || '')
       set('Notas', String(notas).trim())
       set('Actualizado', new Date().toISOString())
       set('Por', mail)
