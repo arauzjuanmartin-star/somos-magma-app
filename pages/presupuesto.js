@@ -960,7 +960,7 @@ export default function Presupuesto() {
         {/* ════════════════ PREVIEW COLUMN ════════════════ */}
         <div style={{position:'sticky',top:14,alignSelf:'flex-start',maxHeight:'calc(100vh - 28px)',overflowY:'auto'}}>
           <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8,fontWeight:600}}>Preview del PDF</div>
-          <PreviewPDF form={form} clausulas={clausulas}/>
+          <PreviewPDF form={form} clausulas={clausulas} desglose={desglose}/>
         </div>
       </div>
     </div>
@@ -970,7 +970,11 @@ export default function Presupuesto() {
 // ════════════════════════════════════════════════════════════════════
 // PREVIEW HTML — réplica simplificada del PDF para edición en vivo
 // ════════════════════════════════════════════════════════════════════
-function PreviewPDF({form, clausulas}) {
+// `desglose` llega por prop: lo calcula el componente de arriba, que es el único que
+// tiene las opciones del presu (con qué impuestos y plazo se armó). Faltaba, y como el
+// JSX lo lee detrás de `form.desglosar &&`, el error solo aparecía en los presupuestos
+// con el precio abierto por ítem: la pantalla entera se caía con "Application error".
+function PreviewPDF({form, clausulas, desglose = []}) {
   const titulo = form.tipoPresu === 'produccion' ? 'Presupuesto Producción Audiovisual' : 'Propuesta servicio audiovisual'
   // Mismo cálculo de descuento que arriba (acá solo llega `form`, no los derivados)
   const precioLista = Math.round(Number(form.precioTotal) || 0)
