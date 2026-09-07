@@ -34,7 +34,7 @@ console.log('════════ SETUP MÓDULO EDICIÓN ══════�
 
 // ---- 1. Solapa EDICION ----
 if (yaExiste) {
-  const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'EDICION!A1:Z1' })
+  const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'EDICION!A1:BZ1' })
   const h = r.data.values?.[0] || []
   const faltan = HEADERS_EDICION.filter(x => !h.includes(x))
   console.log(`1) Solapa EDICION: ya existe (${h.length} columnas)`)

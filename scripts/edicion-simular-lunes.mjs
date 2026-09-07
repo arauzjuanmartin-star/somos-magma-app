@@ -16,7 +16,7 @@ const auth = new google.auth.GoogleAuth({ credentials:{ client_email: env.GOOGLE
 const sheets = google.sheets({ version:'v4', auth })
 const QUIEN = (process.argv[2]||'').toLowerCase()
 
-const r = await sheets.spreadsheets.values.get({ spreadsheetId:'1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc', range:'EDICION!A:AL' })
+const r = await sheets.spreadsheets.values.get({ spreadsheetId:'1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc', range:'EDICION!A:AM' })
 const v = r.data.values||[], h = v[0]
 const filas = v.slice(1).map(f=>Object.fromEntries(h.map((k,i)=>[k, f[i]??'']))).filter(f=>String(f.ID||'').trim())
 const hoy = hoyCero()
