@@ -1,4 +1,4 @@
-import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
@@ -125,6 +125,10 @@ export default async function handler(req, res) {
       // DJ: el presu sale con el precio abierto por ítem. Se decide al armarlo (el PDF
       // lo lee de acá), y va como booleano porque la columna es una casilla del sheet.
       row[COL_DESGLOSAR] = !!p['Desglosar']
+      // DK-DP: el brief de edición, contestado al presupuestar. De acá lo levanta solo
+      // el tablero de Edición (lib/edicion-sync.js) — el editor no tiene que preguntar
+      // por WhatsApp qué video es.
+      HEADERS_BRIEF_ED.forEach((h, i) => { row[COL_BRIEF_ED + i] = p[h] || '' })
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({

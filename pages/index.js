@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
+import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { T, MONO, useEsCelular } from '../lib/ui'
@@ -1121,7 +1122,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
     desglosar:presuDesglosado(initialData),
-  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false })
+    edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
+  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'' })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -1215,6 +1217,12 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const fijarTotal=(target)=>{ const dif=Math.round(target-totalSinAjuste); setForm(f=>({...f, descPct:'', tajuste:dif<0?'-1':'1', ajuste:String(Math.abs(dif))})) }
   const opcRedondeo = total>0 ? [10000,50000,100000].map(p=>Math.ceil(total/p)*p).filter((v,i,a)=>Math.round(v-total)>=1 && a.indexOf(v)===i) : []
 
+  // ¿Este presu lleva post? Es lo que decide si preguntamos el brief de edición.
+  const hayEdicion = peds.some(p=>esPedidoEdicion(p.svc))
+  const briefDerivado = hayEdicion
+    ? [duracionDePedido(peds.find(p=>esPedidoEdicion(p.svc))?.svc||''), materialDePedidos(peds.map(p=>p.svc))].filter(Boolean).join(' · ')
+    : ''
+
   const falta=[]; if(!form.cliente.trim())falta.push('Cliente'); if(!form.proyecto.trim())falta.push('Proyecto'); if(!form.pm.trim())falta.push('PM'); if(!baseList.some(p=>p.svc.trim()))falta.push('un servicio')
   // Cada unidad ocupa un slot del sheet. Pasarse no da error: los de más se pierden
   // en silencio (ya pasó, $5,9M — ver lib/slots.js). Mejor frenar acá.
@@ -1249,6 +1257,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       'Es Adicional':valid.map(p=>p.adicional?'1':'0').join('|'),
       'Precio Cliente Manual':valid.map(p=>p.adicional?(p.precioCliente||''):'').join('|'),
       'Desglosar':!!form.desglosar,   // DJ: el PDF sale con el precio de cada servicio
+      // DK-DP: el brief de edición. Duración y material no se preguntan: ya están en el
+      // presu (el pedido dice "Edit 60s"; si hay jornadas de cámara, lo filmamos nosotros).
+      'Ed. Clase':form.edClase, 'Ed. Formato':form.edFormato, 'Ed. Red':form.edRed, 'Ed. Gráfica':form.edGrafica,
+      'Ed. Duración':duracionDePedido(valid.find(p=>esPedidoEdicion(p.svc))?.svc||''),
+      'Ed. Material':materialDePedidos(valid.map(p=>p.svc)),
       'Observaciones':form.observaciones,
       'Horario':(form.horaIni&&form.horaFin)?`${form.horaIni} a ${form.horaFin} hs`:'',
       'Ubicación':form.ubicacion,
@@ -1425,6 +1438,46 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
           <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={form.ubicacion} onChange={e=>upd('ubicacion',e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
         </div>
         <div style={{fontSize:11.5, color:T.ink3, marginBottom:10}}>El contacto del lugar queda igual al Contacto; si es otro, se cambia en el Calendar.</div>
+        {/* Brief de edición — sólo si el presu lleva post. Es el momento en que estás
+            hablando con el cliente: después nadie vuelve a preguntar y el editor termina
+            averiguándolo por WhatsApp. Nada es obligatorio: lo que falte se completa en
+            el tablero de Edición. Duración y material salen solos del presupuesto. */}
+        {hayEdicion && <div style={{border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 14px', marginBottom:14, background:T.surfaceAlt}}>
+          <div style={{fontSize:12.5, fontWeight:600, color:T.ink, marginBottom:3}}>El video que hay que editar</div>
+          <div style={{fontSize:11.5, color:T.ink3, marginBottom:10, lineHeight:1.45}}>
+            Se lo preguntás al cliente ahora y le llega solo al editor. {briefDerivado && <span>Del presu ya sale: <strong style={{color:T.ink2}}>{briefDerivado}</strong>.</span>}
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:10}}>
+            <div>
+              <label style={lblV2}>Qué clase de video es</label>
+              <select value={form.edClase} onChange={e=>upd('edClase',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
+                <option value="">— a definir —</option>
+                {CLASES_VIDEO.map(c=><option key={c.id} value={c.label}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lblV2}>Formato</label>
+              <select value={form.edFormato} onChange={e=>upd('edFormato',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
+                <option value="">— a definir —</option>
+                {['Vertical (redes sociales)','Horizontal (YouTube / TV)','Los dos'].map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            {/vertical|los dos/i.test(form.edFormato) && <div>
+              <label style={lblV2}>¿Dónde se publica?</label>
+              <select value={form.edRed} onChange={e=>upd('edRed',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
+                <option value="">— a definir —</option>
+                {['Instagram','TikTok','YouTube Shorts','LinkedIn','Varias'].map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>}
+            <div>
+              <label style={lblV2}>¿Lleva gráfica del cliente?</label>
+              <select value={form.edGrafica} onChange={e=>upd('edGrafica',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
+                <option value="">— a definir —</option>
+                {['Sí','No','A definir'].map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>}
         <label style={lblV2}>Observaciones (salen en el PDF)</label>
         <textarea value={form.observaciones} onChange={e=>upd('observaciones',e.target.value)} rows={2} style={{...inpV2, resize:'vertical'}}/>
       </div>

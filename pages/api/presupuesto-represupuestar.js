@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DI' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!A:DP' })
     const rows = r.data.values || []
     if (rows.length < 2) return res.status(404).json({ error: 'Sin datos en PRESUPUESTOS' })
 
