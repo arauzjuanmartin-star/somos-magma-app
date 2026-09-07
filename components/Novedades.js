@@ -34,8 +34,16 @@ export default function Novedades({ data, mail, persona, goTo, cel }) {
     return {
       // Alguien preguntó algo y nadie contestó: es lo que frena un trabajo.
       consultas: filas.filter(f => String(f.Consulta || '').trim()).map(conSemaforo),
-      // Esperan que yo dé el OK antes de que salga al cliente.
-      revisar: (verTodo ? filas : mias).filter(f => esperaAlPM(f.Estado)).map(conSemaforo),
+      // Esperan que yo dé el OK antes de que salga al cliente. El OK lo da el PM del
+      // proyecto, no cualquiera: mostrarle a Juan los de Sofi es ruido y hace que el
+      // aviso se ignore. Las filas sin PM se las mostramos igual a quien ve todo,
+      // porque si no quedan esperando para siempre sin que nadie las mire.
+      revisar: filas.filter(f => {
+        if (!esperaAlPM(f.Estado)) return false
+        const pm = norm(f.PM)
+        if (!pm) return verTodo || esMio(f)
+        return apodos.some(a => pm.includes(a)) || (verTodo && esMio(f))
+      }).map(conSemaforo),
       // Mío y atrasado.
       atrasadas: mias.filter(f => semaforo(f, hoy).nivel === 'rojo').map(conSemaforo),
       // Mío y para arrancar o corregir.
@@ -70,7 +78,7 @@ export default function Novedades({ data, mail, persona, goTo, cel }) {
         {persona?.nombre ? `${persona.nombre}, ` : ''}tenés {lista.length} {lista.length === 1 ? 'cosa' : 'cosas'} para mirar
       </span>
       <div style={{ flex: 1 }} />
-      <button onClick={() => goTo && goTo('edicion')} style={{
+      <button onClick={() => { goTo && goTo('edicion'); window.scrollTo({ top: 0, behavior: 'smooth' }) }} style={{
         padding: '5px 11px', borderRadius: 8, border: 'none', background: T.brand, color: '#fff',
         fontSize: 12, fontWeight: 600, cursor: 'pointer',
       }}>Abrir Edición</button>
@@ -81,8 +89,12 @@ export default function Novedades({ data, mail, persona, goTo, cel }) {
     </div>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Cada línea abre ESE trabajo. Antes había que ir al tablero y buscarlo entre
+          los abiertos, que es justo lo que este aviso viene a evitar. */}
       {lista.slice(0, 6).map(f => (
-        <div key={f.ID} style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontSize: 12.5 }}>
+        <div key={f.ID} onClick={() => { goTo && goTo('edicion', { abrir: f.ID }); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          title="Abrir este trabajo"
+          style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontSize: 12.5, cursor: 'pointer', borderRadius: 6, padding: '3px 4px' }}>
           <span style={{ width: 7, height: 7, borderRadius: 7, background: f.__color, flexShrink: 0 }} />
           <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.ink3 }}>#{f['N° presupuesto']}</span>
           <span style={{ fontWeight: 600, color: T.ink }}>{f.Cliente || f.Agencia}</span>

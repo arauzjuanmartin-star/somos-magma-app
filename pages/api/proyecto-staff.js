@@ -126,7 +126,7 @@ export default async function handler(req, res) {
     const filasExistentes = []
     psRows.forEach((row, i) => {
       if (i === 0) return
-      if (String(row[psIdx.nro]||'').trim() === String(num).trim()) filasExistentes.push({ fila: i+1, freelancer: String(row[psIdx.freelancer]||'').trim(), servicio: String(row[psIdx.servicio]||'').trim(), pagado: row[psIdx.pagado], adeudado: row[psIdx.adeudado] })
+      if (String(row[psIdx.nro]||'').trim() === String(num).trim()) filasExistentes.push({ fila: i+1, freelancer: String(row[psIdx.freelancer]||'').trim(), servicio: String(row[psIdx.servicio]||'').trim(), pagado: row[psIdx.pagado], adeudado: row[psIdx.adeudado], notas: row[psIdx.notas] })
     })
 
     // Lo que queremos: una entrada por staff real (no Somos Magma) con monto > 0
@@ -147,10 +147,18 @@ export default async function handler(req, res) {
         consumidas.add(target.indexOf(match))
         // Update monto adeudado si cambió
         psUpdates.push({ range: `PAGOS_STAFF!${colToLetter(psIdx.adeudado)}${exist.fila}`, values: [[match.monto]] })
-        // Si le cambiamos lo que cobra, se lo decimos. Si es el mismo monto no:
+        // El día también se guarda y también se avisa: si a alguien lo movés del 8 al 9
+        // y no se lo decís, se presenta el día equivocado. Va en Notas y no en
+        // Servicio, que es parte de la llave con la que se reconoce el pago.
+        const notaFecha = match.fecha ? `Fecha: ${match.fecha}` : ''
+        const notaAntes = String(exist.notas || '').trim()
+        if (psIdx.notas > -1 && notaAntes !== notaFecha) {
+          psUpdates.push({ range: `PAGOS_STAFF!${colToLetter(psIdx.notas)}${exist.fila}`, values: [[notaFecha]] })
+        }
+        // Si le cambiamos lo que cobra o el día, se lo decimos. Si no cambió nada, no:
         // guardar la pantalla dos veces no le tiene que mandar dos mails.
         const antes = Number(String(exist.adeudado||'').replace(/[^\d.-]/g,'')) || 0
-        if (antes !== match.monto) aAvisar.push({ ...match, motivo: 'cambio' })
+        if (antes !== match.monto || notaAntes !== notaFecha) aAvisar.push({ ...match, motivo: 'cambio' })
       } else {
         // Si la fila existente NO está pagada todavía, la podemos borrar (cambio antes de pagar)
         const ya = Number(String(exist.pagado||'').replace(/[^\d.-]/g,'')) || 0

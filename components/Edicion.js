@@ -288,7 +288,14 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') }, t ? { nota: '💬 ' + t } : undefined)
   }
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores }
+  const PMS = useMemo(() => {
+    const de = new Set(PMS_FIJOS)
+    ;(data?.proyectos || []).forEach(p => { const v = String(p.PM || '').trim(); if (v) de.add(v) })
+    filas.forEach(f => { const v = String(f.PM || '').trim(); if (v) de.add(v) })
+    return [...de].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [data, filas])
+
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -369,6 +376,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     </>}
   </div>
 }
+
+// Los PM posibles. Salen de los que ya figuran en PROYECTOS, más el equipo fijo:
+// si alguien nuevo toma la posta todavía no está en ningún proyecto y hay que poder
+// asignárselo igual.
+const PMS_FIJOS = ['Juan', 'Sofi', 'Lulu', 'Tomi']
 
 const lineaBitacora = (mail, texto) => {
   const d = new Date()
@@ -677,7 +689,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
@@ -704,7 +716,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} />)}
   </div>
 }
 
@@ -737,7 +749,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -777,7 +789,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
-      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} />}
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} />}
     </div>
   }
 
@@ -801,11 +813,11 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [] }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -835,7 +847,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
     </div>}
 
-    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
         <label style={lbl}>Entregar el {!String(f['Fecha compromiso'] || '').trim() && <span style={{ color: T.brand }}>· falta</span>}</label>
         <input type="date" defaultValue={aISO(parseFechaAR(compromiso))}
@@ -852,6 +864,16 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
         <select value={String(f.Prioridad || 'Normal')} onChange={e => guardar(f.ID, { Prioridad: e.target.value })} style={{ ...inp, width: '100%', cursor: 'pointer', color: COLOR_PRIO[String(f.Prioridad || 'Normal')] || T.ink, fontWeight: String(f.Prioridad) === 'Urgente' ? 700 : 400 }}>
           {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+      </div>
+      <div>
+        <label style={lbl}>PM · quién responde</label>
+        <select value={String(f.PM || '')} onChange={e => guardar(f.ID, { PM: e.target.value })}
+          style={{ ...inp, width: '100%', cursor: 'pointer', borderColor: String(f.PM || '').trim() ? T.border : `${T.brand}55` }}>
+          <option value="">— sin PM —</option>
+          {PMS.map(p => <option key={p} value={p}>{p}</option>)}
+          {String(f.PM || '').trim() && !PMS.includes(String(f.PM).trim()) && <option value={String(f.PM).trim()}>{f.PM}</option>}
+        </select>
+        <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>Sale del presupuesto. Si lo cambiás acá, manda esto y el sync no lo pisa.</div>
       </div>
       <div>
         <label style={lbl}>A cargo</label>
