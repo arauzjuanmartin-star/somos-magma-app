@@ -10,7 +10,7 @@ import Edicion from '../components/Edicion'
 import Novedades from '../components/Novedades'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
-import { codificarFechas, decodificarFechas } from '../lib/fechas'
+import { codificarFechas, decodificarFechas, esTentativa } from '../lib/fechas'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -866,7 +866,9 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   // abrió desde un proyecto hay que ir a buscar la fila del presu, que es la fuente.
   const presuRow = (data?.presupuestos||[]).find(x=>String(x['Columna 1']||'').trim()===String(id).trim()) || p
   const diasOrig = decodificarFechas(presuRow['Fecha Evento']||p['Fecha Evento'], presuRow['Tipo Fechas'], presuRow['Fechas Adicionales'])
+  const tentOrig = esTentativa(presuRow['Tipo Fechas'])
   const [dias,setDias]=useState(diasOrig)
+  const [tentativa,setTentativa]=useState(tentOrig)
   const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
   const clis=dedupCI([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))])
@@ -884,7 +886,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
     // Fechas: el tipo (dia/rango/multi) y las adicionales se derivan de los días
     // marcados en el calendario, así nunca queda un "rango" viejo con el final
     // desactualizado (rompía el Calendar en silencio).
-    const cod=codificarFechas(dias), origF=codificarFechas(diasOrig)
+    const cod=codificarFechas(dias,tentativa), origF=codificarFechas(diasOrig,tentOrig)
     if(cod.fechaEvento!==origF.fechaEvento||cod.tipo!==origF.tipo||cod.adicionales!==origF.adicionales){
       cambios['Fecha Evento']=cod.fechaEvento; cambios['Tipo Fechas']=cod.tipo
       cambios['Fechas Adicionales']=cod.adicionales; cambios['Cant. Fechas']=cod.cant
@@ -926,7 +928,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
       <div style={{padding:'20px 22px', display:'flex', flexDirection:'column', gap:13}}>
         <div>
           <label style={{fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5}}>Fechas del evento</label>
-          <CampoFechas dias={dias} onChange={setDias}/>
+          <CampoFechas dias={dias} onChange={setDias} tentativa={tentativa} onTentativa={setTentativa}/>
         </div>
         {campos.map(([k,label,tipo])=>(
           <div key={k}>
@@ -1077,7 +1079,11 @@ const readPedidosOrig = p => {
       const fl=feeFlags[idx]
       const feeAg=fl==='0'?false:fl==='1'?true:(SVCS_LIST.find(s=>s.n===svc)?.fee ?? true)
       const adicional=adicFlags[idx]==='1'
-      out.push({id:idx+1, svc, precio:String(precio||''), feeAg, manual:false, adicional, precioCliente:adicional?(precioCli[idx]||''):''})
+      // Las líneas iguales y seguidas vuelven juntas como una sola con cantidad:
+      // 3 cápsulas se cargaron como 3 slots, pero editarlas de a una es un dolor.
+      const ult=out[out.length-1]
+      if(ult && ult.svc===svc && ult.precio===String(precio||'') && ult.feeAg===feeAg && ult.adicional===adicional && !adicional) ult.cant++
+      else out.push({id:idx+1, svc, precio:String(precio||''), cant:1, feeAg, manual:false, adicional, precioCliente:adicional?(precioCli[idx]||''):''})
       idx++
     }
   }
@@ -1094,7 +1100,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ajusteOrig = parseMonto(initialData?.['Ajuste'])
   const [form,setForm]=useState(isRep ? {
     fp:hoyISO,
-    dias: decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig),
+    dias: decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig), tentativa: esTentativa(tipoOrig),
     agencia:initialData['Agencia']||'', cliente:initialData['Cliente']||'', proyecto:initialData['Proyecto']||'',
     contacto:initialData['Contacto']||'', pm:initialData['PM Interno']||'',
     plazo:String(initialData['Plazo']||'0').replace(/[^\d]/g,'')||'0',
@@ -1103,8 +1109,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     tajuste:ajusteOrig<0?'-1':'1', ajuste:String(Math.abs(ajusteOrig)||'0'),
     observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
-  } : { fp:hoyISO, dias:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
-  const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}])
+  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
+  const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
   // datos extra para entidades nuevas
@@ -1147,19 +1153,22 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       const idx=peds.findIndex(p=>!p.svc&&!p.adicional)
       const nuevo={svc:nombre, precio:String(svcNew.precio||''), feeAg:!!svcNew.fee, manual:false}
       if(idx>=0) updPed(idx,nuevo)
-      else setPeds(ps=>[...ps,{id:Date.now(),...nuevo,adicional:false,precioCliente:''}])
+      else setPeds(ps=>[...ps,{id:Date.now(),...nuevo,cant:1,adicional:false,precioCliente:''}])
       setSvcNew(null)
       showToast(`"${nombre}" agregado a la lista`,'ok')
     }catch(e){ showToast('Error de red','err') }
     finally{ setSvcSaving(false) }
   }
-  const addPed=(adicional=false)=>setPeds(ps=>[...ps,{id:Date.now(),svc:'',precio:'',feeAg:!adicional,manual:false,adicional,precioCliente:''}])
+  const addPed=(adicional=false)=>setPeds(ps=>[...ps,{id:Date.now(),svc:'',precio:'',cant:1,feeAg:!adicional,manual:false,adicional,precioCliente:''}])
   const delPed=i=>setPeds(ps=>ps.filter((_,j)=>j!==i))
 
   // ---- CÁLCULO ---- el margen (fee) lo decide el tilde "Fee" de cada servicio, no si hay agencia
+  // La cantidad es un atajo de carga: "Edit 60s × 3" se guarda como 3 líneas en el
+  // sheet (ver `expandir` en guardar). Acá multiplica el costo, nada más.
+  const cantDe=p=>Math.max(1, parseInt(p.cant)||1)
   const baseList=peds.filter(p=>!p.adicional), adicList=peds.filter(p=>p.adicional)
-  const subtotal=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
-  const fee=baseList.reduce((s,p)=>p.feeAg?s+(parseFloat(p.precio)||0)*MULT_MARGEN:s,0)
+  const subtotal=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0)*cantDe(p),0)
+  const fee=baseList.reduce((s,p)=>p.feeAg?s+(parseFloat(p.precio)||0)*cantDe(p)*MULT_MARGEN:s,0)
   const base=subtotal+fee
   const gan=form.gan?fee*0.35:0
   const iibb=form.iibb?fee*0.04:0
@@ -1168,7 +1177,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const total=base+gan+iibb+intMto+ajMto
   const factor=subtotal>0?(total/subtotal):1
   const adicCalc=adicList.map(p=>{ const costo=parseFloat(p.precio)||0; const man=parseFloat(p.precioCliente)||0; const precioCliente=man>0?man:Math.round(costo*factor); const margen=precioCliente-costo; const margenPct=precioCliente>0?(margen/precioCliente)*100:0; return {svc:p.svc,costo,precioCliente,margen,margenPct} })
-  const costoBase=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0),0)
+  const costoBase=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0)*cantDe(p),0)
   const margenBase=total-costoBase, margenBasePct=total>0?(margenBase/total)*100:0
 
   // Descuento %: calcula el monto exacto de ajuste para bajar el total ese %
@@ -1183,6 +1192,10 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const opcRedondeo = total>0 ? [10000,50000,100000].map(p=>Math.ceil(total/p)*p).filter((v,i,a)=>Math.round(v-total)>=1 && a.indexOf(v)===i) : []
 
   const falta=[]; if(!form.cliente.trim())falta.push('Cliente'); if(!form.proyecto.trim())falta.push('Proyecto'); if(!form.pm.trim())falta.push('PM'); if(!baseList.some(p=>p.svc.trim()))falta.push('un servicio')
+  // Cada unidad ocupa un slot del sheet. Pasarse no da error: los de más se pierden
+  // en silencio (ya pasó, $5,9M — ver lib/slots.js). Mejor frenar acá.
+  const lineasTotales=peds.filter(p=>p.svc.trim()).reduce((s,p)=>s+cantDe(p),0)
+  if(lineasTotales>MAX_SLOTS) falta.push(`bajar a ${MAX_SLOTS} servicios (contando cantidades hay ${lineasTotales})`)
   if(!(form.dias||[]).length)falta.push('Fecha evento')
   if(isRep && !String(form.motivo||'').trim())falta.push('motivo')
   const puedeGuardar = falta.length===0 && !saving
@@ -1191,9 +1204,13 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     setSaving(true)
     // fechas
     // El tipo (dia/rango/multi) sale solo de los días elegidos — ver lib/fechas.js
-    const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias)
+    const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias, form.tentativa)
 
-    const valid=peds.filter(p=>p.svc.trim())
+    // Acá se deshace el atajo: "Edit 60s × 3" sale como 3 líneas idénticas. Al sheet
+    // llega exactamente lo mismo que si se hubieran cargado a mano, así que los slots,
+    // el tablero de Edición (una tarea por línea) y el staff no se enteran del cambio.
+    // El PDF desglosado las vuelve a juntar solo, como "3 × Edición 60s".
+    const valid=peds.filter(p=>p.svc.trim()).flatMap(p=>Array.from({length:cantDe(p)},()=>p))
     const plazoLabel={'0':'Contado','15':'15 días','30':'30 días','60':'60 días'}[form.plazo]||'Contado'
     const row={
       'Estado':'EN ESPERA', 'PM Interno':form.pm, 'Agencia':form.agencia.trim()||'Sin agencia / Directo',
@@ -1286,22 +1303,27 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         {/* Fecha */}
         <div style={{marginBottom:18}}>
           <label style={lblV2}>Fechas del evento</label>
-          <CampoFechas dias={form.dias} onChange={l=>upd('dias',l)}/>
+          <CampoFechas dias={form.dias} onChange={l=>upd('dias',l)} tentativa={form.tentativa} onTentativa={v=>upd('tentativa',v)}/>
         </div>
 
         {/* Servicios */}
         <div style={{fontSize:12.5, fontWeight:600, color:T.ink, marginBottom:8}}>Servicios</div>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 60px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
-          <span>Servicio</span><span style={{textAlign:'right'}}>Costo</span><span style={{textAlign:'center'}}>Fee</span><span/>
+        <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
+          <span>Servicio</span><span style={{textAlign:'right'}}>Costo c/u</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'center'}}>Fee</span><span/>
         </div>
-        {peds.map((p,i)=> !p.adicional && (
-          <div key={p.id} style={{display:'grid', gridTemplateColumns:'1.5fr 130px 60px 36px', gap:8, marginBottom:7, alignItems:'center'}}>
-            <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" style={inpV2}/>
-            <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-            <input type="checkbox" checked={p.feeAg} onChange={e=>updPed(i,{feeAg:e.target.checked})} title="Aplica fee Magma" style={{justifySelf:'center', cursor:'pointer'}}/>
-            <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+        {peds.map((p,i)=> !p.adicional && (()=>{ const n=cantDe(p), costo=parseFloat(p.precio)||0; return (
+          <div key={p.id} style={{marginBottom:7}}>
+            <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 36px', gap:8, alignItems:'center'}}>
+              <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" style={inpV2}/>
+              <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+              {/* 3 cápsulas = poner 3 acá, no cargar la misma línea tres veces */}
+              <input type="number" min="1" max={MAX_SLOTS} value={p.cant ?? 1} onChange={e=>updPed(i,{cant:e.target.value})} title="Cuántos de este servicio" style={{...inpV2, textAlign:'center', fontFamily:MONO, padding:'8px 4px', color:n>1?T.brand:T.ink, fontWeight:n>1?600:400}}/>
+              <input type="checkbox" checked={p.feeAg} onChange={e=>updPed(i,{feeAg:e.target.checked})} title="Aplica fee Magma" style={{justifySelf:'center', cursor:'pointer'}}/>
+              <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+            </div>
+            {n>1 && costo>0 && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>{n} × {fmt(costo)} = <strong style={{color:T.ink2}}>{fmt(costo*n)}</strong> de costo · van {n} líneas al sheet y {n} tareas al tablero de Edición</div>}
           </div>
-        ))}
+        )})())}
         <datalist id="np-svc">{svcs.map(s=><option key={s.n} value={s.n}/>)}</datalist>
         <div style={{display:'flex', gap:14, alignItems:'center'}}>
           <button onClick={()=>addPed(false)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Agregar servicio</button>
@@ -1537,7 +1559,7 @@ function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
   const out=[]; const f0=parseD(fechaPrincipal); if(!f0) return out
   const tipo=String(tipoFechas||'').toLowerCase().trim(), ad=String(fechasAdicionales||'').trim()
   if(tipo==='rango'&&ad){ const f1=parseD(ad); if(!f1){out.push(f0);return out} let d=new Date(f0); while(d.getTime()<=f1.getTime()){out.push(new Date(d));d.setDate(d.getDate()+1)} }
-  else if(tipo==='multi'&&ad){ out.push(f0); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s);if(f)out.push(f)}) }
+  else if((tipo==='multi'||tipo==='tentativa')&&ad){ out.push(f0); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s);if(f)out.push(f)}) }
   else out.push(f0)
   return out
 }

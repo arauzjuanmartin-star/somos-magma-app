@@ -47,6 +47,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [filtro, setFiltro] = useState('activos')
   const [q, setQ] = useState('')
   const [personaF, setPersonaF] = useState('todos')
+  // Filtrar por estado es distinto de filtrar por plazo: los chips de arriba
+  // ordenan por CUÁNDO vence, esto por EN QUÉ ANDA. Hacía falta porque al pasar
+  // algo a "Material listo" la fila se recalcula, cambia de chip y se pierde de
+  // vista — y no había forma de volver a encontrarla.
+  const [estadoF, setEstadoF] = useState('todos')
   const [abierto, setAbierto] = useState(null)
   const [sincro, setSincro] = useState(false)
   const [drive, setDrive] = useState({})
@@ -61,7 +66,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   useEffect(() => {
     const id = nav?.abrir
     if (!id) return
-    setFiltro('activos'); setPersonaF('todos'); setQ('')
+    setFiltro('activos'); setPersonaF('todos'); setEstadoF('todos'); setQ('')
     setAbierto(id)
     clearNav && clearNav()
     setTimeout(() => {
@@ -109,12 +114,30 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
         if (filtro === 'activos' && nivel === 'listo') return false
         if (filtro !== 'activos' && filtro !== nivel) return false
       }
+      if (estadoF !== 'todos' && (String(f.Estado || '').trim() || 'Sin material') !== estadoF) return false
       if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
       else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [filas, filtro, q, personaF, abierto])
+  }, [filas, filtro, q, personaF, estadoF, abierto])
+
+  // Cuántos hay en cada estado, para no tener que elegir a ciegas en el desplegable.
+  // Cuenta sobre lo que dejó pasar el chip de plazo y el filtro de persona: si estás
+  // mirando "Atrasado", el desplegable dice cuántos atrasados hay en cada estado.
+  const porEstado = useMemo(() => {
+    const c = {}
+    filas.forEach(f => {
+      if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return }
+      else if (filtro === 'activos') { if (f.__sem.nivel === 'listo') return }
+      else if (filtro !== f.__sem.nivel) return
+      if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return }
+      else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return
+      const e = String(f.Estado || '').trim() || 'Sin material'
+      c[e] = (c[e] || 0) + 1
+    })
+    return c
+  }, [filas, filtro, personaF])
 
   const grupos = useMemo(() => {
     const m = new Map()
@@ -266,6 +289,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               }}>{f.label} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 3 }}>{cuenta[f.id]}</span></button>
             })}
             {!cel && <div style={{ flex: 1 }} />}
+            <select value={estadoF} onChange={e => setEstadoF(e.target.value)} title="En qué anda cada entregable (distinto del plazo)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 200, borderColor: estadoF !== 'todos' ? T.ink : T.border, fontWeight: estadoF !== 'todos' ? 600 : 400 }}>
+              <option value="todos">Cualquier estado</option>
+              {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
+            </select>
             <select value={personaF} onChange={e => setPersonaF(e.target.value)} style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
               <option value="todos">Todo el equipo</option>
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
@@ -279,7 +306,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas.map(([e]) => e)} />}
 
           {!grupos.length
-            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {filtro !== 'activos' && <button onClick={() => setFiltro('activos')} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
+            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
             : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...props} />)}
         </>}
     </>}
@@ -712,7 +739,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       </select>
       {esperaAlPM(f.Estado)
         ? <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>
-        : siguiente && !cerrado && <button onClick={() => guardar(f.ID, { Estado: siguiente })} title={`Pasar a "${siguiente}"`} style={{ ...btn, padding: '4px 9px', fontSize: 11.5 }}>→</button>}
+        : siguiente && !cerrado && <button onClick={() => { guardar(f.ID, { Estado: siguiente }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${siguiente}. Filtrá por ese estado para volver a encontrarlo.`) }} title={`Pasar a "${siguiente}"`} style={{ ...btn, padding: '4px 9px', fontSize: 11.5 }}>→</button>}
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
