@@ -1969,8 +1969,18 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     const base = String(presu?.['Fecha Evento'] || p['Fecha Evento'] || '').trim()
     const mas = String(presu?.['Fechas Adicionales'] || '').split('|').map(x=>x.trim()).filter(Boolean)
     const tipo = String(presu?.['Tipo Fechas'] || '').trim()
-    // Un rango son dos extremos, no dos días sueltos: ahí no tiene sentido elegir.
-    if(tipo === 'rango') return []
+    // Un rango se guarda como dos extremos ("del 1 al 5") pero se trabaja día por día:
+    // en Minecraft algunos fueron 3 días y otros 2. Así que el rango se abre en días
+    // sueltos, que es lo que hace falta para decir quién va cada uno.
+    if(tipo === 'rango'){
+      const d1 = parseD(base), d2 = parseD(mas[mas.length-1])
+      if(!d1 || !d2 || d2 < d1) return [base].filter(Boolean)
+      const out = []
+      for(let d = new Date(d1); d <= d2 && out.length < 90; d.setDate(d.getDate()+1)){
+        out.push(`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`)
+      }
+      return out
+    }
     return [...new Set([base, ...mas].filter(Boolean))]
   }, [presu, p])
   const porFecha = fechasProyecto.length > 1

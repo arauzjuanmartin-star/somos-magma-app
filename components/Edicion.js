@@ -229,7 +229,16 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       const r = await fetch('/api/edicion-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
       const j = await r.json()
       if (!j.ok) showToast(j.error || 'No se pudo sincronizar', 'err')
-      else { showToast(j.nuevas ? `${j.nuevas} entregables nuevos` : 'Todo al día ✓'); setLocal({}); onRefresh && onRefresh() }
+      else {
+        const partes = []
+        if (j.nuevas) partes.push(`${j.nuevas} ${j.nuevas === 1 ? 'entregable nuevo' : 'entregables nuevos'}`)
+        // Decir cuántas se limpiaron: si desaparece una fila del tablero sin avisar,
+        // el que la estaba mirando piensa que se rompió algo.
+        if (j.borradas) partes.push(`${j.borradas} ${j.borradas === 1 ? 'huérfana borrada' : 'huérfanas borradas'} (el proyecto ya no existe)`)
+        showToast(partes.length ? partes.join(' · ') : 'Todo al día ✓')
+        if (j.huerfanasConTrabajo) showToast(`${j.huerfanasConTrabajo} sin proyecto pero con trabajo cargado: las dejé, miralas`, 'err')
+        setLocal({}); onRefresh && onRefresh()
+      }
     } catch (e) { showToast('Error de conexión', 'err') }
     setSincro(false)
   }

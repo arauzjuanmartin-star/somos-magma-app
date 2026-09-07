@@ -18,10 +18,10 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-sync', 'EDICION', '', `${r.nuevas} nuevas · ${r.actualizadas} actualizadas · ${r.vistos} líneas en ventana`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-sync', 'EDICION', '', `${r.nuevas} nuevas · ${r.actualizadas} actualizadas · ${r.borradas||0} huérfanas borradas · ${r.vistos} líneas en ventana`]] },
       })
     } catch (e) {}
-    res.json({ ok: true, nuevas: r.nuevas, actualizadas: r.actualizadas, vistos: r.vistos })
+    res.json({ ok: true, nuevas: r.nuevas, actualizadas: r.actualizadas, borradas: r.borradas, huerfanasConTrabajo: r.huerfanasConTrabajo, vistos: r.vistos })
   } catch (e) {
     console.error('edicion-sync:', e)
     res.status(500).json({ error: e.message })
