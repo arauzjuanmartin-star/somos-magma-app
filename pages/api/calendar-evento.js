@@ -33,44 +33,66 @@ function parseFecha(s) {
   return `${yyyy}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`
 }
 
-// Genera las fechas (ISO) de un evento según tipo dia/rango/multi
+// Genera las fechas (ISO) de un evento según tipo dia/rango/multi/tentativa
 function fechasEvento(fechaPrincipal, tipoFechas, fechasAdicionales) {
   const f0 = parseFecha(fechaPrincipal)
-  if (!f0) return []
+  if (!f0) return { type: 'dia', dia: f0, fechas: [] }
   const tipo = String(tipoFechas||'').toLowerCase().trim()
   const ad = String(fechasAdicionales||'').trim()
   if (tipo === 'rango' && ad) {
     const f1 = parseFecha(ad)
     // Solo es rango válido si el fin es >= inicio. Si no (fin antes del inicio, o sin fin),
     // lo tratamos como un día suelto — así un rango viejo desactualizado no rompe el evento.
-    if (f1 && f1 >= f0) return { type: 'rango', desde: f0, hasta: f1 }
-    return { type: 'dia', dia: f0 }
+    if (f1 && f1 >= f0) return { type: 'rango', desde: f0, hasta: f1, fechas: [f0, f1] }
+    return { type: 'dia', dia: f0, fechas: [f0] }
   }
-  if (tipo === 'multi' && ad) {
-    return { type: 'multi', fechas: [f0, ...ad.split('|').filter(Boolean).map(parseFecha).filter(Boolean)] }
+  if ((tipo === 'multi' || tipo === 'tentativa') && ad) {
+    const fechas = [...new Set([f0, ...ad.split('|').filter(Boolean).map(parseFecha).filter(Boolean)])].sort()
+    return { type: tipo, fechas }
   }
-  return { type: 'dia', dia: f0 }
+  if (tipo === 'tentativa') return { type: 'tentativa', fechas: [f0] }
+  return { type: 'dia', dia: f0, fechas: [f0] }
+}
+
+// Un slot = un evento de Google. Un día suelto es un slot; un rango corrido es UN
+// solo evento all-day que abarca el bloque; varias fechas salteadas son un evento
+// por día (antes iba uno solo con el resto escrito en la descripción, y el equipo
+// no las veía en su agenda); y una tentativa es un único bloque gris de punta a punta.
+const MAX_SLOTS_CAL = 60
+function slotsDeCalendario(fechas) {
+  if (fechas.type === 'rango') return [{ desde: fechas.desde, hasta: fechas.hasta, allDay: true }]
+  if (fechas.type === 'tentativa') {
+    const l = fechas.fechas
+    return [{ desde: l[0], hasta: l[l.length-1], allDay: true, tentativo: true }]
+  }
+  if (fechas.type === 'multi') return fechas.fechas.slice(0, MAX_SLOTS_CAL).map(d => ({ desde: d, hasta: d }))
+  return [{ desde: fechas.dia, hasta: fechas.dia }]
 }
 
 // Marca con un tag único en la descripción para encontrar el evento después por presupuesto
 const tagPresu = (num) => `[SOMOS_MAGMA_PRESU:${num}]`
 
-async function buscarEventoPorPresu(cal, num) {
-  // Buscamos en los próximos 18 meses + 6 meses atrás
+// TODOS los eventos del presupuesto, no el primero: un trabajo de varias fechas
+// tiene un evento por día. Buscar de a uno dejaba fantasmas al borrar (pasó con el
+// #2147 Popstars: 5 eventos huérfanos en el Calendar).
+async function buscarEventosPorPresu(cal, num) {
+  // Ventana amplia: un presu de noviembre cargado en marzo tiene que entrar
   const ahora = new Date()
-  const desde = new Date(ahora); desde.setMonth(desde.getMonth()-6)
-  const hasta = new Date(ahora); hasta.setMonth(hasta.getMonth()+18)
+  const desde = new Date(ahora); desde.setMonth(desde.getMonth()-12)
+  const hasta = new Date(ahora); hasta.setMonth(hasta.getMonth()+24)
   const tag = tagPresu(num)
   const r = await cal.events.list({
     calendarId: CALENDAR_ID,
     timeMin: desde.toISOString(),
     timeMax: hasta.toISOString(),
     q: tag,
-    maxResults: 5,
+    maxResults: 250,
     singleEvents: true,
   })
-  return r.data.items?.find(e => String(e.description||'').includes(tag)) || null
+  return (r.data.items || []).filter(e => String(e.description||'').includes(tag))
 }
+// El día en el que cae un evento — la llave con la que se cruza con las fechas del sheet
+const diaDeEvento = e => e.start?.date || String(e.start?.dateTime||'').slice(0,10)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -89,20 +111,23 @@ export default async function handler(req, res) {
     // #2147 Cabify/Telefe/Popstars (5 eventos fantasma en total).
     if (accion === 'borrar') {
       const calDel = google.calendar({ version: 'v3', auth: getCalendarAuth() })
-      const ev = await buscarEventoPorPresu(calDel, num)
-      if (!ev) return res.json({ ok: true, accion: 'no-existia' })
+      const evs = await buscarEventosPorPresu(calDel, num)
+      if (!evs.length) return res.json({ ok: true, accion: 'no-existia' })
       // sendUpdates:'all' → si había staff invitado le llega la cancelación
-      await calDel.events.delete({ calendarId: CALENDAR_ID, eventId: ev.id, sendUpdates: 'all' })
+      for (const ev of evs) {
+        try { await calDel.events.delete({ calendarId: CALENDAR_ID, eventId: ev.id, sendUpdates: 'all' }) } catch (e) {}
+      }
+      const ev = evs[0]
       try {
         const { sheets: sh, SHEET_ID: SID } = await getSheets()
         await sh.spreadsheets.values.append({
           spreadsheetId: SID,
           range: 'LOG!A:F',
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `borrado ${ev.summary || ''}`]] },
+          requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `borrado x${evs.length} ${ev.summary || ''}`]] },
         })
       } catch (e) {}
-      return res.json({ ok: true, accion: 'borrado', eventId: ev.id })
+      return res.json({ ok: true, accion: 'borrado', eventId: ev.id, borrados: evs.length })
     }
 
     // Leer datos del presupuesto del sheet (Fecha Evento, Cliente, Agencia, Proyecto, Tipo Fechas, Fechas Adicionales)
@@ -129,8 +154,8 @@ export default async function handler(req, res) {
     const calAuth = getCalendarAuth()
     const cal = google.calendar({ version: 'v3', auth: calAuth })
 
-    // Buscar evento existente por tag
-    const existing = await buscarEventoPorPresu(cal, num)
+    // Buscar los eventos que ya existen para este presupuesto
+    const existentes = await buscarEventosPorPresu(cal, num)
 
     // Necesitamos fecha para crear/actualizar
     if (!fechaEv) return res.status(400).json({ error: 'Presupuesto sin Fecha Evento — no puedo agendar' })
@@ -228,59 +253,84 @@ export default async function handler(req, res) {
     )
     const descripcion = descripcionPartes.join('\n')
 
-    // Construir start/end según tipo de fecha + horario (si hay)
     const fechas = fechasEvento(fechaEv, tipoFechas, fechasAd)
+    const esTentativo = fechas.type === 'tentativa'
+    const slots = slotsDeCalendario(fechas)
     const TZ = 'America/Argentina/Buenos_Aires'
-    let eventBody = {
-      summary: titulo,
-      description: descripcion,
-      colorId,
-    }
-    if (ubicacion) eventBody.location = ubicacion
 
-    // Helper: si hay horario, generar dateTime con TZ AR. Si no, dejar all-day.
-    const setStartEnd = (diaISO, hastaISO) => {
-      if (horas) {
-        eventBody.start = { dateTime: `${diaISO}T${horas.h1}:00`, timeZone: TZ }
-        eventBody.end = { dateTime: `${hastaISO || diaISO}T${horas.h2}:00`, timeZone: TZ }
-      } else {
-        eventBody.start = { date: diaISO }
-        const fin = new Date(hastaISO || diaISO); fin.setDate(fin.getDate()+1)
-        eventBody.end = { date: fin.toISOString().slice(0,10) }
+    // Una fecha tentativa avisa que el mes está reservado, pero no le pone a nadie
+    // un día en la agenda: bloque gris, sin invitados y sin marcar ocupado.
+    const dmy = iso => String(iso||'').split('-').reverse().join('/')
+    const descripcionFinal = esTentativo
+      ? `⚠️ FECHAS A CONFIRMAR — todavía no están definidas.\nDías reservados: ${fechas.fechas.map(dmy).join(', ')}\n\n` + descripcion
+      : descripcion
+
+    const armarBody = (slot) => {
+      const body = {
+        summary: esTentativo ? `⟨A CONFIRMAR⟩ ${titulo}` : titulo,
+        description: descripcionFinal,
+        colorId: esTentativo ? '8' : colorId,          // 8 = grafito
+        status: 'confirmed',
+        transparency: esTentativo ? 'transparent' : 'opaque',
+        // Siempre explícito: si un evento deja de ser tentativo hay que despintarlo,
+        // porque el update mergea sobre lo que ya estaba.
+        attendees: esTentativo ? [] : staffAttendees,
       }
+      if (ubicacion) body.location = ubicacion
+      if (horas && !slot.allDay) {
+        body.start = { dateTime: `${slot.desde}T${horas.h1}:00`, timeZone: TZ }
+        body.end   = { dateTime: `${slot.hasta || slot.desde}T${horas.h2}:00`, timeZone: TZ }
+      } else {
+        // all-day: en Google el fin es exclusivo, va el día siguiente al último.
+        // El mediodía UTC evita que el huso corra el día para atrás.
+        body.start = { date: slot.desde }
+        const fin = new Date(`${slot.hasta || slot.desde}T12:00:00Z`)
+        fin.setUTCDate(fin.getUTCDate() + 1)
+        body.end = { date: fin.toISOString().slice(0,10) }
+      }
+      return body
     }
 
-    if (fechas.type === 'rango') {
-      // Para rango, mejor all-day (varios días) que dateTime
-      eventBody.start = { date: fechas.desde }
-      const hastaPlus1 = new Date(fechas.hasta); hastaPlus1.setDate(hastaPlus1.getDate()+1)
-      eventBody.end = { date: hastaPlus1.toISOString().slice(0,10) }
-    } else if (fechas.type === 'multi') {
-      setStartEnd(fechas.fechas[0])
-      eventBody.description += `\n\nFechas adicionales: ${fechas.fechas.slice(1).join(', ')}`
-    } else {
-      setStartEnd(fechas.dia)
+    // Sincronizar contra lo que ya hay: actualizar los días que siguen, crear los
+    // que faltan y borrar los que se sacaron. El sheet manda.
+    const porDia = new Map()
+    existentes.forEach(e => { const k = diaDeEvento(e); if (k && !porDia.has(k)) porDia.set(k, e) })
+    const usados = new Set()
+    let result = null, invitados = false, creados = 0, actualizados = 0
+
+    for (const slot of slots) {
+      const prev = porDia.get(slot.desde)
+      if (prev) usados.add(prev.id)
+      const base = armarBody(slot)
+      const guardar = (conInvitados) => {
+        const body = prev ? { ...prev, ...base } : { ...base }
+        if (!conInvitados) body.attendees = []
+        const params = { calendarId: CALENDAR_ID, requestBody: body }
+        if (conInvitados && base.attendees.length) params.sendUpdates = 'all'  // manda las invitaciones
+        if (prev) { params.eventId = prev.id; return cal.events.update(params) }
+        return cal.events.insert(params)
+      }
+      try {
+        result = await guardar(true)
+        if (base.attendees.length) invitados = true
+      } catch (e) {
+        // Google bloquea invitados si no está habilitado Domain-Wide Delegation → guardamos el evento igual, sin invitar
+        result = await guardar(false)
+      }
+      if (prev) actualizados++; else creados++
     }
 
-    if (staffAttendees.length) eventBody.attendees = staffAttendees
-    const doSave = (withAtt) => {
-      const body = existing ? { ...existing, ...eventBody } : { ...eventBody }
-      if (!withAtt) delete body.attendees
-      const params = { calendarId: CALENDAR_ID, requestBody: body }
-      if (withAtt && (body.attendees||[]).length) params.sendUpdates = 'all'  // manda las invitaciones
-      if (existing) { params.eventId = existing.id; return cal.events.update(params) }
-      return cal.events.insert(params)
+    // Los días que ya no están en el sheet se van del Calendar (con cancelación al staff).
+    // Lo ya pasado NO se toca: si un presu quedó mal cargado, borrarle la cobertura que
+    // realmente se hizo sería perder el registro de lo que pasó. Se limpia la agenda futura.
+    const hoyISO = new Date().toISOString().slice(0,10)
+    let borrados = 0, viejosIntactos = 0
+    for (const e of existentes) {
+      if (usados.has(e.id)) continue
+      if (diaDeEvento(e) < hoyISO) { viejosIntactos++; continue }
+      try { await cal.events.delete({ calendarId: CALENDAR_ID, eventId: e.id, sendUpdates: 'all' }); borrados++ } catch (err) {}
     }
-    let result, accionFinal, invitados = false
-    try {
-      result = await doSave(true)
-      invitados = staffAttendees.length > 0
-    } catch (e) {
-      // Google bloquea invitados si no está habilitado Domain-Wide Delegation → guardamos el evento igual, sin invitar
-      result = await doSave(false)
-      invitados = false
-    }
-    accionFinal = existing ? 'actualizado' : 'creado'
+    const accionFinal = actualizados ? 'actualizado' : 'creado'
 
     // Log
     try {
@@ -288,11 +338,11 @@ export default async function handler(req, res) {
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `${accionFinal} ${accion} color=${colorId} link=${result.data.htmlLink}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `${accionFinal} ${accion} eventos=${slots.length}${esTentativo?' (tentativa)':''} nuevos=${creados} borrados=${borrados}${viejosIntactos?' intactos='+viejosIntactos:''} link=${result.data.htmlLink}`]] },
       })
     } catch (e) {}
 
-    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink, invitados, staffSinMail })
+    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink, invitados, staffSinMail, eventos: slots.length, creados, actualizados, borrados, tentativa: esTentativo })
   } catch (e) {
     console.error('Error calendar-evento:', e.message, e.response?.data)
     // Si es problema de permisos, devolver mensaje claro

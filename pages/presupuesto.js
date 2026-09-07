@@ -262,6 +262,8 @@ export default function Presupuesto() {
         const adicionales = String(p['Fechas Adicionales']||'').trim()
         if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
         if (tipo === 'multi' && adicionales) return [fe, ...adicionales.split('|').filter(Boolean)].join(', ')
+        // Fechas todavía sin definir: al cliente se le muestran igual, pero avisadas
+        if (tipo === 'tentativa') return `${[fe, ...adicionales.split('|').filter(Boolean)].join(', ')} (a confirmar)`
         return fe
       })()
       setForm(prev => ({

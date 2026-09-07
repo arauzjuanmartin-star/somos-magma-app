@@ -25,15 +25,31 @@ const activos = rows.slice(1).map((row,i)=>({row,fila:i+2})).filter(({row})=>{
   const est=String(row[iEst]||'').toUpperCase().trim(); return (est==='APROBADO'||est==='EN ESPERA') && String(row[iFE]||'').trim()
 })
 
-// 2) Todos los eventos del Calendar (ventana amplia) → map por nº de presu (parseado del tag)
+// 2) Todos los eventos del Calendar (ventana amplia) → TODOS los de cada presu.
+// Un trabajo de varias fechas tiene un evento por día: quedarse con el último daba
+// "desincronizado" falso en todos los multifecha.
 const map={}
 let pageToken
 do{
   const er=await cal.events.list({calendarId:CALENDAR_ID, timeMin:'2025-07-01T00:00:00Z', timeMax:'2028-01-01T00:00:00Z', singleEvents:true, maxResults:2500, pageToken})
-  for(const e of (er.data.items||[])){ const m=String(e.description||'').match(/\[SOMOS_MAGMA_PRESU:([^\]]+)\]/); if(m) map[m[1].trim()]={start:e.start?.date||e.start?.dateTime?.slice(0,10)||'', end:e.end?.date||e.end?.dateTime?.slice(0,10)||'', summary:e.summary} }
+  for(const e of (er.data.items||[])){
+    const m=String(e.description||'').match(/\[SOMOS_MAGMA_PRESU:([^\]]+)\]/); if(!m) continue
+    const k=m[1].trim(); (map[k]=map[k]||[]).push({start:e.start?.date||e.start?.dateTime?.slice(0,10)||'', end:e.end?.date||e.end?.dateTime?.slice(0,10)||'', summary:e.summary})
+  }
   pageToken=er.data.nextPageToken
 }while(pageToken)
-console.log(`Escaneados: ${activos.length} presus activos (APROBADO/EN ESPERA) · ${Object.keys(map).length} eventos con tag en el Calendar\n`)
+const totalEv=Object.values(map).reduce((a,l)=>a+l.length,0)
+console.log(`Escaneados: ${activos.length} presus activos (APROBADO/EN ESPERA) · ${totalEv} eventos con tag en el Calendar (${Object.keys(map).length} presus)\n`)
+
+// Los días que el sheet dice que tiene que haber en el Calendar
+const diasDelSheet=(fe,tipo,ad)=>{
+  const f0=parseFecha(fe); if(!f0) return []
+  const t=String(tipo||'').toLowerCase().trim(), adTxt=String(ad||'').trim()
+  if(t==='rango'&&adTxt){ const f1=parseFecha(adTxt); if(!f1||f1<f0) return [f0]
+    const out=[]; for(let d=new Date(f0+'T12:00:00Z'); d.toISOString().slice(0,10)<=f1; d.setUTCDate(d.getUTCDate()+1)) out.push(d.toISOString().slice(0,10)); return out }
+  if((t==='multi'||t==='tentativa')&&adTxt) return [...new Set([f0,...adTxt.split('|').map(x=>parseFecha(x.trim())).filter(Boolean)])].sort()
+  return [f0]
+}
 
 const invertidos=[], desync=[], sinEvento=[]
 for(const {row,fila} of activos){
@@ -43,9 +59,18 @@ for(const {row,fila} of activos){
   // (1) rango invertido en el sheet
   if((tipo==='rango'||tipo==='multi') && feISO && adICO && adICO<feISO) invertidos.push(`  ${quien}\n     sheet: ${row[iFE]} (${tipo}) → adic ${row[iFA]}  ⟵ el final es ANTES del inicio`)
   // (2) calendar
-  const ev=map[num]
-  if(!ev){ sinEvento.push(`  ${quien} · Fecha ${row[iFE]}`) ; continue }
-  if(feISO && ev.start && ev.start!==feISO) desync.push(`  ${quien}\n     sheet dice: ${feISO}   ·   Calendar muestra: ${ev.start}${ev.end&&ev.end!==ev.start?' → '+ev.end:''}`)
+  const evs=map[num]||[]
+  if(!evs.length){ sinEvento.push(`  ${quien} · Fecha ${row[iFE]}`) ; continue }
+  const enCal=[...new Set(evs.map(e=>e.start))].sort()
+  // Un rango o una tentativa son UN solo evento que abarca el bloque: alcanza con que arranque bien
+  const unSoloBloque = tipo==='rango' || tipo==='tentativa'
+  if(unSoloBloque){
+    if(feISO && !enCal.includes(feISO)) desync.push(`  ${quien}\n     sheet dice: ${feISO} (${tipo})   ·   Calendar arranca: ${enCal.join(', ')}`)
+    continue
+  }
+  const esperados=diasDelSheet(row[iFE],tipo,row[iFA])
+  const faltan=esperados.filter(d=>!enCal.includes(d)), sobran=enCal.filter(d=>!esperados.includes(d))
+  if(faltan.length||sobran.length) desync.push(`  ${quien}\n     sheet: ${esperados.join(', ')}\n     Calendar: ${enCal.join(', ')}${faltan.length?`\n     ⟵ faltan ${faltan.join(', ')}`:''}${sobran.length?`\n     ⟵ sobran ${sobran.join(', ')}`:''}`)
 }
 
 const bloque=(t,arr)=>{ console.log(`\n━━━ ${t}: ${arr.length} ━━━`); arr.forEach(x=>console.log(x)); if(!arr.length) console.log('  (ninguno)') }

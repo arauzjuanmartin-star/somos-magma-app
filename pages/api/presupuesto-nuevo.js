@@ -8,7 +8,7 @@ import { requireAuth } from '../../lib/auth-helpers'
 // 35 Otros | 36 Precio (otros) | 37 Descuento | 38 Subtotal | 39 Fee Agencia
 // 40 Impuesto a las ganancias | 41 IIBB | 42 Plazo | 43 Interes %
 // 44 Interes $ | 45 Total | 46 Ajuste
-// 47 Tipo Fechas (dia/rango/multi) | 48 Fechas Adicionales (csv |) | 49 Fee Servicios (csv 1|0|1)
+ // 47 Tipo Fechas (dia/rango/multi/tentativa) | 48 Fechas Adicionales (csv |) | 49 Fee Servicios (csv 1|0|1)
 
 // Lock simple en memoria del proceso para evitar race condition dentro del mismo node instance.
 // Para Vercel multi-instance, igual lo evita porque cada uno consulta el sheet al momento.

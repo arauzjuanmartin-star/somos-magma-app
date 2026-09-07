@@ -14,7 +14,7 @@ const DIAS = ['L','M','M','J','V','S','D']
 const pad = n => String(n).padStart(2, '0')
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` }
 
-export default function CampoFechas({ dias = [], onChange, compacto }) {
+export default function CampoFechas({ dias = [], onChange, tentativa = false, onTentativa, compacto }) {
   const [mes, setMes] = useState(() => {
     const base = (dias || []).slice().sort()[0]
     const d = new Date()
@@ -68,8 +68,8 @@ export default function CampoFechas({ dias = [], onChange, compacto }) {
         : <button key={iso} type="button" title={sel.has(iso) ? 'Sacar este día' : 'Agregar este día (shift = tramo)'}
             onClick={e => tocar(iso, e.shiftKey)}
             style={{ ...celda,
-              background: sel.has(iso) ? T.brand : (iso === hoy ? T.brandSoft : 'transparent'),
-              color: sel.has(iso) ? '#fff' : (iso === hoy ? T.brand : T.ink),
+              background: sel.has(iso) ? (tentativa ? T.warnSoft : T.brand) : (iso === hoy ? T.brandSoft : 'transparent'),
+              color: sel.has(iso) ? (tentativa ? T.warn : '#fff') : (iso === hoy ? T.brand : T.ink),
               fontWeight: sel.has(iso) || iso === hoy ? 600 : 400,
               boxShadow: iso === hoy && !sel.has(iso) ? `inset 0 0 0 1px ${T.brand}` : 'none' }}>
             {+iso.slice(8,10)}
@@ -79,12 +79,20 @@ export default function CampoFechas({ dias = [], onChange, compacto }) {
       <button type="button" onClick={todoElMes} style={accion}>Todo el mes</button>
       {delMes.length > 0 && <button type="button" onClick={limpiarMes} style={accion}>Limpiar {MESES[mes.m]}</button>}
     </div>
-    <div style={{ fontSize: 11.5, color: (dias||[]).length ? T.ink2 : T.ink3, marginTop: 8, lineHeight: 1.4 }}>
-      {resumenFechas(dias)}
+    {onTentativa && <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11.5, color: T.ink2, marginTop: 9, cursor: 'pointer', lineHeight: 1.35 }}>
+      <input type="checkbox" checked={tentativa} onChange={e => onTentativa(e.target.checked)} style={{ marginTop: 1 }}/>
+      <span>Todavía no están definidas — reservar los días “a confirmar”</span>
+    </label>}
+    <div style={{ fontSize: 11.5, color: (dias||[]).length ? (tentativa ? T.warn : T.ink2) : T.ink3, marginTop: 8, lineHeight: 1.4 }}>
+      {resumenFechas(dias, tentativa)}
       {deOtrosMeses.length > 0 && <div style={{ color: T.warn, marginTop: 3 }}>
         + {deOtrosMeses.length} en otro mes ({[...new Set(deOtrosMeses.map(d => MESES[+d.slice(5,7)-1]))].join(', ')})
       </div>}
     </div>
-    <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 5 }}>Clic para poner o sacar · shift+clic para un tramo</div>
+    <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 5 }}>
+      {tentativa
+        ? 'En el Calendar va un solo bloque gris, sin invitar a nadie'
+        : 'Clic para poner o sacar · shift+clic para un tramo'}
+    </div>
   </div>
 }

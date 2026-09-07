@@ -915,7 +915,18 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
       // 'pendiente' y le resucitaba el evento en amarillo. Fixed 2026-08-31.
       const estCal=String(form['Estado']||p['Estado']||'').toUpperCase()
       const accionCal=(estCal==='DESAPROBADO'||estCal==='REPRESUPUESTADO')?'borrar':(aprobado?'aprobar':'pendiente')
-      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: accionCal})}).catch(()=>{})
+      // Y avisar qué quedó agendado: un trabajo de varias fechas son varios eventos,
+      // y si sacaste un día se borró uno. Guardarlo en silencio no deja verlo.
+      fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion: accionCal})})
+        .then(r=>r.json()).then(j=>{
+          if(!j||!j.ok||accionCal==='borrar') return
+          const partes=[]
+          if(j.tentativa) partes.push('bloque “a confirmar”')
+          else if(j.eventos) partes.push(`${j.eventos} ${j.eventos===1?'día':'días'} en el Calendar`)
+          if(j.borrados) partes.push(`${j.borrados} ${j.borrados===1?'borrado':'borrados'}`)
+          if(j.staffSinMail&&j.staffSinMail.length) partes.push(`sin mail: ${j.staffSinMail.join(', ')}`)
+          if(partes.length) showToast(`#${id} · ${partes.join(' · ')}`)
+        }).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
