@@ -1,4 +1,4 @@
-import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
@@ -9,6 +9,7 @@ import { requireAuth } from '../../lib/auth-helpers'
 // 40 Impuesto a las ganancias | 41 IIBB | 42 Plazo | 43 Interes %
 // 44 Interes $ | 45 Total | 46 Ajuste
  // 47 Tipo Fechas (dia/rango/multi/tentativa) | 48 Fechas Adicionales (csv |) | 49 Fee Servicios (csv 1|0|1)
+// 113 Desglosar (DJ, casilla): el PDF muestra el precio de cada servicio
 
 // Lock simple en memoria del proceso para evitar race condition dentro del mismo node instance.
 // Para Vercel multi-instance, igual lo evita porque cada uno consulta el sheet al momento.
@@ -66,7 +67,7 @@ export default async function handler(req, res) {
       const nuevoNum = await calcularSiguienteNumero(sheets, SHEET_ID)
       numeroAsignado = nuevoNum
 
-      const row = new Array(ANCHO_PRESU).fill('')
+      const row = new Array(ANCHO_PRESU_FILA).fill('')
       row[0] = nuevoNum  // ← N° asignado por servidor, ignora lo que vino del cliente
       row[1] = p['Fecha Evento'] || ''
       row[2] = p['PM Interno'] || ''
@@ -121,6 +122,9 @@ export default async function handler(req, res) {
       row[54] = p['Contacto Lugar'] || ''  // BC: contacto que recibe en el lugar (va al Calendar)
       row[55] = p['Es Adicional'] || ''    // BD: CSV de 1|0 por slot — qué pedidos son adicionales (opcionales)
       row[56] = p['Precio Cliente Manual'] || '' // BE: CSV de precios al cliente override por slot (para adicionales con descuento manual)
+      // DJ: el presu sale con el precio abierto por ítem. Se decide al armarlo (el PDF
+      // lo lee de acá), y va como booleano porque la columna es una casilla del sheet.
+      row[COL_DESGLOSAR] = !!p['Desglosar']
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({

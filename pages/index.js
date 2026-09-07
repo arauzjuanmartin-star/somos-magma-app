@@ -1120,7 +1120,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     tajuste:ajusteOrig<0?'-1':'1', ajuste:String(Math.abs(ajusteOrig)||'0'),
     observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
-  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
+    desglosar:presuDesglosado(initialData),
+  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -1191,6 +1192,18 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const costoBase=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0)*cantDe(p),0)
   const margenBase=total-costoBase, margenBasePct=total>0?(margenBase/total)*100:0
 
+  // ---- Desglose por ítem: lo que va a ver el cliente, acá y no recién en el PDF ----
+  // Se arma con las MISMAS líneas que van al sheet (la cantidad ya expandida) y contra
+  // el precio final, así el número que se ve mientras se arma el presu es exactamente
+  // el que después sale en el PDF. El cálculo vive en lib/desglose.js: una sola copia.
+  const itemsDesglose=baseList.filter(p=>p.svc.trim()||(parseFloat(p.precio)||0)>0)
+    .flatMap(p=>Array.from({length:cantDe(p)},()=>({id:p.id, nombre:p.svc, costo:parseFloat(p.precio)||0, fee:!!p.feeAg})))
+  const precioItem={}
+  if(form.desglosar&&itemsDesglose.length){
+    desglosarPrecio(itemsDesglose,{gan:form.gan, iibb:form.iibb, interesPct:parseFloat(form.interes)||0, total:Math.round(total)})
+      .lineas.forEach(l=>{ precioItem[l.id]=(precioItem[l.id]||0)+l.precio })
+  }
+
   // Descuento %: calcula el monto exacto de ajuste para bajar el total ese %
   const totalSinAjuste=base+gan+iibb+intMto
   const aplicarDescPct=(v)=>{
@@ -1235,6 +1248,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       'Fee Servicios':valid.map(p=>p.feeAg?'1':'0').join('|'),
       'Es Adicional':valid.map(p=>p.adicional?'1':'0').join('|'),
       'Precio Cliente Manual':valid.map(p=>p.adicional?(p.precioCliente||''):'').join('|'),
+      'Desglosar':!!form.desglosar,   // DJ: el PDF sale con el precio de cada servicio
       'Observaciones':form.observaciones,
       'Horario':(form.horaIni&&form.horaFin)?`${form.horaIni} a ${form.horaFin} hs`:'',
       'Ubicación':form.ubicacion,
@@ -1318,7 +1332,14 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         </div>
 
         {/* Servicios */}
-        <div style={{fontSize:12.5, fontWeight:600, color:T.ink, marginBottom:8}}>Servicios</div>
+        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
+          <div style={{fontSize:12.5, fontWeight:600, color:T.ink}}>Servicios</div>
+          <div style={{flex:1}}/>
+          <label title="El cliente ve cuánto sale cada servicio, no sólo el total. Se guarda en el presu y el PDF sale así." style={{display:'flex', gap:6, alignItems:'center', fontSize:11.5, fontWeight:form.desglosar?600:400, color:form.desglosar?T.pos:T.ink2, cursor:'pointer'}}>
+            <input type="checkbox" checked={!!form.desglosar} onChange={e=>upd('desglosar',e.target.checked)} style={{cursor:'pointer'}}/>
+            Mostrar precio por ítem al cliente
+          </label>
+        </div>
         <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
           <span>Servicio</span><span style={{textAlign:'right'}}>Costo c/u</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'center'}}>Fee</span><span/>
         </div>
@@ -1333,6 +1354,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
               <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
             </div>
             {n>1 && costo>0 && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>{n} × {fmt(costo)} = <strong style={{color:T.ink2}}>{fmt(costo*n)}</strong> de costo · van {n} líneas al sheet y {n} tareas al tablero de Edición</div>}
+            {form.desglosar && (p.svc.trim()||costo>0) && <div style={{fontSize:10.5, marginTop:3, paddingLeft:2, color:costo>0?T.pos:T.warn}}>
+              {costo>0
+                ? <>El cliente ve <strong>{fmt(precioItem[p.id]||0)} + IVA</strong>{n>1?<span style={{color:T.ink3}}> · {fmt(Math.round((precioItem[p.id]||0)/n))} c/u</span>:null}</>
+                : <>Sin costo cargado — en el PDF sale listado sin precio</>}
+            </div>}
           </div>
         )})())}
         <datalist id="np-svc">{svcs.map(s=><option key={s.n} value={s.n}/>)}</datalist>
@@ -1425,6 +1451,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         </div>
         <div style={{display:'flex', alignItems:'center', gap:14}}>
           <span style={{fontSize:12, color:semaforo(margenBasePct).c, fontWeight:600}}>Margen {Math.round(margenBasePct)}% · {semaforo(margenBasePct).l}</span>
+          {form.desglosar && <span style={{fontSize:11.5, color:T.pos}}>Precio abierto · los ítems suman {fmt(Object.values(precioItem).reduce((s,v)=>s+v,0))}</span>}
           {adicList.length>0 && <span style={{fontSize:11.5, color:T.ink3}}>+ {fmt(adicCalc.reduce((s,a)=>s+a.precioCliente,0))} en adicionales</span>}
           <div style={{flex:1}}/>
           {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
