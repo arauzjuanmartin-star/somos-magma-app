@@ -105,6 +105,23 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     })
     return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
   }, [filas])
+  // Quién puede editar. Sale de RRHH (rubro Editor / Motion), no de una lista escrita
+  // en el código: el día que entra alguien nuevo aparece solo. Es un desplegable y no
+  // un campo libre porque el nombre tiene que coincidir EXACTO con RRHH — si dice
+  // "Dani" en vez de "Daniela Viviana Ayala", el aviso por mail no le llega a nadie.
+  const editores = useMemo(() => {
+    const de = new Map()
+    ;(data?.rrhh || []).forEach(r => {
+      const n = String(r['Nombre Apellido'] || '').trim()
+      if (!n || !/edit|motion|post/i.test(String(r.Rubro || ''))) return
+      de.set(n, /@/.test(String(r.Mail || '').trim()))
+    })
+    // Los que ya están asignados en el tablero van igual, aunque no tengan el rubro:
+    // si no, abrir la ficha de alguien lo borraría de la lista sin querer.
+    filas.forEach(f => { const n = String(f.Editor || '').trim(); if (n && !de.has(n)) de.set(n, false) })
+    return [...de.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([nombre, tieneMail]) => ({ nombre, tieneMail }))
+  }, [data, filas])
+
   const sinAsignar = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.Editor || '').trim()).length, [filas])
   // Los PM que tienen trabajo abierto, con cuánto. El PM sale de PROYECTOS y lo copia
   // el sync; las filas viejas sin PM se agrupan en "Sin PM" para que no desaparezcan.
@@ -262,7 +279,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     guardar(f.ID, { Consulta: '', Notas: (t ? lineaBitacora(mail, '💬 ' + t) + '\n' : '') + String(f.Notas || '') }, t ? { nota: '💬 ' + t } : undefined)
   }
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF }
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -334,7 +351,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: cel ? '9px 14px' : '6px 12px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
-          {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={personas.map(([e]) => e)} />}
+          {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
           {!grupos.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
@@ -651,7 +668,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
@@ -678,7 +695,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} />)}
   </div>
 }
 
@@ -711,7 +728,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -751,7 +768,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
-      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />}
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} />}
     </div>
   }
 
@@ -775,11 +792,11 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [] }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -829,7 +846,13 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
       <div>
         <label style={lbl}>A cargo</label>
-        <input defaultValue={String(f.Editor || '')} onBlur={e => { if (e.target.value !== String(f.Editor || '')) guardar(f.ID, { Editor: e.target.value }) }} placeholder="Quién lo hace" style={{ ...inp, width: '100%' }} />
+        <select value={String(f.Editor || '')} onChange={e => guardar(f.ID, { Editor: e.target.value })}
+          style={{ ...inp, width: '100%', cursor: 'pointer', borderColor: String(f.Editor || '').trim() ? T.border : `${T.brand}55` }}>
+          <option value="">— sin asignar —</option>
+          {editores.map(e => <option key={e.nombre} value={e.nombre}>{e.nombre}{e.tieneMail ? '' : ' (sin mail)'}</option>)}
+        </select>
+        {String(f.Editor || '').trim() && !editores.find(e => e.nombre === String(f.Editor).trim())?.tieneMail &&
+          <div style={{ fontSize: 10.5, color: T.brand, marginTop: 4, lineHeight: 1.4 }}>No tiene mail en RRHH: no le van a llegar los avisos.</div>}
       </div>
     </div>
 
