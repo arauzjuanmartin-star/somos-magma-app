@@ -1281,20 +1281,70 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       if(ctNuevo || ctIncompleto){ try{ await fetch('/api/contacto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.contacto, mail:ctNew.mail, telefono:ctNew.telefono, cuit:ctNew.cuit, agencia:form.agencia, cargo:ctNew.cargo})}) }catch(e){} }
       if(agNueva){ try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.agencia, cuit:agNew.cuit, condIVA:agNew.condIVA, mailFact:agNew.mailFact, telefono:agNew.telefono})}) }catch(e){} }
       if(clNuevo){ try{ await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.cliente})}) }catch(e){} }
+      limpiarBorrador()
       showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
+  // ---- Que no se pierda lo cargado ----
+  // Dos cosas distintas arreglan el mismo dolor: un clic de más afuera del cuadro
+  // cerraba el modal y borraba media hora de trabajo, y cerrar la pestaña también.
+  // El borrador se guarda en el navegador a cada tecla y vuelve solo al reabrir.
+  const CLAVE_BORRADOR = isRep ? null : 'magma:presu-borrador'
+  const hayDatos = !!(form.cliente.trim() || form.proyecto.trim() || form.agencia.trim() || (form.dias||[]).length || peds.some(x=>x.svc.trim()||x.precio))
+  const [recuperado, setRecuperado] = useState(false)
+
+  useEffect(()=>{
+    if(!CLAVE_BORRADOR) return
+    try{
+      const b = JSON.parse(localStorage.getItem(CLAVE_BORRADOR)||'null')
+      if(b?.form && (b.form.cliente||b.form.proyecto||b.form.agencia||(b.form.dias||[]).length||(b.peds||[]).some(x=>x.svc))){
+        setForm(f=>({...f, ...b.form})); if(b.peds?.length) setPeds(b.peds); setRecuperado(true)
+      }
+    }catch(e){}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[])
+
+  useEffect(()=>{
+    if(!CLAVE_BORRADOR) return
+    if(!hayDatos){ try{ localStorage.removeItem(CLAVE_BORRADOR) }catch(e){}; return }
+    try{ localStorage.setItem(CLAVE_BORRADOR, JSON.stringify({form, peds, cuando:Date.now()})) }catch(e){}
+  },[form, peds, hayDatos, CLAVE_BORRADOR])
+
+  // Cerrar la pestaña con algo a medio cargar: el navegador pregunta.
+  useEffect(()=>{
+    if(!hayDatos) return
+    const h = e => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return ()=>window.removeEventListener('beforeunload', h)
+  },[hayDatos])
+
+  const limpiarBorrador = ()=>{ try{ if(CLAVE_BORRADOR) localStorage.removeItem(CLAVE_BORRADOR) }catch(e){} }
+  // El clic afuera ya no cierra y listo: si hay algo cargado, pregunta. Y aunque
+  // digas que sí, el borrador queda guardado para recuperarlo.
+  const cerrar = ()=>{
+    if(hayDatos && !confirm('¿Cerrar el presupuesto?\n\nLo que cargaste queda guardado como borrador y vuelve solo la próxima vez que abras uno nuevo.')) return
+    onClose && onClose()
+  }
+  const empezarDeCero = ()=>{
+    if(!confirm('¿Descartar lo que quedó a medio cargar y empezar de cero?')) return
+    limpiarBorrador(); onClose && onClose()
+  }
+
   const colP = (lbl,key,opts)=> <div style={{flex:1, minWidth:opts?.min||140}}><label style={lblV2}>{lbl}</label>{opts?.list?<><input list={opts.list} value={form[key]} onChange={e=>upd(key,e.target.value)} placeholder={opts.ph||''} style={inpV2}/>{opts.datalist}</>:<input type={opts?.type||'text'} value={form[key]} onChange={e=>upd(key,e.target.value)} placeholder={opts?.ph||''} style={inpV2}/>}</div>
 
-  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'32px 20px'}}>
+  return <div onClick={cerrar} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'32px 20px'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:900, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'18px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, background:T.surface, borderRadius:'16px 16px 0 0', zIndex:2}}>
         <div style={{fontSize:17, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'}</div>
-        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        <button onClick={cerrar} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
 
       <div style={{padding:'20px 24px'}}>
+        {recuperado && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:'10px 13px', marginBottom:14}}>
+          <span style={{fontSize:12.5, color:T.ink2, flex:1}}>Recuperamos el presupuesto que habías dejado a medio cargar.</span>
+          <button onClick={empezarDeCero} style={{padding:'5px 11px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, cursor:'pointer'}}>Empezar de cero</button>
+        </div>}
         {isRep && <div style={{background:T.brandSoft, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 14px', marginBottom:16}}>
           <div style={{fontSize:12, color:T.ink2, marginBottom:8}}>Se crea una <strong>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
           <label style={{...lblV2, color:T.brand}}>Motivo del represupuesto *</label>
@@ -1508,7 +1558,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
           {adicList.length>0 && <span style={{fontSize:11.5, color:T.ink3}}>+ {fmt(adicCalc.reduce((s,a)=>s+a.precioCliente,0))} en adicionales</span>}
           <div style={{flex:1}}/>
           {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
-          <button onClick={onClose} style={{padding:'10px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+          <button onClick={cerrar} style={{padding:'10px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
           <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.ink3, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
         </div>
       </div>
