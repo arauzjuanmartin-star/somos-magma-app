@@ -2026,7 +2026,11 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido}))})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       // Listo el guardado → liberamos el botón y cerramos enseguida
-      showToast(`#${num} · staff guardado`)
+      // Decir a quién le llegó el mail: el aviso sale solo y si no se ve, nadie
+      // sabe si el freelancer se enteró o hay que escribirle igual.
+      const avis = (j?.avisados||[]).length ? ` · avisados por mail: ${j.avisados.join(', ')}` : ''
+      showToast(`#${num} · staff guardado${avis}`)
+      if(j?.sinMail?.length) showToast(`Sin mail en RRHH, avisales vos: ${j.sinMail.join(', ')}`,'err')
       setSaving(false)
       if(onRefresh) onRefresh()
       if(onClose) onClose()

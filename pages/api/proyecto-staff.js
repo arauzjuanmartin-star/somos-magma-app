@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { requireAuth } from '../../lib/auth-helpers'
+import { armarAvisoStaff, mandarAviso } from '../../lib/staff-avisos'
 
 const SHEET_ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 
@@ -116,7 +117,7 @@ export default async function handler(req, res) {
     const filasExistentes = []
     psRows.forEach((row, i) => {
       if (i === 0) return
-      if (String(row[psIdx.nro]||'').trim() === String(num).trim()) filasExistentes.push({ fila: i+1, freelancer: String(row[psIdx.freelancer]||'').trim(), servicio: String(row[psIdx.servicio]||'').trim(), pagado: row[psIdx.pagado] })
+      if (String(row[psIdx.nro]||'').trim() === String(num).trim()) filasExistentes.push({ fila: i+1, freelancer: String(row[psIdx.freelancer]||'').trim(), servicio: String(row[psIdx.servicio]||'').trim(), pagado: row[psIdx.pagado], adeudado: row[psIdx.adeudado] })
     })
 
     // Lo que queremos: una entrada por staff real (no Somos Magma) con monto > 0
@@ -127,6 +128,7 @@ export default async function handler(req, res) {
     const psUpdates = []
     const psNuevas = []
     const filasABorrar = []
+    const aAvisar = []   // a quién le mandamos el mail al final
 
     // Update existentes que aún están en target; crear nuevas; marcar para borrar las que ya no están
     const consumidas = new Set()
@@ -136,6 +138,10 @@ export default async function handler(req, res) {
         consumidas.add(target.indexOf(match))
         // Update monto adeudado si cambió
         psUpdates.push({ range: `PAGOS_STAFF!${colToLetter(psIdx.adeudado)}${exist.fila}`, values: [[match.monto]] })
+        // Si le cambiamos lo que cobra, se lo decimos. Si es el mismo monto no:
+        // guardar la pantalla dos veces no le tiene que mandar dos mails.
+        const antes = Number(String(exist.adeudado||'').replace(/[^\d.-]/g,'')) || 0
+        if (antes !== match.monto) aAvisar.push({ ...match, motivo: 'cambio' })
       } else {
         // Si la fila existente NO está pagada todavía, la podemos borrar (cambio antes de pagar)
         const ya = Number(String(exist.pagado||'').replace(/[^\d.-]/g,'')) || 0
@@ -160,6 +166,7 @@ export default async function handler(req, res) {
       row[psIdx.estado] = 'Pendiente'
       row[psIdx.notas] = ''
       psNuevas.push(row)
+      aAvisar.push({ ...t, motivo: 'nuevo' })
     })
 
     if (psUpdates.length > 0) {
@@ -185,17 +192,61 @@ export default async function handler(req, res) {
       await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests } })
     }
 
-    // 5. Log
+    // 5. Avisarle a cada uno: qué hace, cuándo, dónde, cuánto cobra y cuándo.
+    // Va DESPUÉS de escribir el sheet y nunca frena la respuesta: si un mail falla,
+    // la asignación ya quedó guardada igual.
+    const avisados = [], sinMail = []
+    if (aAvisar.length) {
+      try {
+        const extra = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['RRHH!A:D', 'PRESUPUESTOS!A:DP'] })
+        const rr = extra.data.valueRanges[0].values || []
+        const hRR = rr[0] || []
+        const mailDe = nombre => {
+          const n = String(nombre||'').trim().toLowerCase()
+          const f = rr.slice(1).find(r => String(r[hRR.indexOf('Nombre Apellido')]||'').trim().toLowerCase() === n)
+          return String(f?.[hRR.indexOf('Mail')] || '').trim()
+        }
+        // El horario, la dirección y el contacto en el lugar viven en PRESUPUESTOS:
+        // PROYECTOS no tiene esas columnas.
+        const pre = extra.data.valueRanges[1].values || []
+        const hPre = pre[0] || []
+        const filaPre = pre.slice(1).find(r => String(r[0]||'').trim() === String(num).trim())
+        const dePre = k => { const i = hPre.indexOf(k); return i > -1 && filaPre ? String(filaPre[i]||'').trim() : '' }
+        const trabajo = {
+          num: String(num),
+          cliente: projRow[headers.indexOf('Cliente')] || '',
+          agencia: projRow[headers.indexOf('Agencia')] || '',
+          proyecto: proyName,
+          fechaEvento,
+          fechasAdic: dePre('Fechas Adicionales'),
+          horario: dePre('Horario'),
+          ubicacion: dePre('Ubicación'),
+          contactoLugar: dePre('Contacto Lugar'),
+          pm: projRow[headers.indexOf('PM')] || '',
+        }
+        for (const a of aAvisar) {
+          const aviso = armarAvisoStaff({
+            persona: { nombre: a.freelancer, mail: mailDe(a.freelancer), servicio: a.servicio, monto: a.monto },
+            trabajo, motivo: a.motivo,
+          })
+          if (!aviso) { sinMail.push(a.freelancer); continue }
+          const env = await mandarAviso(aviso)
+          if (env.ok) avisados.push(a.freelancer); else sinMail.push(a.freelancer)
+        }
+      } catch (e) { console.error('aviso staff:', e.message) }
+    }
+
+    // 6. Log
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'proyecto-staff', 'PROYECTOS+PAGOS_STAFF', String(num), `staff=${staffData.length} pagos_creados=${psNuevas.length} pagos_actualizados=${psUpdates.length} borradas=${filasABorrar.length}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'proyecto-staff', 'PROYECTOS+PAGOS_STAFF', String(num), `staff=${staffData.length} pagos_creados=${psNuevas.length} pagos_actualizados=${psUpdates.length} borradas=${filasABorrar.length} avisados=${avisados.join(',')||'-'}`]] },
       })
     } catch (e) {}
 
-    res.json({ ok: true, pagosNuevos: psNuevas.length, pagosActualizados: psUpdates.length, pagosBorrados: filasABorrar.length })
+    res.json({ ok: true, pagosNuevos: psNuevas.length, pagosActualizados: psUpdates.length, pagosBorrados: filasABorrar.length, avisados, sinMail })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
