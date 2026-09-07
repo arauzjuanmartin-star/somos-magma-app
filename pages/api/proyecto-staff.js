@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     const sheets = google.sheets({ version: 'v4', auth })
 
     // 1. Leer PROYECTOS para encontrar la fila + headers
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:EV' })
     const rows = r.data.values
     if (!rows || rows.length === 0) return res.status(404).json({ error: 'Hoja vacía' })
     const headers = rows[0]
@@ -72,6 +72,15 @@ export default async function handler(req, res) {
 
     // 3. Actualizar columnas Staff/Precio/Pedido por slot
     const updates = []
+    // Qué día va cada uno. En un trabajo de una fecha da igual; en Popstars, que son
+    // 30 días y 12 jornadas repartidas, es lo único que dice a quién avisarle y
+    // cuánto pagarle. Se guarda como "1:08/09/2026|2:09/09/2026" — el número es el
+    // slot, igual que Pedido N / Staff N / Precio N.
+    const colFechas = headers.indexOf('Fechas Staff')
+    if (colFechas >= 0) {
+      const csv = staffData.map((s, i) => (s.fecha ? `${i + 1}:${s.fecha}` : '')).filter(Boolean).join('|')
+      updates.push({ range: `PROYECTOS!${colToLetter(colFechas)}${rowIndex}`, values: [[csv]] })
+    }
     const colCarga = headers.indexOf('Carga Staff')
     if (colCarga >= 0) updates.push({ range: `PROYECTOS!${colToLetter(colCarga)}${rowIndex}`, values: [[true]] })
 
@@ -123,7 +132,7 @@ export default async function handler(req, res) {
     // Lo que queremos: una entrada por staff real (no Somos Magma) con monto > 0
     const target = staffData
       .filter(s => s.nombre && s.nombre !== 'Somos Magma' && Number(s.monto) > 0)
-      .map(s => ({ freelancer: s.nombre, servicio: s.pedido || '', monto: Number(s.monto)||0 }))
+      .map(s => ({ freelancer: s.nombre, servicio: s.pedido || '', monto: Number(s.monto)||0, fecha: String(s.fecha||'').trim() }))
 
     const psUpdates = []
     const psNuevas = []
@@ -164,7 +173,9 @@ export default async function handler(req, res) {
       row[psIdx.tipo] = ''
       row[psIdx.cuenta] = ''
       row[psIdx.estado] = 'Pendiente'
-      row[psIdx.notas] = ''
+      // El día va en Notas y no en Servicio: Servicio es parte de la llave con la que
+      // la app reconoce el pago (persona + mes + N° + servicio). Tocarlo rompe eso.
+      row[psIdx.notas] = t.fecha ? `Fecha: ${t.fecha}` : ''
       psNuevas.push(row)
       aAvisar.push({ ...t, motivo: 'nuevo' })
     })
@@ -227,7 +238,10 @@ export default async function handler(req, res) {
         for (const a of aAvisar) {
           const aviso = armarAvisoStaff({
             persona: { nombre: a.freelancer, mail: mailDe(a.freelancer), servicio: a.servicio, monto: a.monto },
-            trabajo, motivo: a.motivo,
+            // Si tiene día asignado, el mail habla de ESE día y no de las 30 fechas
+            // del proyecto: al que va el 8 no le sirve la lista entera.
+            trabajo: a.fecha ? { ...trabajo, fechaEvento: a.fecha, fechasAdic: '' } : trabajo,
+            motivo: a.motivo,
           })
           if (!aviso) { sinMail.push(a.freelancer); continue }
           const env = await mandarAviso(aviso)

@@ -180,8 +180,10 @@ for (const suelta of [...new Set(plan.map(x => x.suelta))]) { try {
     soloAniosVacios.push(q)
   }
   if (quedan.length && !soloAniosVacios.length) { console.log(`   · "${suelta.name}" queda: todavía tiene cosas adentro`); continue }
-  for (const v of soloAniosVacios) await drive.files.delete({ fileId: v.id, supportsAllDrives: true })
-  await drive.files.delete({ fileId: suelta.id, supportsAllDrives: true })
+  // A la papelera, no borrado: la cuenta de servicio no puede borrar en la unidad
+  // compartida (canDeleteChildren=false), sí puede tirar a la papelera.
+  for (const v of soloAniosVacios) await drive.files.update({ fileId: v.id, requestBody: { trashed: true }, supportsAllDrives: true })
+  await drive.files.update({ fileId: suelta.id, requestBody: { trashed: true }, supportsAllDrives: true })
   borradas++
   console.log(`   ✓ borrada la carpeta vacía "${suelta.name}"`)
 } catch (e) { console.log(`   · "${suelta.name}" no se pudo borrar: ${e.message}`) } }

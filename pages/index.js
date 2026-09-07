@@ -1962,9 +1962,28 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const dlStaff = 'rrhh-'+useId().replace(/:/g,'')
   const [freel,setFreel]=useState(null)  // nombre del freelancer a completar
   const total=parseMonto(p['Total ']||p['Total'])
-  const init=()=>{ const arr=[]; for(let j=1;j<=MAX_SLOTS;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio}) } return arr.length?arr:[{pedido:'',quien:'',precio:0}] }
+  // Las fechas del trabajo. Si son varias, cada línea de staff puede llevar la suya:
+  // en Popstars son 30 días y 12 jornadas repartidas entre tres personas, y sin el día
+  // no se sabe a quién avisarle ni cuánto pagarle.
+  const fechasProyecto = useMemo(()=>{
+    const base = String(presu?.['Fecha Evento'] || p['Fecha Evento'] || '').trim()
+    const mas = String(presu?.['Fechas Adicionales'] || '').split('|').map(x=>x.trim()).filter(Boolean)
+    const tipo = String(presu?.['Tipo Fechas'] || '').trim()
+    // Un rango son dos extremos, no dos días sueltos: ahí no tiene sentido elegir.
+    if(tipo === 'rango') return []
+    return [...new Set([base, ...mas].filter(Boolean))]
+  }, [presu, p])
+  const porFecha = fechasProyecto.length > 1
+  // Lo guardado: "1:08/09/2026|2:09/09/2026" — la llave es el número de slot.
+  const fechasGuardadas = useMemo(()=>{
+    const m = {}
+    String(p['Fechas Staff']||'').split('|').forEach(x=>{ const [k,...v]=x.split(':'); if(k&&v.length) m[k.trim()] = v.join(':').trim() })
+    return m
+  }, [p])
+  const init=()=>{ const arr=[]; for(let j=1;j<=MAX_SLOTS;j++){ const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; const quien=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const precio=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(ped||quien||precio>0) arr.push({pedido:ped, quien, precio, fecha:fechasGuardadas[String(arr.length+1)]||''}) } return arr.length?arr:[{pedido:'',quien:'',precio:0,fecha:''}] }
   const [items,setItems]=useState(init)
   const [saving,setSaving]=useState(false)
+  const GRID_STAFF = porFecha ? '1.2fr 1.3fr 130px 105px 28px' : '1.3fr 1.4fr 110px 28px'
 
   // ── Aviso de jornadas (Lucho, Juani) ────────────────────────────────────────
   // Las condiciones salen de la solapa ACUERDOS, no de acá. Al poner a alguien con
@@ -2023,7 +2042,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         if(Object.keys(cambios).length) await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, cambios})})
       }
       // 2. Staff → PROYECTOS
-      const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido}))})})
+      const r=await fetch('/api/proyecto-staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, staffData:items.filter(s=>s.pedido||s.quien).map(s=>({nombre:s.quien, monto:Number(s.precio)||0, pedido:s.pedido, fecha:s.fecha||''}))})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       // Listo el guardado → liberamos el botón y cerramos enseguida
       // Decir a quién le llegó el mail: el aviso sale solo y si no se ve, nadie
@@ -2057,11 +2076,14 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       </div>
       <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
     </div>}
-    <div style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 110px 28px', gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
-      <span>Servicio</span><span>Quién lo hace</span><span style={{textAlign:'right'}}>Monto</span><span/>
+    {porFecha && <div style={{fontSize:11.5, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:'8px 11px', marginBottom:10, lineHeight:1.45}}>
+      Este trabajo tiene <strong>{fechasProyecto.length} fechas</strong>. Poné qué día va cada uno: es lo que después le llega en el mail y lo que dice cuánto pagarle por jornada.
+    </div>}
+    <div style={{display:'grid', gridTemplateColumns:GRID_STAFF, gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
+      <span>Servicio</span><span>Quién lo hace</span>{porFecha&&<span>Qué día</span>}<span style={{textAlign:'right'}}>Monto</span><span/>
     </div>
     {items.map((s,i)=>(
-      <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 1.4fr 110px 28px', gap:10, marginBottom:8, alignItems:'start'}}>
+      <div key={i} style={{display:'grid', gridTemplateColumns:GRID_STAFF, gap:10, marginBottom:8, alignItems:'start'}}>
         <div>
           <input list="v2-svcs" value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
           {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
@@ -2073,6 +2095,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           </span>}
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
+        {porFecha && <select value={s.fecha||''} onChange={e=>upd(i,'fecha',e.target.value)} style={{...inpV2, cursor:'pointer', borderColor:s.quien&&!s.fecha?T.warn:T.border}}>
+          <option value="">— sin día —</option>
+          {fechasProyecto.map(f=><option key={f} value={f}>{f}</option>)}
+        </select>}
         <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
         <button onClick={()=>delRow(i)} title="Quitar línea" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:17, padding:0, alignSelf:'center'}}>×</button>
       </div>
