@@ -645,8 +645,10 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, minWidth: 130 }}>{limpiarPedido(f.Entregable)}</span>
       {prio === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}
       {hayConsulta && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4 }}>🙋 PREGUNTA</span>}
-      <span style={{ fontSize: 12.5, color: String(f.Editor).trim() === 'Somos Magma' ? T.ink : T.ink2, fontWeight: String(f.Editor).trim() === 'Somos Magma' ? 600 : 400, minWidth: 150 }}>
+      <span style={{ fontSize: 12.5, color: T.ink2, minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
         {String(f.Editor || '').trim() || <em style={{ color: T.brand, fontStyle: 'normal' }}>sin asignar</em>}
+        {/* "Interno" es de facturación: la plata queda en Magma. No dice quién lo hace. */}
+        {String(f.Interno || '').trim() && <span title="Este trabajo lo cobra Magma, no un freelancer" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 4 }}>MAGMA</span>}
       </span>
       <select value={String(f.Estado || 'Sin material')} onChange={e => guardar(f.ID, { Estado: e.target.value })} style={{ ...inp, padding: '4px 8px', fontSize: 12, width: 138, cursor: 'pointer' }}>
         {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
