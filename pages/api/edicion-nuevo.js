@@ -11,7 +11,7 @@
 
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, aAR, fechaSugerida, parseFechaAR } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, aAR, fechaSugerida, parseFechaAR, sumarHabiles, slaDias, hoyCero } from '../../lib/edicion'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT_COL = colLetra(HEADERS_EDICION.length - 1)
@@ -72,9 +72,13 @@ export default async function handler(req, res) {
     })
 
     // El plazo: el que puso el usuario, o el del manual desde la fecha del evento.
-    const fc = String(compromiso).trim()
-      ? aAR(parseFechaAR(compromiso))
-      : aAR(fechaSugerida(base['Fecha Evento'], tit))
+    //
+    // Ojo con los trabajos viejos: en un evento de hace tres meses el plazo del
+    // manual cae en el pasado y la tarea nace en rojo, como si ya estuviera
+    // atrasada cuando recién se pide. En ese caso el plazo se cuenta desde hoy.
+    let sugerida = fechaSugerida(base['Fecha Evento'], tit)
+    if (!sugerida || sugerida < hoyCero()) sugerida = sumarHabiles(hoyCero(), slaDias(tit))
+    const fc = String(compromiso).trim() ? aAR(parseFechaAR(compromiso)) : aAR(sugerida)
 
     const nuevas = []
     const ids = []
