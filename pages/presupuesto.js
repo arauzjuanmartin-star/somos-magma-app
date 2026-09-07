@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
+import { desglosarPrecio, agruparLineas, opcionesDePresu, presuDesglosado } from '../lib/desglose'
 
 // Parsea formatos AR ($1.234,56) y US ($1,234.56) de forma robusta
 const parseMonto = v => {
@@ -170,6 +171,10 @@ export default function Presupuesto() {
   const [form, setForm] = useState({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
     servicios:[''], adicionales:[], observaciones:'', descripcion:'', precioTotal:'',
+    // costos[i] = {costo, fee} del servicio i, tal como está en el presu. Sólo lo usa el
+    // desglose: el PDF normal muestra los servicios sin precio.
+    costos:[],
+    desglosar:false,             // el cliente ve cuánto sale cada ítem (se guarda en el sheet)
     descPct:'', descMotivo:'',   // descuento comercial que el cliente ve desglosado en el PDF
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'30',  // 30 días por default (reunión 14/08/2026)
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
@@ -209,13 +214,17 @@ export default function Presupuesto() {
       }
       const esAdicCSV = String(p['Es Adicional']||'').split('|')
       const preciosClienteManualCSV = String(p['Precio Cliente Manual']||'').split('|')
+      // Quién lleva margen Magma. Sin CSV (presus viejos) asumimos que sí: es el caso normal.
+      const feeCSV = String(p['Fee Servicios']||'').split('|')
       // Calcular factor del presu base para precio cliente automático de adicionales sin manual
       const parseMontoLocal = v => { const n = parseFloat(String(v||'').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
       const subtotalBase = pedidosRaw.reduce((s,_,i) => esAdicCSV[i]==='1' ? s : s+parseMontoLocal(preciosRaw[i]), 0)
       const totalCliente = parseMontoLocal(p['Precio Final'])
       const factor = subtotalBase>0 ? totalCliente/subtotalBase : 1
       // Separar base y adicionales
-      const baseSvcs = [], adicionales = []
+      // baseCostos va en paralelo a baseSvcs (mismo índice): es lo que necesita el
+      // desglose para abrir el precio por ítem. Sin esto sólo tendríamos los nombres.
+      const baseSvcs = [], baseCostos = [], adicionales = []
       pedidosRaw.forEach((ped, i) => {
         if (!ped) return
         const nombre = prettifySvc(ped)
@@ -226,11 +235,12 @@ export default function Presupuesto() {
           adicionales.push({nombre, precio: precioCliente})
         } else {
           baseSvcs.push(nombre)
+          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1' })
         }
       })
       console.log('[Presu '+nro+'] base:', baseSvcs, '· adicionales:', adicionales)
       setUltimosServiciosDelSheet(baseSvcs)
-      return { p, svcs: baseSvcs, adicionales }
+      return { p, svcs: baseSvcs, costos: baseCostos, adicionales }
     } catch (e) {
       console.error('Error cargando presu:', e)
       setLoading(false)
@@ -244,7 +254,7 @@ export default function Presupuesto() {
     if (!nro) return
     cargarDelSheet(nro).then(res => {
       if (!res) { setLoading(false); return }
-      const { p, svcs, adicionales } = res
+      const { p, svcs, costos, adicionales } = res
       const fechaHoy = new Date().toISOString().slice(0,10)
       const fechaEv = (() => {
         const tipo = String(p['Tipo Fechas']||'').trim()
@@ -263,12 +273,15 @@ export default function Presupuesto() {
         fechaEvento: fechaEv,
         precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
         servicios: svcs.length > 0 ? svcs : [''],
+        costos: costos || [],
+        desglosar: presuDesglosado(p),
         adicionales: adicionales || [],
         observaciones: p['Observaciones']||'',
         fechaEmision: fechaHoy,
       }))
       setValidez(addDays(fechaHoy, 20))
-      setPresuSheet({ nro: String(p['Columna 1']||''), precioFinal: Math.round(parseMonto(p['Precio Final'])), fila: p.__row || null })
+      // opts = con qué impuestos y plazo se armó ESE presu. El desglose los repite por ítem.
+      setPresuSheet({ nro: String(p['Columna 1']||''), precioFinal: Math.round(parseMonto(p['Precio Final'])), fila: p.__row || null, opts: opcionesDePresu(p) })
       setLoading(false)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,7 +295,7 @@ export default function Presupuesto() {
     const res = await cargarDelSheet(nro)
     setLoading(false)
     if (res && res.svcs.length > 0) {
-      setForm(prev => ({...prev, servicios: res.svcs}))
+      setForm(prev => ({...prev, servicios: res.svcs, costos: res.costos || []}))
     }
     setServiciosRecargando(false)
   }
@@ -292,9 +305,12 @@ export default function Presupuesto() {
   }, [form.fechaEmision])
 
   const setF = (k,v) => setForm(p => ({...p,[k]:v}))
+  // Renombrar un servicio no le cambia el costo (sigue siendo el mismo ítem del presu),
+  // pero agregar y borrar sí tienen que mover el costo de lugar: si no, el desglose le
+  // pone a un servicio el precio de otro.
   const setSvc = (i,v) => { const s=[...form.servicios]; s[i]=v; setF('servicios',s) }
-  const addSvc = () => setF('servicios',[...form.servicios,''])
-  const delSvc = i => setF('servicios', form.servicios.filter((_,j)=>j!==i))
+  const addSvc = () => setForm(p => ({...p, servicios:[...p.servicios,''], costos:[...(p.costos||[]),{costo:0,fee:true}]}))
+  const delSvc = i => setForm(p => ({...p, servicios:p.servicios.filter((_,j)=>j!==i), costos:(p.costos||[]).filter((_,j)=>j!==i)}))
   const updAdic = (i,k,v) => setForm(p => ({...p, adicionales:(p.adicionales||[]).map((a,j)=>j===i?{...a,[k]:v}:a)}))
   const addAdic = () => setForm(p => ({...p, adicionales:[...(p.adicionales||[]),{nombre:'',precio:''}]}))
   const delAdic = i => setForm(p => ({...p, adicionales:(p.adicionales||[]).filter((_,j)=>j!==i)}))
@@ -312,6 +328,37 @@ export default function Presupuesto() {
     ? [10000,50000,100000].map(p => Math.ceil(precioLista/p)*p).filter((v,i,a) => v-precioLista >= 1 && a.indexOf(v) === i)
     : []
   const desincronizado = !!(presuSheet?.nro && precioNum > 0 && precioNum !== presuSheet.precioFinal)
+
+  // ---- Desglose por ítem ----
+  // Reparte el precio de lista (el de antes del descuento, que va como línea aparte)
+  // entre los servicios. Se recalcula solo si Juan redondea el total o edita la lista.
+  const itemsDesglose = form.servicios.map((s,i) => ({
+    nombre: prettifySvc(s),
+    costo: form.costos?.[i]?.costo || 0,
+    fee: form.costos?.[i]?.fee !== false,
+  })).filter(it => it.nombre)
+  const desglose = form.desglosar
+    ? agruparLineas(desglosarPrecio(itemsDesglose, { ...(presuSheet?.opts || {}), total: precioLista }).lineas)
+    : []
+  // Servicios agregados a mano acá, que no existen como línea en el presu: no tienen
+  // costo, así que no se les puede poner precio. Van listados sin número.
+  const svcsSinCosto = itemsDesglose.filter(it => it.costo <= 0).map(it => it.nombre)
+
+  // El tilde va al sheet enseguida: si mañana Lulu regenera el PDF de este presu,
+  // tiene que salir igual que el que vio el cliente.
+  const [desglosarSaving, setDesglosarSaving] = useState(false)
+  const toggleDesglosar = async (valor) => {
+    setF('desglosar', valor)
+    if (!presuSheet?.nro) return   // borrador sin número: sólo vive en esta pantalla
+    setDesglosarSaving(true)
+    try {
+      await fetch('/api/presupuesto-editar', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ num: presuSheet.nro, cambios: { 'Desglosar': valor } }),
+      })
+    } catch (e) { console.warn('No se pudo guardar el tilde de desglose:', e.message) }
+    setDesglosarSaving(false)
+  }
 
   const guardarPrecio = async () => {
     if (!presuSheet?.nro || !precioNum) return
@@ -469,7 +516,36 @@ export default function Presupuesto() {
       // SERVICIOS INCLUIDOS — sin warning rojo, sin emojis raros
       // ════════════════════════════════════════════════════════════════════
       const svcsLimpios = form.servicios.map(s => prettifySvc(s)).filter(Boolean)
-      if (svcsLimpios.length > 0) {
+      if (form.desglosar && desglose.length > 0) {
+        // ── Con precio por ítem ──
+        // Mismo bloque de siempre pero con el precio a la derecha. La suma de la columna
+        // da el "Valor total" de abajo: si algún día no cierra, el bug está en lib/desglose.js.
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
+        doc.text('El servicio incluye:', M, y); y += 6
+        for (const l of desglose) {
+          const label = l.cantidad > 1 ? `${l.cantidad} × ${l.nombre}` : l.nombre
+          const precioTxt = l.sinPrecio ? 'incluido' : '$' + fmt$(l.precio)
+          doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+          const pw = doc.getTextWidth(precioTxt)
+          doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F')
+          const lines = doc.splitTextToSize(label, W-M*2-10-pw)
+          doc.text(lines, M+5, y)
+          if (l.sinPrecio) { doc.setFont('helvetica','italic'); doc.setTextColor(...C.muted) }
+          doc.text(precioTxt, W-M, y, {align:'right'})
+          // Con cantidad, el unitario abajo en chico: sin eso el cliente hace la división a mano
+          if (l.cantidad > 1 && !l.sinPrecio) {
+            y += lines.length * 5 - 1
+            doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
+            doc.text('$' + fmt$(Math.round(l.precio / l.cantidad)) + ' c/u', W-M, y, {align:'right'})
+            y += 5
+          } else {
+            y += lines.length * 5
+          }
+        }
+        y += 2
+        doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y)
+        y += 5
+      } else if (svcsLimpios.length > 0) {
         doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
         doc.text('El servicio incluye:', M, y); y += 6
         doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
@@ -746,6 +822,21 @@ export default function Presupuesto() {
               <input style={{...S.inp,border:'0.5px solid #CE263740',fontSize:14,fontFamily:'monospace'}} type="number" value={form.precioTotal} onChange={e=>setF('precioTotal',e.target.value)} placeholder="ej: 2550000"/>
             </label>
 
+            {/* Desglose — el cliente ve cuánto sale cada servicio, con impuestos y margen adentro */}
+            <label style={{display:'flex',alignItems:'flex-start',gap:9,marginTop:12,cursor:'pointer',padding:'10px 11px',
+              border:'0.5px solid '+(form.desglosar?'#1D9E7550':'#2A2A2A'),borderRadius:7,background:form.desglosar?'#1D9E7508':'transparent'}}>
+              <input type="checkbox" checked={!!form.desglosar} onChange={e=>toggleDesglosar(e.target.checked)} style={{marginTop:2,accentColor:'#1D9E75'}}/>
+              <span>
+                <span style={{fontSize:12.5,color:'#F0F0F0',display:'block'}}>Mostrar precio por ítem {desglosarSaving && <span style={{fontSize:10,color:'#555'}}>guardando…</span>}</span>
+                <span style={{fontSize:10.5,color:'#555',display:'block',marginTop:2,lineHeight:1.45}}>
+                  Cada servicio sale con su precio final (impuestos y margen ya adentro) y la suma da el Valor total. Sin tildar, el PDF sale como siempre.
+                </span>
+              </span>
+            </label>
+            {form.desglosar && svcsSinCosto.length > 0 && <div style={{padding:'8px 10px',background:'#BA751708',border:'0.5px solid #BA751730',borderRadius:6,marginTop:8,fontSize:10.5,color:'#BA7517',lineHeight:1.5}}>
+              ⚠ Sin precio en el presu: <strong>{svcsSinCosto.join(' · ')}</strong>. Van listados sin número (el total no cambia). Si tienen que salir con precio, cargalos como servicio en el presupuesto y tocá ↻ Recargar.
+            </div>}
+
             {/* Descuento — el cliente ve de cuánto se parte y cuánto se le baja */}
             <div style={{marginTop:10,display:'flex',gap:8}}>
               <label style={{width:110}}>
@@ -950,7 +1041,22 @@ function PreviewPDF({form, clausulas}) {
     {form.descripcion && <div style={{...S.cuerpo, marginTop:10}}>{form.descripcion}</div>}
 
     {/* SERVICIOS */}
-    {orden.length > 0 ? <>
+    {form.desglosar && desglose.length > 0 ? <>
+      <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5}}>El servicio incluye:</div>
+      <div>
+        {desglose.map((l,i) => <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'1px 0'}}>
+          <span style={{display:'flex',alignItems:'baseline',gap:5,fontSize:10.5,color:C.texto}}>
+            <span style={S.cuadrado}/>
+            <span>{l.cantidad > 1 ? l.cantidad+' × '+l.nombre : l.nombre}</span>
+          </span>
+          <span style={{fontSize:10.5,color:l.sinPrecio?C.gris:C.texto,whiteSpace:'nowrap',fontStyle:l.sinPrecio?'italic':'normal'}}>
+            {l.sinPrecio ? 'incluido' : '$'+fmt$(l.precio)}
+            {l.cantidad > 1 && !l.sinPrecio && <span style={{fontSize:8.5,color:C.gris}}> · ${fmt$(Math.round(l.precio/l.cantidad))} c/u</span>}
+          </span>
+        </div>)}
+      </div>
+      <div style={{borderTop:'0.5px solid '+C.grisL,marginTop:6}}/>
+    </> : orden.length > 0 ? <>
       <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5}}>El servicio incluye:</div>
       <div>
         {orden.map((s,i) => <div key={i} style={S.bullet}>

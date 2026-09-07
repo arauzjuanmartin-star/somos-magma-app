@@ -2,11 +2,15 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
+import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
 import Novedades from '../components/Novedades'
+import HoraInput from '../components/HoraInput'
+import CampoFechas from '../components/CampoFechas'
+import { codificarFechas, decodificarFechas } from '../lib/fechas'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -44,7 +48,8 @@ const dedupCI = arr => { const m=new Map(); arr.map(v=>String(v||'').trim()).fil
 // OJO: subir esto 5% NO sube el precio final 5% — Ganancias e IIBB se calculan sobre el
 // margen, así que el total se mueve menos. Total = costo × (1 + 1,39 × MULT_MARGEN).
 // 1,086 es el número que da +5,0% al cliente (de $525.800 a $552.099 sobre costo $220.000).
-const MULT_MARGEN = 1.086
+// El número vive en lib/desglose.js (se importa arriba) porque el desglose por ítem del
+// PDF repite esta misma cadena: con dos copias, el desglose dejaría de cerrar con el total.
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -685,12 +690,12 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     }catch(e){ showToast('Error de conexión','err'); setBorrSaving(false) }
   }
 
-  async function aprobarConAdic({nuevoEsAdic, nuevoTotal}){
+  async function aprobarConAdic({nuevoEsAdic, nuevoTotal, extras}){
     const p=aprobAdic; if(!p) return
     const id=p['Columna 1']
     setAprobSaving(true)
     try{
-      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal)}})})
+      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal), ...(extras||{})}})})
       const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
       const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
       showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false)
@@ -777,7 +782,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||<em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}</span>
             <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
-            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : (nuevo==='APROBADO' && presuTieneAdicionales(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
+            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
           </div>
           {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
         </div>
@@ -819,9 +824,9 @@ function CampoHorario({valor, onChange}){
   const set = (a,b) => onChange(a && b ? `${a} a ${b} hs` : '')
   return <div>
     <div style={{display:'flex', gap:8, alignItems:'center'}}>
-      <input type="time" value={ini} disabled={aConfirmar} onChange={e=>set(e.target.value, fin||'18:00')} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
+      <HoraInput value={ini} disabled={aConfirmar} onChange={v=>set(v, fin||'18:00')} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
       <span style={{fontSize:12, color:T.ink3}}>a</span>
-      <input type="time" value={fin} disabled={aConfirmar} onChange={e=>set(ini||'09:00', e.target.value)} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
+      <HoraInput value={fin} disabled={aConfirmar} onChange={v=>set(ini||'09:00', v)} style={{...inpV2, flex:1, opacity:aConfirmar?0.45:1}}/>
     </div>
     <label style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:T.ink2, marginTop:6, cursor:'pointer'}}>
       <input type="checkbox" checked={aConfirmar} onChange={e=>onChange(e.target.checked?'A confirmar':'')}/>
@@ -846,7 +851,7 @@ function CampoUbicacion({valor, onChange}){
 
 function EditarModal({p, data, onClose, onSaved, showToast}){
   const campos = [
-    ['PM Interno','PM',false], ['Fecha Evento','Fecha evento (DD/MM/AAAA)',false],
+    ['PM Interno','PM',false],
     ['Proyecto','Proyecto',false], ['Agencia','Agencia','ag'], ['Cliente','Cliente','cl'],
     ['Contacto','Contacto','ct'], ['Horario','Horario de la jornada','hora'],
     ['Ubicación','Ubicación','mapa'], ['Contacto Lugar','Contacto en el lugar',false],
@@ -857,6 +862,11 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   const [agNew,setAgNew]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
   const [ctNew,setCtNew]=useState({mail:'',telefono:'',cargo:'',cuit:''})
   const id = p['Columna 1'] || p['N° presupuesto']
+  // Las fechas viven en PRESUPUESTOS (Tipo Fechas / Fechas Adicionales): si esto se
+  // abrió desde un proyecto hay que ir a buscar la fila del presu, que es la fuente.
+  const presuRow = (data?.presupuestos||[]).find(x=>String(x['Columna 1']||'').trim()===String(id).trim()) || p
+  const diasOrig = decodificarFechas(presuRow['Fecha Evento']||p['Fecha Evento'], presuRow['Tipo Fechas'], presuRow['Fechas Adicionales'])
+  const [dias,setDias]=useState(diasOrig)
   const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
   const clis=dedupCI([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))])
@@ -871,9 +881,14 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   async function guardar(){
     const cambios={}
     campos.forEach(([k])=>{ if((form[k]||'')!==(p[k]||'')) cambios[k]=form[k] })
-    // Si cambiás la Fecha Evento desde acá, es un día suelto → normalizar el tipo de fecha
-    // para que no quede un "rango" viejo con el final desactualizado (rompía el Calendar en silencio).
-    if(cambios['Fecha Evento']!==undefined){ cambios['Tipo Fechas']='dia'; cambios['Fechas Adicionales']='' }
+    // Fechas: el tipo (dia/rango/multi) y las adicionales se derivan de los días
+    // marcados en el calendario, así nunca queda un "rango" viejo con el final
+    // desactualizado (rompía el Calendar en silencio).
+    const cod=codificarFechas(dias), origF=codificarFechas(diasOrig)
+    if(cod.fechaEvento!==origF.fechaEvento||cod.tipo!==origF.tipo||cod.adicionales!==origF.adicionales){
+      cambios['Fecha Evento']=cod.fechaEvento; cambios['Tipo Fechas']=cod.tipo
+      cambios['Fechas Adicionales']=cod.adicionales; cambios['Cant. Fechas']=cod.cant
+    }
     if(Object.keys(cambios).length===0){ showToast('No hay cambios','err'); return }
     setSaving(true)
     try{
@@ -909,6 +924,10 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:20, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'20px 22px', display:'flex', flexDirection:'column', gap:13}}>
+        <div>
+          <label style={{fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5}}>Fechas del evento</label>
+          <CampoFechas dias={dias} onChange={setDias}/>
+        </div>
         {campos.map(([k,label,tipo])=>(
           <div key={k}>
             <label style={{fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5}}>{label}</label>
@@ -1075,11 +1094,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ajusteOrig = parseMonto(initialData?.['Ajuste'])
   const [form,setForm]=useState(isRep ? {
     fp:hoyISO,
-    fechaMode:(tipoOrig==='rango'||tipoOrig==='multi')?tipoOrig:'dia',
-    fe1:dmyToISO(initialData['Fecha Evento']),
-    feIni: tipoOrig==='rango'?dmyToISO(initialData['Fecha Evento']):'',
-    feFin: tipoOrig==='rango'&&adicOrig?dmyToISO(adicOrig):'',
-    feMulti: tipoOrig==='multi'?adicOrig.split('|').filter(Boolean).join(', '):'',
+    dias: decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig),
     agencia:initialData['Agencia']||'', cliente:initialData['Cliente']||'', proyecto:initialData['Proyecto']||'',
     contacto:initialData['Contacto']||'', pm:initialData['PM Interno']||'',
     plazo:String(initialData['Plazo']||'0').replace(/[^\d]/g,'')||'0',
@@ -1088,7 +1103,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     tajuste:ajusteOrig<0?'-1':'1', ajuste:String(Math.abs(ajusteOrig)||'0'),
     observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
-  } : { fp:hoyISO, fechaMode:'dia', fe1:'', feIni:'', feFin:'', feMulti:'', agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
+  } : { fp:hoyISO, dias:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'' })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -1168,18 +1183,15 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const opcRedondeo = total>0 ? [10000,50000,100000].map(p=>Math.ceil(total/p)*p).filter((v,i,a)=>Math.round(v-total)>=1 && a.indexOf(v)===i) : []
 
   const falta=[]; if(!form.cliente.trim())falta.push('Cliente'); if(!form.proyecto.trim())falta.push('Proyecto'); if(!form.pm.trim())falta.push('PM'); if(!baseList.some(p=>p.svc.trim()))falta.push('un servicio')
-  const fechaOK = form.fechaMode==='dia'?form.fe1:form.fechaMode==='rango'?(form.feIni&&form.feFin):form.fe1
-  if(!fechaOK)falta.push('Fecha evento')
+  if(!(form.dias||[]).length)falta.push('Fecha evento')
   if(isRep && !String(form.motivo||'').trim())falta.push('motivo')
   const puedeGuardar = falta.length===0 && !saving
 
   async function guardar(){
     setSaving(true)
     // fechas
-    let fechaEventoOut='', tipoFechas=form.fechaMode, fechasAdic='', cantFechas=1
-    if(form.fechaMode==='dia'){ fechaEventoOut=isoToDMY(form.fe1); cantFechas=1 }
-    else if(form.fechaMode==='rango'){ fechaEventoOut=isoToDMY(form.feIni); fechasAdic=isoToDMY(form.feFin); const d=Math.round((new Date(form.feFin)-new Date(form.feIni))/864e5)+1; cantFechas=Math.max(1,d) }
-    else { fechaEventoOut=isoToDMY(form.fe1); const extra=String(form.feMulti||'').split(/[\n,]/).map(s=>s.trim()).filter(Boolean).map(s=>s.includes('-')?isoToDMY(s):s); fechasAdic=extra.join('|'); cantFechas=1+extra.length }
+    // El tipo (dia/rango/multi) sale solo de los días elegidos — ver lib/fechas.js
+    const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias)
 
     const valid=peds.filter(p=>p.svc.trim())
     const plazoLabel={'0':'Contado','15':'15 días','30':'30 días','60':'60 días'}[form.plazo]||'Contado'
@@ -1272,15 +1284,9 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         </div>}
         {clNuevo && <div style={{fontSize:11.5, color:T.warn, fontWeight:600, marginBottom:12, marginTop:-2}}>🎯 Cliente nuevo: "{form.cliente}" — se guarda automáticamente al crear el presu.</div>}
         {/* Fecha */}
-        <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:18}}>
-          <div><label style={lblV2}>Fecha evento</label>
-            <select value={form.fechaMode} onChange={e=>upd('fechaMode',e.target.value)} style={{...inpV2, width:'auto'}}>
-              <option value="dia">Un día</option><option value="rango">Rango</option><option value="multi">Varias fechas</option>
-            </select>
-          </div>
-          {form.fechaMode==='dia' && <div><label style={lblV2}>Día</label><input type="date" value={form.fe1} onChange={e=>upd('fe1',e.target.value)} style={{...inpV2, width:'auto'}}/></div>}
-          {form.fechaMode==='rango' && <><div><label style={lblV2}>Desde</label><input type="date" value={form.feIni} onChange={e=>upd('feIni',e.target.value)} style={{...inpV2, width:'auto'}}/></div><div><label style={lblV2}>Hasta</label><input type="date" value={form.feFin} onChange={e=>upd('feFin',e.target.value)} style={{...inpV2, width:'auto'}}/></div></>}
-          {form.fechaMode==='multi' && <><div><label style={lblV2}>Primera</label><input type="date" value={form.fe1} onChange={e=>upd('fe1',e.target.value)} style={{...inpV2, width:'auto'}}/></div><div style={{flex:1, minWidth:180}}><label style={lblV2}>Otras (coma o línea)</label><input value={form.feMulti} onChange={e=>upd('feMulti',e.target.value)} placeholder="15/06/2026, 18/06/2026" style={inpV2}/></div></>}
+        <div style={{marginBottom:18}}>
+          <label style={lblV2}>Fechas del evento</label>
+          <CampoFechas dias={form.dias} onChange={l=>upd('dias',l)}/>
         </div>
 
         {/* Servicios */}
@@ -1352,9 +1358,9 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', marginBottom:12}}>
           <div><label style={lblV2}>Horario del evento</label>
             <div style={{display:'flex', gap:8, alignItems:'center'}}>
-              <input type="time" value={form.horaIni} onChange={e=>upd('horaIni',e.target.value)} style={{...inpV2, width:'auto'}}/>
+              <HoraInput value={form.horaIni} onChange={v=>upd('horaIni',v)} style={{...inpV2, width:88}}/>
               <span style={{fontSize:13, color:T.ink3}}>a</span>
-              <input type="time" value={form.horaFin} onChange={e=>upd('horaFin',e.target.value)} style={{...inpV2, width:'auto'}}/>
+              <HoraInput value={form.horaFin} onChange={v=>upd('horaFin',v)} style={{...inpV2, width:88}}/>
             </div>
           </div>
           <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={form.ubicacion} onChange={e=>upd('ubicacion',e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
@@ -1397,31 +1403,62 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   </div>
 }
 
-// ============================ APROBAR CON ADICIONALES ============================
-// Parsea los pedidos de un presupuesto (en orden) con sus flags adicional + precio cliente
-function parsePedidosPresu(presu){
-  const esAdicCSV = String(presu['Es Adicional']||'').split('|')
-  const precioCliCSV = String(presu['Precio Cliente Manual']||'').split('|')
-  const peds=[]; let k=0
-  for(let i=1;i<=MAX_SLOTS;i++){ const svc=presu['Pedido '+i]||(i===1?presu['Pedido']:'')||''; const prc=parseMonto(presu['Precio '+i]||(i===1?presu['Precio']:'')); if(svc||prc>0){ peds.push({k, svc, costo:prc, esAdic:esAdicCSV[k]==='1', precioCliManual:parseMonto(precioCliCSV[k])}); k++ } }
-  return peds
-}
+// ============================ APROBAR: QUÉ SE LLEVÓ EL CLIENTE ============================
+// El parseo de los pedidos vive en lib/desglose.js (itemsDePresu): lo comparten este
+// modal y el generador de PDF, y tienen que leer los slots igual.
 function presuTieneAdicionales(presu){ return String(presu?.['Es Adicional']||'').split('|').includes('1') }
+// Cuándo hay algo que elegir al aprobar: o hay adicionales opcionales, o el presu se
+// mandó con el precio abierto por ítem y el cliente pudo recortar líneas.
+function presuTieneOpciones(presu){ return presuTieneAdicionales(presu) || presuDesglosado(presu) }
+
+// Una línea tildable del modal. Va afuera del componente a propósito: definirla adentro
+// la recrea en cada render y React remonta el input en cada clic (ver [[project_bug_inputs_pierden_foco]]).
+function FilaOpcion({marcado, nombre, precio, esAdic, onToggle}){
+  return <label style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:`1px solid ${marcado?(esAdic?T.brand:T.pos):T.border}`, borderRadius:10, marginBottom:8, cursor:'pointer', background:marcado?'transparent':T.surfaceAlt}}>
+    <input type="checkbox" checked={marcado} onChange={onToggle}/>
+    <span style={{flex:1, fontSize:13, color:marcado?T.ink:T.ink3, textDecoration:marcado?'none':'line-through'}}>{nombre}</span>
+    <span style={{fontSize:13, fontFamily:MONO, color:marcado?T.ink:T.ink3}}>{fmt(precio)}</span>
+  </label>
+}
 
 function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
-  const peds=parsePedidosPresu(presu)
-  const baseSubtotal=peds.filter(p=>!p.esAdic).reduce((s,p)=>s+p.costo,0)
-  const total=parseMonto(presu['Precio Final'])
+  const desglosado=presuDesglosado(presu)
+  const items=itemsDePresu(presu)
+  const opts=opcionesDePresu(presu)
+  const total=opts.total
+  const base=items.filter(i=>!i.adicional), adicRaw=items.filter(i=>i.adicional)
+  // Precio de cada línea base = el mismo desglose que vio el cliente en el PDF (suma = total).
+  const preciosBase={}; desglosarPrecio(base, {...opts, total}).lineas.forEach(l=>{ preciosBase[l.k]=l.precio })
+  // Adicionales: precio manual si lo tiene, si no el automático por factor (como siempre).
+  const baseSubtotal=base.reduce((s,p)=>s+p.costo,0)
   const factor=baseSubtotal>0?total/baseSubtotal:1
-  const adic=peds.filter(p=>p.esAdic).map(p=>({...p, cli:p.precioCliManual>0?p.precioCliManual:Math.round(p.costo*factor)}))
-  const [tom,setTom]=useState({})
-  const tomados=adic.filter(a=>tom[a.k])
-  const sumaTom=tomados.reduce((s,a)=>s+a.cli,0)
-  const totalFinal=total+sumaTom
+  const adic=adicRaw.map(a=>({...a, cli:a.precioClienteManual>0?a.precioClienteManual:Math.round(a.costo*factor)}))
+  // Las líneas base arrancan tildadas (es lo que se presupuestó), los adicionales no.
+  const [tom,setTom]=useState(()=>Object.fromEntries(items.map(i=>[i.k, !i.adicional])))
+  const baseTom=base.filter(b=>tom[b.k]), adicTom=adic.filter(a=>tom[a.k])
+  const sacadas=base.filter(b=>!tom[b.k])
+  const sumaBase=desglosado ? baseTom.reduce((s,b)=>s+(preciosBase[b.k]||0),0) : total
+  const sumaTom=adicTom.reduce((s,a)=>s+a.cli,0)
+  const totalFinal=sumaBase+sumaTom
+  const sinNada=totalFinal<=0 || (desglosado && baseTom.length===0 && adicTom.length===0)
   function confirmar(){
-    const nuevoEsAdic=peds.map(p=> (p.esAdic && tom[p.k]) ? '0' : (p.esAdic?'1':'0')).join('|')
-    onConfirm({ nuevoEsAdic, nuevoTotal:totalFinal })
+    // Lo que el cliente no tomó viaja en 'Es Adicional': es el flag que mira
+    // presupuesto-estado para NO copiar esa línea a PROYECTOS (no se le paga a nadie).
+    const nuevoEsAdic=items.map(i=> tom[i.k] ? '0' : '1').join('|')
+    // Un adicional tomado ya viene con margen adentro de su precio: marcarlo con fee
+    // deja el margen en "Fee Agencia" en vez de disfrazarlo de ajuste.
+    const nuevoFee=items.map(i=> (i.adicional && tom[i.k]) ? '1' : (i.fee?'1':'0')).join('|')
+    // Sacar una línea no es sólo restar plata: subtotal, fee e impuestos tienen que volver a dar.
+    const finales=items.filter(i=>tom[i.k]).map(i=>({...i, fee: i.adicional ? true : i.fee}))
+    const t=recalcularTotales(finales, {...opts, totalObjetivo: totalFinal})
+    onConfirm({ nuevoEsAdic, nuevoTotal: totalFinal, extras:{
+      'Fee Servicios': nuevoFee,
+      'Subtotal': t.subtotal, 'Fee Agencia': t.fee,
+      'Impuesto a las ganancias': t.gan, 'IIBB': t.iibb,
+      'Interes $': t.interes, 'Ajuste': t.ajuste,
+    }})
   }
+  const toggle=k=>setTom(t=>({...t,[k]:!t[k]}))
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:920, display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'60px 20px', overflowY:'auto'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:460, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
       <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
@@ -1429,23 +1466,27 @@ function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
         <div style={{fontSize:12, color:T.ink3, marginTop:2}}>{presu['Proyecto']||presu['Cliente']||''}</div>
       </div>
       <div style={{padding:'18px 22px'}}>
-        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>¿El cliente tomó algún adicional? Tildá los que aceptó — se suman al total y al proyecto.</div>
-        {adic.map(a=>(
-          <label key={a.k} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:`1px solid ${tom[a.k]?T.brand:T.border}`, borderRadius:10, marginBottom:8, cursor:'pointer'}}>
-            <input type="checkbox" checked={!!tom[a.k]} onChange={e=>setTom(t=>({...t,[a.k]:e.target.checked}))}/>
-            <span style={{flex:1, fontSize:13, color:T.ink}}>{a.svc}</span>
-            <span style={{fontSize:13, fontFamily:MONO, color:T.ink}}>{fmt(a.cli)}</span>
-          </label>
-        ))}
+        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>
+          {desglosado
+            ? '¿Qué aprobó el cliente? Este presu se mandó con el precio por ítem, así que puede haber sacado alguno. Destildá lo que no va — sale del total y del proyecto.'
+            : '¿El cliente tomó algún adicional? Tildá los que aceptó — se suman al total y al proyecto.'}
+        </div>
+        {desglosado && base.map(b=><FilaOpcion key={b.k} marcado={!!tom[b.k]} nombre={b.nombre} precio={preciosBase[b.k]||0} onToggle={()=>toggle(b.k)}/>)}
+        {desglosado && adic.length>0 && <div style={{fontSize:11, color:T.ink3, textTransform:'uppercase', letterSpacing:'0.06em', margin:'14px 0 8px'}}>Adicionales opcionales</div>}
+        {adic.map(a=><FilaOpcion key={a.k} marcado={!!tom[a.k]} nombre={a.nombre} precio={a.cli} esAdic onToggle={()=>toggle(a.k)}/>)}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
           <span style={{fontSize:12.5, color:T.ink2}}>Total a aprobar</span>
           <span style={{fontSize:20, fontWeight:700, fontFamily:MONO, color:T.pos}}>{fmt(totalFinal)}</span>
         </div>
-        {sumaTom>0 && <div style={{fontSize:11.5, color:T.ink3, textAlign:'right', marginTop:2}}>base {fmt(total)} + adicionales {fmt(sumaTom)}</div>}
+        {(sumaTom>0 || sacadas.length>0) && <div style={{fontSize:11.5, color:T.ink3, textAlign:'right', marginTop:2}}>
+          de {fmt(total)} presupuestado
+          {sumaTom>0 && ` · + ${fmt(sumaTom)} en adicionales`}
+          {sacadas.length>0 && ` · − ${fmt(total-sumaBase)} (${sacadas.map(s=>s.nombre).join(', ')})`}
+        </div>}
       </div>
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={confirmar} disabled={saving} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Aprobando…':'Aprobar'}</button>
+        <button onClick={confirmar} disabled={saving||sinNada} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||sinNada)?'default':'pointer', opacity:(saving||sinNada)?0.6:1}}>{saving?'Aprobando…':'Aprobar'}</button>
       </div>
     </div>
   </div>
@@ -1520,11 +1561,11 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
   const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
   const [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
-  async function aprobarConAdic({nuevoEsAdic, nuevoTotal}){
+  async function aprobarConAdic({nuevoEsAdic, nuevoTotal, extras}){
     const p=aprobAdic; if(!p) return; const id=p['Columna 1']
     setAprobSaving(true)
     try{
-      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal)}})})
+      await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal), ...(extras||{})}})})
       const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
       const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
       showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false); setPendingStaff(id)
@@ -1633,7 +1674,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
               <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                {!soloVer && <button onClick={()=> presuTieneAdicionales(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
+                {!soloVer && <button onClick={()=> presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
                 {!soloVer && <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 {!soloVer && <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>}
@@ -1842,9 +1883,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       <div><label style={lblV2}>Horario (va al Calendar)</label>
         <div style={{display:'flex', gap:8, alignItems:'center'}}>
-          <input type="time" value={horaIni} onChange={e=>setHoraIni(e.target.value)} style={{...inpV2, width:'auto'}}/>
+          <HoraInput value={horaIni} onChange={setHoraIni} style={{...inpV2, width:88}}/>
           <span style={{fontSize:13, color:T.ink3}}>a</span>
-          <input type="time" value={horaFin} onChange={e=>setHoraFin(e.target.value)} style={{...inpV2, width:'auto'}}/>
+          <HoraInput value={horaFin} onChange={setHoraFin} style={{...inpV2, width:88}}/>
         </div>
       </div>
       <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
