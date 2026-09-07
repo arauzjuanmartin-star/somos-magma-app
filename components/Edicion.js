@@ -41,7 +41,7 @@ const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u030
 const nombreDe = mail => String(mail || '').split('@')[0]
 
 // ---------------------------------------------------------------- principal
-export default function Edicion({ data, onRefresh, showToast, mail }) {
+export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav }) {
   const [vista, setVista] = useState('tablero')   // 'tablero' | 'info'
   const [local, setLocal] = useState({})          // cambios ya aplicados en pantalla
   const [filtro, setFiltro] = useState('activos')
@@ -55,6 +55,20 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
 
   const crudas = data?.edicion || []
   const hoy = hoyCero()
+
+  // Si llegó desde un aviso por mail (?e=<ID>), abrimos ese trabajo y sacamos
+  // los filtros de encima: si quedaba escondido detrás de uno, el link no servía.
+  useEffect(() => {
+    const id = nav?.abrir
+    if (!id) return
+    setFiltro('activos'); setPersonaF('todos'); setQ('')
+    setAbierto(id)
+    clearNav && clearNav()
+    setTimeout(() => {
+      const el = document.getElementById(`ed-${id}`)
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 350)
+  }, [nav]) // eslint-disable-line
 
   const contactos = data?.contactos || []
   const mailsDe = (agencia, cliente) => {
@@ -89,6 +103,7 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
     const nq = norm(q.trim())
     return filas.filter(f => {
       const nivel = f.__sem.nivel
+      if (abierto === f.ID) return true   // lo que se abrió desde un link siempre se ve
       if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
       else {
         if (filtro === 'activos' && nivel === 'listo') return false
@@ -99,7 +114,7 @@ export default function Edicion({ data, onRefresh, showToast, mail }) {
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [filas, filtro, q, personaF])
+  }, [filas, filtro, q, personaF, abierto])
 
   const grupos = useMemo(() => {
     const m = new Map()
@@ -652,7 +667,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   // que hay que ver: el estado y para cuándo. Acá va apilada, con el estado y el
   // plazo juntos en la última línea y todo el bloque tocable para abrir.
   if (cel) {
-    return <div style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
+    return <div id={`ed-${f.ID}`} style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
       <div onClick={() => setAbierto(abierta ? null : f.ID)} style={{
         display: 'flex', flexDirection: 'column', gap: 7, padding: '11px 13px',
         borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: 'pointer',
@@ -682,7 +697,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
     </div>
   }
 
-  return <div style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
+  return <div id={`ed-${f.ID}`} style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1 }}>
       <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, minWidth: 130 }}>{limpiarPedido(f.Entregable)}</span>
       {prio === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}

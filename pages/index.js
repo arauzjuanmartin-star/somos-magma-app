@@ -105,6 +105,15 @@ export default function V2() {
   // Si el usuario tiene acceso parcial, arrancamos en su primer módulo
   useEffect(()=>{ if(modulos && !modulos.includes(mod)) setMod(modulos[0]) /* eslint-disable-next-line */ },[modulos])
   const [nav,setNav] = useState(null)  // {mod, filtro?, q?} → al navegar, deja el destino filtrado/buscado
+  // Un aviso por mail linkea a ?e=<ID del entregable>: la app abre Edición con
+  // ese trabajo desplegado, en vez de dejarlo en el tablero entero buscándolo.
+  useEffect(()=>{
+    if(typeof window==='undefined') return
+    const id = new URLSearchParams(window.location.search).get('e')
+    if(!id) return
+    setMod('edicion'); setNav({mod:'edicion', abrir:id})
+    window.history.replaceState({}, '', window.location.pathname)
+  },[])
   const goTo = (m, opts) => { setMod(m); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
   const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)

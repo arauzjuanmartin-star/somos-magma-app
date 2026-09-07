@@ -31,7 +31,11 @@ export async function middleware(req) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    // Guardamos a dónde quería ir para devolverlo ahí después de entrar: los
+    // avisos por mail linkean a un trabajo concreto, no a la home.
     const loginUrl = new URL('/login', req.url)
+    const destino = pathname + (req.nextUrl.search || '')
+    if (destino && destino !== '/') loginUrl.searchParams.set('volver', destino)
     return NextResponse.redirect(loginUrl)
   }
 
