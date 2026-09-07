@@ -11,6 +11,9 @@ export const ALLOWED_MAILS = [
   'lulu@somosmagma.com',
   'dani@somosmagma.com',
   'arauzjuanmartin@gmail.com',
+  // Freelancers con acceso al tablero de Edición, limitados a sus propios
+  // trabajos (ver SOLO_LO_SUYO en lib/roles.js).
+  'barcevarela@gmail.com',   // Bruno Arce
 ]
 
 // Acceso PARCIAL: quién ve solo algunos módulos vive en lib/roles.js (archivo

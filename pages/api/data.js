@@ -12,9 +12,14 @@ const sinPlata = filas => (filas || []).map(f => {
   return o
 })
 
-function filtrarPorModulos(data, modulos) {
+// A un freelancer se le manda SOLO lo suyo. Acá y no en el front: si el recorte
+// fuera visual, bastaría con mirar la respuesta de /api/data en el navegador.
+const norm = s => String(s || '').trim().toLowerCase()
+const soloSusFilas = (filas, quien) => (filas || []).filter(f => norm(f.Editor) === norm(quien))
+
+function filtrarPorModulos(data, modulos, soloLoSuyo) {
   const out = { listado: data.listado }
-  if (modulos.includes('edicion')) out.edicion = data.edicion
+  if (modulos.includes('edicion')) out.edicion = soloLoSuyo ? soloSusFilas(data.edicion, soloLoSuyo) : data.edicion
   if (modulos.includes('edicion') || modulos.includes('calendario')) {
     out.proyectos = sinPlata(data.proyectos)
     out.presupuestos = sinPlata(data.presupuestos)
@@ -52,16 +57,16 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, must-revalidate')
     res.setHeader('X-Cache-Source', fuente)
     res.setHeader('X-Cache-Age', String(Math.round((ahora - cacheTime) / 1000)))
-    const salida = auth.modulos ? filtrarPorModulos(data, auth.modulos) : data
-    res.status(200).json({ ok: true, data: salida, modulos: auth.modulos || null })
+    const salida = auth.modulos ? filtrarPorModulos(data, auth.modulos, auth.soloLoSuyo) : data
+    res.status(200).json({ ok: true, data: salida, modulos: auth.modulos || null, soloLoSuyo: auth.soloLoSuyo || null })
   } catch (err) {
     console.error(err)
     const status = err.code || err.response?.status
     if (status === 429) {
       if (cacheData) {
         res.setHeader('X-Cache-Source', 'stale-by-quota')
-        const stale = auth.modulos ? filtrarPorModulos(cacheData, auth.modulos) : cacheData
-        return res.status(200).json({ ok: true, data: stale, modulos: auth.modulos || null, warning: 'Datos desde cache (quota excedida)' })
+        const stale = auth.modulos ? filtrarPorModulos(cacheData, auth.modulos, auth.soloLoSuyo) : cacheData
+        return res.status(200).json({ ok: true, data: stale, modulos: auth.modulos || null, soloLoSuyo: auth.soloLoSuyo || null, warning: 'Datos desde cache (quota excedida)' })
       }
       return res.status(429).json({ ok: false, error: 'Google está limitando los pedidos. Esperá 30 segundos.' })
     }

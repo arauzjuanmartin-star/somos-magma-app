@@ -734,11 +734,15 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
 
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
-        <label style={lbl}>Entregar el</label>
+        <label style={lbl}>Entregar el {!String(f['Fecha compromiso'] || '').trim() && <span style={{ color: T.brand }}>· falta</span>}</label>
         <input type="date" defaultValue={aISO(parseFechaAR(compromiso))}
           onChange={e => { const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : null; guardar(f.ID, { 'Fecha compromiso': d ? aAR(d) : '' }) }}
-          style={{ ...inp, width: '100%' }} />
-        <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4 }}>{String(f['Fecha compromiso'] || '').trim() ? 'fijada a mano' : 'sugerida por el plazo del manual'}</div>
+          style={{ ...inp, width: '100%', borderColor: String(f['Fecha compromiso'] || '').trim() ? T.border : T.brand }} />
+        <div style={{ fontSize: 10.5, color: String(f['Fecha compromiso'] || '').trim() ? T.ink3 : T.brand, marginTop: 4, lineHeight: 1.4 }}>
+          {String(f['Fecha compromiso'] || '').trim()
+            ? 'la puso el PM'
+            : 'Es una estimación por el plazo del manual. La fecha real la confirma el PM.'}
+        </div>
       </div>
       <div>
         <label style={lbl}>Prioridad</label>
