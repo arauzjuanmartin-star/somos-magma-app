@@ -175,6 +175,10 @@ export default function Presupuesto() {
     // desglose: el PDF normal muestra los servicios sin precio.
     costos:[],
     desglosar:false,             // el cliente ve cuánto sale cada ítem (se guarda en el sheet)
+    // Precios de cada ítem puestos a mano (o redondeados de un clic). null = reparto
+    // automático. Cuando existe, es {nombre: precio} con TODAS las líneas adentro: si
+    // algunas quedaran fijas y otras escalando, la suma dejaría de dar el total.
+    preciosItem:null,
     descPct:'', descMotivo:'',   // descuento comercial que el cliente ve desglosado en el PDF
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'30',  // 30 días por default (reunión 14/08/2026)
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
@@ -339,9 +343,33 @@ export default function Presupuesto() {
     costo: form.costos?.[i]?.costo || 0,
     fee: form.costos?.[i]?.fee !== false,
   })).filter(it => it.nombre)
-  const desglose = form.desglosar
+  const desgloseAuto = form.desglosar
     ? agruparLineas(desglosarPrecio(itemsDesglose, { ...(presuSheet?.opts || {}), total: precioLista }).lineas)
     : []
+  // Si hay precios a mano, mandan ellos. El reparto automático reparte el total entre
+  // los ítems; esto es al revés: los ítems mandan y el total es la suma.
+  const desglose = desgloseAuto.map(l => {
+    const v = form.preciosItem?.[l.nombre]
+    return v == null || v === '' ? l : { ...l, precio: Math.round(Number(v) || 0), aMano: true }
+  })
+  const totalItems = desglose.reduce((t, l) => t + (l.sinPrecio ? 0 : l.precio), 0)
+
+  // Redondeo por ítem: a los $1.000 más cercanos, y a los $100 si la línea es chica
+  // (un ítem de $4.200 redondeado a $4.000 se nota; a $0 sería un desastre).
+  const redondearItem = v => v >= 10000 ? Math.round(v / 1000) * 1000 : Math.max(100, Math.round(v / 100) * 100)
+  // Congela TODAS las líneas y mueve el Valor total a la suma: así el PDF nunca puede
+  // mostrar renglones que no dan el número de abajo.
+  const fijarItems = mapa => setForm(p => ({ ...p, preciosItem: mapa,
+    precioTotal: String(Object.values(mapa).reduce((t, v) => t + (Number(v) || 0), 0)) }))
+  const preciosActuales = () => Object.fromEntries(desglose.filter(l => !l.sinPrecio).map(l => [l.nombre, l.precio]))
+  const redondearItems = () => fijarItems(Object.fromEntries(Object.entries(preciosActuales()).map(([k, v]) => [k, redondearItem(v)])))
+  const editarItem = (nombre, valor) => fijarItems({ ...preciosActuales(), [nombre]: Math.round(Number(valor) || 0) })
+  // Volver al automático: el total manda de nuevo y se reparte solo entre los ítems.
+  const repartoAutomatico = () => setForm(p => ({ ...p, preciosItem: null }))
+  // Tocar el total a mano (o un chip de redondeo) vuelve al reparto automático: si no,
+  // el total diría una cosa y los renglones seguirían sumando otra.
+  const setTotal = v => setForm(p => ({ ...p, precioTotal: v, preciosItem: null }))
+  const itemsRedondeados = desglose.length > 0 && desglose.filter(l => !l.sinPrecio).every(l => l.precio === redondearItem(l.precio))
   // Servicios agregados a mano acá, que no existen como línea en el presu: no tienen
   // costo, así que no se les puede poner precio. Van listados sin número.
   const svcsSinCosto = itemsDesglose.filter(it => it.costo <= 0).map(it => it.nombre)
@@ -821,7 +849,7 @@ export default function Presupuesto() {
             <div style={{...S.sec,color:'#CE2637'}}>Precio</div>
             <label>
               <span style={S.lbl}>Valor total *</span>
-              <input style={{...S.inp,border:'0.5px solid #CE263740',fontSize:14,fontFamily:'monospace'}} type="number" value={form.precioTotal} onChange={e=>setF('precioTotal',e.target.value)} placeholder="ej: 2550000"/>
+              <input style={{...S.inp,border:'0.5px solid #CE263740',fontSize:14,fontFamily:'monospace'}} type="number" value={form.precioTotal} onChange={e=>setTotal(e.target.value)} placeholder="ej: 2550000"/>
             </label>
 
             {/* Desglose — el cliente ve cuánto sale cada servicio, con impuestos y margen adentro */}
@@ -835,6 +863,39 @@ export default function Presupuesto() {
                 </span>
               </span>
             </label>
+            {/* Precio de cada ítem — editable, y redondeo de todos de un clic.
+                El cliente ve estos números: "$237.482" en un renglón es un cartel de que
+                el precio salió de una fórmula. Al tocar cualquiera, el Valor total pasa a
+                ser la suma, así los renglones y el total nunca dicen cosas distintas. */}
+            {form.desglosar && desglose.length > 0 && <div style={{marginTop:10,padding:'10px 11px',border:'0.5px solid #2A2A2A',borderRadius:7}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+                <span style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>Precio de cada ítem</span>
+                {!itemsRedondeados && <button onClick={redondearItems}
+                  style={{padding:'4px 10px',borderRadius:6,border:'0.5px solid #1D9E7550',background:'#1D9E7510',color:'#1D9E75',fontSize:11.5,cursor:'pointer'}}>
+                  Redondear todos
+                </button>}
+                {form.preciosItem && <button onClick={repartoAutomatico}
+                  style={{padding:'4px 10px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#888',fontSize:11.5,cursor:'pointer'}}>
+                  Volver al automático
+                </button>}
+              </div>
+              {desglose.filter(l=>!l.sinPrecio).map(l=>(
+                <div key={l.nombre} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+                  <span style={{flex:1,fontSize:11.5,color:'#BBB',lineHeight:1.35}}>{l.cantidad>1?l.cantidad+' × ':''}{l.nombre}</span>
+                  <input type="number" value={l.precio} onChange={e=>editarItem(l.nombre,e.target.value)}
+                    style={{...S.inp,width:120,padding:'5px 8px',fontSize:12,fontFamily:'monospace',textAlign:'right',
+                      border:'0.5px solid '+(l.aMano?'#1D9E7550':'#2A2A2A')}}/>
+                </div>
+              ))}
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,color:'#888',fontFamily:'monospace',borderTop:'0.5px solid #2A2A2A',paddingTop:6,marginTop:2}}>
+                <span>Suma de los ítems</span>
+                <strong style={{color:totalItems===precioLista?'#F0F0F0':'#BA7517'}}>${fmt$(totalItems)}</strong>
+              </div>
+              {form.preciosItem
+                ? <div style={{fontSize:10.5,color:'#555',marginTop:6,lineHeight:1.45}}>Precios puestos a mano: el Valor total es la suma. {desincronizado && 'Guardalo abajo para que el sistema diga lo mismo.'}</div>
+                : <div style={{fontSize:10.5,color:'#555',marginTop:6,lineHeight:1.45}}>Repartidos solos desde el Valor total. Tocá cualquiera para fijarlo a mano.</div>}
+            </div>}
+
             {form.desglosar && svcsSinCosto.length > 0 && <div style={{padding:'8px 10px',background:'#BA751708',border:'0.5px solid #BA751730',borderRadius:6,marginTop:8,fontSize:10.5,color:'#BA7517',lineHeight:1.5}}>
               ⚠ Sin precio en el presu: <strong>{svcsSinCosto.join(' · ')}</strong>. Van listados sin número (el total no cambia). Si tienen que salir con precio, cargalos como servicio en el presupuesto y tocá ↻ Recargar.
             </div>}
@@ -861,7 +922,7 @@ export default function Presupuesto() {
             {opcRedondeo.length>0&&<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
               <span style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em'}}>Redondear a</span>
               {opcRedondeo.map(v=>(
-                <button key={v} onClick={()=>setF('precioTotal',String(v))}
+                <button key={v} onClick={()=>setTotal(String(v))}
                   style={{padding:'4px 10px',borderRadius:6,border:'0.5px solid #2A2A2A',background:'transparent',color:'#F0F0F0',fontSize:12,fontFamily:'monospace',cursor:'pointer'}}>
                   ${fmt$(v)}
                 </button>
