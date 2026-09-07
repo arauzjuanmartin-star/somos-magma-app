@@ -1,0 +1,392 @@
+[
+  {
+    "slug": "microsoft",
+    "ok": true,
+    "kb": 15,
+    "qid": "Q2283",
+    "label": "Microsoft",
+    "desc": "corporación tecnológica multinacional estadounidense",
+    "file": "Microsoft logo (1980).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "santander",
+    "ok": true,
+    "kb": 29,
+    "qid": "Q6496310",
+    "label": "Banco Santander",
+    "desc": "banco español",
+    "file": "Banco Santander Logotipo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "unilever",
+    "ok": true,
+    "kb": 41,
+    "qid": "Q157062",
+    "label": "Unilever",
+    "desc": "empresa multinacional británica de bienes de consumo",
+    "file": "Unilever text logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "google",
+    "ok": true,
+    "kb": 41,
+    "qid": "Q95",
+    "label": "Google",
+    "desc": "empresa tecnológica multinacional estadounidense, filial de Alphabet Inc.",
+    "file": "Google 2026 logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "mercado-libre",
+    "ok": true,
+    "kb": 48,
+    "qid": "Q950419",
+    "label": "Mercado Libre",
+    "desc": "compañía de comercio electrónico argentina",
+    "file": "Mercado Libre wordmark (Spanish version).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "personal",
+    "ok": true,
+    "kb": 47,
+    "qid": "Q10933021",
+    "label": "Telecom Personal (Argentina)",
+    "desc": "Compañía de servicios de telecomunicaciones moviles",
+    "file": "Personal logonuevo.png",
+    "matcheoPista": true
+  },
+  {
+    "slug": "latam",
+    "ok": true,
+    "kb": 24,
+    "qid": "Q1321868",
+    "label": "LATAM Airlines Group",
+    "desc": "holding de aerolíneas chileno",
+    "file": "Latam-logo -v (Indigo).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "iveco",
+    "ok": true,
+    "kb": 22,
+    "qid": "Q29913",
+    "label": "Iveco",
+    "desc": "fabricante italiano de vehículos comerciales",
+    "file": "IVECO 2.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "case-ih",
+    "ok": true,
+    "kb": 22,
+    "qid": "Q1046997",
+    "label": "Case IH",
+    "desc": "marca de maquinaria agrícola",
+    "file": "Logo Case IH.png",
+    "matcheoPista": true
+  },
+  {
+    "slug": "new-holland",
+    "ok": true,
+    "kb": 27,
+    "qid": "Q1423217",
+    "label": "New Holland",
+    "desc": "empresa estadounidense",
+    "file": "New Holland Logo 2023.png",
+    "matcheoPista": false
+  },
+  {
+    "slug": "ferrero",
+    "ok": true,
+    "kb": 20,
+    "qid": "Q269792",
+    "label": "Ferrero",
+    "desc": "empresa agroalimentaria italiana",
+    "file": "Ferrero - logo brown (Italy, 1964-).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "nutella",
+    "ok": true,
+    "kb": 33,
+    "qid": "Q212193",
+    "label": "Nutella",
+    "desc": "marca de crema de chocolate y avellana endulzada",
+    "file": "Logo Nutella.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "adidas",
+    "ok": true,
+    "kb": 23,
+    "qid": "Q3895",
+    "label": "Adidas AG",
+    "desc": "empresa textil alemana",
+    "file": "Adidas 2022 logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "mondelez",
+    "ok": true,
+    "kb": 41,
+    "qid": "Q327751",
+    "label": "Kraft Foods",
+    "desc": "Empresa productora de alimentos",
+    "file": "Kraft logo 2009.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "garnier",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "loreal",
+    "ok": true,
+    "kb": 12,
+    "qid": "Q156077",
+    "label": "L'Oréal",
+    "desc": "empresa francesa de cosméticos y belleza",
+    "file": "L'Oréal logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "maybelline",
+    "ok": true,
+    "kb": 12,
+    "qid": "Q1351054",
+    "label": "Maybelline",
+    "desc": "empresa francesa de cosmética",
+    "file": "Maybelline-Logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "medtronic",
+    "ok": true,
+    "kb": 32,
+    "qid": "Q642189",
+    "label": "Medtronic plc",
+    "desc": "medical device company",
+    "file": "Medtronic logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "samsung",
+    "ok": true,
+    "kb": 30,
+    "qid": "Q20718",
+    "label": "Samsung Electronics",
+    "desc": "empresa multinacional surcoreana de la industria electrónica",
+    "file": "Samsung wordmark.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "air-france",
+    "ok": true,
+    "kb": 16,
+    "qid": "Q131005",
+    "label": "Air France",
+    "desc": "aerolínea bandera francesa",
+    "file": "Air France Logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "klm",
+    "ok": true,
+    "kb": 30,
+    "qid": "Q181912",
+    "label": "KLM",
+    "desc": "aerolínea bandera neerlandesa",
+    "file": "KLM logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "endeavor",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "comafi",
+    "ok": true,
+    "kb": 13,
+    "qid": "Q5717905",
+    "label": "Banco Comafi",
+    "desc": "banco comercial argentino",
+    "file": "Logo Oficial Banco Comafi.png",
+    "matcheoPista": true
+  },
+  {
+    "slug": "honda",
+    "ok": true,
+    "kb": 15,
+    "qid": "Q9584",
+    "label": "Honda",
+    "desc": "compañía industrial japonesa",
+    "file": "Honda logo.svg",
+    "matcheoPista": false
+  },
+  {
+    "slug": "peugeot",
+    "ok": true,
+    "kb": 14,
+    "qid": "Q6742",
+    "label": "Peugeot",
+    "desc": "marca francesa de automóviles, motocicletas y bicicletas",
+    "file": "Peugeot textlogo21.png",
+    "matcheoPista": true
+  },
+  {
+    "slug": "citroen",
+    "ok": true,
+    "kb": 29,
+    "qid": "Q326015",
+    "label": "Citroën 2 CV",
+    "desc": "modelo de automovil",
+    "file": "Citroën 2 CV Logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "castrol",
+    "ok": true,
+    "kb": 39,
+    "qid": "Q1049970",
+    "label": "Castrol",
+    "desc": "marca de lubricante inglesa",
+    "file": "Castrol logo 2023.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "syngenta",
+    "ok": true,
+    "kb": 31,
+    "qid": "Q688613",
+    "label": "Syngenta",
+    "desc": "compañía de biotecnología para la agricultura",
+    "file": "Syngenta Logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "pampers",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "gillette",
+    "ok": true,
+    "kb": 37,
+    "qid": "Q503592",
+    "label": "Global Gillette",
+    "desc": "marca estadounidense de cuidado personal masculino",
+    "file": "Gillette.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "philips",
+    "ok": true,
+    "kb": 112,
+    "qid": "Q170416",
+    "label": "Philips",
+    "desc": "conglomerado multinacional neerlandés especialista en electrodomésticos",
+    "file": "Philips shield (2013).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "stella-artois",
+    "ok": true,
+    "kb": 199,
+    "qid": "Q929276",
+    "label": "Stella Artois",
+    "desc": "marca de cerveza belga",
+    "file": "Stella Artois new logo.png",
+    "matcheoPista": true
+  },
+  {
+    "slug": "hard-rock-cafe",
+    "ok": true,
+    "kb": 141,
+    "qid": "Q918151",
+    "label": "Hard Rock Cafe",
+    "desc": "cadena estadounidense de restaurantes",
+    "file": "Hard Rock Cafe Logo.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "visa",
+    "ok": true,
+    "kb": 37,
+    "qid": "Q328840",
+    "label": "Visa Inc.",
+    "desc": "corporación multinacional estadounidense de servicios financieros",
+    "file": "Visa Inc. logo (1992–1999).svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "four-seasons",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "cencosud",
+    "ok": true,
+    "kb": 50,
+    "qid": "Q2895093",
+    "label": "Cencosud Perú",
+    "desc": "retail company",
+    "file": "Cencosud-2014.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "afa",
+    "ok": true,
+    "kb": 80,
+    "qid": "Q496548",
+    "label": "Asociación del Fútbol Argentino",
+    "desc": "organismo regulador del fútbol en Argentina",
+    "file": "Afa gold logo24.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "universidad-austral",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "andreani",
+    "ok": false,
+    "error": "sin logo en Wikidata"
+  },
+  {
+    "slug": "campari",
+    "ok": true,
+    "kb": 73,
+    "qid": "Q753685",
+    "label": "Grupo Campari",
+    "desc": "Italian beverage company",
+    "file": "Campari Group - logo (Italy, 1998-2008).svg",
+    "matcheoPista": false
+  },
+  {
+    "slug": "hp",
+    "ok": true,
+    "kb": 69,
+    "qid": "Q21404084",
+    "label": "HP Inc.",
+    "desc": "compañía multinacional estadounidense de tecnología",
+    "file": "HP logo 2012.svg",
+    "matcheoPista": true
+  },
+  {
+    "slug": "movistar-arena-bsas",
+    "ok": true,
+    "kb": 27,
+    "qid": "Q62005881",
+    "label": "Movistar Arena Buenos Aires",
+    "desc": "estadio cubierto en Argentina",
+    "file": "Movistar Arena logo.svg",
+    "matcheoPista": true
+  }
+]
