@@ -103,6 +103,14 @@ async function buscarEventosPorPresu(cal, num) {
 }
 // El día en el que cae un evento — la llave con la que se cruza con las fechas del sheet
 const diaDeEvento = e => e.start?.date || String(e.start?.dateTime||'').slice(0,10)
+// El último día que ocupa. En un all-day el `end.date` de Google es exclusivo, así
+// que el día real es el anterior. Hace falta para saber si el evento ya terminó: un
+// bloque del 1 al 30 EMPIEZA en el pasado pero sigue vigente, y mirar sólo el
+// arranque lo dejaba clavado tapando todo el mes.
+const finDeEvento = e => {
+  if (e.end?.date) return new Date(new Date(`${e.end.date}T12:00:00Z`).getTime() - 864e5).toISOString().slice(0,10)
+  return String(e.end?.dateTime || e.start?.dateTime || '').slice(0,10) || diaDeEvento(e)
+}
 
 // Sincronizar un trabajo de varias fechas son varias llamadas a Google + tres
 // lecturas del sheet: los 10s que da Vercel por defecto no alcanzan.
@@ -350,12 +358,13 @@ export default async function handler(req, res) {
     }
 
     // Los días que ya no están en el sheet se van del Calendar (con cancelación al staff).
-    // Lo ya pasado NO se toca: si un presu quedó mal cargado, borrarle la cobertura que
-    // realmente se hizo sería perder el registro de lo que pasó. Se limpia la agenda futura.
+    // Lo que YA TERMINÓ no se toca: si un presu quedó mal cargado, borrarle la cobertura
+    // que realmente se hizo sería perder el registro de lo que pasó. Se mira el fin y no
+    // el arranque, porque un bloque del 1 al 30 empieza en el pasado y sigue vigente.
     const hoyISO = new Date().toISOString().slice(0,10)
     const sobrantes = existentes.filter(e => !usados.has(e.id))
-    const viejosIntactos = sobrantes.filter(e => diaDeEvento(e) < hoyISO).length
-    const aBorrar = sobrantes.filter(e => diaDeEvento(e) >= hoyISO)
+    const viejosIntactos = sobrantes.filter(e => finDeEvento(e) < hoyISO).length
+    const aBorrar = sobrantes.filter(e => finDeEvento(e) >= hoyISO)
     let borrados = 0
     for (let i = 0; i < aBorrar.length; i += 5) {
       const tanda = await Promise.all(aBorrar.slice(i, i + 5).map(async e => {
