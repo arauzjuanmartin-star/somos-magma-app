@@ -172,6 +172,10 @@ export default async function handler(req, res) {
     const contactoLugar = get('Contacto Lugar')
     const contacto = get('Contacto')
     let staffAttendees = [], staffSinMail = [], compartidoCrudo = null
+    // Cada línea de staff puede tener su día: en un trabajo de varias fechas no va todo
+    // el mundo todos los días (el 3 fue Juan, el 4 Felipe). El que no tiene día asignado
+    // va a todas — es como venía funcionando y es lo correcto para un trabajo de un día.
+    const staffConDia = []
 
     const calAuth = getCalendarAuth()
     const cal = google.calendar({ version: 'v3', auth: calAuth })
@@ -219,21 +223,36 @@ export default async function handler(req, res) {
     // Staff asignado (desde PROYECTOS) — para que en el Calendar se vea quién va
     if (accion === 'aprobar') {
       try {
-        const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ER' })
+        const rProy = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:EZ' })
         const pHeaders = rProy.data.values?.[0] || []
         const pCol = pHeaders.indexOf('N° presupuesto')
         const pFila = (rProy.data.values || []).slice(1).find(r => String(r[pCol]||'').trim() === String(num).trim())
         if (pFila) {
-          const staffList = []
+          // Slot por slot, contando también los vacíos: el número de slot es la llave con
+          // la que la columna "Fechas Staff" dice qué día va cada uno ("4:03/09/2026").
+          const staffPorSlot = []
+          let slot = 0
           pHeaders.forEach((h, i) => {
             const ht = String(h||'').trim()
-            if ((ht === 'Staff' || /^Staff \d+$/.test(ht)) && pFila[i]) {
-              const nombre = String(pFila[i]).trim()
-              if (nombre && nombre !== 'Somos Magma') staffList.push(nombre)
-            }
+            if (ht !== 'Staff' && !/^Staff \d+$/.test(ht)) return
+            slot++
+            const nombre = String(pFila[i]||'').trim()
+            if (nombre && nombre !== 'Somos Magma') staffPorSlot.push({ slot, nombre })
           })
-          const uniqStaff = [...new Set(staffList)]
-          if (uniqStaff.length) descripcionPartes.push(`🎥 Staff: ${uniqStaff.join(', ')}`)
+          const fechasSlot = {}
+          const iFS = pHeaders.indexOf('Fechas Staff')
+          if (iFS >= 0) String(pFila[iFS]||'').split('|').forEach(x => {
+            const [k, ...v] = x.split(':')
+            const d = parseFecha(v.join(':').trim())
+            if (k && d) fechasSlot[k.trim()] = d
+          })
+          staffPorSlot.forEach(x => { x.dia = fechasSlot[String(x.slot)] || null })
+
+          // En la citación se ve el reparto completo con el día de cada uno; a Juan y a
+          // Felipe les figuraba todo el mes porque el staff se cargaba sin fecha.
+          const vistos = new Set()
+          const lista = staffPorSlot.filter(x => { const k = x.nombre + '|' + (x.dia||''); if (vistos.has(k)) return false; vistos.add(k); return true })
+          if (lista.length) descripcionPartes.push(`🎥 Staff: ${lista.map(x => x.dia ? `${x.nombre} (${(+x.dia.slice(8,10))}/${(+x.dia.slice(5,7))})` : x.nombre).join(', ')}`)
           // Buscar el mail de cada uno en RRHH para invitarlos al evento
           try {
             const rRRHH = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:D' })
@@ -241,7 +260,13 @@ export default async function handler(req, res) {
             const iNom = (rh[0]||[]).indexOf('Nombre Apellido'), iMail = (rh[0]||[]).indexOf('Mail')
             const mailDe = {}
             rh.slice(1).forEach(r => { const n = String(r[iNom]||'').trim().toLowerCase(); const m = String(r[iMail]||'').trim(); if (n && /@/.test(m)) mailDe[n] = m })
-            uniqStaff.forEach(n => { const m = mailDe[n.toLowerCase()]; if (m) staffAttendees.push({ email: m, displayName: n }); else staffSinMail.push(n) })
+            lista.forEach(x => {
+              const m = mailDe[x.nombre.toLowerCase()]
+              if (m) staffConDia.push({ email: m, displayName: x.nombre, dia: x.dia })
+              else if (!staffSinMail.includes(x.nombre)) staffSinMail.push(x.nombre)
+            })
+            const yaVisto = new Set()
+            staffAttendees = staffConDia.filter(a => !yaVisto.has(a.email) && yaVisto.add(a.email)).map(({ email, displayName }) => ({ email, displayName }))
           } catch (e) { /* si falla RRHH, seguimos sin invitar */ }
         }
       } catch (e) { /* no bloquea */ }
@@ -250,7 +275,7 @@ export default async function handler(req, res) {
     // dónde ir, pero no qué hacer con lo que graba — y termina por WhatsApp.
     if (accion === 'aprobar') {
       try {
-        const rP2 = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:ET' })
+        const rP2 = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PROYECTOS!A:EZ' })
         const rows2 = rP2.data.values || [], h2 = rows2[0] || []
         const f2 = rows2.slice(1).find(r => String(r[h2.indexOf('N° presupuesto')] || '').trim() === String(num).trim())
         const crudo = f2 ? String(f2[h2.indexOf('Drive Crudo')] || '').trim() : ''
@@ -291,6 +316,16 @@ export default async function handler(req, res) {
     // nadie un día en la agenda: gris, sin invitados y sin marcar ocupado.
     const dmy = iso => String(iso||'').split('-').reverse().join('/')
 
+    // A cada evento se invita SÓLO a quien va ese día. Sin día asignado = va a todos.
+    const attendeesDeSlot = (slot) => {
+      const hasta = slot.hasta || slot.desde
+      const vistos = new Set()
+      return staffConDia
+        .filter(a => !a.dia || (a.dia >= slot.desde && a.dia <= hasta))
+        .filter(a => !vistos.has(a.email) && vistos.add(a.email))
+        .map(({ email, displayName }) => ({ email, displayName }))
+    }
+
     const armarBody = (slot) => {
       const body = {
         summary: slot.tentativo ? `⟨A CONFIRMAR⟩ ${titulo}` : titulo,
@@ -302,7 +337,7 @@ export default async function handler(req, res) {
         transparency: slot.tentativo ? 'transparent' : 'opaque',
         // Siempre explícito: si un evento deja de ser tentativo hay que despintarlo,
         // porque el update mergea sobre lo que ya estaba.
-        attendees: slot.tentativo ? [] : staffAttendees,
+        attendees: slot.tentativo ? [] : attendeesDeSlot(slot),
       }
       if (ubicacion) body.location = ubicacion
       if (horas && !slot.allDay) {

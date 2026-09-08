@@ -1969,7 +1969,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   // no se sabe a quién avisarle ni cuánto pagarle.
   const fechasProyecto = useMemo(()=>{
     const base = String(presu?.['Fecha Evento'] || p['Fecha Evento'] || '').trim()
-    const mas = String(presu?.['Fechas Adicionales'] || '').split('|').map(x=>x.trim()).filter(Boolean)
+    // El "?" marca los días que todavía no están confirmados (ver lib/fechas.js). En el
+    // desplegable van igual — se le puede asignar gente a un día tentativo — pero sin la marca.
+    const mas = String(presu?.['Fechas Adicionales'] || '').split('|').map(x=>x.trim().replace(/^\?/,'')).filter(Boolean)
     const tipo = String(presu?.['Tipo Fechas'] || '').trim()
     // Un rango se guarda como dos extremos ("del 1 al 5") pero se trabaja día por día:
     // en Minecraft algunos fueron 3 días y otros 2. Así que el rango se abre en días
