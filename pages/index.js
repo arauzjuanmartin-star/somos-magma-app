@@ -11,7 +11,7 @@ import Edicion from '../components/Edicion'
 import Novedades from '../components/Novedades'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
-import { codificarFechas, decodificarFechas, esTentativa } from '../lib/fechas'
+import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -867,9 +867,9 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   // abrió desde un proyecto hay que ir a buscar la fila del presu, que es la fuente.
   const presuRow = (data?.presupuestos||[]).find(x=>String(x['Columna 1']||'').trim()===String(id).trim()) || p
   const diasOrig = decodificarFechas(presuRow['Fecha Evento']||p['Fecha Evento'], presuRow['Tipo Fechas'], presuRow['Fechas Adicionales'])
-  const tentOrig = esTentativa(presuRow['Tipo Fechas'])
+  const tentOrig = tentativosDe(presuRow['Fecha Evento']||p['Fecha Evento'], presuRow['Tipo Fechas'], presuRow['Fechas Adicionales'])
   const [dias,setDias]=useState(diasOrig)
-  const [tentativa,setTentativa]=useState(tentOrig)
+  const [tentativos,setTentativos]=useState(tentOrig)
   const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
   const clis=dedupCI([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))])
@@ -887,7 +887,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
     // Fechas: el tipo (dia/rango/multi) y las adicionales se derivan de los días
     // marcados en el calendario, así nunca queda un "rango" viejo con el final
     // desactualizado (rompía el Calendar en silencio).
-    const cod=codificarFechas(dias,tentativa), origF=codificarFechas(diasOrig,tentOrig)
+    const cod=codificarFechas(dias,tentativos), origF=codificarFechas(diasOrig,tentOrig)
     if(cod.fechaEvento!==origF.fechaEvento||cod.tipo!==origF.tipo||cod.adicionales!==origF.adicionales){
       cambios['Fecha Evento']=cod.fechaEvento; cambios['Tipo Fechas']=cod.tipo
       cambios['Fechas Adicionales']=cod.adicionales; cambios['Cant. Fechas']=cod.cant
@@ -922,8 +922,9 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
         .then(r=>r.json()).then(j=>{
           if(!j||!j.ok||accionCal==='borrar') return
           const partes=[]
-          if(j.tentativa) partes.push('bloque “a confirmar”')
-          else if(j.eventos) partes.push(`${j.eventos} ${j.eventos===1?'día':'días'} en el Calendar`)
+          const firmes=(j.eventos||0)-(j.aConfirmar||0)
+          if(firmes) partes.push(`${firmes} ${firmes===1?'día':'días'} en el Calendar`)
+          if(j.aConfirmar) partes.push('+ bloque “a confirmar”')
           if(j.borrados) partes.push(`${j.borrados} ${j.borrados===1?'borrado':'borrados'}`)
           if(j.staffSinMail&&j.staffSinMail.length) partes.push(`sin mail: ${j.staffSinMail.join(', ')}`)
           if(partes.length) showToast(`#${id} · ${partes.join(' · ')}`)
@@ -940,7 +941,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
       <div style={{padding:'20px 22px', display:'flex', flexDirection:'column', gap:13}}>
         <div>
           <label style={{fontSize:11, fontWeight:600, color:T.ink2, textTransform:'uppercase', letterSpacing:0.3, display:'block', marginBottom:5}}>Fechas del evento</label>
-          <CampoFechas dias={dias} onChange={setDias} tentativa={tentativa} onTentativa={setTentativa}/>
+          <CampoFechas dias={dias} tentativos={tentativos} onChange={(d,t)=>{setDias(d); setTentativos(t)}}/>
         </div>
         {campos.map(([k,label,tipo])=>(
           <div key={k}>
@@ -1112,7 +1113,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ajusteOrig = parseMonto(initialData?.['Ajuste'])
   const [form,setForm]=useState(isRep ? {
     fp:hoyISO,
-    dias: decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig), tentativa: esTentativa(tipoOrig),
+    dias: decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig),
+    tentativos: tentativosDe(initialData['Fecha Evento'], tipoOrig, adicOrig),
     agencia:initialData['Agencia']||'', cliente:initialData['Cliente']||'', proyecto:initialData['Proyecto']||'',
     contacto:initialData['Contacto']||'', pm:initialData['PM Interno']||'',
     plazo:String(initialData['Plazo']||'0').replace(/[^\d]/g,'')||'0',
@@ -1123,7 +1125,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
     desglosar:presuDesglosado(initialData),
     edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
-  } : { fp:hoyISO, dias:[], tentativa:false, agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'' })
+  } : { fp:hoyISO, dias:[], tentativos:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'' })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -1236,7 +1238,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     setSaving(true)
     // fechas
     // El tipo (dia/rango/multi) sale solo de los días elegidos — ver lib/fechas.js
-    const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias, form.tentativa)
+    const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias, form.tentativos)
 
     // Acá se deshace el atajo: "Edit 60s × 3" sale como 3 líneas idénticas. Al sheet
     // llega exactamente lo mismo que si se hubieran cargado a mano, así que los slots,
@@ -1391,7 +1393,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         {/* Fecha */}
         <div style={{marginBottom:18}}>
           <label style={lblV2}>Fechas del evento</label>
-          <CampoFechas dias={form.dias} onChange={l=>upd('dias',l)} tentativa={form.tentativa} onTentativa={v=>upd('tentativa',v)}/>
+          <CampoFechas dias={form.dias} tentativos={form.tentativos} onChange={(d,t)=>setForm(f=>({...f, dias:d, tentativos:t}))}/>
         </div>
 
         {/* Servicios */}
@@ -1700,7 +1702,7 @@ function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
   const out=[]; const f0=parseD(fechaPrincipal); if(!f0) return out
   const tipo=String(tipoFechas||'').toLowerCase().trim(), ad=String(fechasAdicionales||'').trim()
   if(tipo==='rango'&&ad){ const f1=parseD(ad); if(!f1){out.push(f0);return out} let d=new Date(f0); while(d.getTime()<=f1.getTime()){out.push(new Date(d));d.setDate(d.getDate()+1)} }
-  else if((tipo==='multi'||tipo==='tentativa')&&ad){ out.push(f0); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s);if(f)out.push(f)}) }
+  else if((tipo==='multi'||tipo==='tentativa')&&ad){ out.push(f0); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s.trim().replace(/^\?/,''));if(f)out.push(f)}) }
   else out.push(f0)
   return out
 }

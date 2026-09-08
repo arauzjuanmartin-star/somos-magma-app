@@ -9,6 +9,7 @@
 import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
+import { compartirCarpeta } from '../../lib/drive'
 
 const CALENDAR_ID = '5gc9hdvh4vi28bf8uemr2vfnn4@group.calendar.google.com'
 
@@ -47,11 +48,18 @@ function fechasEvento(fechaPrincipal, tipoFechas, fechasAdicionales) {
     return { type: 'dia', dia: f0, fechas: [f0] }
   }
   if ((tipo === 'multi' || tipo === 'tentativa') && ad) {
-    const fechas = [...new Set([f0, ...ad.split('|').filter(Boolean).map(parseFecha).filter(Boolean)])].sort()
-    return { type: tipo, fechas }
+    // Los días sin confirmar vienen marcados con "?" en la misma columna (ver lib/fechas.js)
+    const partes = ad.split('|').filter(Boolean).map(x => x.trim())
+    const tent = partes.filter(x => x.startsWith('?')).map(x => parseFecha(x.slice(1))).filter(Boolean)
+    const firmes = partes.filter(x => !x.startsWith('?')).map(parseFecha).filter(Boolean)
+    if (tipo === 'tentativa') {
+      const todas = [...new Set([f0, ...firmes, ...tent])].sort()
+      return { type: 'tentativa', fechas: todas, tentativos: todas }
+    }
+    return { type: 'multi', fechas: [...new Set([f0, ...firmes])].sort(), tentativos: [...new Set(tent)].sort() }
   }
-  if (tipo === 'tentativa') return { type: 'tentativa', fechas: [f0] }
-  return { type: 'dia', dia: f0, fechas: [f0] }
+  if (tipo === 'tentativa') return { type: 'tentativa', fechas: [f0], tentativos: [f0] }
+  return { type: 'dia', dia: f0, fechas: [f0], tentativos: [] }
 }
 
 // Un slot = un evento de Google. Un día suelto es un slot; un rango corrido es UN
@@ -59,13 +67,15 @@ function fechasEvento(fechaPrincipal, tipoFechas, fechasAdicionales) {
 // por día (antes iba uno solo con el resto escrito en la descripción, y el equipo
 // no las veía en su agenda); y una tentativa es un único bloque gris de punta a punta.
 const MAX_SLOTS_CAL = 60
+// Los días sin confirmar de un mismo trabajo se juntan en UN bloque, aunque el
+// trabajo ya tenga días firmes: Popstars filmó el 3 y el 4, y lo que queda del mes
+// es un solo bloque gris hasta que se definan.
+const bloqueTentativo = t => t && t.length ? [{ desde: t[0], hasta: t[t.length-1], allDay: true, tentativo: true }] : []
 function slotsDeCalendario(fechas) {
+  const tent = bloqueTentativo(fechas.tentativos)
+  if (fechas.type === 'tentativa') return tent
   if (fechas.type === 'rango') return [{ desde: fechas.desde, hasta: fechas.hasta, allDay: true }]
-  if (fechas.type === 'tentativa') {
-    const l = fechas.fechas
-    return [{ desde: l[0], hasta: l[l.length-1], allDay: true, tentativo: true }]
-  }
-  if (fechas.type === 'multi') return fechas.fechas.slice(0, MAX_SLOTS_CAL).map(d => ({ desde: d, hasta: d }))
+  if (fechas.type === 'multi') return [...fechas.fechas.slice(0, MAX_SLOTS_CAL).map(d => ({ desde: d, hasta: d })), ...tent]
   return [{ desde: fechas.dia, hasta: fechas.dia }]
 }
 
@@ -153,7 +163,7 @@ export default async function handler(req, res) {
     const ubicacion = get('Ubicación')
     const contactoLugar = get('Contacto Lugar')
     const contacto = get('Contacto')
-    let staffAttendees = [], staffSinMail = []
+    let staffAttendees = [], staffSinMail = [], compartidoCrudo = null
 
     const calAuth = getCalendarAuth()
     const cal = google.calendar({ version: 'v3', auth: calAuth })
@@ -237,6 +247,14 @@ export default async function handler(req, res) {
         const f2 = rows2.slice(1).find(r => String(r[h2.indexOf('N° presupuesto')] || '').trim() === String(num).trim())
         const crudo = f2 ? String(f2[h2.indexOf('Drive Crudo')] || '').trim() : ''
         const entrega = f2 ? String(f2[h2.indexOf('Drive Entrega')] || '').trim() : ''
+        // Si lo invitamos a filmar, tiene que poder subir. La citación le da el link y
+        // le dice "entrás con tu propio mail": sin esto era mentira — la carpeta se creaba
+        // al aprobar pero sólo se compartía a mano desde Edición, y el freelancer se
+        // encontraba con "no tenés permiso" el día del rodaje.
+        const idCarpeta = (crudo.match(/\/folders\/([A-Za-z0-9_-]+)/) || [])[1]
+        if (idCarpeta && staffAttendees.length) {
+          try { compartidoCrudo = await compartirCarpeta(idCarpeta, staffAttendees.map(a => a.email)) } catch (e) {}
+        }
         if (crudo || entrega) {
           descripcionPartes.push('', '— DÓNDE SUBIR EL MATERIAL —')
           if (crudo) descripcionPartes.push(`📤 Video crudo: ${crudo}`)
@@ -258,27 +276,25 @@ export default async function handler(req, res) {
     const descripcion = descripcionPartes.join('\n')
 
     const fechas = fechasEvento(fechaEv, tipoFechas, fechasAd)
-    const esTentativo = fechas.type === 'tentativa'
     const slots = slotsDeCalendario(fechas)
     const TZ = 'America/Argentina/Buenos_Aires'
 
-    // Una fecha tentativa avisa que el mes está reservado, pero no le pone a nadie
-    // un día en la agenda: bloque gris, sin invitados y sin marcar ocupado.
+    // Un bloque tentativo avisa que los días están reservados, pero no le pone a
+    // nadie un día en la agenda: gris, sin invitados y sin marcar ocupado.
     const dmy = iso => String(iso||'').split('-').reverse().join('/')
-    const descripcionFinal = esTentativo
-      ? `⚠️ FECHAS A CONFIRMAR — todavía no están definidas.\nDías reservados: ${fechas.fechas.map(dmy).join(', ')}\n\n` + descripcion
-      : descripcion
 
     const armarBody = (slot) => {
       const body = {
-        summary: esTentativo ? `⟨A CONFIRMAR⟩ ${titulo}` : titulo,
-        description: descripcionFinal,
-        colorId: esTentativo ? '8' : colorId,          // 8 = grafito
+        summary: slot.tentativo ? `⟨A CONFIRMAR⟩ ${titulo}` : titulo,
+        description: slot.tentativo
+          ? `⚠️ FECHAS A CONFIRMAR — todavía no están definidas.\nDías reservados: ${(fechas.tentativos||[]).map(dmy).join(', ')}\n\n` + descripcion
+          : descripcion,
+        colorId: slot.tentativo ? '8' : colorId,          // 8 = grafito
         status: 'confirmed',
-        transparency: esTentativo ? 'transparent' : 'opaque',
+        transparency: slot.tentativo ? 'transparent' : 'opaque',
         // Siempre explícito: si un evento deja de ser tentativo hay que despintarlo,
         // porque el update mergea sobre lo que ya estaba.
-        attendees: esTentativo ? [] : staffAttendees,
+        attendees: slot.tentativo ? [] : staffAttendees,
       }
       if (ubicacion) body.location = ubicacion
       if (horas && !slot.allDay) {
@@ -355,11 +371,11 @@ export default async function handler(req, res) {
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `${accionFinal} ${accion} eventos=${slots.length}${esTentativo?' (tentativa)':''} nuevos=${creados} borrados=${borrados}${viejosIntactos?' intactos='+viejosIntactos:''} link=${result.data.htmlLink}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'calendar-evento', 'CALENDAR', String(num), `${accionFinal} ${accion} eventos=${slots.length} tentativos=${slots.filter(x=>x.tentativo).length} nuevos=${creados} borrados=${borrados}${viejosIntactos?' intactos='+viejosIntactos:''} link=${result.data.htmlLink}`]] },
       })
     } catch (e) {}
 
-    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink, invitados, staffSinMail, eventos: slots.length, creados, actualizados, borrados, tentativa: esTentativo })
+    res.json({ ok: true, accion: accionFinal, eventId: result.data.id, link: result.data.htmlLink, invitados, staffSinMail, crudoCompartidoCon: compartidoCrudo?.ok || [], eventos: slots.length, creados, actualizados, borrados, aConfirmar: slots.filter(x=>x.tentativo).length })
   } catch (e) {
     console.error('Error calendar-evento:', e.message, e.response?.data)
     // Si es problema de permisos, devolver mensaje claro

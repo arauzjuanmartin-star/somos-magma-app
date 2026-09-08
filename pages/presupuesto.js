@@ -265,9 +265,15 @@ export default function Presupuesto() {
         const fe = String(p['Fecha Evento']||'').trim()
         const adicionales = String(p['Fechas Adicionales']||'').trim()
         if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
-        if (tipo === 'multi' && adicionales) return [fe, ...adicionales.split('|').filter(Boolean)].join(', ')
-        // Fechas todavía sin definir: al cliente se le muestran igual, pero avisadas
+        // Fechas todavía sin definir: al cliente se le muestran igual, pero avisadas.
+        // Las que van con "?" son las que faltan confirmar (ver lib/fechas.js).
         if (tipo === 'tentativa') return `${[fe, ...adicionales.split('|').filter(Boolean)].join(', ')} (a confirmar)`
+        if (tipo === 'multi' && adicionales) {
+          const partes = adicionales.split('|').filter(Boolean).map(x => x.trim())
+          const firmes = [fe, ...partes.filter(x => !x.startsWith('?'))].join(', ')
+          const tent = partes.filter(x => x.startsWith('?')).map(x => x.slice(1))
+          return tent.length ? `${firmes} · a confirmar: ${tent.join(', ')}` : firmes
+        }
         return fe
       })()
       setForm(prev => ({
