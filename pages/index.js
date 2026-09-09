@@ -4,13 +4,16 @@ import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
 import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
-import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos'
+import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
+import { repartoDelMes } from '../lib/jornadas'
+import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
 import Novedades from '../components/Novedades'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
+import RepartoStaff from '../components/RepartoStaff'
 import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 
 /* ============================================================
@@ -1999,29 +2002,36 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const [saving,setSaving]=useState(false)
   const GRID_STAFF = porFecha ? '1.2fr 1.3fr 130px 105px 28px' : '1.3fr 1.4fr 110px 28px'
 
-  // ── Aviso de jornadas (Lucho, Juani) ────────────────────────────────────────
-  // Las condiciones salen de la solapa ACUERDOS, no de acá. Al poner a alguien con
-  // acuerdo vigente aparece "6/10 del mes · $190.000" y, si el monto está vacío, se
-  // completa con la tarifa que corresponde a ESA jornada (dentro del mínimo o extra).
+  // ── Cuántas lleva cada uno en el mes ────────────────────────────────────────
+  // Arrancó para Lucho y Juani (tienen mínimo pactado en la solapa ACUERDOS) y
+  // ahora sale para TODOS: al lado del nombre dice "3ª del mes". Es el dato que
+  // hace que el reparto salga parejo sin tener que ir a mirar otra pantalla.
+  // Con acuerdo además dice el precio de ESA jornada (dentro del mínimo o extra)
+  // y, si el monto está vacío, lo completa solo.
   const acVig = useMemo(()=>acuerdosVigentes(acuerdos, parseD(p['Fecha Evento'])||new Date()), [acuerdos, p])
   const acDe = useCallback(nombre=>{ const k=normTxt(nombre); return acVig.find(a=>a.keys.includes(k))||null }, [acVig])
-  // Lo que ya está en el sheet para el mes del evento, sin contar este proyecto
-  // (sus líneas se cuentan abajo desde el formulario, así el número se mueve al tipear).
   const feEv = parseD(p['Fecha Evento'])
+  // El mes entero de una pasada, SIN este proyecto: sus líneas se cuentan abajo
+  // desde el formulario, así el número se mueve mientras se escribe.
   const previasSheet = useMemo(()=>{
     if(!feEv) return {}
-    const out={}; acVig.forEach(a=>{ out[a.key]=jornadasDelMes(proyectos, a.keys, feEv.getMonth()+1, feEv.getFullYear(), num) })
-    return out
-  }, [proyectos, acVig, feEv, num])
+    const otros = proyectos.filter(x=>String(x['N° presupuesto']||'').trim()!==String(num||'').trim())
+    return Object.fromEntries(repartoDelMes(otros, feEv.getMonth()+1, feEv.getFullYear()).map(r=>[r.key, r.jornadas]))
+  }, [proyectos, feEv, num])
+  const keyDe = nombre => canonKey(canonStaff(nombre))
   // Por línea: cuántas lleva esa persona contando las de arriba en este mismo formulario.
   const avisos = useMemo(()=>{
     if(!feEv) return []
     const corridas={}
     return items.map(it=>{
-      const a=acDe(it.quien); if(!a || !esJornada(it.pedido)) return null
-      const previas=(previasSheet[a.key]||0)+(corridas[a.key]||0)
-      corridas[a.key]=(corridas[a.key]||0)+1
-      return avisoJornada(a, previas)
+      const nombre=canonStaff(it.quien)
+      if(!nombre || esMagma(nombre) || !esJornada(it.pedido)) return null
+      const k=canonKey(nombre)
+      const previas=(previasSheet[k]||0)+(corridas[k]||0)
+      corridas[k]=(corridas[k]||0)+1
+      const a=acDe(it.quien)
+      // Sin acuerdo no hay mínimo ni tarifa pactada: solo el contador.
+      return a ? avisoJornada(a, previas) : {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true}
     })
   }, [items, acDe, previasSheet, feEv])
 
@@ -2030,7 +2040,8 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     if(j!==i) return x
     const a=acDe(val)
     if(!a || Number(x.precio)>0 || !esJornada(x.pedido)) return {...x, quien:val}
-    const previas=(previasSheet[a.key]||0)+it.filter((y,k)=>k<j && a.keys.includes(normTxt(y.quien)) && esJornada(y.pedido)).length
+    const k=keyDe(val)
+    const previas=(previasSheet[k]||0)+it.filter((y,z)=>z<j && keyDe(y.quien)===k && esJornada(y.pedido)).length
     return {...x, quien:val, precio:avisoJornada(a, previas).precio}
   }))
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
@@ -2104,9 +2115,11 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         </div>
         <div>
           <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>setQuien(i,e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
-          {avisos[i] && <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
-            {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
-          </span>}
+          {avisos[i] && (avisos[i].soloContador
+            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}</span>
+            : <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
+                {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
+              </span>)}
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         {porFecha && <select value={s.fecha||''} onChange={e=>upd(i,'fecha',e.target.value)} style={{...inpV2, cursor:'pointer', borderColor:s.quien&&!s.fecha?T.warn:T.border}}>
@@ -3224,6 +3237,10 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       <span style={{fontSize:11.5, color:T.ink3}}>queda registrado en cada pago</span>
     </div>
 
+    {/* Cómo se repartió el mes que estás pagando. Sigue al selector de arriba. */}
+    <RepartoStaff proyectos={proyectos} rrhh={rrhh} mes={mesIdx} anio={anio} onPersona={n=>setQ(n)}
+      titulo={`Reparto de ${MESES_LARGO[mesIdx-1]}`}/>
+
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
       {lista.length===0&&<Empty>Sin freelancers con trabajos este mes</Empty>}
       {lista.map((persona,i)=>{
@@ -3303,10 +3320,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 
 // ============================ FREELANCERS ============================
 // Unifica nombres de staff repetidos (misma persona, distintas grafías). Solo UI, no toca datos.
-const STAFF_CANON_MAP={juan:'Juan Martin Arauz','juan martin':'Juan Martin Arauz',sofi:'Sofia Maria Grenier Basavilbaso',sofia:'Sofia Maria Grenier Basavilbaso',lulu:'Lucía María Grenier Basavilbaso',lucia:'Lucía María Grenier Basavilbaso',luli:'Lucía María Grenier Basavilbaso',dani:'Daniela Viviana Ayala',tom:'Tomás Halbach',santino:'Santino D’ Angelo','santino d angelo':'Santino D’ Angelo',gaspar:'Gaspar Peñalba',felipe:'Felipe Martinez',felip:'Felipe Martinez',ivan:'Ivan Aranda',pablo:'Pablo Leonel Molanes Araujo',lucas:'Lucas Ignacio Godoy',julian:'Julián Exequiel Pérez',blas:'Blas Lafontaine',mailen:'Mailen Santana',pedro:'Pedro Maddonni',nahuel:'Nahuel David Aguilar',lucho:'Jorge Luis Chavez',chanas:'Luciano Nicolas Scigliotti',luciano:'Luciano Nicolas Scigliotti',tutu:'Martin Nahuel Litman (Tutu)','martin litman':'Martin Nahuel Litman (Tutu)',pocho:'Martín Ponczyk (Pocho)','martin dario ponczyk':'Martín Ponczyk (Pocho)',paz:'Paz Bunge',pachu:'Paz Bunge',clari:'Clara Patti',eli:'Eli Cagliano',andy:'Andrés Julio Verón',gabo:'Gabriel Franco',manu:'Manuel Peñalba',nacho:'Ignacio Bettera',teo:'Mateo Minchilli',martin:'Martin Remedi',diego:'Diego Di Ciurcio','diego bariloche':'Diego Di Ciurcio','diego dc':'Diego Di Ciurcio',juli:'Juli Butteri'}
-const canonKey=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/['’´`]/g,'').replace(/\s+/g,' ').trim()
-const canonStaff=name=>{ const k=canonKey(name); return STAFF_CANON_MAP[k]||String(name||'').trim() }
-
+// canonStaff / canonKey viven en lib/staff.js — los usa también lib/jornadas.js.
 function Freelancers({data, nav, clearNav, onRefresh, showToast}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
   const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState(''), [lAnio,setLAnio]=useState(''), [lMes,setLMes]=useState('')
@@ -3371,6 +3385,11 @@ function Freelancers({data, nav, clearNav, onRefresh, showToast}){
       <Mini label="Trabajos" val={trabPeriodo}/>
       <Mini label="Promedio x trabajo" val={fmtM(trabPeriodo?totPeriodo/trabPeriodo:0)}/>
     </div>
+    {/* Cómo viene repartido el mes. Si arriba filtraste un mes, el gráfico lo sigue;
+        si no, muestra el mes en curso con su propio selector. Clic = abre su ficha. */}
+    <RepartoStaff proyectos={proyectos} rrhh={rrhh} onPersona={n=>setSel(n)}
+      mes={lMes?+lMes:undefined} anio={lAnio?+lAnio:undefined}
+      titulo={lMes?`Reparto de ${MESES_LARGO[+lMes-1]}`:'Reparto del mes'}/>
     <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
       <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
         <div style={{display:'grid', gridTemplateColumns:'1.5fr 55px 110px 105px 110px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>

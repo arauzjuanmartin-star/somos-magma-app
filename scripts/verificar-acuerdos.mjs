@@ -6,7 +6,8 @@
  */
 import { google } from 'googleapis'
 import { readFileSync } from 'fs'
-import { acuerdosVigentes, jornadasDelMes, avisoJornada, esJornada } from '../lib/acuerdos.js'
+import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos.js'
+import { jornadasDePersona, repartoDelMes } from '../lib/jornadas.js'
 const env=Object.fromEntries(readFileSync('.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return [l.slice(0,i).trim(),v]}))
 const auth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets.readonly']})
 const sheets=google.sheets({version:'v4',auth}); const ID='1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
@@ -19,7 +20,7 @@ const objProy=v=>{const h=v[0]||[];return v.slice(1).filter(r=>r.some(c=>c!=='')
   h.forEach((k,i)=>{ if(k==='Staff'){st++;o['Staff '+st]=r[i]||''} else if(k==='Precio'){pc++;o['Precio '+pc]=r[i]||''} else o[k]=r[i]||'' })
   return o })}
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['ACUERDOS!A:U','PROYECTOS!A:ET']})
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['ACUERDOS!A:U','PROYECTOS!A:EV']})
 const acuerdos=obj(R.data.valueRanges[0].values||[])
 const proyectos=objProy(R.data.valueRanges[1].values||[])
 
@@ -42,7 +43,7 @@ console.log('     mes   jornadas reales    lo que iría diciendo el aviso       
 const MES=['','ene','feb','mar','abr','may','jun','jul','ago']
 let okTot=0
 for(let m=1;m<=8;m++){
-  const n=jornadasDelMes(proyectos, lucho.keys, m, 2026)
+  const n=jornadasDePersona(proyectos, lucho.keys, m, 2026)
   let costo=0; const muestras=[]
   for(let k=0;k<n;k++){ const a=avisoJornada(lucho,k); costo+=a.precio
     if(k===0||k===lucho.minimo-1||k===lucho.minimo||k===n-1) muestras.push(`${a.contador} ${M(a.precio)}`) }
@@ -66,12 +67,31 @@ console.log('\n  Lo que NO suma jornada (edición y viáticos quedaron fuera del
 ;['🎥 Video ½','Cobertura','Edición','Edicion de video','Viático','Viatico Pilar','Foto entera'].forEach(sv=>
   console.log(`    ${esJornada(sv)?'cuenta   ':'NO cuenta'}  ${sv}`))
 
+// ── 3.5 Reparto del mes: el gráfico y el contador del formulario tienen que dar igual
+console.log('\n'+'─'.repeat(74))
+console.log('  REPARTO DEL MES — lo que muestra el gráfico de Freelancers / Pagos Staff')
+console.log('─'.repeat(74))
+let coinciden=0, difieren=0
+for(const m of [7,8,9]){
+  const rep=repartoDelMes(proyectos, m, 2026)
+  const tot=rep.reduce((s,x)=>s+x.jornadas,0)
+  console.log(`\n  ${['','ene','feb','mar','abr','may','jun','julio','agosto','septiembre'][m]} 2026 — ${tot} convocatorias entre ${rep.length} personas`)
+  rep.slice(0,8).forEach(x=>{
+    // el mismo número que muestra el formulario de staff al lado del nombre
+    const delFormulario=jornadasDePersona(proyectos, [x.key], m, 2026)
+    const ok = delFormulario===x.jornadas
+    if(ok) coinciden++; else difieren++
+    console.log(`    ${String(x.jornadas).padStart(3)}  ${'█'.repeat(Math.min(24,x.jornadas)).padEnd(24)} ${x.nombre.padEnd(34)} ${M(x.monto).padStart(12)}  ${ok?'✓':'✗ el formulario dice '+delFormulario}`)
+  })
+}
+console.log(`\n  Gráfico vs contador del formulario: ${coinciden} coinciden${difieren?`, ${difieren} NO`:''}  ${difieren?'✗':'✓'}`)
+
 // ── 4. El margen +5%
 console.log('\n'+'─'.repeat(74))
 console.log('  MARGEN — MULT_MARGEN 1,086 (era 1)')
 console.log('─'.repeat(74))
-const MULT=parseFloat(readFileSync('pages/index.js','utf8').match(/const MULT_MARGEN = ([\d.]+)/)[1])
-console.log(`  leído de pages/index.js: ${MULT}\n`)
+const MULT=parseFloat(readFileSync('lib/desglose.js','utf8').match(/MULT_MARGEN\s*=\s*([\d.]+)/)[1])
+console.log(`  leído de lib/desglose.js: ${MULT}\n`)
 console.log('     costo staff        antes        ahora      sube')
 for(const costo of [130000,190000,220000,400000,1500000]){
   const t=(k)=>{ const fee=costo*k; return costo+fee+fee*0.35+fee*0.04 }
