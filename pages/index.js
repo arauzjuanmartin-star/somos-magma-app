@@ -675,8 +675,13 @@ const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:
 // siempre; se guarda en PRESUPUESTOS col AY (Motivo Desaprobado) vía /api/presupuesto-estado.
 // A nivel módulo a propósito: adentro de otro componente el textarea pierde el foco
 // a cada tecla (ver [[project_bug_inputs_pierden_foco]]).
-const MOTIVOS_DESAPROBADO = ['Precio alto','No contestaron','Eligió otra productora','Se suspendió el evento','Fecha no disponible','Cambió el alcance','Lo hizo in-house']
-const MOTIVOS_REPRESUPUESTADO = ['Cambio de alcance','Ajuste de precio','Cambio de fecha','Pidió otra opción','Duplicado']
+// Los de represupuestar salen de contar los 100 motivos que ya estaban escritos a mano:
+// 28% error propio de cotización, 28% el cliente cambió el pedido, 20% pidió bajar el
+// precio, 3% la comisión. "Error en la cotización" es el que más importa y el que no
+// estaba — es el único de la lista que no depende del cliente. Se llama así y no
+// "nos equivocamos" a propósito: si suena a culpa nadie lo tilda y el dato se pierde.
+const MOTIVOS_DESAPROBADO = ['Precio alto','No contestaron','No lo seguimos a tiempo','Eligió otra productora','Se suspendió el evento','Fecha no disponible','Lo hizo in-house']
+const MOTIVOS_REPRESUPUESTADO = ['Error en la cotización','El cliente cambió el pedido','El cliente pidió bajar el precio','Cambió la fecha','Cambió la comisión','Duplicado']
 function MotivoEstadoModal({num, estado, saving, onClose, onConfirm}){
   const [motivo,setMotivo]=useState('')
   const esDes = estado==='DESAPROBADO'
