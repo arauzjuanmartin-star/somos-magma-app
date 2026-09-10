@@ -669,12 +669,140 @@ const ESTADOS_DOT = {
 }
 const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:e||'—'}
 
+// ── Por qué se cayó un trabajo ────────────────────────────────────────────────
+// Desaprobar sin motivo deja el dato muerto: de 194 desaprobados históricos solo 7
+// tenían el porqué cargado, así que no se puede analizar nada. Este modal lo pide
+// siempre; se guarda en PRESUPUESTOS col AY (Motivo Desaprobado) vía /api/presupuesto-estado.
+// A nivel módulo a propósito: adentro de otro componente el textarea pierde el foco
+// a cada tecla (ver [[project_bug_inputs_pierden_foco]]).
+const MOTIVOS_DESAPROBADO = ['Precio alto','No contestaron','Eligió otra productora','Se suspendió el evento','Fecha no disponible','Cambió el alcance','Lo hizo in-house']
+const MOTIVOS_REPRESUPUESTADO = ['Cambio de alcance','Ajuste de precio','Cambio de fecha','Pidió otra opción','Duplicado']
+function MotivoEstadoModal({num, estado, saving, onClose, onConfirm}){
+  const [motivo,setMotivo]=useState('')
+  const esDes = estado==='DESAPROBADO'
+  const chips = esDes ? MOTIVOS_DESAPROBADO : MOTIVOS_REPRESUPUESTADO
+  const color = esDes ? T.brand : T.ink2
+  return <div onClick={()=>!saving&&onClose()} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:950, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:470, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
+      <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10}}>
+        <span style={{width:8,height:8,borderRadius:8,background:color}}/>
+        <span style={{fontSize:15.5, fontWeight:700, color:T.ink}}>{esDes?'Desaprobar':'Marcar represupuestado'} #{num}</span>
+        <div style={{flex:1}}/>
+        <button onClick={onClose} disabled={saving} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <div style={{fontSize:12.5, color:T.ink2, marginBottom:10}}>{esDes?'¿Por qué no salió? Elegí una o escribí el detalle.':'¿Por qué se rehace?'} <span style={{color:T.ink3}}>Queda en el sheet para poder analizarlo después.</span></div>
+        <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:11}}>
+          {chips.map(m=>{ const sel=motivo===m
+            return <button key={m} onClick={()=>setMotivo(sel?'':m)} style={{padding:'6px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:`1px solid ${sel?color:T.border}`, background:sel?(esDes?T.brandSoft:T.surfaceAlt):T.surface, color:sel?color:T.ink2, fontWeight:sel?600:400}}>{m}</button>
+          })}
+        </div>
+        <textarea autoFocus value={motivo} onChange={e=>setMotivo(e.target.value)}
+          placeholder={esDes?'Ej: quedamos $200k arriba de la otra productora':'Ej: el cliente pidió sumar una cámara'}
+          style={{...inpV2, minHeight:64, resize:'vertical', fontFamily:'inherit', boxSizing:'border-box'}}/>
+      </div>
+      <div style={{padding:'13px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} disabled={saving} style={miniBtn}>Cancelar</button>
+        <button onClick={()=>onConfirm(motivo.trim())} disabled={saving||!motivo.trim()}
+          style={{padding:'8px 20px', borderRadius:8, border:'none', background:motivo.trim()?color:T.ink3, color:'#fff', fontSize:12.5, fontWeight:600, cursor:motivo.trim()?'pointer':'default', opacity:saving?0.6:1}}>
+          {saving?'Guardando…':(esDes?'Desaprobar':'Confirmar')}</button>
+      </div>
+    </div>
+  </div>
+}
+
+// ── Por qué se caen los trabajos ──────────────────────────────────────────────
+// Desaprobado y represupuestado NO son lo mismo y no se suman: el desaprobado es
+// plata que se perdió, el represupuestado se rehizo y sigue vivo en otra versión.
+// Cada panel mira sólo lo suyo. Los motivos se agrupan normalizados (los chips ya
+// vienen iguales; lo escrito a mano se agrupa por texto en minúscula).
+function AnalisisMotivos({presus, esDesaprobado}){
+  const monto = p => parseMonto(p['Precio Final'])
+  const total = presus.reduce((s,p)=>s+monto(p),0)
+  const grupos = new Map()
+  let sinMotivo=0, sinMotivoMonto=0
+  presus.forEach(p=>{
+    const m = String(p['Motivo Desaprobado']||'').trim()
+    if(!m){ sinMotivo++; sinMotivoMonto+=monto(p); return }
+    const k = m.toLowerCase()
+    const g = grupos.get(k) || {label:m, n:0, monto:0}
+    g.n++; g.monto+=monto(p)
+    if(m.length<g.label.length) g.label=m   // el más corto suele ser el chip
+    grupos.set(k,g)
+  })
+  const todos = [...grupos.values()].sort((a,b)=>b.monto-a.monto)
+  // Los motivos viejos son texto libre y casi no se repiten (99 represupuestados
+  // dieron ~100 textos distintos). Se muestran los 8 más pesados y el resto junto.
+  const ranking = todos.slice(0,8)
+  const resto = todos.slice(8)
+  const restoN = resto.reduce((s,g)=>s+g.n,0), restoMonto = resto.reduce((s,g)=>s+g.monto,0)
+  const conMotivo = presus.length-sinMotivo
+  const cobertura = presus.length ? Math.round(conMotivo/presus.length*100) : 0
+  const maxMonto = ranking.length ? ranking[0].monto : 1
+  const color = esDesaprobado ? T.brand : T.ink2
+
+  // Quién carga el motivo y quién no. Es el dato para la charla con el equipo:
+  // si un PM tiene 0% no es que no pierda trabajos, es que no los anota.
+  const porPM = new Map()
+  presus.forEach(p=>{
+    const pm = String(p['PM Interno']||'').trim() || '—'
+    const g = porPM.get(pm) || {n:0, con:0}
+    g.n++; if(String(p['Motivo Desaprobado']||'').trim()) g.con++
+    porPM.set(pm,g)
+  })
+  const pms = [...porPM.entries()].filter(([,g])=>g.n>=3).sort((a,b)=>(a[1].con/a[1].n)-(b[1].con/b[1].n))
+
+  if(!presus.length) return null
+  return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'16px 18px', marginBottom:14}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8, marginBottom:14}}>
+      <div style={{fontSize:14, fontWeight:700, color:T.ink}}>{esDesaprobado?'Por qué no salieron':'Por qué se rehicieron'}</div>
+      <div style={{fontSize:12.5, color:T.ink2}}>{presus.length} {presus.length===1?'trabajo':'trabajos'} · <span style={{fontFamily:MONO, color:esDesaprobado?T.brand:T.ink}}>{fmt(total)}</span></div>
+    </div>
+
+    {conMotivo===0
+      ? <div style={{fontSize:12.5, color:T.warn, background:T.warnSoft, borderRadius:9, padding:'11px 13px'}}>
+          Ninguno tiene el motivo cargado, así que no hay nada para analizar todavía. Se pide solo al desaprobar desde el Calendario o desde acá.
+        </div>
+      : <>
+        {ranking.map((g,i)=>(
+          <div key={i} style={{marginBottom:9}}>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:12.5, marginBottom:3}}>
+              <span style={{color:T.ink}}>{g.label}</span>
+              <span style={{color:T.ink2}}><span style={{fontFamily:MONO, color:T.ink}}>{fmt(g.monto)}</span> <span style={{color:T.ink3}}>· {g.n}</span></span>
+            </div>
+            <div style={{height:6, borderRadius:6, background:T.surfaceAlt, overflow:'hidden'}}>
+              <div style={{height:'100%', width:`${Math.max(2,Math.round(g.monto/maxMonto*100))}%`, background:color, opacity:1-i*0.12, borderRadius:6}}/>
+            </div>
+          </div>
+        ))}
+        {restoN>0 && <div style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, marginTop:2}}>
+          <span>otros {resto.length} motivos</span><span><span style={{fontFamily:MONO}}>{fmt(restoMonto)}</span> · {restoN}</span>
+        </div>}
+        {sinMotivo>0 && <div style={{marginTop:12, paddingTop:11, borderTop:`1px solid ${T.border}`, fontSize:12.5, color:T.ink2}}>
+          <strong style={{color:T.ink}}>{sinMotivo}</strong> sin motivo cargado (<span style={{fontFamily:MONO}}>{fmt(sinMotivoMonto)}</span>) — el análisis de arriba cubre el <strong style={{color:T.ink}}>{cobertura}%</strong>.
+        </div>}
+      </>}
+
+    {pms.length>0 && conMotivo>0 && <div style={{marginTop:13, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
+      <div style={{fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, marginBottom:8}}>Quién lo está anotando</div>
+      <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+        {pms.map(([pm,g])=>{ const pct=Math.round(g.con/g.n*100)
+          return <span key={pm} style={{fontSize:12, padding:'4px 10px', borderRadius:20, border:`1px solid ${T.border}`, background:pct===0?T.warnSoft:T.surface, color:pct===0?T.warn:T.ink2}}>
+            {pm} <strong style={{color:pct===0?T.warn:T.ink}}>{pct}%</strong> <span style={{color:T.ink3}}>({g.con}/{g.n})</span>
+          </span>
+        })}
+      </div>
+    </div>}
+  </div>
+}
+
 function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
   const [rows,setRows]=useState(data.presupuestos||[])
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
   useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro==='__nuevo__'){ setNuevo(true) } else if(nav.filtro){ setF(nav.filtro) } if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
   const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
+  const [motivoModal,setMotivoModal]=useState(null), [motivoSaving,setMotivoSaving]=useState(false)
 
   async function eliminarPresupuesto(){
     const p=borrando; if(!p) return
@@ -708,15 +836,15 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
   }
 
-  async function cambiarEstado(id, nuevo, actual){
+  async function cambiarEstado(id, nuevo, actual, motivo){
     if(String(nuevo).toUpperCase()===String(actual||'').toUpperCase()) return
     const eraActivo = ['APROBADO','EN CURSO','ENTREGADO'].includes(String(actual||'').toUpperCase())
     if(eraActivo && nuevo!=='APROBADO'){
       if(!window.confirm(`Pasar a "${estadoInfo(nuevo).l}" va a sacar este trabajo de PROYECTOS. ¿Seguro?`)) return
     }
-    setRows(rs=>rs.map(r=> (String(r['Columna 1'])===String(id) ? {...r, Estado:nuevo} : r)))
+    setRows(rs=>rs.map(r=> (String(r['Columna 1'])===String(id) ? {...r, Estado:nuevo, ...(motivo?{'Motivo Desaprobado':motivo}:{})} : r)))
     try{
-      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo, noCalendar:true})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo, motivo, noCalendar:true})})
       const j=await r.json()
       if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))); return }
       showToast(`#${id} → ${estadoInfo(nuevo).l}`)
@@ -769,6 +897,9 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
       ))}
     </div>
 
+    {/* El porqué, sobre lo que esté filtrado (año/mes/PM valen) */}
+    {(f==='des'||f==='rep') && <AnalisisMotivos presus={filtered} esDesaprobado={f==='des'}/>}
+
     {/* Tabla */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{display:'grid', gridTemplateColumns:'90px 1.8fr 1.1fr 110px 130px', gap:0, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
@@ -786,7 +917,7 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||<em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}</span>
             <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
             <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
-            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
+            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : nuevo==='DESAPROBADO' ? setMotivoModal({num:id, estado:'DESAPROBADO', actual:p['Estado']}) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
           </div>
           {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
         </div>
@@ -798,6 +929,9 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
     {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
+    {motivoModal && <MotivoEstadoModal num={motivoModal.num} estado={motivoModal.estado} saving={motivoSaving}
+      onClose={()=>setMotivoModal(null)}
+      onConfirm={async motivo=>{ setMotivoSaving(true); await cambiarEstado(motivoModal.num, motivoModal.estado, motivoModal.actual, motivo); setMotivoSaving(false); setMotivoModal(null) }}/>}
     {borrando && <EliminarPresupuestoModal presu={borrando} saving={borrSaving} onClose={()=>setBorrando(null)} onConfirm={eliminarPresupuesto}/>}
   </>
 }
@@ -1003,7 +1137,14 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar}){
   const total=parseMonto(p['Precio Final'])
   const fee=total-subtotal
 
+  // Por qué se cayó (col AY del sheet). Solo tiene sentido en los que no salieron.
+  const estU = String(p['Estado']||'').toUpperCase()
+  const motivo = String(p['Motivo Desaprobado']||'').trim()
   return <div style={{padding:'4px 18px 20px', background:T.surfaceAlt, borderTop:`1px solid ${T.border}`}}>
+    {(estU==='DESAPROBADO'||estU==='REPRESUPUESTADO') && <div style={{marginTop:12, padding:'9px 13px', borderRadius:9, background:motivo?T.surface:'transparent', border:`1px solid ${motivo?T.border:T.warn+'55'}`, fontSize:12.5, color:motivo?T.ink2:T.warn}}>
+      {motivo ? <><span style={{color:T.ink3}}>{estU==='DESAPROBADO'?'Por qué no salió:':'Por qué se rehizo:'}</span> <strong style={{color:T.ink, fontWeight:600}}>{motivo}</strong></>
+              : <>Sin motivo cargado — cambiale el estado de nuevo para dejarlo anotado.</>}
+    </div>}
     <div style={{display:'flex', gap:32, padding:'14px 0', flexWrap:'wrap'}}>
       {[['N°',id],['Agencia',p['Agencia']],['Carga',p['Fecha Presupuesto']],['Contacto',p['Contacto']],['PM',p['PM Interno']],['Horario',p['Horario']],['Ubicación',p['Ubicación']]].filter(x=>x[1]).map(([k,v])=>(
         <div key={k}><div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:3}}>{v}</div></div>
@@ -1353,6 +1494,13 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         {isRep && <div style={{background:T.brandSoft, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 14px', marginBottom:16}}>
           <div style={{fontSize:12, color:T.ink2, marginBottom:8}}>Se crea una <strong>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
           <label style={{...lblV2, color:T.brand}}>Motivo del represupuesto *</label>
+          {/* Chips = motivos comparables entre sí. Escritos a mano cada uno sale distinto
+              y después no se puede agrupar para ver por qué se rehacen los presus. */}
+          <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:8}}>
+            {MOTIVOS_REPRESUPUESTADO.map(m=>{ const sel=form.motivo===m
+              return <button key={m} type="button" onClick={()=>upd('motivo', sel?'':m)} style={{padding:'5px 11px', borderRadius:20, fontSize:11.5, cursor:'pointer', border:`1px solid ${sel?T.brand:T.border}`, background:sel?T.brandSoft:T.surface, color:sel?T.brand:T.ink2, fontWeight:sel?600:400}}>{m}</button>
+            })}
+          </div>
           <input value={form.motivo||''} onChange={e=>upd('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente…" style={{...inpV2, borderColor:form.motivo?T.border:T.brand}} autoFocus/>
           <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
             <button onClick={async()=>{
@@ -1701,12 +1849,20 @@ function EliminarPresupuestoModal({presu, onClose, onConfirm, saving}){
 }
 
 // ============================ CALENDARIO ============================
+// Devuelve [{d, tent}] — tent = el día todavía no está confirmado. Un trabajo puede
+// tener las dos cosas a la vez: Popstars #2256 filmó el 3 y el 4 de septiembre y los
+// otros 17 días son "a confirmar" (van con "?" en Fechas Adicionales, ver lib/fechas.js).
+// Tipo 'tentativa' = ninguno confirmado todavía (el trabajo sí, las fechas no).
 function fechasDelEvento(fechaPrincipal, tipoFechas, fechasAdicionales){
   const out=[]; const f0=parseD(fechaPrincipal); if(!f0) return out
   const tipo=String(tipoFechas||'').toLowerCase().trim(), ad=String(fechasAdicionales||'').trim()
-  if(tipo==='rango'&&ad){ const f1=parseD(ad); if(!f1){out.push(f0);return out} let d=new Date(f0); while(d.getTime()<=f1.getTime()){out.push(new Date(d));d.setDate(d.getDate()+1)} }
-  else if((tipo==='multi'||tipo==='tentativa')&&ad){ out.push(f0); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s.trim().replace(/^\?/,''));if(f)out.push(f)}) }
-  else out.push(f0)
+  if(tipo==='tentativa'){ out.push({d:f0, tent:true}); ad.split('|').filter(Boolean).forEach(s=>{const f=parseD(s.trim().replace(/^\?/,''));if(f)out.push({d:f, tent:true})}); return out }
+  // Rango sin fin, o con el fin ANTES del inicio (pasa al editar la fecha y no el rango):
+  // se muestra el día principal, igual que lib/fechas.js y el sync de Calendar. Antes el
+  // while no corría nunca y el trabajo no se dibujaba en NINGÚN día (#2257 Popstars, $7,5M).
+  if(tipo==='rango'&&ad){ const f1=parseD(ad); if(!f1||f1.getTime()<f0.getTime()){out.push({d:f0, tent:false});return out} let d=new Date(f0); while(d.getTime()<=f1.getTime()){out.push({d:new Date(d), tent:false});d.setDate(d.getDate()+1)} }
+  else if(tipo==='multi'&&ad){ out.push({d:f0, tent:false}); ad.split('|').filter(Boolean).forEach(s=>{const t=s.trim(); const esT=t.startsWith('?'); const f=parseD(t.replace(/^\?/,'')); if(f)out.push({d:f, tent:esT})}) }
+  else out.push({d:f0, tent:false})
   return out
 }
 const dayKey = d => d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()
@@ -1729,6 +1885,9 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
   const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
   const [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false)
+  const [motivoModal,setMotivoModal]=useState(null)   // {num, estado} — pide el porqué antes de desaprobar
+  const [motivoSaving,setMotivoSaving]=useState(false)
+  const [represu,setRepresu]=useState(null)           // presupuesto a represupuestar (versión nueva)
   async function aprobarConAdic({nuevoEsAdic, nuevoTotal, extras}){
     const p=aprobAdic; if(!p) return; const id=p['Columna 1']
     setAprobSaving(true)
@@ -1748,9 +1907,15 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
   const proyByNum={}; proyectos.forEach(p=>{proyByNum[String(p['N° presupuesto']||'').trim()]=p})
   // Abrir el cargador de staff apenas el proyecto exista (después de aprobar)
   useEffect(()=>{ if(pendingStaff){ const proy=proyByNum[String(pendingStaff).trim()]; if(proy){ setStaffModal({proy, presu:presusByNum[String(pendingStaff).trim()]}); setPendingStaff(null) } } /* eslint-disable-next-line */ },[data.proyectos, pendingStaff])
+  // Clave de un trabajo. Los presus se identifican por fila porque hay N° repetidos
+  // (#1833 aparece 4 veces); los proyectos no traen __row, van por N°+nombre.
+  const claveTrab = p => String(p.__row ?? '')+'#'+String(p['N° presupuesto']||p['Columna 1']||'')+'|'+(p['Proyecto']||'')
   const aprobadosPorDia={}, enEsperaPorDia={}
-  proyectos.forEach(p=>{ const presu=presusByNum[String(p['N° presupuesto']||'').trim()]; fechasDelEvento(p['Fecha Evento'], presu?.['Tipo Fechas'], presu?.['Fechas Adicionales']).forEach(f=>{ const k=dayKey(f); (aprobadosPorDia[k]=aprobadosPorDia[k]||[]).push(p) }) })
-  presus.forEach(p=>{ if(String(p['Estado']||'').toUpperCase()!=='EN ESPERA') return; fechasDelEvento(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales']).forEach(f=>{ const k=dayKey(f); (enEsperaPorDia[k]=enEsperaPorDia[k]||[]).push(p) }) })
+  const tentPorDia={}   // dayKey → Set de trabajos que ESE día todavía no tienen confirmado
+  const marcarTent=(k,p)=>{ (tentPorDia[k]=tentPorDia[k]||new Set()).add(claveTrab(p)) }
+  proyectos.forEach(p=>{ const presu=presusByNum[String(p['N° presupuesto']||'').trim()]; fechasDelEvento(p['Fecha Evento'], presu?.['Tipo Fechas'], presu?.['Fechas Adicionales']).forEach(({d,tent})=>{ const k=dayKey(d); (aprobadosPorDia[k]=aprobadosPorDia[k]||[]).push(p); if(tent) marcarTent(k,p) }) })
+  presus.forEach(p=>{ if(String(p['Estado']||'').toUpperCase()!=='EN ESPERA') return; fechasDelEvento(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales']).forEach(({d,tent})=>{ const k=dayKey(d); (enEsperaPorDia[k]=enEsperaPorDia[k]||[]).push(p); if(tent) marcarTent(k,p) }) })
+  const esTentDia=(k,p)=> !!tentPorDia[k]?.has(claveTrab(p))
 
   // grilla (lunes primero)
   const primDia=new Date(ref.a, ref.m, 1)
@@ -1759,18 +1924,33 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
   const celdas=[]; for(let i=0;i<offset;i++) celdas.push(null); for(let d=1;d<=ultDia;d++) celdas.push(new Date(ref.a, ref.m, d))
   while(celdas.length%7!==0) celdas.push(null)
 
-  // KPIs del mes
-  let totAprob=0,cntAprob=0,totEsp=0,cntEsp=0
-  Object.keys(aprobadosPorDia).forEach(k=>{const [y,m]=k.split('-').map(Number); if(y===ref.a&&m===ref.m) aprobadosPorDia[k].forEach(p=>{totAprob+=parseMonto(p['Total ']||p['Total']||p['Precio Final']);cntAprob++})})
-  Object.keys(enEsperaPorDia).forEach(k=>{const [y,m]=k.split('-').map(Number); if(y===ref.a&&m===ref.m) enEsperaPorDia[k].forEach(p=>{totEsp+=parseMonto(p['Precio Final']);cntEsp++})})
+  // KPIs del mes — un trabajo cuenta UNA sola vez aunque ocupe varios días del calendario.
+  // Antes se sumaba el total completo por cada jornada: Popstars (19 días × $6,9M) solito
+  // inflaba septiembre 2026 en $131,9M sobre $35,5M reales. Las jornadas van aparte, que
+  // es el dato operativo (cuántos días de rodaje tiene el mes), no plata.
+  let totAprob=0,cntAprob=0,totEsp=0,cntEsp=0,jorAprob=0,jorEsp=0,porConfirmar=0
+  const vistosAp=new Set(), vistosEs=new Set()
+  const esDelMesRef = k => { const [y,m]=k.split('-').map(Number); return y===ref.a&&m===ref.m }
+  Object.keys(aprobadosPorDia).filter(esDelMesRef).forEach(k=> aprobadosPorDia[k].forEach(p=>{
+    if(esTentDia(k,p)) porConfirmar++; else jorAprob++   // un día sin confirmar no es una jornada agendada
+    const key=claveTrab(p)
+    if(vistosAp.has(key)) return
+    vistosAp.add(key); totAprob+=parseMonto(p['Total ']||p['Total']||p['Precio Final']); cntAprob++
+  }))
+  Object.keys(enEsperaPorDia).filter(esDelMesRef).forEach(k=> enEsperaPorDia[k].forEach(p=>{
+    jorEsp++
+    const key=claveTrab(p)
+    if(vistosEs.has(key)) return
+    vistosEs.add(key); totEsp+=parseMonto(p['Precio Final']); cntEsp++
+  }))
 
   const navMes=delta=>{ const d=new Date(ref.a, ref.m+delta, 1); setRef({a:d.getFullYear(),m:d.getMonth()}); setDiaSel(null) }
   const aprobSel = diaSel ? (aprobadosPorDia[dayKey(diaSel)]||[]) : []
   const espSel = diaSel ? (enEsperaPorDia[dayKey(diaSel)]||[]) : []
 
-  async function setEstado(num, estado){
-    if(estado!=='APROBADO' && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
-    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,noCalendar:true})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh()
+  async function setEstado(num, estado, motivo){
+    if(estado!=='APROBADO' && !motivo && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
+    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,motivo,noCalendar:true})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh()
       const accion = estado==='APROBADO'?'aprobar':(estado==='DESAPROBADO'||estado==='REPRESUPUESTADO')?'borrar':'pendiente'
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion})}).catch(()=>{})
     }catch(e){showToast('Error de conexión','err')}
@@ -1781,7 +1961,11 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:20}}>
       <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>{MESES_LARGO[ref.m]} {ref.a}</h1>
-        <div style={{fontSize:13, color:T.ink3, marginTop:3}}>{cntAprob} aprobados · {fmtM(totAprob)} &nbsp;·&nbsp; {cntEsp} en espera · {fmtM(totEsp)}</div></div>
+        <div style={{fontSize:13, color:T.ink3, marginTop:3}}>
+          <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} aprobados · {fmtM(totAprob)}{jorAprob>0&&<span style={{color:T.ink3}}> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</span>}{porConfirmar>0&&<span style={{color:T.ink3}} title="Días del trabajo que todavía no tienen fecha confirmada — se ven en gris en la grilla."> · {porConfirmar} a confirmar</span>}</span>
+          &nbsp;·&nbsp;
+          <span title="Presupuestos en espera con evento este mes. Idem: cada uno cuenta una vez.">{cntEsp} en espera · {fmtM(totEsp)}{jorEsp>cntEsp&&<span style={{color:T.ink3}}> · {jorEsp} jornadas</span>}</span>
+        </div></div>
       <div style={{display:'flex', gap:8}}>
         <button onClick={()=>navMes(-1)} style={navBtn}>←</button>
         <button onClick={()=>{setRef({a:now.getFullYear(),m:now.getMonth()});setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 14px'}}>Hoy</button>
@@ -1800,7 +1984,11 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
               <div style={{fontSize:11.5, fontWeight:esHoy(d)?700:500, color:esHoy(d)?T.brand:T.ink3, marginBottom:4, display:'flex', justifyContent:'space-between'}}>
                 <span style={esHoy(d)?{background:T.brand,color:'#fff',borderRadius:10,width:18,height:18,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10.5}:{}}>{d.getDate()}</span>
               </div>
-              {ap.slice(0,3).map((p,j)=><div key={'a'+j} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:T.posSoft, borderLeft:`2px solid ${T.pos}`, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+              {/* Gris = el trabajo está confirmado pero ESE día todavía no. Popstars tiene
+                  las dos cosas en el mismo mes: el 3 y el 4 firmes, el resto a ubicar. */}
+              {ap.slice(0,3).map((p,j)=>{ const tent=esTentDia(dayKey(d),p)
+                return <div key={'a'+j} title={tent?'Día a confirmar':undefined} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:tent?T.surfaceAlt:T.posSoft, borderLeft:`2px ${tent?'dashed':'solid'} ${tent?T.ink3:T.pos}`, color:tent?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>
+              })}
               {es.slice(0,Math.max(0,3-ap.length)).map((p,j)=><div key={'e'+j} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:T.warnSoft, borderLeft:`2px dashed ${T.warn}`, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>)}
               {total>3&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-3} más</div>}
             </div>
@@ -1813,10 +2001,10 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
         {!diaSel ? <Empty>Clickeá un día para ver el detalle</Empty> : <>
           <CardHead>{diaSel.getDate()} de {MESES_LARGO[diaSel.getMonth()]}</CardHead>
           {aprobSel.length===0&&espSel.length===0 && <Empty>Sin eventos este día</Empty>}
-          {aprobSel.map((p,i)=>{ const staff=staffDe(p); const num=p['N° presupuesto']
+          {aprobSel.map((p,i)=>{ const staff=staffDe(p); const num=p['N° presupuesto']; const tent=esTentDia(dayKey(diaSel),p)
             return <div key={'a'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontSize:11, fontFamily:MONO, color:T.pos, fontWeight:600}}>● #{num}</span>
+                <span style={{fontSize:11, fontFamily:MONO, color:tent?T.ink3:T.pos, fontWeight:600}}>{tent?'○':'●'} #{num}{tent&&<span style={{fontFamily:'inherit', fontWeight:500}}> · día a confirmar</span>}</span>
                 <span style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
               </div>
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
@@ -1829,7 +2017,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
                 {!soloVer && <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>}
                 {!soloVer && presusByNum[String(num).trim()] && <button onClick={()=>setEditando(presusByNum[String(num).trim()])} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                {!soloVer && <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>}
+                {!soloVer && presusByNum[String(num).trim()] && <button onClick={()=>setRepresu(presusByNum[String(num).trim()])} style={miniBtn}>Represupuestar</button>}
+                {!soloVer && <button onClick={()=>setMotivoModal({num, estado:'DESAPROBADO'})} style={miniBtn}>Desaprobar</button>}
               </div>
             </div>
           })}
@@ -1845,7 +2034,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
                 {!soloVer && <button onClick={()=> presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
                 {!soloVer && <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                {!soloVer && <button onClick={()=>setEstado(num,'DESAPROBADO')} style={miniBtn}>Desaprobar</button>}
+                {!soloVer && <button onClick={()=>setRepresu(p)} style={miniBtn}>Represupuestar</button>}
+                {!soloVer && <button onClick={()=>setMotivoModal({num, estado:'DESAPROBADO'})} style={miniBtn}>Desaprobar</button>}
               </div>
             </div>
           })}
@@ -1863,6 +2053,10 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
+    {motivoModal && <MotivoEstadoModal num={motivoModal.num} estado={motivoModal.estado} saving={motivoSaving}
+      onClose={()=>setMotivoModal(null)}
+      onConfirm={async motivo=>{ setMotivoSaving(true); await setEstado(motivoModal.num, motivoModal.estado, motivo); setMotivoSaving(false); setMotivoModal(null) }}/>}
+    {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); setDiaSel(null); if(onRefresh) onRefresh() }}/>}
   </>
 }
 
