@@ -36,13 +36,14 @@ export default async function handler(req, res) {
   const mail = auth.mail
 
   const { nombre, nombreOriginal, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad,
-          tarifaMedia, tarifaJornada, zona, estado, notas } = req.body
+          tarifaMedia, tarifaJornada, tarifaHoraExtra, zona, estado, notas } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
     // A:P — incluye las columnas del registro (tarifas, zona, estado, notas)
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:P' })
+    // Hasta Z: "Tarifa hora extra" está en Q (14/9/2026)
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:Z' })
     const headers = r.data.values?.[0] || []
     const rows = r.data.values || []
 
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
       cbu: headers.indexOf('CBU'),
       tarifaMedia: headers.indexOf('Tarifa media jornada'),
       tarifaJornada: headers.indexOf('Tarifa jornada'),
+      tarifaHoraExtra: headers.indexOf('Tarifa hora extra'),
       zona: headers.indexOf('Zona'),
       estado: headers.indexOf('Estado'),
       notas: headers.indexOf('Notas'),
@@ -89,7 +91,7 @@ export default async function handler(req, res) {
         set('rubro', rubro), set('cel', celular), set('mail', mailFreelancer),
         set('dni', dni), set('cuit', cuit), set('banco', banco),
         set('alias', alias), set('cbu', cbu), set('fechaNac', fechaNac), set('nac', nacionalidad),
-        set('tarifaMedia', tarifaMedia), set('tarifaJornada', tarifaJornada), set('zona', zona),
+        set('tarifaMedia', tarifaMedia), set('tarifaJornada', tarifaJornada), set('tarifaHoraExtra', tarifaHoraExtra), set('zona', zona),
         setNulleable('estado', estado), setNulleable('notas', notas),
       ].filter(Boolean)
       // Renombrar: si cambió el nombre, actualizar la columna Nombre Apellido
@@ -127,7 +129,7 @@ export default async function handler(req, res) {
     put('rubro', rubro); put('cel', celular); put('mail', mailFreelancer); put('dni', dni)
     put('fechaNac', fechaNac); put('nac', nacionalidad); put('cuit', cuit); put('banco', banco)
     put('alias', alias); put('cbu', cbu)
-    put('tarifaMedia', tarifaMedia); put('tarifaJornada', tarifaJornada); put('zona', zona)
+    put('tarifaMedia', tarifaMedia); put('tarifaJornada', tarifaJornada); put('tarifaHoraExtra', tarifaHoraExtra); put('zona', zona)
     put('estado', estado); put('notas', notas)
 
     await sheets.spreadsheets.values.append({

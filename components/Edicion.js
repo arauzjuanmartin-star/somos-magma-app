@@ -708,7 +708,7 @@ function HorasExtra({ f, horas = [], editores = [], showToast, onRefresh, soloLo
       <input type="number" step="0.5" min="0.5" max="24" value={h} onChange={e => setH(e.target.value)} placeholder="hs" style={{ ...inp, width: 70, fontFamily: MONO }} />
       <input value={motivo} onChange={e => setMotivo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sumar() }} placeholder="Por qué (cambios del cliente, entrega urgente…)" style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 220, fontSize: 12 }} />
       <button onClick={sumar} disabled={yendo || !quien} style={{ ...btnPri, opacity: quien ? 1 : 0.5 }}>{yendo ? 'Anotando…' : 'Anotar'}</button>
-      <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>Queda con fecha de hoy en la solapa HORAS_EXTRA. A fin de mes se suma por persona: nadie tiene que acordarse.</span>
+      <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>Queda con fecha de hoy en HORAS_EXTRA y aparece en Pagos Staff del mes, valorizada con la tarifa de hora extra de RRHH.</span>
     </div>}
     {abierto && delProyecto.length > 0 && <div style={{ marginTop: 8, fontSize: 11.5, color: T.ink2, lineHeight: 1.6 }}>
       {delProyecto.slice(-6).map((x, i) => <div key={i}>{x.Fecha} · {String(x.Persona || '').split(' ')[0]} · <strong>{fmtH(parseFloat(String(x.Horas || '').replace(',', '.')) || 0)}</strong>{x.Motivo ? ` · ${x.Motivo}` : ''}</div>)}

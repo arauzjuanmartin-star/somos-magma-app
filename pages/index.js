@@ -3404,6 +3404,25 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       personas[gk].total+=precio
     }
   })
+  // Horas extra cargadas desde Edición (solapa HORAS_EXTRA): una línea por carga, en
+  // el mes de la fecha, valorizada con "Tarifa hora extra" de RRHH. Entran aunque el
+  // staff del proyecto diga "Somos Magma": la persona las hizo y se le pagan (Juan,
+  // 14/9/2026: "tiene que aparecer en Pagos Staff, así en octubre le pagamos").
+  // Sin tarifa la línea aparece igual, en $0 y avisando: mejor verla que olvidarla.
+  const mesHX=`${anio}-${String(mesIdx).padStart(2,'0')}`
+  const tarifaHoraDe=nombre=>{ const r=rrhh.find(x=>canonKey(canonStaff(x['Nombre Apellido']||x['Nombre']))===canonKey(nombre)); return parseMonto(r?.['Tarifa hora extra']) }
+  ;(data.horasExtra||[]).forEach(h=>{
+    if(String(h.Mes||'').trim()!==mesHX) return
+    const staff=canonStaff(h.Persona), gk=canonKey(staff); if(!staff||esMagma(staff)) return
+    const horas=parseFloat(String(h.Horas||'').replace(',','.'))||0; if(horas<=0) return
+    const tarifa=tarifaHoraDe(staff), precio=Math.round(horas*tarifa)
+    if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
+    const nro=String(h['N° presupuesto']||'').trim(), hs=String(horas).replace('.',',')
+    personas[gk].trabajos.push({ nro, proyecto:h.Proyecto||h.Cliente||'', agencia:'', fechaEvento:h.Fecha||'',
+      pedido:`⏱ Horas extra ${h.Fecha||''} · ${hs} hs${h.Motivo?` · ${h.Motivo}`:''}${tarifa?'':' · SIN TARIFA en RRHH'}`,
+      precio, key:'hx|'+nro+'|'+(h.Fecha||'')+'|'+(h.__row||''), horasExtra:horas })
+    personas[gk].total+=precio
+  })
   // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
   const esPagRow=r=>{ const e=String(r['Estado']||r['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
@@ -3787,6 +3806,7 @@ function Freelancers({data, nav, clearNav, onRefresh, showToast}){
             <div style={{display:'flex', gap:14, flexWrap:'wrap', padding:'9px 11px', marginBottom:10, background:T.surfaceAlt, borderRadius:9, border:`1px solid ${T.border}`}}>
               {datos['Tarifa media jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>½ jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa media jornada']))}</div></div>}
               {datos['Tarifa jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa jornada']))}</div></div>}
+              {datos['Tarifa hora extra'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Hora extra</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa hora extra']))}</div></div>}
               {datos['Zona'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Zona</div><div style={{fontSize:12.5, color:T.ink}}>{datos['Zona']}</div></div>}
               {datos['Estado'] && <div style={{marginLeft:'auto'}}><span style={{padding:'3px 9px', borderRadius:20, fontSize:10.5, fontWeight:600, background:/activo/i.test(datos['Estado'])?T.posSoft:/no llamar|inactivo/i.test(datos['Estado'])?T.brandSoft:T.warnSoft, color:/activo/i.test(datos['Estado'])?T.pos:/no llamar|inactivo/i.test(datos['Estado'])?T.brand:T.warn}}>{datos['Estado']}</span></div>}
             </div>
@@ -4789,12 +4809,12 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
   const [rubroInput,setRubroInput]=useState('')
   const fnInit=()=>{ const v=datos['Fecha de nac']||datos['Fecha de Nac']||''; return v?(String(v).includes('/')?dmyToISO(v):v):'' }
   const [form,setForm]=useState(()=>({ celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', fechaNac:fnInit(), cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'',
-    tarifaMedia:datos['Tarifa media jornada']||'', tarifaJornada:datos['Tarifa jornada']||'', zona:datos['Zona']||'', estado:datos['Estado']||'', notas:datos['Notas']||'' }))
+    tarifaMedia:datos['Tarifa media jornada']||'', tarifaJornada:datos['Tarifa jornada']||'', tarifaHoraExtra:datos['Tarifa hora extra']||'', zona:datos['Zona']||'', estado:datos['Estado']||'', notas:datos['Notas']||'' }))
   const [saving,setSaving]=useState(false)
   const existe = datos && Object.keys(datos).length>0
   const sugeridos=[...new Set([...RUBROS_DEFAULT, ...rubrosConocidos])].filter(r=>r&&!rubros.includes(r)).sort()
   const addRubro=(t)=>{ const v=String(t||'').trim(); if(v&&!rubros.includes(v)) setRubros(rs=>[...rs,v]); setRubroInput('') }
-  const campos=[['tarifaMedia','Tarifa media jornada'],['tarifaJornada','Tarifa jornada completa'],['zona','Zona'],
+  const campos=[['tarifaMedia','Tarifa media jornada'],['tarifaJornada','Tarifa jornada completa'],['tarifaHoraExtra','Tarifa hora extra (valoriza lo que carga en Edición)'],['zona','Zona'],
     ['celular','Celular'],['mailFreelancer','Mail'],['dni','DNI'],['fechaNac','Fecha de nacimiento','date'],['cuit','CUIT / CUIL'],['banco','Banco'],['alias','Alias'],['cbu','CBU']]
   async function guardar(){
     if(!String(nombreEdit).trim()){ showToast('El nombre no puede quedar vacío','err'); return }
