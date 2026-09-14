@@ -1,13 +1,17 @@
 import { getSheets, MAX_SLOTS, SLOT_PRESU, SLOT_PROY, ANCHO_PROY } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { asegurarCarpetasProyecto } from '../../lib/drive'
+import { sincronizarEdicion, migrarEdicionRepresupuesto } from '../../lib/edicion-sync'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const auth = await requireAuth(req, res)
   if (!auth) return
   const mail = auth.mail
-  const { num, estado, motivo, noCalendar } = req.body
+  // `nuevo`: al represupuestar, el número de la versión nueva (lo manda el front
+  // después de crearla). Con eso las tareas de Edición cambian de número en vez
+  // de quedar huérfanas.
+  const { num, estado, motivo, noCalendar, nuevo } = req.body
   try {
     const { sheets, SHEET_ID } = await getSheets()
 
@@ -127,6 +131,30 @@ export default async function handler(req, res) {
           requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-estado', 'PRESUPUESTOS', String(num), estado]] },
         })
       } catch (e) {}
+    }
+
+    // 🎬 REPRESUPUESTADO con versión nueva → las tareas de Edición pasan al número
+    // nuevo. Si no, quedan colgadas del viejo sin link a las carpetas (que se crean
+    // con el nuevo) — pasó con #2191 → #2293. Best-effort, no bloquea.
+    let edicionMigrada = null
+    if (estado === 'REPRESUPUESTADO' && nuevo && String(nuevo).trim() !== String(num).trim()) {
+      try {
+        const nRow = rows.slice(1).find(x => String(x[0] || '').trim() === String(nuevo).trim())
+        const pedidosNuevos = []
+        if (nRow) for (let n = 1; n <= MAX_SLOTS; n++) { const p = String(nRow[SLOT_PRESU(n).pedido] || '').trim(); if (p) pedidosNuevos.push({ slot: n, pedido: p }) }
+        edicionMigrada = await migrarEdicionRepresupuesto({ sheets, SHEET_ID, viejo: num, nuevo, pedidosNuevos, motivo })
+        if (edicionMigrada.migradas || edicionMigrada.borradas) {
+          try {
+            await sheets.spreadsheets.values.append({
+              spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [[new Date().toISOString(), mail, 'edicion-represupuesto', 'EDICION', String(num), `→ #${nuevo} · ${edicionMigrada.detalle.join(' · ')}`]] },
+            })
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('Edición no migró al represupuestar (no bloquea):', e.message)
+        edicionMigrada = { error: e.message }
+      }
     }
 
     // Si APROBADO → crear/completar fila en PROYECTOS con TODAS las columnas
@@ -295,6 +323,22 @@ export default async function handler(req, res) {
       }
     }
 
+    // 🎬 TABLERO DE EDICIÓN (best-effort, no bloquea)
+    // La fila del entregable nace acá, ya con el link al crudo que se acaba de
+    // crear. Antes dependía de que alguien apretara "↻ Actualizar" en Edición: al
+    // 14/9/2026 el tablero llevaba una semana sin correrlo y le faltaban 17
+    // entregables aprobados. Sin bajas: aprobar un trabajo no borra filas de otros.
+    let edicionResult = null
+    if (estado === 'APROBADO') {
+      try {
+        const e = await sincronizarEdicion({ sheets, SHEET_ID, sinBajas: true })
+        edicionResult = { nuevas: e.nuevas, actualizadas: e.actualizadas }
+      } catch (e) {
+        console.warn('Edición sync falló (no bloquea):', e.message)
+        edicionResult = { error: e.message }
+      }
+    }
+
     // 🗓 SINCRONIZAR CON CALENDAR MAGMA (best-effort, no bloquea el flujo si falla)
     // Si noCalendar=true, el front lo hace en segundo plano para que el cambio de estado sea rápido.
     let calendarResult = null
@@ -316,7 +360,7 @@ export default async function handler(req, res) {
       console.warn('Calendar sync falló (no bloquea):', e.message)
     }
 
-    res.json({ ok: true, calendar: calendarResult, drive: driveResult })
+    res.json({ ok: true, calendar: calendarResult, drive: driveResult, edicion: edicionResult, edicionMigrada })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })

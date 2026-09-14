@@ -1030,6 +1030,11 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
     // marcados en el calendario, así nunca queda un "rango" viejo con el final
     // desactualizado (rompía el Calendar en silencio).
     const cod=codificarFechas(dias,tentativos), origF=codificarFechas(diasOrig,tentOrig)
+    // Tenía fecha y quedó sin ningún día marcado: se guardaba igual y el trabajo
+    // desaparecía del calendario (#2209 Unilever, 14/9/2026: sacando el 15 se fue
+    // también el 14). Cada clic rota confirmado → a confirmar → vacío, así que es
+    // fácil vaciar un día sin darse cuenta. Sin fecha no se guarda.
+    if(diasOrig.length>0 && !dias.length){ showToast('No quedó ningún día marcado — así el trabajo desaparece del calendario. Dejá al menos uno (puede ser “a confirmar”).','err'); return }
     if(cod.fechaEvento!==origF.fechaEvento||cod.tipo!==origF.tipo||cod.adicionales!==origF.adicionales){
       cambios['Fecha Evento']=cod.fechaEvento; cambios['Tipo Fechas']=cod.tipo
       cambios['Fechas Adicionales']=cod.adicionales; cambios['Cant. Fechas']=cod.cant
@@ -1424,8 +1429,10 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       const j=await r.json()
       if(!j.ok){ showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
       // Represupuestar: marcar el original como REPRESUPUESTADO (con motivo)
+      // `nuevo` va para que las tareas de Edición del original pasen al número nuevo
+      // en vez de quedar huérfanas (y sin link a las carpetas, que se crean con el nuevo).
       if(isRep){
-        try{ await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'], estado:'REPRESUPUESTADO', motivo:form.motivo})}) }
+        try{ await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'], estado:'REPRESUPUESTADO', motivo:form.motivo, nuevo:j.numero})}) }
         catch(e){ showToast('Nuevo creado, pero no pude marcar el original — revisá','err') }
       }
       // Guardar entidades nuevas (contacto / agencia / cliente) en sus solapas

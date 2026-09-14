@@ -10,13 +10,13 @@
 // Todos los subcomponentes están a nivel de módulo A PROPÓSITO: definirlos adentro
 // hace que React los remonte en cada tecla y los inputs pierdan el foco.
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import {
   ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX,
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
-  textoPedirBrief, textoParaElEditor, esperaAlPM, ES_MAGMA,
+  textoPedirBrief, textoParaElEditor, esperaAlPM, ES_MAGMA, esPedidoEdicion,
 } from '../lib/edicion'
 
 // ---------------------------------------------------------------- estilos
@@ -60,6 +60,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [sincro, setSincro] = useState(false)
   const [drive, setDrive] = useState({})
   const [nueva, setNueva] = useState(false)
+  // Lo que se tocó en esta sesión (cambio de estado, alta) se sigue viendo aunque
+  // ya no entre en el filtro. Antes, mover una fila la recalculaba, cambiaba de
+  // chip y desaparecía de la pantalla: "la apretás y desaparece".
+  const [tocados, setTocados] = useState(() => new Set())
+  const [scrollA, setScrollA] = useState(null)
   const cel = useEsCelular()
 
   const crudas = data?.edicion || []
@@ -141,7 +146,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const nq = norm(q.trim())
     return filas.filter(f => {
       const nivel = f.__sem.nivel
-      if (abierto === f.ID) return true   // lo que se abrió desde un link siempre se ve
+      if (abierto === f.ID || tocados.has(f.ID)) return true   // lo abierto desde un link y lo tocado en esta sesión siempre se ven
       if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
       else {
         if (filtro === 'activos' && nivel === 'listo') return false
@@ -155,7 +160,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [filas, filtro, q, personaF, pmF, estadoF, abierto])
+  }, [filas, filtro, q, personaF, pmF, estadoF, abierto, tocados])
 
   // Cuántos hay en cada estado, para no tener que elegir a ciegas en el desplegable.
   // Cuenta sobre lo que dejó pasar el chip de plazo y el filtro de persona: si estás
@@ -203,6 +208,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // había salido algo (spoiler: no salía).
   async function guardar(id, campos, extra) {
     setLocal(l => ({ ...l, [id]: { ...(l[id] || {}), ...campos } }))
+    if (campos.Estado !== undefined) setTocados(t => new Set(t).add(id))
     try {
       const r = await fetch('/api/edicion-guardar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, campos, ...(extra || {}) }) })
       const j = await r.json()
@@ -217,30 +223,69 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       const r = await fetch('/api/edicion-nuevo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) })
       const j = await r.json()
       if (!j.ok) { showToast(j.error || 'No se pudo crear', 'err'); return false }
-      showToast(j.creadas === 1 ? 'Tarea agregada ✓' : `${j.creadas} tareas agregadas ✓`)
+      const nombres = (j.nombres || []).join(', ')
+      showToast(j.creadas === 1 ? `Agregado: ${nombres || 'tarea'} ✓` : `${j.creadas} agregados: ${nombres} ✓`)
+      // Que se vea dónde quedó: se abre y la pantalla baja hasta ahí. "El otro día
+      // cargamos una tarea y nos costó encontrarla" (Juan, 14/9/2026).
+      if (j.ids?.length) {
+        setTocados(t => { const n = new Set(t); j.ids.forEach(i => n.add(i)); return n })
+        setAbierto(j.ids[0]); setScrollA(j.ids[0])
+      }
       setNueva(false); onRefresh && onRefresh()
       return true
     } catch (e) { showToast('Error de conexión', 'err'); return false }
   }
 
-  async function sincronizar() {
+  // `silencioso`: la corrida automática de al abrir. Solo avisa si cambió algo y
+  // no pisa lo que haya en pantalla si no hubo nada que traer.
+  async function sincronizar(silencioso = false) {
     setSincro(true)
     try {
       const r = await fetch('/api/edicion-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
       const j = await r.json()
-      if (!j.ok) showToast(j.error || 'No se pudo sincronizar', 'err')
+      if (!j.ok) { if (!silencioso) showToast(j.error || 'No se pudo sincronizar', 'err') }
       else {
         const partes = []
         if (j.nuevas) partes.push(`${j.nuevas} ${j.nuevas === 1 ? 'entregable nuevo' : 'entregables nuevos'}`)
         // Decir cuántas se limpiaron: si desaparece una fila del tablero sin avisar,
         // el que la estaba mirando piensa que se rompió algo.
         if (j.borradas) partes.push(`${j.borradas} ${j.borradas === 1 ? 'huérfana borrada' : 'huérfanas borradas'} (el proyecto ya no existe)`)
-        showToast(partes.length ? partes.join(' · ') : 'Todo al día ✓')
-        if (j.huerfanasConTrabajo) showToast(`${j.huerfanasConTrabajo} sin proyecto pero con trabajo cargado: las dejé, miralas`, 'err')
-        setLocal({}); onRefresh && onRefresh()
+        if (partes.length || !silencioso) showToast(partes.length ? partes.join(' · ') : 'Todo al día ✓')
+        if (j.huerfanasConTrabajo && !silencioso) showToast(`${j.huerfanasConTrabajo} sin proyecto pero con trabajo cargado: las dejé, miralas`, 'err')
+        if (partes.length || j.actualizadas || !silencioso) { setLocal({}); onRefresh && onRefresh() }
       }
-    } catch (e) { showToast('Error de conexión', 'err') }
+    } catch (e) { if (!silencioso) showToast('Error de conexión', 'err') }
     setSincro(false)
+  }
+
+  // Al abrir el tablero se pone al día solo. Hasta hoy dependía de que alguien
+  // apretara "↻ Actualizar": al 14/9/2026 llevaba una semana sin correrse y le
+  // faltaban 17 entregables aprobados (Farmacity #2293 entre ellos).
+  const autoSync = useRef(false)
+  useEffect(() => {
+    if (autoSync.current || !Array.isArray(data?.edicion)) return
+    autoSync.current = true
+    sincronizar(true)
+  }, [data]) // eslint-disable-line
+
+  // Bajar hasta la fila recién creada, cuando ya está en los datos.
+  useEffect(() => {
+    if (!scrollA) return
+    const el = document.getElementById(`ed-${scrollA}`)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' }); setScrollA(null)
+  }, [crudas, scrollA])
+
+  // Un número que ya no está en PROYECTOS (represupuestado, desaprobado, borrado)
+  // no tiene carpetas ni las va a tener: las tiene el número vigente. Pasó con
+  // #2191 → #2293: la fila vieja decía "sin material" con 50 GB ya subidos al 2293.
+  const proyectos = data?.proyectos || []
+  const numsVivos = useMemo(() => new Set(proyectos.map(p => String(p['N° presupuesto'] || '').trim())), [proyectos])
+  const sucesorDe = g => {
+    if (!numsVivos.size || numsVivos.has(String(g.num))) return null
+    const k = s => norm(s).replace(/[^a-z0-9]/g, '')
+    const p = proyectos.find(p => k(p.Cliente) === k(g.cliente) && k(p.Proyecto) === k(g.proyecto))
+    return { fantasma: true, sucesor: p ? String(p['N° presupuesto']).trim() : '' }
   }
 
   async function carpeta(num, destinos, compartir) {
@@ -295,7 +340,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return [...de].sort((a, b) => a.localeCompare(b, 'es'))
   }, [data, filas])
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS }
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -321,7 +366,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               Se arma solo con los entregables de post de los proyectos aprobados<br />
               (fotos, Edit 60s, Edit 60s+, Motion, reels…) de los últimos 30 días en adelante.
             </div>
-            <button onClick={sincronizar} disabled={sincro} style={btnPri}>{sincro ? 'Buscando…' : 'Traer los entregables'}</button>
+            <button onClick={() => sincronizar(false)} disabled={sincro} style={btnPri}>{sincro ? 'Buscando…' : 'Traer los entregables'}</button>
             <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 14 }}>Si da error de solapa, correr <code style={{ fontFamily: MONO }}>node scripts/edicion-setup.mjs --escribir</code></div>
           </div>
         : <>
@@ -363,15 +408,15 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
             </select>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '6px 10px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 190 }} />
-            <button onClick={sincronizar} disabled={sincro} title="Trae los entregables nuevos desde Proyectos" style={{ ...btn, padding: cel ? '9px 12px' : '6px 11px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{sincro ? '…' : '↻ Actualizar'}</button>
-            <button onClick={() => setNueva(n => !n)} style={{ ...btnPri, padding: cel ? '9px 14px' : '6px 12px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
+            <button onClick={() => sincronizar(false)} disabled={sincro} title="Trae los entregables nuevos desde Proyectos (también corre solo al abrir)" style={{ ...btn, padding: cel ? '9px 12px' : '6px 11px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{sincro ? '…' : '↻ Actualizar'}</button>
+            <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un proyecto que ya está en el tablero, usá el “+ Video” de ese proyecto" style={{ ...btnPri, padding: cel ? '9px 14px' : '6px 12px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
           {!grupos.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
-            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...props} />)}
+            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} {...props} />)}
         </>}
     </>}
   </div>
@@ -585,8 +630,14 @@ function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = fals
 // Raid", "cambios". Con cantidad, porque una línea del presu suele ser varias
 // piezas reales. Componente a nivel de módulo: si va adentro, los inputs
 // pierden el foco a cada tecla.
-function NuevaTarea({ onCrear, onCancelar, proyectos, personas }) {
-  const [num, setNum] = useState('')
+// Dos cosas distintas que antes eran una: "un video más" (otra pieza igual a una
+// que ya está: mismo brief, mismo crudo, mismo PM — sale como "Edit 60s 2") y
+// "una tarea" (cambiar la placa, cambios). Juan, 14/9: "no es una tarea porque
+// es un video más". Con `numFijo` y `hermanos` viene desde el proyecto.
+function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', hermanos = [] }) {
+  const [num, setNum] = useState(numFijo)
+  const [modo, setModo] = useState(hermanos.length ? 'video' : 'tarea')
+  const [copiarDe, setCopiarDe] = useState((hermanos.find(h => esPedidoEdicion(h.Entregable)) || hermanos[0])?.ID || '')
   const [titulo, setTitulo] = useState('')
   const [cantidad, setCantidad] = useState(1)
   const [editor, setEditor] = useState('')
@@ -601,31 +652,64 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas }) {
     return proyectos.find(p => String(p['N° presupuesto'] || '').trim() === n) || null
   }, [num, proyectos])
 
+  const esVideo = modo === 'video' && !!copiarDe
+  const hermana = hermanos.find(h => h.ID === copiarDe)
+  const baseNombre = hermana ? limpiarPedido(hermana.Entregable).replace(/\s+\d+$/, '') : ''
+  const yaHay = hermana ? hermanos.filter(h => limpiarPedido(h.Entregable).replace(/\s+\d+$/, '').toLowerCase() === baseNombre.toLowerCase()).length : 0
+  const puede = esVideo || !!titulo.trim()
+
   const enviar = async () => {
-    if (!titulo.trim()) return
+    if (!puede) return
     setYendo(true)
-    await onCrear({ num: num.trim(), titulo: titulo.trim(), cantidad: +cantidad || 1, editor, prioridad, compromiso, notas })
+    await onCrear({ num: num.trim(), titulo: titulo.trim(), cantidad: +cantidad || 1, editor, prioridad, compromiso, notas, copiarDe: esVideo ? copiarDe : '' })
     setYendo(false)
   }
+  const cant = +cantidad || 1
 
   return <div style={{ ...card, borderColor: T.brand, padding: '14px 16px', marginBottom: 14 }}>
-    <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 12 }}>Agregar una tarea de edición</div>
-    <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px', gap: 10, marginBottom: 10 }}>
-      <div>
-        <label style={lbl}>N° de presu</label>
-        <input value={num} onChange={e => setNum(e.target.value)} placeholder="2256" style={{ ...inp, width: '100%', fontFamily: MONO }} />
-      </div>
-      <div>
-        <label style={lbl}>Qué hay que hacer</label>
-        <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
-          placeholder="Cambiar la placa del video largo" style={{ ...inp, width: '100%' }} />
-      </div>
-      <div>
-        <label style={lbl}>Cuántas</label>
-        <input type="number" min="1" max="20" value={cantidad} onChange={e => setCantidad(e.target.value)} style={{ ...inp, width: '100%', fontFamily: MONO }} />
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, flex: 1 }}>{numFijo ? `Sumar a #${numFijo}` : 'Agregar una tarea de edición'}</div>
+      {hermanos.length > 0 && <div style={{ display: 'flex', gap: 4 }}>
+        {[['video', 'Un video más'], ['tarea', 'Una tarea']].map(([id, l]) => <button key={id} onClick={() => setModo(id)} style={{
+          ...btn, padding: '5px 11px', fontSize: 12, border: `1px solid ${modo === id ? T.ink : T.border}`, background: modo === id ? T.ink : T.surface, color: modo === id ? '#fff' : T.ink2, fontWeight: modo === id ? 600 : 500,
+        }}>{l}</button>)}
+      </div>}
     </div>
-    {num.trim() && <div style={{ fontSize: 12, color: proy ? T.ink2 : T.brand, marginBottom: 10 }}>
+    {modo === 'video' && hermanos.length > 0
+      ? <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 90px', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label style={lbl}>Igual que</label>
+            <select value={copiarDe} onChange={e => setCopiarDe(e.target.value)} style={{ ...inp, width: '100%', cursor: 'pointer' }}>
+              {hermanos.map(h => <option key={h.ID} value={h.ID}>{limpiarPedido(h.Entregable)}{String(h.Editor || '').trim() ? ` · ${String(h.Editor).split(' ')[0]}` : ''}</option>)}
+            </select>
+            <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>Copia el brief, el crudo y el PM de esa pieza. Quién lo edita lo elegís abajo.</div>
+          </div>
+          <div>
+            <label style={lbl}>Nombre (opcional)</label>
+            <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
+              placeholder={baseNombre ? `${baseNombre} ${yaHay + 1}` : 'Video'} style={{ ...inp, width: '100%' }} />
+          </div>
+          <div>
+            <label style={lbl}>Cuántos</label>
+            <input type="number" min="1" max="20" value={cantidad} onChange={e => setCantidad(e.target.value)} style={{ ...inp, width: '100%', fontFamily: MONO }} />
+          </div>
+        </div>
+      : <div style={{ display: 'grid', gridTemplateColumns: numFijo ? '1fr 90px' : '110px 1fr 90px', gap: 10, marginBottom: 10 }}>
+          {!numFijo && <div>
+            <label style={lbl}>N° de presu</label>
+            <input value={num} onChange={e => setNum(e.target.value)} placeholder="2256" style={{ ...inp, width: '100%', fontFamily: MONO }} />
+          </div>}
+          <div>
+            <label style={lbl}>Qué hay que hacer</label>
+            <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
+              placeholder="Cambiar la placa del video largo" style={{ ...inp, width: '100%' }} />
+          </div>
+          <div>
+            <label style={lbl}>Cuántas</label>
+            <input type="number" min="1" max="20" value={cantidad} onChange={e => setCantidad(e.target.value)} style={{ ...inp, width: '100%', fontFamily: MONO }} />
+          </div>
+        </div>}
+    {!numFijo && num.trim() && <div style={{ fontSize: 12, color: proy ? T.ink2 : T.brand, marginBottom: 10 }}>
       {proy ? `${proy.Cliente || proy.Agencia} · ${proy.Proyecto || ''} · ${proy['Fecha Evento'] || ''}` : `No encontré el proyecto #${num.trim()}`}
     </div>}
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -646,13 +730,51 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas }) {
       </div>
     </div>
     <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Nota para el editor (opcional)" style={{ ...inp, width: '100%', marginBottom: 11 }} />
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <button onClick={enviar} disabled={yendo || !titulo.trim()} style={{ ...btnPri, opacity: titulo.trim() ? 1 : 0.5 }}>
-        {yendo ? 'Agregando…' : cantidad > 1 ? `Agregar ${cantidad} tareas` : 'Agregar'}
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <button onClick={enviar} disabled={yendo || !puede} style={{ ...btnPri, opacity: puede ? 1 : 0.5 }}>
+        {yendo ? 'Agregando…' : esVideo ? (cant > 1 ? `Agregar ${cant} videos` : 'Agregar el video') : cant > 1 ? `Agregar ${cant} tareas` : 'Agregar'}
       </button>
       <button onClick={onCancelar} style={btn}>Cancelar</button>
-      {cantidad > 1 && <span style={{ fontSize: 11.5, color: T.ink3 }}>Se numeran solas: “{titulo || 'Tarea'} 1”, “{titulo || 'Tarea'} 2”…</span>}
+      {esVideo && !titulo.trim() && <span style={{ fontSize: 11.5, color: T.ink3 }}>Queda como “{baseNombre} {yaHay + 1}”{cant > 1 ? `, “${baseNombre} ${yaHay + 2}”…` : ''} — y aparece abajo, abierto.</span>}
+      {!esVideo && cant > 1 && <span style={{ fontSize: 11.5, color: T.ink3 }}>Se numeran solas: “{titulo || 'Tarea'} 1”, “{titulo || 'Tarea'} 2”…</span>}
     </div>
+  </div>
+}
+
+// ------------------------------------------------- la barra de estado
+// Reemplaza al desplegable + la flecha "→". La flecha movía la fila al estado
+// siguiente y, como los chips de arriba filtran por PLAZO, la fila se
+// recalculaba y desaparecía: "la apretás y desaparece" (Juan, 14/9/2026).
+// Acá se ve el recorrido entero, en qué paso está y se toca el paso al que va —
+// como la barra pagado/pendiente de Egresos, pero con los ocho pasos del flujo.
+// Verde lo hecho, oscuro el paso actual (ámbar si es una vuelta atrás), gris
+// lo que falta. Y la fila que se movió no se esconde (ver `tocados`).
+const ES_VUELTA = e => /^cambios/i.test(String(e || ''))
+const colorPaso = (e, i, idx) => i < idx ? T.pos : i === idx ? (ES_VUELTA(e) ? T.warn : estaCerrado(e) ? T.pos : T.ink) : T.border
+
+function Barra({ estado, onChange, compacta = false, soloBarra = false }) {
+  const idx = ESTADO_IDX(estado)
+  const actual = ESTADOS[idx]
+  if (compacta || soloBarra) {
+    const cAct = colorPaso(actual, idx, idx)
+    return <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, width: soloBarra ? '100%' : undefined }}>
+      <div style={{ display: 'flex', gap: 2, flex: soloBarra ? 1 : undefined }} title={`Está en: ${actual}`}>
+        {ESTADOS.map((e, i) => <button key={e} onClick={() => onChange && onChange(e)} disabled={!onChange} title={i === idx ? `Está en: ${e}` : `Pasar a: ${e}`}
+          style={{ width: soloBarra ? 'auto' : 20, flex: soloBarra ? 1 : undefined, minWidth: soloBarra ? 18 : undefined, height: soloBarra ? 5 : 10, padding: 0, border: 'none', borderRadius: 2, cursor: onChange ? 'pointer' : 'default', background: colorPaso(e, i, idx) }} />)}
+      </div>
+      {!soloBarra && <span style={{ fontSize: 11.5, fontWeight: 600, color: cAct === T.border ? T.ink2 : cAct, minWidth: 118, whiteSpace: 'nowrap' }}>{actual}</span>}
+    </div>
+  }
+  return <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+    {ESTADOS.map((e, i) => {
+      const c = colorPaso(e, i, idx)
+      const es = i === idx
+      return <button key={e} onClick={() => onChange && onChange(e)} title={es ? 'Está acá' : `Pasar a "${e}"`} style={{
+        flex: '1 1 90px', padding: '7px 4px', border: 'none', borderRadius: 6, cursor: onChange ? 'pointer' : 'default', fontFamily: 'inherit',
+        background: c, color: c === T.border ? T.ink2 : '#fff', fontSize: 11, fontWeight: es ? 700 : 500, lineHeight: 1.2,
+        outline: es ? `2px solid ${c}` : 'none', outlineOffset: 1,
+      }}>{i < idx ? '✓ ' : ''}{e}</button>
+    })}
   </div>
 }
 
@@ -689,12 +811,15 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '' }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
   const linkCrudo = (typeof estadoDrive === 'string' && estadoDrive.startsWith('http')) ? estadoDrive : g.linkCrudo
   const [panel, setPanel] = useState(false)
+  // "Un video más" se carga desde el proyecto, no desde un formulario suelto arriba
+  // donde hay que tipear el número y después buscar dónde cayó.
+  const [nuevaAca, setNuevaAca] = useState(false)
 
   return <div style={{ ...card, marginBottom: 10, overflow: 'hidden' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '11px 14px', background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: 'wrap' }}>
@@ -703,7 +828,11 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
       <span style={{ fontSize: cel ? 13 : 13.5, fontWeight: 600, color: T.ink }}>{g.cliente || g.agencia || '—'}</span>
       {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2, ...(cel ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } : {}) }}>· {g.proyecto}</span>}
       {!cel && <span style={{ fontSize: 11.5, color: T.ink3, fontFamily: MONO }}>{g.fecha}</span>}
+      {fantasma && <span title="Este número ya no está en Proyectos: se represupuestó, se desaprobó o se borró. Las carpetas y el material van con el número vigente." style={{ fontSize: 11, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '2px 8px', borderRadius: 5, whiteSpace: 'nowrap' }}>
+        ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
+      </span>}
       <div style={{ flex: 1 }} />
+      {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
       {cel ? (linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ fontSize: 15, textDecoration: 'none' }}>📁</a>)
@@ -711,8 +840,13 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         {linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Crudo</a>}
         {g.linkEntrega && <a href={g.linkEntrega} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📤 Entrega</a>}
         <button onClick={() => setPanel(p => !p)} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: panel ? T.ink : T.surface, color: panel ? '#fff' : T.ink2 }}>Compartir…</button>
-      </> : <button onClick={() => carpeta(g.num, ['crudo', 'entregas'], false)} disabled={creando} title="Crea la carpeta en CRUDO y en ENTREGAS CLIENTES, con las subcarpetas de lo que se vendió" style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>{creando ? 'Creando…' : '📁 Crear carpetas'}</button>}
+      </> : !fantasma && <button onClick={() => carpeta(g.num, ['crudo', 'entregas'], false)} disabled={creando} title="Crea la carpeta en CRUDO y en ENTREGAS CLIENTES, con las subcarpetas de lo que se vendió" style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>{creando ? 'Creando…' : '📁 Crear carpetas'}</button>}
     </div>
+
+    {nuevaAca && <div style={{ padding: '10px 14px 0', background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+      <NuevaTarea numFijo={g.num} hermanos={g.items} proyectos={[]} personas={editores.map(e => e.nombre)}
+        onCrear={async d => { const ok = await crearTarea(d); if (ok) setNuevaAca(false); return ok }} onCancelar={() => setNuevaAca(false)} />
+    </div>}
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
@@ -754,10 +888,10 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
   const cerrado = estaCerrado(f.Estado)
-  const idx = ESTADO_IDX(f.Estado)
-  const siguiente = idx < ESTADOS.length - 1 ? ESTADOS[idx + 1] : null
   const prio = String(f.Prioridad || 'Normal').trim()
   const hayConsulta = !!String(f.Consulta || '').trim()
+  // El toast dice a dónde fue; la fila se queda a la vista (ver `tocados` arriba).
+  const cambiarEstado = e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }
 
   // En el teléfono la fila de escritorio se parte y lo que se corta es justo lo
   // que hay que ver: el estado y para cuándo. Acá va apilada, con el estado y el
@@ -773,9 +907,10 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {hayConsulta && <span style={{ fontSize: 13 }}>🙋</span>}
           {prio === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>URGENTE</span>}
         </div>
+        <Barra estado={f.Estado} soloBarra />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-            <select value={String(f.Estado || 'Sin material')} onChange={e => guardar(f.ID, { Estado: e.target.value })}
+            <select value={String(f.Estado || 'Sin material')} onChange={e => cambiarEstado(e.target.value)}
               style={{ ...inp, padding: '6px 8px', fontSize: 12.5, cursor: 'pointer', maxWidth: 168 }}>
               {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
@@ -803,12 +938,8 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
         {/* "Interno" es de facturación: la plata queda en Magma. No dice quién lo hace. */}
         {String(f.Interno || '').trim() && <span title="Este trabajo lo cobra Magma, no un freelancer" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 4 }}>MAGMA</span>}
       </span>
-      <select value={String(f.Estado || 'Sin material')} onChange={e => guardar(f.ID, { Estado: e.target.value })} style={{ ...inp, padding: '4px 8px', fontSize: 12, width: 138, cursor: 'pointer' }}>
-        {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
-      </select>
-      {esperaAlPM(f.Estado)
-        ? <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>
-        : siguiente && !cerrado && <button onClick={() => { guardar(f.ID, { Estado: siguiente }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${siguiente}. Filtrá por ese estado para volver a encontrarlo.`) }} title={`Pasar a "${siguiente}"`} style={{ ...btn, padding: '4px 9px', fontSize: 11.5 }}>→</button>}
+      <Barra estado={f.Estado} compacta onChange={cambiarEstado} />
+      {esperaAlPM(f.Estado) && <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>}
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
@@ -846,6 +977,11 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
         <button onClick={() => { responder(f, pregunta); setPregunta('') }} style={btnPri}>Responder</button>
       </div>
     </div>}
+
+    <div style={{ marginBottom: 14 }}>
+      <label style={lbl}>En qué anda — tocá el paso al que pasa</label>
+      <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} />
+    </div>
 
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
