@@ -32,7 +32,7 @@ const rows = rE.data.values || []
 const h = rows[0] || []
 const iNum = h.indexOf('N° presupuesto'), iEst = h.indexOf('Estado'), iCru = h.indexOf('Link crudo')
 const nums = [...new Set(rows.slice(1)
-  .filter(r => !['Entregado','Aprobado'].includes(String(r[iEst]||'').trim()))
+  .filter(r => !['Entregado','Aprobado','Terminado'].includes(String(r[iEst]||'').trim()))
   .filter(r => !String(r[iCru]||'').trim())
   .map(r => String(r[iNum]||'').trim()).filter(Boolean))]
 const objetivo = SOLO ? [SOLO] : nums

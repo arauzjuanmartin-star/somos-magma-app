@@ -112,8 +112,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // Si se marca Entregado y nadie puso la fecha real, la ponemos hoy.
-    if (estaCerrado(campos.Estado) && !campos['Fecha entrega'] && !String(actual[cE('Fecha entrega')] || '').trim()) {
+    // La fecha de entrega es cuando le LLEGÓ al cliente, no cuando dio el OK: se
+    // pone al pasar a "Con el cliente". Y si alguien salta directo a Terminado sin
+    // haber pasado por ahí, también, para que la fila no quede sin fecha.
+    const estadoNuevo = String(campos.Estado || '').trim()
+    if ((estadoNuevo === 'Con el cliente' || estaCerrado(estadoNuevo)) && !campos['Fecha entrega'] && !String(actual[cE('Fecha entrega')] || '').trim()) {
       data.push({ range: `EDICION!${colLetra(cE('Fecha entrega'))}${sheetRow}`, values: [[aAR(new Date())]] })
       cambios.push('Fecha entrega: hoy (automática)')
     }

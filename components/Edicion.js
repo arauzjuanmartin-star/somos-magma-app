@@ -14,10 +14,10 @@ import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { canonStaff } from '../lib/staff'
 import {
-  ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX,
-  limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero,
+  ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX, estadoDe,
+  limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero, diasEntre,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
-  textoPedirBrief, textoParaElEditor, esperaAlPM, ES_MAGMA, esPedidoEdicion,
+  textoPedirBrief, textoParaElEditor, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
 } from '../lib/edicion'
 
 // ---------------------------------------------------------------- estilos
@@ -31,11 +31,12 @@ const COLOR_PRIO = { Urgente: T.brand, Normal: T.ink3, Baja: T.ink3 }
 const FILTROS = [
   { id: 'activos',  label: 'Todo lo abierto' },
   { id: 'revisar',  label: 'Esperan tu OK' },
+  { id: 'cliente',  label: 'Con el cliente' },   // esperan el OK del cliente: la lista para llamar
   { id: 'rojo',     label: 'Atrasado' },
   { id: 'naranja',  label: 'Vence hoy' },
   { id: 'amarillo', label: 'Esta semana' },
   { id: 'verde',    label: 'En fecha' },
-  { id: 'listo',    label: 'Cerrados' },
+  { id: 'listo',    label: 'Terminados' },
 ]
 
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -152,13 +153,20 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const nq = norm(q.trim())
     return filas.filter(f => {
       const nivel = f.__sem.nivel
-      if (abierto === f.ID || tocados.has(f.ID)) return true   // lo abierto desde un link y lo tocado en esta sesión siempre se ven
-      if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
-      else {
-        if (filtro === 'activos' && nivel === 'listo') return false
-        if (filtro !== 'activos' && filtro !== nivel) return false
+      // Lo abierto desde un link y lo tocado en esta sesión se saltan el chip de
+      // plazo y el desplegable de estado — son los que cambian cuando se mueve la
+      // fila ("la apretás y desaparece"). El buscador y los filtros de persona NO:
+      // escribir "farmacity" mostraba el Stand de Brasil recién tocado (14/9/2026).
+      const fijada = abierto === f.ID || tocados.has(f.ID)
+      if (!fijada) {
+        if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
+        else if (filtro === 'cliente') { if (!esperaAlCliente(f.Estado)) return false }
+        else {
+          if (filtro === 'activos' && nivel === 'listo') return false
+          if (filtro !== 'activos' && filtro !== nivel) return false
+        }
+        if (estadoF !== 'todos' && estadoDe(f.Estado) !== estadoF) return false
       }
-      if (estadoF !== 'todos' && (String(f.Estado || '').trim() || 'Sin material') !== estadoF) return false
       if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
       else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
       if (pmF === '__sin__') { if (String(f.PM || '').trim()) return false }
@@ -175,13 +183,14 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const c = {}
     filas.forEach(f => {
       if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return }
+      else if (filtro === 'cliente') { if (!esperaAlCliente(f.Estado)) return }
       else if (filtro === 'activos') { if (f.__sem.nivel === 'listo') return }
       else if (filtro !== f.__sem.nivel) return
       if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return }
       else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return
       if (pmF === '__sin__') { if (String(f.PM || '').trim()) return }
       else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return
-      const e = String(f.Estado || '').trim() || 'Sin material'
+      const e = estadoDe(f.Estado)
       c[e] = (c[e] || 0) + 1
     })
     return c
@@ -203,8 +212,8 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }, [visibles])
 
   const cuenta = useMemo(() => {
-    const c = { activos: 0, revisar: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
-    filas.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++ })
+    const c = { activos: 0, revisar: 0, cliente: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
+    filas.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++; if (esperaAlCliente(f.Estado)) c.cliente++ })
     return c
   }, [filas])
 
@@ -517,6 +526,7 @@ function FirmarFotos({ num }) {
 // acceso al cliente y marca la fecha real— porque hoy son tres pasos sueltos y
 // alguno siempre se olvida. Pedir cambios los cuenta aparte de los del cliente:
 // muchas vueltas internas es un problema de edición, muchas del cliente es de brief.
+// Aprobar NO cierra: deja la pieza "Con el cliente". Cerrar es el OK de él (abajo).
 function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
   const [modo, setModo] = useState(null)      // null | 'aprobar' | 'cambios'
   const [texto, setTexto] = useState('')
@@ -543,8 +553,8 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
         body: JSON.stringify({ id: f.ID, mailsCliente: mails.split(/[,;\s]+/).filter(x => /@/.test(x)), confirmar: true }) })
       const j = await r.json()
       if (!j.ok) { showToast(j.error || 'No se pudo', 'err'); setYendo(false); return }
-      showToast(j.movido ? 'Entregado ✓ el archivo pasó a Finales' : 'Marcado como entregado ✓')
-      guardar(f.ID, { Estado: 'Entregado' })
+      showToast(j.movido ? 'Con el cliente ✓ el archivo pasó a Finales' : 'Quedó con el cliente ✓')
+      guardar(f.ID, { Estado: 'Con el cliente' })
       setModo(null); setPlan(null)
     } catch (e) { showToast('Error de conexión', 'err') }
     setYendo(false)
@@ -562,7 +572,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
   return <div style={{ border: `1px solid ${T.brand}40`, background: T.brandSoft, borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
     <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Esperando tu OK</div>
     <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 11 }}>
-      {f.Editor || 'El editor'} subió una versión. Si va, se la mandamos al cliente; si no, vuelve sin que él se entere.
+      {f.Editor || 'El editor'} subió una versión. Si va, se la mandamos al cliente y queda esperando su OK; si no, vuelve sin que él se entere.
     </div>
 
     {link
@@ -574,7 +584,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
       : <div style={{ fontSize: 12, color: T.brand, marginBottom: 11 }}>No hay link de pre-entrega cargado — pedíselo antes de aprobar.</div>}
 
     {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
-      <button onClick={pedirPlan} style={{ ...btnPri, flex: 1, padding: '11px', background: '#1E8A5A' }}>Aprobar y entregar</button>
+      <button onClick={pedirPlan} style={{ ...btnPri, flex: 1, padding: '11px', background: '#1E8A5A' }}>Aprobar y mandar al cliente</button>
       <button onClick={() => setModo('cambios')} style={{ ...btn, flex: 1, padding: '11px' }}>Pedir cambios</button>
     </div>}
 
@@ -595,11 +605,68 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
       {plan && <div style={{ fontSize: 12, color: T.ink2, marginBottom: 10, lineHeight: 1.6 }}>
         {plan.moverArchivo ? '· El archivo pasa a la carpeta Finales' : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
         {plan.compartirCon?.length ? `· Se le da acceso a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo a Finales, no al resto` : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
-        · Queda marcado como entregado con la fecha de hoy
+        · Queda "Con el cliente" con la fecha de entrega de hoy. Se cierra como Terminado cuando él dé el OK.
       </div>}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={aprobar} disabled={yendo} style={{ ...btnPri, background: '#1E8A5A' }}>{yendo ? 'Entregando…' : 'Confirmar entrega'}</button>
+        <button onClick={aprobar} disabled={yendo} style={{ ...btnPri, background: '#1E8A5A' }}>{yendo ? 'Mandando…' : 'Confirmar y mandar'}</button>
         <button onClick={() => { setModo(null); setPlan(null) }} style={btn}>Cancelar</button>
+      </div>
+    </div>}
+  </div>
+}
+
+// ---------------------------------------------------- el OK del cliente
+// El cierre que faltaba. "Aprobar" mandaba la pieza al cliente y la fila quedaba
+// como entregada, pero el trabajo no termina cuando sale: termina cuando el
+// cliente dice que sí. Hasta el 14/9/2026 ese sí no se registraba en ningún lado
+// y el Stand de Brasil figuraba cerrado con el cliente todavía mirándolo.
+// Si pide correcciones, vuelven al editor con la nota (y suma una ronda suya).
+function OKCliente({ f, guardar, showToast, cel }) {
+  const [modo, setModo] = useState(null)      // null | 'cambios'
+  const [texto, setTexto] = useState('')
+  const desde = parseFechaAR(f['Fecha entrega'])
+  const dias = desde ? diasEntre(desde, hoyCero()) : null
+  const link = String(f['Link entrega'] || f['Link pre-entrega'] || '').trim()
+
+  const terminar = () => {
+    guardar(f.ID, { Estado: 'Terminado' })
+    showToast && showToast(`${limpiarPedido(f.Entregable)} → Terminado ✓`)
+  }
+  const pedirCambios = () => {
+    const t = texto.trim()
+    guardar(f.ID, {
+      Estado: 'Cambios del cliente',
+      Notas: (t ? `[${new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}] ✏️ cambios del cliente: ${t}\n` : '') + String(f.Notas || ''),
+    })
+    setModo(null); setTexto('')
+  }
+
+  return <div style={{ border: `1px solid ${T.pos}55`, background: T.posSoft, borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
+      Con el cliente{desde ? ` desde el ${aAR(desde)}` : ''}
+      {dias !== null && dias >= 1 && <span style={{ fontWeight: 500, color: dias >= 5 ? T.brand : T.ink2 }}> · hace {dias} {dias === 1 ? 'día' : 'días'}{dias >= 5 ? ', vale un llamado' : ''}</span>}
+    </div>
+    <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 11 }}>
+      Ya lo tiene. Cuando confirme que va, se cierra; si pide correcciones, le llegan al editor con tu nota.
+    </div>
+    {link && <a href={link} target="_blank" rel="noreferrer" style={{
+      display: 'block', textAlign: 'center', padding: cel ? '16px' : '12px', borderRadius: 9,
+      background: T.surface, border: `1px solid ${T.border}`, color: T.ink, textDecoration: 'none',
+      fontSize: 14, fontWeight: 600, marginBottom: 11,
+    }}>▶ Ver lo que se le mandó</a>}
+
+    {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
+      <button onClick={terminar} style={{ ...btnPri, flex: 1, padding: '11px', background: T.pos }}>El cliente dio el OK · Terminado</button>
+      <button onClick={() => setModo('cambios')} style={{ ...btn, flex: 1, padding: '11px' }}>Pidió cambios</button>
+    </div>}
+
+    {modo === 'cambios' && <div>
+      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
+        placeholder="Qué pidió el cliente — queda en la bitácora y le llega al editor"
+        style={{ ...inp, width: '100%', resize: 'vertical', marginBottom: 8 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={pedirCambios} style={btnPri}>Mandar los cambios</button>
+        <button onClick={() => setModo(null)} style={btn}>Cancelar</button>
       </div>
     </div>}
   </div>
@@ -1033,7 +1100,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
         <Barra estado={f.Estado} soloBarra />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-            <select value={String(f.Estado || 'Sin material')} onChange={e => cambiarEstado(e.target.value)}
+            <select value={estadoDe(f.Estado)} onChange={e => cambiarEstado(e.target.value)}
               style={{ ...inp, padding: '6px 8px', fontSize: 12.5, cursor: 'pointer', maxWidth: 168 }}>
               {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
@@ -1063,6 +1130,9 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       </span>
       <Barra estado={f.Estado} compacta onChange={cambiarEstado} />
       {esperaAlPM(f.Estado) && <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>}
+      {/* Un clic cierra: el cliente ya dijo que sí, no hay nada más que mirar. Si pidió
+          cambios, se abre la fila y va con la nota. */}
+      {esperaAlCliente(f.Estado) && <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la fila." style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.pos, color: '#fff', border: 'none', fontWeight: 600 }}>✓ OK del cliente</button>}
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
@@ -1150,6 +1220,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     </div>
 
     {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
+    {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
 
     <Plegable titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
       <Campos f={f} campos={CAMPOS_PIEZA} guardar={guardar} cols={cel ? 1 : 3} />

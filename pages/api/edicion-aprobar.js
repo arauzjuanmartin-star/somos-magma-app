@@ -1,11 +1,15 @@
-// El botón que cierra el circuito: aprobar una pieza y entregarla.
+// El OK del PM: aprobar una pieza y mandársela al cliente.
 //
 // Hace las tres cosas de una, que es el punto — hoy son tres pasos manuales y
 // por eso alguno siempre se olvida:
 //   1. mueve el archivo de "Pre-entregas" a "Finales"
 //   2. le da acceso al cliente a la carpeta Finales (nunca a la del proyecto:
 //      en Drive el acceso se hereda hacia abajo y vería los cortes rebotados)
-//   3. marca la fila como Entregada con la fecha real
+//   3. deja la fila "Con el cliente" con la fecha de entrega real
+//
+// NO la cierra: el trabajo termina cuando el cliente da el OK, y eso se marca
+// aparte ("Terminado", vía edicion-guardar). Hasta el 14/9/2026 este botón
+// ponía "Entregado" y el tablero daba por cerrado lo que el cliente ni había visto.
 //
 // El movimiento funciona porque las dos carpetas viven en la MISMA unidad
 // compartida. Probado: mover entre unidades da "permisos insuficientes".
@@ -111,9 +115,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. marcar entregado
+    // 3. dejarlo con el cliente, con la fecha en que le llegó
     const data = [
-      { range: `EDICION!${colLetra(cE('Estado'))}${sheetRow}`, values: [['Entregado']] },
+      { range: `EDICION!${colLetra(cE('Estado'))}${sheetRow}`, values: [['Con el cliente']] },
       { range: `EDICION!${colLetra(cE('Actualizado'))}${sheetRow}`, values: [[new Date().toISOString()]] },
       { range: `EDICION!${colLetra(cE('Por'))}${sheetRow}`, values: [[mail]] },
     ]
@@ -128,7 +132,7 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-aprobar', 'EDICION', String(id), `entregado${movido ? ' · archivo movido' : ''}${dados.length ? ` · compartido con ${dados.length}` : ''}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-aprobar', 'EDICION', String(id), `con el cliente${movido ? ' · archivo movido' : ''}${dados.length ? ` · compartido con ${dados.length}` : ''}`]] },
       })
     } catch (e) {}
 

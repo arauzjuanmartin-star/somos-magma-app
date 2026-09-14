@@ -4,7 +4,7 @@
 // "Sin material" y el tablero se llena de rojo con trabajos que en realidad ya se
 // entregaron hace semanas. Este script propone un estado inicial honesto:
 //
-//   · Si el proyecto YA TIENE FACTURA EMITIDA → se entregó. Estado "Entregado".
+//   · Si el proyecto YA TIENE FACTURA EMITIDA → se entregó y se cobró. Estado "Terminado".
 //     (Magma factura después del evento; una factura emitida es la mejor señal
 //      disponible de que el trabajo salió.)
 //   · Si no hay factura → lo deja abierto y lo lista aparte para revisar a mano.
@@ -62,7 +62,7 @@ ed.slice(1).forEach((r, i) => {
 
 console.log(`\n════ PONER AL DÍA EL TABLERO ════`)
 console.log(`Entregables en "Sin material" con el evento hace ${MIN_DIAS}+ días\n`)
-console.log(`✅ ${aCerrar.length} con factura ya emitida → pasan a "Entregado":`)
+console.log(`✅ ${aCerrar.length} con factura ya emitida → pasan a "Terminado":`)
 aCerrar.forEach(x => console.log(`     #${String(x.num).padEnd(5)} ${String(x.cliente).slice(0,20).padEnd(20)} ${x.ent.padEnd(14)} hace ${x.dias}d`))
 console.log(`\n⚠  ${aRevisar.length} SIN factura → quedan abiertos, hay que mirarlos:`)
 aRevisar.forEach(x => console.log(`     #${String(x.num).padEnd(5)} ${String(x.cliente).slice(0,20).padEnd(20)} ${x.ent.padEnd(14)} hace ${x.dias}d`))
@@ -72,14 +72,14 @@ if (ESCRIBIR && aCerrar.length) {
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SHEET_ID,
     requestBody: { valueInputOption: 'USER_ENTERED', data: aCerrar.flatMap(x => ([
-      { range: `EDICION!${colLetra(iEst)}${x.fila}`, values: [['Entregado']] },
+      { range: `EDICION!${colLetra(iEst)}${x.fila}`, values: [['Terminado']] },
       { range: `EDICION!${colLetra(iEnt)}${x.fila}`, values: [[aAR(hoy)]] },
       { range: `EDICION!${colLetra(hE.indexOf('Notas'))}${x.fila}`, values: [['[puesta al día] cerrado automáticamente: el proyecto ya tiene factura emitida']] },
       { range: `EDICION!${colLetra(hE.indexOf('Por'))}${x.fila}`, values: [['poner-al-dia']] },
       { range: `EDICION!${colLetra(hE.indexOf('Actualizado'))}${x.fila}`, values: [[ahora]] },
     ])) },
   })
-  console.log(`\n✅ ${aCerrar.length} marcados como Entregado.`)
+  console.log(`\n✅ ${aCerrar.length} marcados como Terminado.`)
 } else if (!ESCRIBIR) {
   console.log('\n👀 PREVIEW — nada se escribió. Corré con --escribir.')
 }
