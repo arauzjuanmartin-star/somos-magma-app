@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
-import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos, semaforo, hoyCero, fechaSugerida, parseFechaAR, estaCerrado, limpiarPedido, COLOR_SEM } from '../lib/edicion'
+import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
@@ -1901,21 +1901,21 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
   const [editorF,setEditorF]=useState('todos')
   const verRod = capa!=='entregas', verEnt = capa!=='rodajes'
   const edicion=(data.edicion||[]).filter(f=>String(f.ID||'').trim())
-  const hoy0=hoyCero()
+  const hoy0=hoyCeroEd()
   const entregasPorDia={}; let sinFecha=0
   edicion.forEach(f=>{
     const ed=String(f.Editor||'').trim()
     if(editorF==='__sin__'){ if(ed) return } else if(editorF!=='todos' && ed!==editorF) return
-    const cerrado=estaCerrado(f.Estado)
+    const cerrado=estaCerradoEd(f.Estado)
     // Abiertas: el día prometido (o el que sugiere el manual si el PM no puso fecha).
     // Cerradas: el día en que se entregaron, en gris, para ver qué salió.
-    const d = cerrado ? parseFechaAR(f['Fecha entrega']) : (parseFechaAR(f['Fecha compromiso'])||fechaSugerida(f['Fecha Evento'], f.Entregable))
+    const d = cerrado ? parseFechaAREd(f['Fecha entrega']) : (parseFechaAREd(f['Fecha compromiso'])||fechaSugeridaEd(f['Fecha Evento'], f.Entregable))
     if(!d){ if(!cerrado) sinFecha++; return }
     const k=dayKey(d)
-    ;(entregasPorDia[k]=entregasPorDia[k]||[]).push({...f, __sem:semaforo(f,hoy0), __estimada:!cerrado&&!String(f['Fecha compromiso']||'').trim(), __cerrado:cerrado})
+    ;(entregasPorDia[k]=entregasPorDia[k]||[]).push({...f, __sem:semaforoEd(f,hoy0), __estimada:!cerrado&&!String(f['Fecha compromiso']||'').trim(), __cerrado:cerrado})
   })
-  const editores=[...new Set(edicion.filter(f=>!estaCerrado(f.Estado)).map(f=>String(f.Editor||'').trim()).filter(Boolean))].sort()
-  const sinAsignar=edicion.filter(f=>!estaCerrado(f.Estado)&&!String(f.Editor||'').trim()).length
+  const editores=[...new Set(edicion.filter(f=>!estaCerradoEd(f.Estado)).map(f=>String(f.Editor||'').trim()).filter(Boolean))].sort()
+  const sinAsignar=edicion.filter(f=>!estaCerradoEd(f.Estado)&&!String(f.Editor||'').trim()).length
   const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
   const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
@@ -2043,8 +2043,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
               {/* ✂ Entregas: el color es el semáforo del trabajo (rojo atrasado, naranja hoy,
                   amarillo esta semana, verde en fecha, gris entregado). Punteado = fecha del
                   manual, todavía no la confirmó el PM. */}
-              {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM[f.__sem.nivel]||COLOR_SEM.verde
-                return <div key={'n'+j} title={`${limpiarPedido(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}`} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedido(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
+              {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
+                return <div key={'n'+j} title={`${limpiarPedidoEd(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}`} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
               })}
               {total>TOPE&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-TOPE} más</div>}
             </div>
@@ -2057,13 +2057,13 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
         {!diaSel ? <Empty>Clickeá un día para ver el detalle</Empty> : <>
           <CardHead>{diaSel.getDate()} de {MESES_LARGO[diaSel.getMonth()]}</CardHead>
           {aprobSel.length===0&&espSel.length===0&&entSel.length===0 && <Empty>{capa==='entregas'?'Sin entregas este día':'Sin eventos este día'}</Empty>}
-          {entSel.map((f,i)=>{ const c=COLOR_SEM[f.__sem.nivel]||COLOR_SEM.verde; const ed=String(f.Editor||'').trim()
+          {entSel.map((f,i)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde; const ed=String(f.Editor||'').trim()
             return <div key={'n'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`, borderLeft:`3px solid ${c.fg}`}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
                 <span style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>✂ #{f['N° presupuesto']}</span>
                 <span style={{fontSize:11, fontWeight:600, color:c.fg, background:c.bg, padding:'2px 8px', borderRadius:6, whiteSpace:'nowrap'}}>{f.__sem.txt}</span>
               </div>
-              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{limpiarPedido(f.Entregable)}</div>
+              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{limpiarPedidoEd(f.Entregable)}</div>
               <div style={{fontSize:12, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
               <div style={{fontSize:11.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.brand}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
               {f.__estimada && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}
