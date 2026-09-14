@@ -39,6 +39,7 @@ const FILTROS = [
 
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 const nombreDe = mail => String(mail || '').split('@')[0]
+const esURL = s => /^https?:\/\//i.test(String(s || '').trim())
 
 // ---------------------------------------------------------------- principal
 export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav }) {
@@ -345,7 +346,16 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return [...de].sort((a, b) => a.localeCompare(b, 'es'))
   }, [data, filas])
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea }
+  // El logo de cada cliente, sacado de cualquier pieza donde ya se haya cargado:
+  // se pega una vez y las demás lo toman con un clic. Juan, 14/9/2026: "dónde lo
+  // cargo fácil… recién a Dani le puse el link del logo en los comentarios".
+  const logos = useMemo(() => {
+    const m = {}
+    filas.forEach(f => { const v = String(f['Logo y placas'] || '').trim(); const k = norm(f.Cliente || f.Agencia); if (k && esURL(v) && !m[k]) m[k] = { link: v, num: f['N° presupuesto'], id: f.ID } })
+    return m
+  }, [filas])
+
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -615,6 +625,32 @@ function Campos({ f, campos, guardar, cols = 3 }) {
   </div>
 }
 
+// El logo del cliente, a la vista. Es el campo "Logo y placas" del brief (capa 2),
+// que estaba adentro de un desplegable cerrado: al 14/9/2026 lo tenía cargado 1
+// fila de 115 y el link terminaba en la bitácora. Se pega una vez: queda para
+// las otras piezas del proyecto, y las de otros trabajos del mismo cliente lo
+// toman con un clic. Va en el mail al editor.
+function Logo({ f, g, guardar, logos = {}, cel }) {
+  const actual = String(f['Logo y placas'] || '').trim()
+  const [v, setV] = useState(actual)
+  useEffect(() => { setV(actual) }, [actual])
+  const k = norm(f.Cliente || f.Agencia)
+  const sugerido = logos[k] && logos[k].id !== f.ID && logos[k].link !== actual ? logos[k] : null
+  const guardarLogo = val => {
+    guardar(f.ID, { 'Logo y placas': val })
+    ;(g?.items || []).filter(h => h.ID !== f.ID && !String(h['Logo y placas'] || '').trim()).forEach(h => guardar(h.ID, { 'Logo y placas': val }))
+  }
+  const confirmar = () => { if (v.trim() !== actual) guardarLogo(v.trim()) }
+  return <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, padding: '9px 12px', borderRadius: 9, background: actual ? T.surface : T.brandSoft, border: `1px solid ${actual ? T.border : T.brand + '40'}` }}>
+    <span style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>🎨 Logo y gráfica</span>
+    {esURL(actual) && <a href={actual} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>Abrir el logo</a>}
+    <input value={v} onChange={e => setV(e.target.value)} onBlur={confirmar} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmar() } }}
+      placeholder="Pegá el link del logo (Drive, WeTransfer…) o escribí “ya lo tenemos”" style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 260, fontSize: 12 }} />
+    {!actual && sugerido && <button onClick={() => { setV(sugerido.link); guardarLogo(sugerido.link) }} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>Usar el de {f.Cliente || f.Agencia} (#{sugerido.num})</button>}
+    {!cel && <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>{actual ? 'Queda para las otras piezas de este proyecto y va en el mail al editor.' : 'Sin logo el editor arranca a ciegas: pegalo acá, no en la bitácora.'}</span>}
+  </div>
+}
+
 function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = false }) {
   const [abierto, setAbierto] = useState(abiertoPorDefecto)
   return <div style={{ border: `1px solid ${alerta ? `${T.brand}55` : T.border}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
@@ -816,8 +852,9 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {} }) {
   const peor = g.items[0].__sem
+  const logoGrupo = g.items.map(h => String(h['Logo y placas'] || '').trim()).find(esURL)
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
   const linkCrudo = (typeof estadoDrive === 'string' && estadoDrive.startsWith('http')) ? estadoDrive : (g.linkCrudo || String(proy?.['Drive Crudo'] || '').trim())
@@ -842,6 +879,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
       </span>}
       <div style={{ flex: 1 }} />
+      {logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="El logo y la gráfica del cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
       {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
@@ -865,7 +903,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} />)}
   </div>
 }
 
@@ -898,7 +936,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -939,7 +977,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
-      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} />}
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} />}
     </div>
   }
 
@@ -959,11 +997,11 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {} }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -997,6 +1035,8 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       <label style={lbl}>En qué anda — tocá el paso al que pasa</label>
       <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} />
     </div>
+
+    <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} />
 
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
