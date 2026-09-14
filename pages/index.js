@@ -378,7 +378,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
     const esMes = m.includes(String(mesACobrar).padStart(2,'0'))||m.includes(MESES[(mesACobrar+11)%12])
     return esMes && !esPagada(p)
   })
-  const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total']),0)
+  const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total'])+parseMonto(p['Viáticos']||p['Viaticos']),0)
 
   // --- Plata del mes ---
   // Cobrado: facturas que efectivamente cobramos este mes (plata que entró).
@@ -2114,7 +2114,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
       ))}
     </div>
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px 64px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span><span style={{textAlign:'right'}}>Factura</span>
       </div>
       {filtrados.length===0&&<Empty>Sin resultados</Empty>}
@@ -2127,7 +2127,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
           : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
           : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
         return <div key={num+'_'+i}>
-          <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
+          <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px 64px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
             onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
             <span style={{fontSize:12, color:T.ink2}}>{p['Fecha Evento']||'—'}</span>
             <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||'—'}</span>
@@ -2140,6 +2140,12 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
             <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
               <span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/>
               <span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span>
+            </span>
+            {/* Las carpetas del proyecto a un clic, sin abrir nada: 📁 crudo, 📸 lo que se le manda al cliente */}
+            <span onClick={e=>e.stopPropagation()} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6, fontSize:14}}>
+              {p['Drive Crudo'] && <a href={p['Drive Crudo']} target="_blank" rel="noreferrer" title="Crudo (lo que se filmó)" style={{textDecoration:'none'}}>📁</a>}
+              {(p['Drive Finales']||p['Drive Entrega']) && <a href={p['Drive Finales']||p['Drive Entrega']} target="_blank" rel="noreferrer" title={p['Drive Finales']?'Finales: lo que se le manda al cliente':'Carpeta de entrega'} style={{textDecoration:'none'}}>📸</a>}
+              {!p['Drive Crudo'] && !p['Drive Entrega'] && <span title="Sin carpetas en Drive todavía" style={{fontSize:11, color:T.ink3}}>—</span>}
             </span>
           </div>
           {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
@@ -2297,6 +2303,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       <div style={{flex:1}}/>
       {onEditarDatos && <button onClick={onEditarDatos} style={{...miniBtn, alignSelf:'center'}}>Editar datos (fecha, etc)</button>}
     </div>
+    <DriveDelProyecto p={p} num={num} showToast={showToast} onRefresh={onRefresh}/>
     {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       <div><label style={lblV2}>Horario (va al Calendar)</label>
         <div style={{display:'flex', gap:8, alignItems:'center'}}>
@@ -2355,6 +2362,40 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     {freel && <FreelancerModal nombre={freel} datos={{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </div>
 }
+// Los links de Drive del proyecto, a la vista de todos. Juan, 14/9/2026: "tengo que
+// tener los links de entrega de fotos en cada proyecto, así vemos fácil todos qué
+// mandarle al cliente". Lo que se manda es FINALES (o Fotos en las carpetas
+// viejas): nunca la carpeta del proyecto, que tiene Pre-entregas adentro.
+function DriveDelProyecto({p, num, showToast, onRefresh}){
+  const [creando,setCreando]=useState(false)
+  const [copiado,setCopiado]=useState(false)
+  const crudo=String(p['Drive Crudo']||'').trim(), entrega=String(p['Drive Entrega']||'').trim(), finales=String(p['Drive Finales']||'').trim()
+  const paraCliente=finales||entrega
+  const copiar=async()=>{ try{ await navigator.clipboard.writeText(paraCliente); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }catch(e){} }
+  const crear=async()=>{
+    setCreando(true)
+    try{
+      const r=await fetch('/api/drive-carpeta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, destinos:['crudo','entregas']})})
+      const j=await r.json()
+      if(!j.ok){ showToast(j.error||'No se pudo crear','err') } else { showToast(j.crudo?.creada||j.entregas?.creada?'Carpetas creadas ✓':'Las carpetas ya existían ✓'); onRefresh&&onRefresh() }
+    }catch(e){ showToast('Error de conexión','err') }
+    setCreando(false)
+  }
+  const link=(href,label,title)=><a href={href} target="_blank" rel="noreferrer" title={title} style={{...miniBtn, textDecoration:'none', display:'inline-block'}}>{label}</a>
+  return <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
+    <span style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600, marginRight:4}}>Drive</span>
+    {crudo && link(crudo,'📁 Crudo','Lo que se filmó')}
+    {entrega && link(entrega,'📤 Entrega','La carpeta del proyecto en ENTREGAS CLIENTES (con Pre-entregas y Finales)')}
+    {finales && link(finales,'📸 Finales','Lo que se le manda al cliente')}
+    {paraCliente && <button onClick={copiar} style={{...miniBtn, color:T.pos, borderColor:T.pos}}>{copiado?'✓ Copiado':'Copiar link para el cliente'}</button>}
+    {!crudo && !entrega && <>
+      <span style={{fontSize:12, color:T.ink2}}>Este proyecto no tiene carpetas en Drive todavía.</span>
+      <button onClick={crear} disabled={creando} style={miniBtn}>{creando?'Creando…':'📁 Crear carpetas'}</button>
+    </>}
+    {paraCliente && !finales && <span style={{fontSize:11, color:T.ink3}}>Carpeta vieja sin “Finales”: el link es el de la carpeta entera.</span>}
+  </div>
+}
+
 function Mini({label,val,color}){ return <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{label}</div><div style={{fontSize:14, fontFamily:MONO, color:color||T.ink, marginTop:2}}>{val}</div></div> }
 
 // ============================ FACTURACIÓN ============================
@@ -3241,6 +3282,9 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [staffModalPS,setStaffModalPS]=useState(null)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
   const [ivaPersona,setIvaPersona]=useState({})  // nombre -> true : pagar +21% IVA (puntual, para RI que factura con IVA)
+  // Viáticos por trabajo: lo recién guardado (hasta que vuelve el refresh) y lo que se está tipeando.
+  const [viatLocal,setViatLocal]=useState({}), [viatDraft,setViatDraft]=useState({})
+  const viatEnVuelo=useRef(new Set())  // guardados en curso: pagar espera a que terminen (si no, se pagaría sin el viático recién cargado)
   const conIvaDe=persona=>!!ivaPersona[persona.nombre]
   const [respuestas,setRespuestas]=useState(null), [loadingResp,setLoadingResp]=useState(false), [resumenResp,setResumenResp]=useState(null)
   const [savingAdj,setSavingAdj]=useState({}), [savedAdj,setSavedAdj]=useState({})
@@ -3290,7 +3334,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     for(let j=1;j<=MAX_SLOTS;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
       if(!staffRaw||staffRaw==='Somos Magma'||!pedido||precio<=0) continue
       const staff=canonStaff(staffRaw), gk=canonKey(staff)
-      if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0}
+      if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
       personas[gk].trabajos.push({nro,proyecto,agencia,pedido,precio,fechaEvento, key:nro+'|'+pedido+'|'+j})
       personas[gk].total+=precio
     }
@@ -3300,12 +3344,22 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
   // (Antes ignoraba el mes → mostraba pagado pero el botón desmarcar, que sí filtra por mes, no lo encontraba.)
   const paidCount={}
-  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
-  Object.values(personas).forEach(p=>{ const used={}; p.trabajos.forEach(t=>{
+  const keyDe=r=>canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio'])
+  pagosPersistidos.forEach(r=>{ if(!esPagRow(r)) return; const k=keyDe(r); paidCount[k]=(paidCount[k]||0)+1 })
+  // Viáticos: viven en la columna "Viáticos" de PAGOS_STAFF, con la misma llave que el pago.
+  // Si hay dos filas iguales (dos motions idénticos) se reparten en orden, igual que paidCount.
+  const viatByKey={}
+  pagosPersistidos.forEach(r=>{ const k=keyDe(r); (viatByKey[k]=viatByKey[k]||[]).push(parseMonto(r['Viáticos']||r['Viaticos'])) })
+  Object.values(personas).forEach(p=>{ const used={}, usedV={}; p.trabajos.forEach(t=>{
     let pag
+    const k=canonKey(p.nombre)+'|'+norm(mesLabel)+'|'+String(t.nro).trim()+'|'+norm(t.pedido)
     if(t.key in override) pag=override[t.key]
-    else { const k=canonKey(p.nombre)+'|'+norm(mesLabel)+'|'+String(t.nro).trim()+'|'+norm(t.pedido); const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
-    t.pagado=pag; if(pag)p.totalPagado+=t.precio; else p.totalPendiente+=t.precio
+    else { const cnt=paidCount[k]||0, u=used[k]||0; pag=u<cnt; if(pag) used[k]=u+1 }
+    const uv=usedV[k]||0; usedV[k]=uv+1
+    t.viaticos=(t.key in viatLocal)?viatLocal[t.key]:((viatByKey[k]||[])[uv]||0)
+    t.aPagar=t.precio+t.viaticos   // lo que se le paga por este trabajo (sin IVA): honorario + viáticos
+    t.pagado=pag; p.total+=t.viaticos; p.viaticos+=t.viaticos
+    if(pag) p.totalPagado+=t.aPagar; else { p.totalPendiente+=t.aPagar; p.pendFee+=t.precio; p.pendViat+=t.viaticos }
   }) })
 
   let lista=Object.values(personas).sort((a,b)=>b.total-a.total)
@@ -3313,6 +3367,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 
   const totalPend=Object.values(personas).reduce((s,p)=>s+p.totalPendiente,0)
   const totalPag=Object.values(personas).reduce((s,p)=>s+p.totalPagado,0)
+  const totalViatPend=Object.values(personas).reduce((s,p)=>s+p.pendViat,0)
 
   const rrhhByName={}; rrhh.forEach(r=>{ rrhhByName[String(r['Nombre Apellido']||r['Nombre']||'').trim()]=r })
   const proyByNum={}; proyectos.forEach(p=>{ proyByNum[String(p['N° presupuesto']||'').trim()]=p })
@@ -3322,15 +3377,34 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 
   const postPago=(persona,t,pagado)=>{
     const conIva = pagado && conIvaDe(persona)
-    const montoPagar = conIva ? Math.round(t.precio*1.21) : t.precio
-    const obs = conIva ? `Pago con IVA 21% · neto ${fmt(t.precio)} + IVA ${fmt(Math.round(t.precio*0.21))}` : undefined
-    return fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:montoPagar, montoAdeudado:t.precio, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:pagado?cuentaPago:'', observacion:obs })}).then(r=>r.json().catch(()=>({})))
+    const viat = t.viaticos||0
+    // El IVA va sobre el honorario; los viáticos se suman tal cual (reintegro de gastos, sin IVA).
+    const montoPagar = (conIva ? Math.round(t.precio*1.21) : t.precio) + viat
+    const obs = conIva ? `Pago con IVA 21% · neto ${fmt(t.precio)} + IVA ${fmt(Math.round(t.precio*0.21))}${viat?` + viáticos ${fmt(viat)}`:''}` : undefined
+    return fetch('/api/pago-staff-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, monto:montoPagar, montoAdeudado:t.precio, viaticos:viat, fechaEvento:t.fechaEvento, agencia:t.agencia, pagado, cuenta:pagado?cuentaPago:'', observacion:obs })}).then(r=>r.json().catch(()=>({})))
   }
+  // Viáticos de un trabajo: se guardan al salir del campo (o Enter), en PAGOS_STAFF, esté pagado o no.
+  async function guardarViaticos(persona,t,raw){
+    const v=Math.max(0, Math.round(parseMontoAR(raw)))
+    setViatDraft(d=>{ const n={...d}; delete n[t.key]; return n })
+    if(v===(t.viaticos||0)) return
+    setViatLocal(o=>({...o,[t.key]:v}))
+    const req=(async()=>{
+      try{ const r=await fetch('/api/pago-staff-viaticos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ mes:mesLabel, persona:persona.nombre, nroProyecto:t.nro, proyecto:t.proyecto, pedido:t.pedido, montoAdeudado:t.precio, viaticos:v })})
+        const j=await r.json().catch(()=>({})); if(j&&j.error){ showToast(j.error,'err'); setViatLocal(o=>{ const n={...o}; delete n[t.key]; return n }); return }
+        showToast(v>0?`Viáticos ${fmt(v)} · ${persona.nombre.split(' ')[0]} · ${t.pedido||''}`:'Viáticos en 0')
+        if(onRefresh){ await onRefresh(); setViatLocal(o=>{ const n={...o}; delete n[t.key]; return n }) }
+      }catch(e){ showToast('Error de conexión','err'); setViatLocal(o=>{ const n={...o}; delete n[t.key]; return n }) }
+    })()
+    viatEnVuelo.current.add(req); req.finally(()=>viatEnVuelo.current.delete(req))
+  }
+  const esperarViaticos=()=>Promise.all([...viatEnVuelo.current])
 
   async function togglePago(persona, t, pagado){
     const k=t.key
     // Volver atrás un pago: pedir confirmación (devuelve la plata a la cuenta).
-    if(!pagado){ if(!window.confirm(`¿Volver atrás el pago de "${t.pedido||'este trabajo'}" de ${persona.nombre.split(' ')[0]} por ${fmt(t.precio)}?\n\nVuelve a PENDIENTE y devuelve la plata a la cuenta. ¿Seguro?`)) return }
+    if(!pagado){ if(!window.confirm(`¿Volver atrás el pago de "${t.pedido||'este trabajo'}" de ${persona.nombre.split(' ')[0]} por ${fmt(t.aPagar)}?\n\nVuelve a PENDIENTE y devuelve la plata a la cuenta. ¿Seguro?`)) return }
+    else await esperarViaticos()
     setOverride(o=>({...o,[k]:pagado}))  // optimista: se tilda al instante
     try{ const j=await postPago(persona,t,pagado); if(j&&j.error){showToast(j.error,'err'); setOverride(o=>{const n={...o};delete n[k];return n}); return}
       showToast(pagado?`Pagado: ${t.pedido||''}`:'Desmarcado')
@@ -3343,8 +3417,10 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     if(!pend.length) return
     const nombre=persona.nombre.split(' ')[0]
     if(!cuentaPago){ showToast('Elegí desde qué cuenta pagás (arriba)','err'); return }
-    const conIva=conIvaDe(persona), totalPagar=conIva?Math.round(persona.totalPendiente*1.21):persona.totalPendiente
-    const detalle=conIva?`${pend.length} trabajos: neto ${fmt(persona.totalPendiente)} + IVA 21% = ${fmt(totalPagar)}`:`${pend.length} trabajos = ${fmt(persona.totalPendiente)}`
+    await esperarViaticos()
+    const conIva=conIvaDe(persona), fee=persona.pendFee, viat=persona.pendViat
+    const totalPagar=(conIva?Math.round(fee*1.21):fee)+viat
+    const detalle=`${pend.length} trabajos: ${conIva?`neto ${fmt(fee)} + IVA 21%`:fmt(fee)}${viat?` + viáticos ${fmt(viat)}`:''}${(conIva||viat)?` = ${fmt(totalPagar)}`:''}`
     if(!window.confirm(`Pagar TODO lo de ${nombre} de ${MESES_LARGO[mesIdx-1]}:\n${detalle}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
     setOverride(o=>{const n={...o}; pend.forEach(t=>n[t.key]=true); return n})
     try{
@@ -3366,11 +3442,12 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     }catch(e){ showToast('Error de conexión','err') }
   }
   const selList=Object.values(selPay)
-  const selTotal=selList.reduce((s,x)=>s+(conIvaDe(x.persona)?Math.round(x.t.precio*1.21):x.t.precio),0)
+  const selTotal=selList.reduce((s,x)=>s+(conIvaDe(x.persona)?Math.round(x.t.precio*1.21):x.t.precio)+(x.t.viaticos||0),0)
   const toggleSel=(persona,t)=>setSelPay(s=>{ const n={...s}; if(n[t.key]) delete n[t.key]; else n[t.key]={persona,t}; return n })
   async function pagarSeleccion(){
     if(!selList.length) return
     if(!cuentaPago){ showToast('Elegí desde qué cuenta pagás','err'); return }
+    await esperarViaticos()
     if(!window.confirm(`Pagar ${selList.length} trabajos = ${fmt(selTotal)}\nDesde: ${cuentaPago}\n\n¿Confirmás?`)) return
     const keys=selList.map(x=>x.t.key)
     setOverride(o=>{const n={...o}; keys.forEach(k=>n[k]=true); return n})
@@ -3383,8 +3460,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   }
   function mensajeDe(persona){
     const nombre=persona.nombre.split(' ')[0]
-    const items=persona.trabajos.filter(t=>!t.pagado).map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}`).join('\n')
-    const tot=persona.trabajos.filter(t=>!t.pagado).reduce((s,t)=>s+t.precio,0)
+    const items=persona.trabajos.filter(t=>!t.pagado).map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`).join('\n')
+    const tot=persona.trabajos.filter(t=>!t.pagado).reduce((s,t)=>s+t.precio+(t.viaticos||0),0)
     return `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${MESES_LARGO[mesIdx-1]} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   }
   function copiarDesc(persona){ navigator.clipboard?.writeText(mensajeDe(persona)); showToast('Mensaje copiado al portapapeles') }
@@ -3405,7 +3482,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   return <>
     <PageHead title="Pagos Staff" sub={`${MESES_LARGO[mesIdx-1]} ${anio} · ${lista.length} freelancers`}/>
     <div style={{display:'flex', gap:14, marginBottom:20}}>
-      <Hero label="Pendiente de pago" value={fmt(totalPend)} accent={totalPend>0?T.brand:T.pos} sub="este mes"/>
+      <Hero label="Pendiente de pago" value={fmt(totalPend)} accent={totalPend>0?T.brand:T.pos} sub={totalViatPend>0?`este mes · incl. ${fmt(totalViatPend)} de viáticos`:'este mes'}/>
       <Hero label="Ya pagado" value={fmt(totalPag)} sub="este mes" subStrong="" />
     </div>
     {/* Respuestas de freelancers a los mails de pago (lee la casilla admin@somosmagma.com) */}
@@ -3459,7 +3536,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
           <div onClick={()=>setOpen(abierto?null:persona.nombre)} style={{display:'flex', alignItems:'center', gap:14, padding:'14px 18px', cursor:'pointer'}}>
             <span style={{width:7,height:7,borderRadius:7,background:estado.c, flexShrink:0}}/>
             <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{persona.trabajos.length} trabajos · {estado.l}</div></div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}{persona.viaticos>0&&<span style={{color:T.warn}}> · {fmt(persona.viaticos)} viáticos</span>}</div></div>
             <div style={{display:'flex', gap:7, alignItems:'center', flexShrink:0}}>
               {persona.totalPendiente>0
                 ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>{conIvaDe(persona)?'Pagar todo +IVA':'Pagar todo'}</button>
@@ -3478,8 +3555,14 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
               <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
                 <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
                 <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}</div>
-                <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink}}>{fmt(t.precio)}</span>
-                <button onClick={()=>{ const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Editar montos / agregar viáticos en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
+                {/* Viáticos: un campo en cada trabajo. Si se carga se suma al pago; vacío = 0. Pagado: solo se muestra. */}
+                {t.pagado
+                  ? (t.viaticos>0 ? <span style={{fontSize:11, color:T.ink3, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
+                  : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>viáticos
+                      <input value={viatDraft[t.key]!==undefined?viatDraft[t.key]:(t.viaticos?String(t.viaticos):'')} onChange={e=>setViatDraft(d=>({...d,[t.key]:e.target.value}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" inputMode="numeric" style={{width:76, padding:'4px 7px', borderRadius:6, border:`1px solid ${t.viaticos>0?T.warn:T.border}`, background:T.surface, color:T.ink, fontSize:12, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
+                    </label>}
+                <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmt(t.precio)}{t.viaticos>0&&<span style={{fontSize:11, color:T.warn}}> +{fmt(t.viaticos)}</span>}</span>
+                <button onClick={()=>{ const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Corregir montos o agregar líneas en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
               </div>
             )})}
             {persona.totalPendiente>0 && <div style={{marginTop:10, padding:'9px 11px', borderRadius:8, background:conIvaDe(persona)?T.brandSoft:T.surface, border:`1px solid ${conIvaDe(persona)?T.brand+'40':T.border}`}}>
@@ -3487,7 +3570,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
                 <input type="checkbox" checked={conIvaDe(persona)} onChange={e=>setIvaPersona(s=>({...s,[persona.nombre]:e.target.checked}))}/>
                 Pagar con IVA (+21%) <span style={{fontWeight:400, color:T.ink3}}>— si te factura como Responsable Inscripto</span>
               </label>
-              {conIvaDe(persona) && <div style={{fontSize:12, color:T.ink2, marginTop:7, fontFamily:MONO}}>neto {fmt(persona.totalPendiente)} + IVA 21% {fmt(Math.round(persona.totalPendiente*0.21))} = <b style={{color:T.brand}}>{fmt(Math.round(persona.totalPendiente*1.21))}</b></div>}
+              {conIvaDe(persona) && <div style={{fontSize:12, color:T.ink2, marginTop:7, fontFamily:MONO}}>neto {fmt(persona.pendFee)} + IVA 21% {fmt(Math.round(persona.pendFee*0.21))}{persona.pendViat>0&&<> + viáticos {fmt(persona.pendViat)} (sin IVA)</>} = <b style={{color:T.brand}}>{fmt(Math.round(persona.pendFee*1.21)+persona.pendViat)}</b></div>}
             </div>}
             <div style={{display:'flex', justifyContent:'flex-end', gap:6, marginTop:10, flexWrap:'wrap'}}>
               <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
@@ -3505,7 +3588,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     {staffModalPS && <div onClick={()=>setStaffModalPS(null)} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
       <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:680, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content', overflow:'hidden'}}>
         <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar staff · #{staffModalPS.proy['N° presupuesto']}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Corregí montos o agregá líneas (viáticos, horas extra…)</div></div>
+          <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar staff · #{staffModalPS.proy['N° presupuesto']}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Corregí montos o agregá líneas (horas extra, otro servicio…). Los viáticos van en el campo de cada trabajo.</div></div>
           <button onClick={()=>setStaffModalPS(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
         <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
@@ -3542,14 +3625,17 @@ function Freelancers({data, nav, clearNav, onRefresh, showToast}){
   // para que coincida exacto y no se duplique con los pagos de años anteriores.
   const mesLab=fe=>{ const d=parseD(fe); return d?`${String(d.getMonth()+1).padStart(2,'0')} - ${MESES_LARGO[d.getMonth()].toLowerCase()}`:'' }
   const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
-  const paidCount={}
-  pagos.forEach(r=>{ if(!esPag(r))return; const k=canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio']); paidCount[k]=(paidCount[k]||0)+1 })
+  const paidCount={}, viatByKey={}, usedV={}
+  const keyPS=r=>canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio'])
+  pagos.forEach(r=>{ const k=keyPS(r); (viatByKey[k]=viatByKey[k]||[]).push(parseMonto(r['Viáticos']||r['Viaticos'])); if(esPag(r)) paidCount[k]=(paidCount[k]||0)+1 })
   const stats={}, usedG={}
-  proyectos.forEach(p=>{ for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
-    if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
+  proyectos.forEach(p=>{ for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr0=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
+    if(!st||/somos magma|^magma$/i.test(st)||pr0<=0) continue
     const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
-    stats[k].trabajos++; stats[k].ganado+=pr
     const pk=k+'|'+norm(mesLab(p['Fecha Evento']))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
+    // Los viáticos (columna de PAGOS_STAFF) van sumados al trabajo: también le salen a Magma.
+    const uv=usedV[pk]||0; usedV[pk]=uv+1; const pr=pr0+((viatByKey[pk]||[])[uv]||0)
+    stats[k].trabajos++; stats[k].ganado+=pr
     const cnt=paidCount[pk]||0, u=usedG[pk]||0; const pagado=u<cnt; if(pagado)usedG[pk]=u+1; else stats[k].debe+=pr
     const _d=parseD(p['Fecha Evento'])
     stats[k].items.push({fecha:p['Fecha Evento']||'', anio:_d?_d.getFullYear():'', mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, nro:p['N° presupuesto']||''})
@@ -4716,8 +4802,8 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
   const [facturarA,setFacturarA]=useState(FACTURAR_OPC.find(e=>/somos magma/i.test(e))||FACTURAR_OPC[0])
   const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
   const pend=persona.trabajos.filter(t=>!t.pagado)
-  const items=pend.map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}`).join('\n')
-  const tot=pend.reduce((s,t)=>s+t.precio,0)
+  const items=pend.map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`).join('\n')
+  const tot=pend.reduce((s,t)=>s+t.precio+(t.viaticos||0),0)
   const nombre=String(persona.nombre).split(' ')[0]
   const ent=entidades[facturarA]||{}
   const lineasFact=[`Facturá a: ${facturarA}`]

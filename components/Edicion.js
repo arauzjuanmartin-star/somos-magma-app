@@ -283,6 +283,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // #2191 → #2293: la fila vieja decía "sin material" con 50 GB ya subidos al 2293.
   const proyectos = data?.proyectos || []
   const numsVivos = useMemo(() => new Set(proyectos.map(p => String(p['N° presupuesto'] || '').trim())), [proyectos])
+  // Los links de Drive salen de PROYECTOS (los escribe la app al aprobar). La fila
+  // de EDICION tiene los suyos por pieza; si están vacíos, manda el proyecto.
+  const proyDe = useMemo(() => new Map(proyectos.map(p => [String(p['N° presupuesto'] || '').trim(), p])), [proyectos])
   const sucesorDe = g => {
     if (!numsVivos.size || numsVivos.has(String(g.num))) return null
     const k = s => norm(s).replace(/[^a-z0-9]/g, '')
@@ -418,7 +421,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
 
           {!grupos.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
-            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} {...props} />)}
+            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
         </>}
     </>}
   </div>
@@ -813,11 +816,16 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '' }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy }) {
   const peor = g.items[0].__sem
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
-  const linkCrudo = (typeof estadoDrive === 'string' && estadoDrive.startsWith('http')) ? estadoDrive : g.linkCrudo
+  const linkCrudo = (typeof estadoDrive === 'string' && estadoDrive.startsWith('http')) ? estadoDrive : (g.linkCrudo || String(proy?.['Drive Crudo'] || '').trim())
+  const linkEntrega = g.linkEntrega || String(proy?.['Drive Entrega'] || '').trim()
+  // Lo que se le manda al cliente: Finales (o Fotos en carpetas viejas), nunca la del proyecto.
+  const linkFinales = String(proy?.['Drive Finales'] || '').trim()
+  const [copiado, setCopiado] = useState(false)
+  const copiarCliente = async () => { try { await navigator.clipboard.writeText(linkFinales || linkEntrega); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch (e) {} }
   const [panel, setPanel] = useState(false)
   // "Un video más" se carga desde el proyecto, no desde un formulario suelto arriba
   // donde hay que tipear el número y después buscar dónde cayó.
@@ -837,10 +845,15 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
       {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
-      {cel ? (linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ fontSize: 15, textDecoration: 'none' }}>📁</a>)
-      : (linkCrudo || g.linkEntrega) ? <>
+      {cel ? <>
+          {linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ fontSize: 15, textDecoration: 'none' }}>📁</a>}
+          {(linkFinales || linkEntrega) && <a href={linkFinales || linkEntrega} target="_blank" rel="noreferrer" style={{ fontSize: 15, textDecoration: 'none' }}>📸</a>}
+        </>
+      : (linkCrudo || linkEntrega) ? <>
         {linkCrudo && <a href={linkCrudo} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Crudo</a>}
-        {g.linkEntrega && <a href={g.linkEntrega} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📤 Entrega</a>}
+        {linkEntrega && <a href={linkEntrega} target="_blank" rel="noreferrer" title="La carpeta del proyecto en ENTREGAS (Pre-entregas + Finales)" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📤 Entrega</a>}
+        {linkFinales && <a href={linkFinales} target="_blank" rel="noreferrer" title="Lo que se le manda al cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📸 Finales</a>}
+        {(linkFinales || linkEntrega) && <button onClick={copiarCliente} title="Copia el link de Finales (o el de entrega si no hay)" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, color: T.pos, borderColor: T.pos }}>{copiado ? '✓ Copiado' : 'Copiar para el cliente'}</button>}
         <button onClick={() => setPanel(p => !p)} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: panel ? T.ink : T.surface, color: panel ? '#fff' : T.ink2 }}>Compartir…</button>
       </> : !fantasma && <button onClick={() => carpeta(g.num, ['crudo', 'entregas'], false)} disabled={creando} title="Crea la carpeta en CRUDO y en ENTREGAS CLIENTES, con las subcarpetas de lo que se vendió" style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>{creando ? 'Creando…' : '📁 Crear carpetas'}</button>}
     </div>
