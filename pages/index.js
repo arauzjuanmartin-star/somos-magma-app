@@ -341,6 +341,7 @@ function TeamMails(){
 // ============================ DASHBOARD ============================
 function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const [verCuentas,setVerCuentas]=useState(false)
+  const [editSaldos,setEditSaldos]=useState(false)  // "Actualizar saldos" adentro de "ver cuentas"
   const [cobrando,setCobrando]=useState(null)  // cobrar directo desde el dashboard
   const [facturando,setFacturando]=useState(null)  // facturar directo desde el dashboard
   const hoy = new Date()
@@ -353,6 +354,13 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const reservasActivas = reservas.filter(r=>esActiva(r['Activa']))
   const totalReservado = reservasActivas.reduce((s,r)=>s+parseMonto(r['Monto']),0)
   const totalDisponible = totalCaja - totalReservado
+  // Los cobros/pagos de la app mueven el saldo, pero no son un chequeo contra el banco: eso es
+  // lo que registra "Hist saldos" (solo lo escribe cuenta-saldo-update). Con más de 2 días, aviso.
+  const cuentasPesos = cuentasActivas.filter(c=>!esCuentaUsd(c))
+  const chequeos = cuentasPesos.map(ultimoChequeoCuenta)
+  const ultChequeo = chequeos.length && chequeos.every(Boolean) ? new Date(Math.min(...chequeos.map(d=>d.getTime()))) : null
+  const diasChequeo = ultChequeo ? Math.floor((hoy-ultChequeo)/864e5) : null
+  const saldosViejos = diasChequeo==null || diasChequeo>2
 
   // --- Por cobrar ---
   const porCobrar = fc.filter(f=>!isCobrada(f)).map(f=>{
@@ -529,8 +537,8 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
     <div style={{display:'flex', gap:14}}>
       <div style={{flex:1, cursor:'pointer'}} onClick={()=>setVerCuentas(v=>!v)} title="Ver detalle por cuenta">
         <Hero label="Disponible real"
-          value={fmt(totalDisponible)}
-          sub={`En caja ${fmt(totalCaja)} · reservado ${fmt(totalReservado)} · `} subStrong={verCuentas?'ocultar ▲':'ver cuentas ▼'} subStrongColor={T.ink3}/>
+          value={fmtS(totalDisponible)}
+          sub={`En caja ${fmtS(totalCaja)} · reservado ${fmt(totalReservado)} · `} subStrong={verCuentas?'ocultar ▲':saldosViejos?(diasChequeo==null?'saldos sin chequear ▼':`saldos de hace ${diasChequeo} días ▼`):'ver cuentas ▼'} subStrongColor={!verCuentas&&saldosViejos?T.warn:T.ink3}/>
       </div>
       <div style={{flex:1, cursor:'pointer'}} onClick={()=>goTo&&goTo('facturacion', atrasadas30.length>0?'atrasadas':undefined)}>
         <Hero label="Por cobrar"
@@ -547,19 +555,32 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
       </div>
     </div>
     {verCuentas && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'14px 18px', marginTop:12}}>
-      <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, marginBottom:10}}>Plata por cuenta</div>
-      {cuentasActivas.map((c,i)=>{ const saldo=parseMonto(c['Saldo actual']); const usd=parseMonto(c['Saldo USD']); return (
-        <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
-          <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div>{c['Banco']&&<div style={{fontSize:11, color:T.ink3}}>{c['Banco']}</div>}</div>
-          <div style={{textAlign:'right'}}><div style={{fontSize:13.5, fontFamily:MONO, color:T.ink}}>{fmt(saldo)}</div>{usd>0&&<div style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>USD {fmt(usd)}</div>}</div>
-        </div>
-      )})}
-      <div style={{display:'flex', justifyContent:'space-between', padding:'10px 0 0', marginTop:6, borderTop:`1px solid ${T.border}`}}>
-        <span style={{fontSize:12.5, color:T.ink2}}>En caja</span><span style={{fontSize:13.5, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmt(totalCaja)}</span>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+        <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3}}>Plata por cuenta</div>
+        {!editSaldos && <button style={{...miniBtn, ...(saldosViejos?{borderColor:T.warn, color:T.warn}:{})}} onClick={()=>setEditSaldos(true)}>Actualizar saldos</button>}
       </div>
-      {totalReservado>0 && <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.warn}}>Reservado (IVA/imp.)</span><span style={{fontSize:13, fontFamily:MONO, color:T.warn}}>-{fmt(totalReservado)}</span></div>}
-      <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.ink2, fontWeight:600}}>Disponible real</span><span style={{fontSize:14, fontFamily:MONO, fontWeight:700, color:T.pos}}>{fmt(totalDisponible)}</span></div>
-      <div style={{fontSize:11, color:T.ink3, marginTop:8}}>Los saldos se cargan manual en la solapa CUENTAS del sheet. Mañana los actualizás.</div>
+      {editSaldos
+        ? <SaldosEditor cuentas={cuentasActivas} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/>
+        : <>
+          {cuentasActivas.filter(c=>!esCuentaUsd(c) || parseMonto(c['Saldo USD'])>0).map((c,i)=>{ const saldo=parseMonto(c['Saldo actual']); const usd=parseMonto(c['Saldo USD']); const chq=ultimoChequeoCuenta(c); const enUsd=esCuentaUsd(c); return (
+            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
+              <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div><div style={{fontSize:11, color:T.ink3}}>{[c['Banco']&&c['Banco']!=='—'?c['Banco']:null, enUsd?null:chq?`chequeado ${chq.getDate()}/${chq.getMonth()+1}`:'nunca chequeado'].filter(Boolean).join(' · ')}</div></div>
+              <div style={{textAlign:'right'}}>{enUsd
+                ? <div style={{fontSize:13.5, fontFamily:MONO, color:T.ink}}>USD {fmt(usd)}</div>
+                : <><div style={{fontSize:13.5, fontFamily:MONO, color:saldo<0?T.brand:T.ink}}>{fmtS(saldo)}</div>{usd>0&&<div style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>USD {fmt(usd)}</div>}</>}</div>
+            </div>
+          )})}
+          <div style={{display:'flex', justifyContent:'space-between', padding:'10px 0 0', marginTop:6, borderTop:`1px solid ${T.border}`}}>
+            <span style={{fontSize:12.5, color:T.ink2}}>En caja</span><span style={{fontSize:13.5, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmtS(totalCaja)}</span>
+          </div>
+          {totalReservado>0 && <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.warn}}>Reservado (IVA/imp.)</span><span style={{fontSize:13, fontFamily:MONO, color:T.warn}}>-{fmt(totalReservado)}</span></div>}
+          <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.ink2, fontWeight:600}}>Disponible real</span><span style={{fontSize:14, fontFamily:MONO, fontWeight:700, color:totalDisponible<0?T.brand:T.pos}}>{fmtS(totalDisponible)}</span></div>
+          <div style={{fontSize:11, color:saldosViejos?T.warn:T.ink3, marginTop:8}}>{diasChequeo==null
+            ? 'Hay cuentas que nunca se chequearon contra el banco. Mirá el home banking y cargá los saldos con "Actualizar saldos".'
+            : saldosViejos
+              ? `Último chequeo contra el banco hace ${diasChequeo} días. Los cobros y pagos de la app lo van moviendo, pero el banco es el que manda: actualizalo.`
+              : `Chequeado contra el banco ${diasChequeo===0?'hoy':'ayer'}. Cada cobro o pago que cargás en la app lo va moviendo solo.`}</div>
+        </>}
     </div>}
 
     {/* ESTE MES */}
@@ -684,6 +705,60 @@ const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:
 // "nos equivocamos" a propósito: si suena a culpa nadie lo tilda y el dato se pierde.
 const MOTIVOS_DESAPROBADO = ['Precio alto','No contestaron','No lo seguimos a tiempo','Eligió otra productora','Se suspendió el evento','Fecha no disponible','Lo hizo in-house']
 const MOTIVOS_REPRESUPUESTADO = ['Error en la cotización','El cliente cambió el pedido','El cliente pidió bajar el precio','Cambió la fecha','Cambió la comisión','Duplicado']
+// ── Saldos de CUENTAS ──────────────────────────────────────────────────────
+// Cuenta en dólares: el saldo vive en "Saldo USD" (la col "Saldo actual" queda en 0 para no ensuciar la caja).
+const esCuentaUsd = c => /d[oó]lar|usd/i.test(String(c?.['Tipo']||''))
+// Última vez que alguien cargó el saldo mirando el banco = última línea de "Hist saldos"
+// (solo la escribe cuenta-saldo-update; los cobros/pagos automáticos no la tocan).
+const ultimoChequeoCuenta = c => { const lineas=String(c?.['Hist saldos']||'').trim().split('\n').filter(Boolean); const m=(lineas[lineas.length-1]||'').match(/^(\d{1,2}\/\d{1,2}\/\d{4})/); return m?parseD(m[1]):null }
+
+// Editor de saldos del Dashboard: un input por cuenta activa, lo que ves en el home banking tal cual.
+// Escribe CUENTAS (Saldo actual / Saldo USD + fecha + Hist saldos) vía cuenta-saldo-update, solo lo que cambió.
+// Vive a nivel módulo: si se define adentro de Dashboard, los inputs pierden el foco a cada tecla.
+function SaldosEditor({cuentas, onClose, onSaved, showToast}){
+  const [vals,setVals]=useState(()=>Object.fromEntries(cuentas.map(c=>[c['Nombre'], numAMontoAR(esCuentaUsd(c)?parseMonto(c['Saldo USD']):parseMonto(c['Saldo actual']))])))
+  const [saving,setSaving]=useState(false)
+  const actualDe = c => esCuentaUsd(c)?parseMonto(c['Saldo USD']):parseMonto(c['Saldo actual'])
+  const cambiados = cuentas.filter(c=>Math.abs(parseMontoAR(vals[c['Nombre']])-actualDe(c))>=0.005)
+  const totalPesos = cuentas.filter(c=>!esCuentaUsd(c)).reduce((s,c)=>s+parseMontoAR(vals[c['Nombre']]),0)
+  const guardar=async()=>{
+    if(cambiados.length===0){ showToast('No cambiaste ningún saldo'); onClose(); return }
+    setSaving(true)
+    let ok=0, err=0
+    for(const c of cambiados){
+      const nuevo=parseMontoAR(vals[c['Nombre']])
+      const body=esCuentaUsd(c)?{nombre:c['Nombre'], saldoUsd:nuevo}:{nombre:c['Nombre'], saldoArs:nuevo}
+      try{
+        const r=await fetch('/api/cuenta-saldo-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        const j=await r.json()
+        if(j.ok) ok++; else { err++; showToast(`${c['Nombre']}: ${j.error||'error'}`,'err') }
+      }catch(e){ err++; showToast(`${c['Nombre']}: error de conexión`,'err') }
+    }
+    setSaving(false)
+    if(ok>0) showToast(ok===1?'1 saldo actualizado en CUENTAS':`${ok} saldos actualizados en CUENTAS`)
+    if(err===0) onSaved()
+  }
+  return <div>
+    {cuentas.map((c,i)=>{ const enUsd=esCuentaUsd(c); return (
+      <div key={c['Nombre']} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'6px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
+        <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div><div style={{fontSize:11, color:T.ink3}}>en la app: {enUsd?'USD '+fmt(actualDe(c)):fmtS(actualDe(c))}</div></div>
+        <div style={{display:'flex', alignItems:'center', gap:6}}>
+          <span style={{fontSize:12, color:T.ink3, fontFamily:MONO}}>{enUsd?'USD':'$'}</span>
+          <MontoInput value={vals[c['Nombre']]} onChange={v=>setVals(s=>({...s,[c['Nombre']]:v}))} disabled={saving} placeholder="0" style={{...inpV2, width:150, textAlign:'right', fontFamily:MONO}}/>
+        </div>
+      </div>
+    )})}
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
+      <span style={{fontSize:12.5, color:T.ink2}}>En caja quedaría <b style={{fontFamily:MONO, color:T.ink}}>{fmtS(totalPesos)}</b>{cambiados.length>0&&<span style={{color:T.ink3}}> · {cambiados.length} {cambiados.length===1?'cuenta cambia':'cuentas cambian'}</span>}</span>
+      <div style={{display:'flex', gap:8}}>
+        <button style={miniBtn} onClick={onClose} disabled={saving}>Cancelar</button>
+        <button style={{...miniBtn, background:T.brand, color:'#fff', border:'none', fontWeight:600, opacity:saving?0.6:1}} onClick={guardar} disabled={saving}>{saving?'Guardando…':'Guardar saldos'}</button>
+      </div>
+    </div>
+    <div style={{fontSize:11, color:T.ink3, marginTop:8}}>Copiá el saldo del home banking tal cual. Queda en la solapa CUENTAS con fecha, quién lo cargó y el historial.</div>
+  </div>
+}
+
 function MotivoEstadoModal({num, estado, saving, onClose, onConfirm}){
   const [motivo,setMotivo]=useState('')
   const esDes = estado==='DESAPROBADO'
