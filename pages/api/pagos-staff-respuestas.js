@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   let freelPorMail = {}, psRows = []
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['RRHH!A:D', 'PAGOS_STAFF!A:N'] })
+    const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['RRHH!A:D', 'PAGOS_STAFF!A:Z'] })
     const rrhh = b.data.valueRanges?.[0]?.values || []
     const h = rrhh[0] || []
     const iNom = h.indexOf('Nombre Apellido'), iMail = h.indexOf('Mail')

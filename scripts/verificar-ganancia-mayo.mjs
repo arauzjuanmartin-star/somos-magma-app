@@ -14,7 +14,7 @@ const fmt = n => Math.round(n).toLocaleString('es-AR')
 
 const [proyR, psR] = await Promise.all([
   sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PROYECTOS!A:CZ'}),
-  sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:L'}),
+  sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:Z'}),
 ])
 
 const proyHeaders = proyR.data.values[0]
@@ -40,11 +40,12 @@ proyHeaders.forEach((h,i) => {
 
 // Pagos_Staff por N° presupuesto
 const psPorPresu = {}
+const psH = psR.data.values[0]||[], pI = n => psH.indexOf(n)
 psR.data.values.slice(1).forEach(row => {
-  const nro = String(row[3]||'').trim()
+  const nro = String(row[pI('N° Presupuesto')]||'').trim()
   if (!nro) return
   if (!psPorPresu[nro]) psPorPresu[nro] = []
-  psPorPresu[nro].push({ freelancer: row[1]||'', servicio: row[5]||'', adeudado: parseMonto(row[6]), pagado: parseMonto(row[7]) })
+  psPorPresu[nro].push({ freelancer: row[pI('Freelancer')]||'', servicio: row[pI('Servicio')]||'', adeudado: parseMonto(row[pI('Monto Adeudado')]), pagado: parseMonto(row[pI('Monto Pagado')]) })
 })
 
 const mayo = rawProys.filter(row => /\/5\/2026|\/05\/2026/.test(row[idxFE]||''))

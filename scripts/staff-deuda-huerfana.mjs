@@ -40,7 +40,7 @@ const norm  = s => String(s||'').trim().toLowerCase()
 const pedido = s => norm(String(s||'').replace(/^[^\p{L}\p{N}]+/u,''))
 
 const b = await sheets.spreadsheets.values.batchGet({
-  spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:N','PROYECTOS!A:ET','PRESUPUESTOS!A:J'],
+  spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:Z','PROYECTOS!A:ET','PRESUPUESTOS!A:J'],
 })
 const [pv, yv, sv] = b.data.valueRanges.map(v => v.values||[])
 const hP = pv[0], hY = yv[0], hS = sv[0]

@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     const fechaEvento = projRow[headers.indexOf('Fecha Evento')] || ''
     const mesRef = mesDeFecha(fechaEvento)
 
-    const ps = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
+    const ps = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:Z' })
     const psRows = ps.data.values || []
     const psHeaders = psRows[0] || []
     const psIdx = {
@@ -169,7 +169,8 @@ export default async function handler(req, res) {
     // Las nuevas (target que no estaban en existentes)
     target.forEach((t,ti) => {
       if (consumidas.has(ti)) return
-      const row = new Array(12).fill('')
+      // Del ancho del header real: si hay columnas nuevas en el medio (Viáticos), no se pisan.
+      const row = new Array(Math.max(psHeaders.length, 12)).fill('')
       row[psIdx.fechaPago] = ''
       row[psIdx.freelancer] = t.freelancer
       row[psIdx.mesRef] = mesRef
@@ -194,7 +195,7 @@ export default async function handler(req, res) {
     if (psNuevas.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: 'PAGOS_STAFF!A:L',
+        range: 'PAGOS_STAFF!A:Z',
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: psNuevas }

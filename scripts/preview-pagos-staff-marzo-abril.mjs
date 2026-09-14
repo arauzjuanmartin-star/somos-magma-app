@@ -12,23 +12,24 @@ const SHEET_ID='1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 const auth = new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets']})
 const sheets = google.sheets({version:'v4',auth})
 
-const r = await sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:L'})
+const r = await sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:Z'})
 const headers = r.data.values[0]
 console.log('Headers PAGOS_STAFF:', headers.join(' | '))
+const hi = n => headers.indexOf(n)   // por nombre: si corren una columna no se desalinea
 const rows = r.data.values.slice(1).map((row,i) => ({
   fila: i+2,
-  fechaPago: row[0]||'',
-  freelancer: row[1]||'',
-  mesRef: row[2]||'',
-  nro: row[3]||'',
-  proyecto: row[4]||'',
-  servicio: row[5]||'',
-  adeudado: row[6]||'',
-  pagado: row[7]||'',
-  tipo: row[8]||'',
-  cuenta: row[9]||'',
-  estado: row[10]||'',
-  notas: row[11]||'',
+  fechaPago: row[hi('Fecha Pago')]||'',
+  freelancer: row[hi('Freelancer')]||'',
+  mesRef: row[hi('Mes Referencia')]||'',
+  nro: row[hi('N° Presupuesto')]||'',
+  proyecto: row[hi('Proyecto')]||'',
+  servicio: row[hi('Servicio')]||'',
+  adeudado: row[hi('Monto Adeudado')]||'',
+  pagado: row[hi('Monto Pagado')]||'',
+  tipo: row[hi('Tipo')]||'',
+  cuenta: row[hi('Cuenta')]||'',
+  estado: row[hi('Estado')]||'',
+  notas: row[hi('Notas')]||'',
 }))
 
 const parseMonto = v => { const s=String(v||'').replace(/[\s$]/g,''); if(s.includes(',')&&s.includes('.'))return s.lastIndexOf(',')>s.lastIndexOf('.')?Number(s.replace(/\./g,'').replace(',','.'))||0:Number(s.replace(/,/g,''))||0; if(s.includes(','))return Number(s.replace(',','.'))||0; return Number(s)||0 }

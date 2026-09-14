@@ -46,7 +46,7 @@ const plata = n => '$' + Math.round(n).toLocaleString('es-AR')
 const norm  = s => String(s||'').trim().toLowerCase()
 const col   = i => { let s=''; i++; while(i>0){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26) } return s }
 
-const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range:'Pagos_Staff!A:N' })
+const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range:'Pagos_Staff!A:Z' })
 const pv = r.data.values, hP = pv[0]
 const cCuenta = hP.indexOf('Cuenta')
 

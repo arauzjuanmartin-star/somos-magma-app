@@ -93,7 +93,7 @@ pyF.forEach((r,i)=>{if(i===0)return;const n=String(r[yfN]||'').trim();const pe=p
 if(!desync) ok('Todas las fechas de evento coinciden entre solapas')
 
 // 6) PAGOS_STAFF
-const ps=await g('PAGOS_STAFF!A:N')
+const ps=await g('PAGOS_STAFF!A:Z')
 const psh=ps[0]
 const sF=psh.indexOf('Freelancer'),sMe=psh.indexOf('Mes Referencia'),sNr=psh.indexOf('N° Presupuesto'),sSv=psh.indexOf('Servicio'),sEs=psh.indexOf('Estado'),sMp=psh.indexOf('Monto Pagado')
 const esPag=r=>{const e=String(r[sEs]||'').toUpperCase();return['PAGADO','SÍ','SI','TRUE'].includes(e)||num(r[sMp])>0}

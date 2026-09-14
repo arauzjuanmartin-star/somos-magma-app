@@ -19,7 +19,7 @@ async function renombrarEnReferencias(sheets, SHEET_ID, nombreOriginal, nombreNu
     if (updP.length) { await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data: updP } }); total += updP.length }
   } catch (e) { console.error('rename PROYECTOS:', e.message) }
   try {
-    const rPS = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
+    const rPS = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:Z' })
     const psRows = rPS.data.values || [], psH = psRows[0] || []
     const iFre = psH.indexOf('Freelancer') !== -1 ? psH.indexOf('Freelancer') : 1
     const updPS = []

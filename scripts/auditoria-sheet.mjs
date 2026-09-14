@@ -27,7 +27,7 @@ const RANGES = [
   'PROYECTOS!A:AQ',
   'FACTURACION!A:AG',
   'COBROS!A:L',
-  'PAGOS_STAFF!A:L',
+  'PAGOS_STAFF!A:Z',
 ]
 const results = await Promise.all(RANGES.map(r =>
   sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: r })

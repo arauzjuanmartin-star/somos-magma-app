@@ -42,7 +42,7 @@ const numUS = v => { const n = parseFloat(String(v||'').replace(/[$\s,]/g,'')); 
 const plata = n => '$' + Math.round(n).toLocaleString('es-AR')
 const norm  = s => String(s||'').trim().toLowerCase()
 
-const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:N','RRHH!A:Z','PROYECTOS!A:ET'] })
+const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:Z','RRHH!A:Z','PROYECTOS!A:ET'] })
 const [pv, rv, yv] = b.data.valueRanges.map(v => v.values||[])
 const hP = pv[0], hR = rv[0]
 

@@ -21,9 +21,11 @@ async function ajustarCuenta(sheets, SHEET_ID, nombreCuenta, delta) {
   } catch (e) { console.error('ajustarCuenta:', e.message) }
 }
 
-// Esquema REAL de PAGOS_STAFF (2026):
-// A Fecha Pago | B Freelancer | C Mes Referencia | D N° Presupuesto | E Proyecto
-// F Servicio | G Monto Adeudado | H Monto Pagado | I Tipo | J Cuenta | K Estado | L Notas
+// Esquema REAL de PAGOS_STAFF (desde 09/2026, con Viáticos en H):
+// A Fecha Pago | B Freelancer | C Mes Referencia | D N° Presupuesto | E Proyecto | F Servicio
+// G Monto Adeudado | H Viáticos | I Monto Pagado | J Tipo | K Cuenta | L Estado | M Notas | N Mail Enviado | O Factura | P Período
+// Todo se busca por nombre de header: si alguien corre una columna, esto sigue andando.
+// "monto" ya viene con IVA (si aplica) y con los viáticos sumados: es lo que sale de la cuenta.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -31,12 +33,12 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { mes, persona, nroProyecto, proyecto, pedido, monto, montoAdeudado, fechaEvento, agencia, pagado, cuenta, fechaPago, observacion } = req.body || {}
+  const { mes, persona, nroProyecto, proyecto, pedido, monto, montoAdeudado, viaticos, fechaEvento, agencia, pagado, cuenta, fechaPago, observacion } = req.body || {}
   if (!mes || !persona) return res.status(400).json({ error: 'Faltan mes o persona' })
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:L' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:Z' })
     const rows = r.data.values || []
     const headers = rows[0] || []
     // Detectar columnas por nombre real (con fallback a posición fija del esquema 2026)
@@ -53,6 +55,7 @@ export default async function handler(req, res) {
     const iCuenta    = find(['Cuenta','Cuenta pago'], 9)
     const iEstado    = find(['Estado','Pagado'], 10)
     const iNotas     = find(['Notas','Observación'], 11)
+    const iViaticos  = find(['Viáticos','Viaticos'], -1)   // -1 = la columna todavía no existe
 
     const eq = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase()
     const PAG = v => ['PAGADO','SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
@@ -85,11 +88,13 @@ export default async function handler(req, res) {
       ]
       if (cuenta !== undefined)      updates.push({ range: `PAGOS_STAFF!${colLetra(iCuenta)}${sheetRow}`, values: [[cuenta||'']] })
       if (observacion !== undefined) updates.push({ range: `PAGOS_STAFF!${colLetra(iNotas)}${sheetRow}`,  values: [[observacion||'']] })
+      // Los viáticos quedan escritos con el pago (vacío = 0). Al desmarcar no se tocan.
+      if (pagado && viaticos !== undefined && iViaticos >= 0) updates.push({ range: `PAGOS_STAFF!${colLetra(iViaticos)}${sheetRow}`, values: [[Number(viaticos)||'']] })
       await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: updates } })
     } else {
       // No existe: si se está DESMARCANDO algo inexistente, no escribir nada.
       if (!pagado) return res.json({ ok: true, noop: true })
-      const maxCol = Math.max(iFechaPago,iPersona,iMes,iNro,iProy,iPedido,iAdeudado,iPagado$,iTipo,iCuenta,iEstado,iNotas) + 1
+      const maxCol = Math.max(iFechaPago,iPersona,iMes,iNro,iProy,iPedido,iAdeudado,iPagado$,iTipo,iCuenta,iEstado,iNotas,iViaticos) + 1
       const newRow = new Array(maxCol).fill('')
       newRow[iFechaPago] = fechaStr
       newRow[iPersona]   = persona
@@ -98,14 +103,15 @@ export default async function handler(req, res) {
       if (proyecto)    newRow[iProy] = proyecto
       if (pedido)      newRow[iPedido] = pedido
       newRow[iAdeudado]  = Number(montoAdeudado) || montoN  // neto (costo); si no viene, = pagado
-      newRow[iPagado$]   = montoN                            // lo pagado (bruto con IVA si aplica)
+      newRow[iPagado$]   = montoN                            // lo pagado (bruto con IVA si aplica, + viáticos)
+      if (iViaticos >= 0) newRow[iViaticos] = Number(viaticos) || ''
       newRow[iTipo]      = 'Total'
       newRow[iCuenta]    = cuenta || ''
       newRow[iEstado]    = estado
       if (observacion)   newRow[iNotas] = observacion
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: 'PAGOS_STAFF!A:L',
+        range: 'PAGOS_STAFF!A:Z',
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [newRow] },
       })
@@ -120,7 +126,7 @@ export default async function handler(req, res) {
         spreadsheetId: SHEET_ID,
         range: 'LOG!A:F',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, pagado?'pago-trabajo-pagado':'pago-trabajo-desmarcado', 'PAGOS_STAFF', `${mes} ${persona} #${nroProyecto||'?'} ${pedido||''}`, `cuenta=${cuenta||cuentaPrevia||'-'} monto=${monto||'-'}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, pagado?'pago-trabajo-pagado':'pago-trabajo-desmarcado', 'PAGOS_STAFF', `${mes} ${persona} #${nroProyecto||'?'} ${pedido||''}`, `cuenta=${cuenta||cuentaPrevia||'-'} monto=${monto||'-'} viaticos=${viaticos||0}`]] },
       })
     } catch (e) {}
 

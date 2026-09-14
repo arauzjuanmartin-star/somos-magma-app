@@ -64,7 +64,7 @@ const norm = s => String(s||'').trim().toLowerCase()
 
 // ---------------------------------------------------------------- datos
 const b = await sheets.spreadsheets.values.batchGet({
-  spreadsheetId: SHEET_ID, ranges:['RRHH!A:Z','Pagos_Staff!A:N','PROYECTOS!A:ET','ACUERDOS!A:U','TARIFAS!A:E'],
+  spreadsheetId: SHEET_ID, ranges:['RRHH!A:Z','Pagos_Staff!A:Z','PROYECTOS!A:ET','ACUERDOS!A:U','TARIFAS!A:E'],
 })
 const [rrhh, pagos, proy, acu, tar] = b.data.valueRanges.map(v => v.values||[])
 const hR = rrhh[0], hP = pagos[0], hY = proy[0], hA = acu[0] || []

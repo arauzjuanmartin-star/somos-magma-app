@@ -25,7 +25,7 @@ const num=v=>{const s=txt(v).replace(/[^\d.-]/g,'');const n=parseFloat(s);return
 const M=n=>'$'+Math.round(n).toLocaleString('es-AR')
 const colLetra=c=>{let s='',n=c+1;while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26)}return s}
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['PROYECTOS!A:CZ','Pagos_Staff!A:K'],valueRenderOption:'FORMATTED_VALUE'})
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['PROYECTOS!A:CZ','Pagos_Staff!A:Z'],valueRenderOption:'FORMATTED_VALUE'})
 const [PRO,PS]=R.data.valueRanges.map(v=>v.values||[])
 const H=PRO[0]
 const fila=PRO.findIndex((r,i)=>i>0&&txt(r[2])===NRO)
@@ -38,9 +38,10 @@ if(hayQueCrear) iCol=H.length          // se agrega al final
 
 console.log(`\n\x1b[1m■ #${NRO} · ${txt(r[4])} · ${txt(r[6])}\x1b[0m`)
 console.log(`   fecha ${txt(r[3])} · total ${M(num(r[7]))}`)
-const pagos=PS.slice(1).filter(x=>txt(x[3])===NRO)
+const PH=PS[0]||[], pN=PH.indexOf('N° Presupuesto'), pF=PH.indexOf('Freelancer'), pA=PH.indexOf('Monto Adeudado'), pP=PH.indexOf('Monto Pagado'), pE=PH.indexOf('Estado')
+const pagos=PS.slice(1).filter(x=>txt(x[pN])===NRO)
 if(pagos.length){ console.log(`\n   Pagos al staff que quedan como están:`)
-  pagos.forEach(x=>console.log(`      ${txt(x[1]).padEnd(24)}${M(num(x[7])||num(x[6])).padStart(12)}   ${txt(x[10])}`)) }
+  pagos.forEach(x=>console.log(`      ${txt(x[pF]).padEnd(24)}${M(num(x[pP])||num(x[pA])).padStart(12)}   ${txt(x[pE])}`)) }
 console.log(`\n   ${hayQueCrear?`\x1b[33mSe crea la columna "${COL}"\x1b[0m en PROYECTOS (${colLetra(iCol)})`:`Columna "${COL}" ya existe (${colLetra(iCol)})`}`)
 console.log(`   Se escribe en ${colLetra(iCol)}${fila+1}: \x1b[32m"${MOTIVO}"\x1b[0m`)
 console.log(`\n   El proyecto y el pago NO se borran. Solo deja de figurar entre los pendientes`)

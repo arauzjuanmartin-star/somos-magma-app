@@ -59,6 +59,10 @@ const C_FAC=buscaPer(FH)===-1?FH.length:buscaPer(FH)
 const C_PS =buscaPer(PH)===-1?PH.length:buscaPer(PH)
 const C_PRO=buscaPer(RH)===-1?RH.length:buscaPer(RH)
 const LF=col(C_FAC), LP=col(C_PS), LR=col(C_PRO)
+// Monto Adeudado / Monto Pagado por nombre: desde 09/2026 hay una columna "Viáticos" entre las dos.
+const C_ADE=PH.findIndex(h=>txt(h).toLowerCase()==='monto adeudado'), C_PAG=PH.findIndex(h=>txt(h).toLowerCase()==='monto pagado')
+if(C_ADE===-1||C_PAG===-1){ console.error('Pagos_Staff: no encuentro "Monto Adeudado" / "Monto Pagado". Freno.'); process.exit(1) }
+const LADE=col(C_ADE), LPAG=col(C_PAG)
 const N_FAC=Math.max(FACh.properties.gridProperties.rowCount, fK.length+40)
 const N_PS =Math.max(PSh.properties.gridProperties.rowCount, pG.length+60)
 const N_PRO=Math.max(PROh.properties.gridProperties.rowCount, rHH.length+40)
@@ -129,11 +133,11 @@ for(let m=1;m<=12;m++){
     `=SUMIFS(FACTURACION!$K:$K,${F},$B${r},FACTURACION!$E:$E,TRUE)`,
     `=$D${r}-$G${r}`,
     `=SUMIFS(PROYECTOS!$H:$H,${PR},$B${r})`,
-    `=SUMIFS(Pagos_Staff!$G:$G,${P},$B${r})`,
-    SOCIOS.map(s=>`SUMIFS(Pagos_Staff!$G:$G,${P},$B${r},Pagos_Staff!$B:$B,"${s}")`).join('+').replace(/^/,'='),
+    `=SUMIFS(Pagos_Staff!${LADE}:${LADE},${P},$B${r})`,
+    SOCIOS.map(s=>`SUMIFS(Pagos_Staff!${LADE}:${LADE},${P},$B${r},Pagos_Staff!$B:$B,"${s}")`).join('+').replace(/^/,'='),
     `=$J${r}-$K${r}`,
     `=IFERROR(IF($I${r}=0,"",$J${r}/$I${r}),"")`,
-    `=SUMIFS(Pagos_Staff!$H:$H,${P},$B${r})`,
+    `=SUMIFS(Pagos_Staff!${LPAG}:${LPAG},${P},$B${r})`,
     `=$J${r}-$N${r}`])
 }
 filas.push(['TOTAL '+ANIO,'','=SUM(C5:C16)','=SUM(D5:D16)','=SUM(E5:E16)','=SUM(F5:F16)','=SUM(G5:G16)','=SUM(H5:H16)','=SUM(I5:I16)','=SUM(J5:J16)','=SUM(K5:K16)','=SUM(L5:L16)','=IFERROR(IF($I$17=0,"",$J$17/$I$17),"")','=SUM(N5:N16)','=SUM(O5:O16)'])

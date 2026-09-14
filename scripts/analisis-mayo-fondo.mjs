@@ -14,7 +14,7 @@ const fmt = n => Math.round(n).toLocaleString('es-AR')
 
 const [proyR, psR, facR] = await Promise.all([
   sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PROYECTOS!A:CZ'}),
-  sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:L'}),
+  sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'PAGOS_STAFF!A:Z'}),
   sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:'FACTURACION!A:AG'}),
 ])
 
@@ -39,12 +39,13 @@ const mayo = proyR.data.values.slice(1).filter(r=>/\/5\/2026|\/05\/2026/.test(r[
 
 // Pagos staff de mayo por proyecto
 const psPorPresu = {}
+const psH = psR.data.values[0]||[], pI = n => psH.indexOf(n)
 psR.data.values.slice(1).forEach(r => {
-  const nro=String(r[3]||'').trim()
+  const nro=String(r[pI('N° Presupuesto')]||'').trim()
   if (!nro) return
   if (!psPorPresu[nro]) psPorPresu[nro] = {adeudado:0, pagado:0, items:0}
-  psPorPresu[nro].adeudado += parseMonto(r[6])
-  psPorPresu[nro].pagado += parseMonto(r[7])
+  psPorPresu[nro].adeudado += parseMonto(r[pI('Monto Adeudado')])
+  psPorPresu[nro].pagado += parseMonto(r[pI('Monto Pagado')])
   psPorPresu[nro].items++
 })
 

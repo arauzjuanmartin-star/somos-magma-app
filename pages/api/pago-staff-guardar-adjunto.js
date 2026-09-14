@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     const link = fileRes.data.webViewLink
 
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:N' }))
+    const r = await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:Z' }))
     const rows = r.data.values || [], H = rows[0] || []
     const norm = v => String(v || '').trim().toLowerCase()
     const iFre = H.indexOf('Freelancer') !== -1 ? H.indexOf('Freelancer') : 1

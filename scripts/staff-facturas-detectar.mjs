@@ -37,7 +37,7 @@ const numUS = v => { const n = parseFloat(String(v||'').replace(/[$\s,]/g,'')); 
 const plata = n => '$' + Math.round(n).toLocaleString('es-AR')
 const norm  = s => String(s||'').trim().toLowerCase()
 
-const bb = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:N','RRHH!A:Z'] })
+const bb = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges:['Pagos_Staff!A:Z','RRHH!A:Z'] })
 const [pv, rv] = bb.data.valueRanges.map(v => v.values||[])
 const hP = pv[0], hR = rv[0]
 const cFactura = hP.indexOf('Factura')
