@@ -2793,13 +2793,13 @@ function msgUpload(j, base='PDF subido ✓'){
     {filt!=='sinfacturar' && filt!=='futuros' && (<>
     {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 275px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Neto</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
+      <div style={{display:'grid', gridTemplateColumns:'90px 1.2fr 105px 150px 340px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
       {filtrada.slice(0,200).map((f,i)=>{
         const e=estF(f), info=ESTF[e], num=f['N° Presupuesto'], d=diffVenc(f)
-        return <div key={i} style={{display:'grid', gridTemplateColumns:'90px 1.2fr 90px 150px 275px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        return <div key={i} style={{display:'grid', gridTemplateColumns:'90px 1.2fr 105px 150px 340px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(evDe(f)); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
             <span style={{fontSize:9.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
@@ -2808,7 +2808,15 @@ function msgUpload(j, base='PDF subido ✓'){
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
             <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
           </span>
-          <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(f['Precio SIN IVA']))}</span>
+          {/* Total CON IVA en grande: es el número que Flor cruza contra lo que entra al banco.
+              El neto va chico abajo, solo si la factura lleva IVA. Antes la columna mostraba el
+              neto y no coincidía con ninguna transferencia. */}
+          {(()=>{ const tot=parseMonto(f['Precio FINAL']), net=parseMonto(f['Precio SIN IVA']), ivaF=parseMonto(f['IVA']), cob=parseMonto(f['Monto cobrado'])
+            return <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:1, minWidth:0}}>
+              <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink, fontWeight:600}} title={ivaF>0?'Total con IVA':'Total (sin IVA)'}>{fmt(tot||net)}</span>
+              {ivaF>0 && tot>0 && <span style={{fontSize:10, color:T.ink3, fontFamily:MONO}}>neto {fmt(net)}</span>}
+              {cob>0 && !isCobrada(f) && <span style={{fontSize:10, color:T.warn, fontFamily:MONO, fontWeight:600}}>falta {fmt(saldoF(f))}</span>}
+            </span> })()}
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
             <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
             {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:11, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
@@ -2819,6 +2827,9 @@ function msgUpload(j, base='PDF subido ✓'){
           </span>
           <span style={{display:'flex', gap:5, justifyContent:'flex-end'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
+            {/* Reclamar desde la fila: abre el reclamo de cuenta de ese cliente con ESTA factura ya tildada
+                (más lo vencido que tenga). Antes había que ir al botón de arriba y buscar el cliente. */}
+            {!isCobrada(f) && <button onClick={()=>setReclamo({agencia:String(f['Agencia']||f['Cliente']||'').trim(), fila:f.__row, nro:String(num||'').trim()})} style={{...miniBtn, padding:'6px 9px', ...(['vencida','reclamar'].includes(e)?{color:T.brand, borderColor:`${T.brand}66`, fontWeight:600}:{})}} title="Reclamar esta factura por mail (junto con lo demás que deba este cliente)">Reclamar</button>}
             <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar factura por mail (desde la app)">✉</button>
             <button onClick={()=>setEditarFechas(f)} style={{...miniBtn, padding:'6px 8px'}} title="Editar a mano fecha de envío y de cobro (notas de crédito, facturas consolidadas)">📅</button>
             {/* Si ya hay PDF se puede VER y también REEMPLAZAR: antes, con un PDF mal subido
@@ -2836,7 +2847,7 @@ function msgUpload(j, base='PDF subido ✓'){
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
-    {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={()=>{ setNuevaF(false); setNuevaFsel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
@@ -2873,33 +2884,18 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       // Fila donde quedó ESTA factura. Con adelanto + saldo hay varias del mismo proyecto:
       // el PDF y el mail tienen que ir contra esta fila, no contra "la factura del #X".
       const filaNueva = j.filaVerificada || j.fila || ''
-      // 1) Subir PDF si se adjuntó (antes del mail, para que el mail incluya el link)
+      // 1) Subir PDF si se adjuntó (antes del mail, para que el mail lo lleve adjunto)
       if(pdfFile){
         try{ const fd=new FormData(); fd.append('file',pdfFile,pdfFile.name); fd.append('entidad',entidad); fd.append('nroFactura',nro); fd.append('presupuestoNum',presuNum); fd.append('fila',String(filaNueva)); fd.append('mes',String(hoy.getMonth()+1)); fd.append('anio',String(hoy.getFullYear()))
           showToast('Subiendo PDF…'); const ru=await fetch('/api/factura-upload',{method:'POST',body:fd}); const ju=await ru.json(); if(!ju.ok) showToast('Factura creada, pero el PDF falló: '+(ju.error||''),'err')
         }catch(e){ showToast('Factura creada, el PDF falló','err') }
       }
-      // 2) Mandar mail al cliente (destinatarios + cuerpo + el PDF adjunto al mail)
-      if(conMail){
-        // Sale desde admin@somosmagma.com por Gmail (mismo camino que Pagos Staff).
-        // Antes abría Outlook con mailto: y el mail quedaba sin mandar.
-        try{ const rm=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:presuNum, fila:filaNueva})}); const jm=await rm.json()
-          if(jm.ok){
-            // Solo los sugeridos: el contacto del presu y facturación de la agencia.
-            // Antes salía a TODOS los contactos de la agencia y quedaban todos en copia.
-            const to=(jm.destinatarios||[]).filter(d=>d.sugerido).map(d=>d.mail).filter(Boolean)
-            if(!to.length) showToast('Factura creada — sin mail de contacto. Mandala con el botón ✉ de la lista.','err')
-            else {
-              const re=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to, asunto:jm.asunto, cuerpo:jm.cuerpo, presupuestoNum:presuNum, fila:filaNueva, adjuntarPDF:!!jm.adjuntarPDF})})
-              const je=await re.json()
-              if(je.ok) showToast(`Mail enviado a ${to.join(', ')}${je.adjunto?' con la factura adjunta':''} ✓`)
-              else showToast('Factura creada — el mail falló: '+(je.error||''),'err')
-            }
-          }
-          else showToast('Factura creada — no pude armar el mail: '+(jm.error||''),'err')
-        }catch(e){ showToast('Factura creada — el mail falló','err') }
-      }
-      showToast(`Factura #${presuNum} creada ✓`); onCreada()
+      // 2) El mail NO sale solo. Se abre el modal de envío (el mismo del botón ✉) con los
+      //    destinatarios sugeridos tildados y el resto de la agencia destildado, para que quien
+      //    carga VEA a quién va y qué dice antes de mandarlo. Antes salía automático y Flor no
+      //    sabía a quién le había llegado ni qué texto llevaba.
+      const fMail = conMail ? { 'N° Presupuesto':String(presuNum), __row:filaNueva, 'Proyecto':sel.p['Proyecto']||'', 'Cliente':sel.p['Cliente']||'', 'Agencia':sel.p['Agencia']||'', 'Nro de Factura':nro||'', 'Fecha emision':fechaEmision } : null
+      showToast(`Factura #${presuNum} creada ✓${conMail?' · elegí a quién mandarla':''}`); onCreada(fMail)
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -2990,7 +2986,12 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
 // Un solo mail con TODAS las facturas pendientes de un cliente.
 // Caso real: Ostara debe varias y siempre contesta la misma persona de administración.
 function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast }){
-  const [ag,setAg]=useState(inicial||'')
+  // `inicial` puede ser el nombre del cliente (botón de arriba) o {agencia, fila, nro}
+  // (botón Reclamar de una fila): en ese caso ESA factura viene tildada aunque esté en plazo.
+  const iniAg = typeof inicial==='string' ? inicial : (inicial?.agencia||'')
+  const iniFact = (inicial && typeof inicial==='object') ? inicial : null
+  const esLaInicial = p => !!iniFact && ((iniFact.fila && String(p.fila)===String(iniFact.fila)) || (!iniFact.fila && iniFact.nro && String(p.nro)===String(iniFact.nro)))
+  const [ag,setAg]=useState(iniAg)
   const [loading,setLoading]=useState(false)
   const [data,setData]=useState(null)
   const [dests,setDests]=useState([])
@@ -3010,12 +3011,14 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
       setData(j)
       // Se reclama lo VENCIDO. Lo que todavía está en plazo (mes de gracia) viene destildado:
       // no se le reclama a un cliente algo que aún no venció. Igual se puede tildar a mano.
-      setItems((j.pendientes||[]).map(p=>({...p, sel:!p.enPlazo})))
+      setItems((j.pendientes||[]).map(p=>({...p, sel: (nombre===iniAg && esLaInicial(p)) ? true : !p.enPlazo})))
       setDests((j.destinatarios||[]).map((d,i)=>({...d, sel:d.admin ? true : (i===0 && !(j.destinatarios||[]).some(x=>x.admin))})))
       setLoading(false)
     }catch(e){ showToast('Error de conexión','err'); setLoading(false) }
   }
-  useEffect(()=>{ if(inicial) cargar(inicial) /* eslint-disable-next-line */ },[])
+  useEffect(()=>{ if(iniAg) cargar(iniAg) /* eslint-disable-next-line */ },[])
+  // Si el cliente de la fila no está en el desplegable (ej: factura con monto 0), igual se muestra
+  const agOpts = (!ag || agenciasPendientes.some(a=>a.nombre===ag)) ? agenciasPendientes : [{nombre:ag,n:0,monto:0},...agenciasPendientes]
 
   const elegidas=items.filter(i=>i.sel)
   const totalSel=elegidas.reduce((s,i)=>s+i.monto,0)
@@ -3068,7 +3071,7 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
         <label style={lblV2}>Cliente / agencia</label>
         <select value={ag} onChange={e=>{ setAg(e.target.value); cargar(e.target.value) }} style={{...inpV2, marginBottom:14}}>
           <option value="">Elegí a quién reclamar…</option>
-          {agenciasPendientes.map(a=><option key={a.nombre} value={a.nombre}>{a.nombre} — {a.n} pendiente{a.n===1?'':'s'} · {fmtM(a.monto)}</option>)}
+          {agOpts.map(a=><option key={a.nombre} value={a.nombre}>{a.nombre}{a.n?` — ${a.n} pendiente${a.n===1?'':'s'} · ${fmtM(a.monto)}`:''}</option>)}
         </select>
 
         {loading && <div style={{padding:'24px', textAlign:'center', color:T.ink3, fontSize:13}}>Buscando lo pendiente…</div>}
@@ -3091,6 +3094,7 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
                 <input type="checkbox" checked={p.sel} onChange={()=>setItems(a=>a.map((x,j)=>j===i?{...x,sel:!x.sel}:x))}/>
                 <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                   {p.nroFactura?`Fc ${p.nroFactura}`:`#${p.nro}`} · {p.proyecto||'—'}
+                  {ag===iniAg && esLaInicial(p) && <span style={{color:T.brand, fontWeight:600}}> · esta</span>}
                   {p.sinNumero && <span style={{color:T.warn, fontWeight:600}}> · falta N°</span>}
                   {p.enPlazo && <span style={{color:T.ink3}}> · en plazo, vence en {p.diasParaVencer}d</span>}
                 </span>
@@ -3348,6 +3352,7 @@ function EditarFechasModal({f, onClose, onRefresh, showToast}){
 
 function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   const total=parseMonto(f['Precio FINAL'])
+  const netoF=parseMonto(f['Precio SIN IVA']), ivaF=parseMonto(f['IVA'])   // el total ya es CON IVA; el desglose es para cruzar con el banco
   const cuentaOpts=[...new Set((cuentas||[]).map(c=>c['Nombre']).filter(Boolean))]
   const [cuenta,setCuenta]=useState(cuentaOpts[0]||'')
   const [forma,setForma]=useState('Transferencia')
@@ -3383,7 +3388,7 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
         <div style={{textAlign:'center', marginBottom:18}}>
           <div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6}}>Monto cobrado (lo que realmente entró)</div>
           <input type="number" value={montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
-          <div style={{fontSize:11, color:T.ink3, marginTop:5}}>Facturado: {fmt(total)}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
+          <div style={{fontSize:11, color:T.ink3, marginTop:5}}>Facturado: <b style={{color:T.ink}}>{fmt(total)}</b>{ivaF>0?` (neto ${fmt(netoF)} + IVA ${fmt(ivaF)})`:' (sin IVA)'}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
         </div>
         <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:parcial?T.brandSoft:T.surfaceAlt, border:`1px solid ${parcial?T.brand:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
           <input type="checkbox" checked={parcial} onChange={e=>setParcial(e.target.checked)} style={{marginTop:2}}/>

@@ -38,13 +38,18 @@ export default async function handler(req, res) {
     const hoy = new Date(); hoy.setHours(0,0,0,0)
 
     // Todas las facturas impagas de esa agencia/cliente
-    const pendientes = factR.data.values.slice(1)
-      .filter(r => (norm(r[F('Agencia')]) === norm(agencia) || norm(r[F('Cliente')]) === norm(agencia))
+    // Cada pendiente lleva su `fila` real del sheet (1-based, igual que el __row de lib/sheets):
+    // el botón Reclamar de una fila la usa para dejar tildada ESA factura y no otra del mismo N°.
+    const pendientes = factR.data.values
+      .map((r, i) => ({ r, fila: i + 1 }))
+      .slice(1)
+      .filter(({ r }) => (norm(r[F('Agencia')]) === norm(agencia) || norm(r[F('Cliente')]) === norm(agencia))
                 && !esTrue(r[F('Cobrado')]) && num(r[F('Precio FINAL')]) > 0)
-      .map(r => {
+      .map(({ r, fila }) => {
         const venc = parseD(r[F('Vencimiento')])
         const diasVencida = venc && venc < hoy ? Math.round((hoy - venc) / 86400000) : 0
         return {
+          fila,
           nro: String(r[F('N° Presupuesto')]||'').trim(),
           nroFactura: String(r[F('Nro de Factura')]||'').trim(),
           proyecto: r[F('Proyecto')] || '',
