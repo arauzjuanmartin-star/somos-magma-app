@@ -17,8 +17,13 @@ const sheets=google.sheets({version:'v4',auth}); const drive=google.drive({versi
 const t=v=>String(v??'').trim()
 const colLetra=n=>{let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=(n-m-1)/26}return s}
 const HEADER='Drive Finales'
-const meta=await sheets.spreadsheets.get({spreadsheetId:ID,ranges:['PROYECTOS'],fields:'sheets(properties(title,sheetId,gridProperties),basicFilter)'})
+const meta=await sheets.spreadsheets.get({spreadsheetId:ID,ranges:['PROYECTOS'],fields:'sheets(properties(title,sheetId,gridProperties),basicFilter,tables(tableId,name,range))'})
 const hoja=meta.data.sheets.find(x=>x.properties.title==='PROYECTOS'); const sheetId=hoja.properties.sheetId
+// El filtro de PROYECTOS está atado a una "tabla" de Sheets (basicFilter.tableId), no a
+// un rango: ahí se extiende la tabla, no el filtro ("Filter can either be applied to a
+// table or a range, not both").
+const tabla=(hoja.tables||[]).find(t=>t.tableId===hoja.basicFilter?.tableId)
+console.log(`filtro: ${hoja.basicFilter?.tableId?`de tabla "${tabla?.name||hoja.basicFilter.tableId}" (cols ${tabla?.range?.startColumnIndex}-${tabla?.range?.endColumnIndex})`:hoja.basicFilter?'de rango':'no hay'}`)
 const r=await sheets.spreadsheets.values.get({spreadsheetId:ID,range:'PROYECTOS!A:ZZ'})
 const F=r.data.values||[], H=F[0]||[]
 let iFin=H.indexOf(HEADER)
@@ -46,7 +51,10 @@ if(hoja.properties.gridProperties.columnCount<=destino) reqs.push({appendDimensi
 if(iFin<0){
   reqs.push({copyPaste:{source:{sheetId,startRowIndex:0,endRowIndex:1,startColumnIndex:iEnt,endColumnIndex:iEnt+1},destination:{sheetId,startRowIndex:0,endRowIndex:1,startColumnIndex:destino,endColumnIndex:destino+1},pasteType:'PASTE_FORMAT'}})
   reqs.push({updateDimensionProperties:{range:{sheetId,dimension:'COLUMNS',startIndex:destino,endIndex:destino+1},properties:{pixelSize:160},fields:'pixelSize'}})
-  if(hoja.basicFilter){ const bf=JSON.parse(JSON.stringify(hoja.basicFilter)); bf.range.endColumnIndex=Math.max(bf.range.endColumnIndex||0,destino+1); delete bf.criteria; delete bf.filterSpecs; reqs.push({setBasicFilter:{filter:bf}}) }
+  if(hoja.basicFilter?.tableId && tabla){
+    const rango={...tabla.range, endColumnIndex:Math.max(tabla.range.endColumnIndex||0,destino+1)}
+    reqs.push({updateTable:{table:{tableId:tabla.tableId,range:rango},fields:'range'}})
+  } else if(hoja.basicFilter){ const bf=JSON.parse(JSON.stringify(hoja.basicFilter)); bf.range.endColumnIndex=Math.max(bf.range.endColumnIndex||0,destino+1); delete bf.criteria; delete bf.filterSpecs; reqs.push({setBasicFilter:{filter:bf}}) }
 }
 if(reqs.length) await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:reqs}})
 const L=colLetra(destino)

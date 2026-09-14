@@ -20,8 +20,14 @@ const todas=[]; let pageToken
 do{ const r=await drive.files.list({q:`mimeType='application/vnd.google-apps.folder' and trashed=false`,driveId:EN,corpora:'drive',includeItemsFromAllDrives:true,supportsAllDrives:true,pageSize:1000,pageToken,fields:'nextPageToken,files(id,name,parents)'}); todas.push(...(r.data.files||[])); pageToken=r.data.nextPageToken }while(pageToken)
 const porId=new Map(todas.map(f=>[f.id,f])); const hijosDe=id=>todas.filter(f=>f.parents?.[0]===id)
 const raiz=todas.filter(f=>f.parents?.[0]===EN)
-// índice: clave de carpeta (nivel 1 y 2) → carpeta
-const nivel=new Map(); raiz.forEach(f=>{ nivel.set(clave(f.name),f); hijosDe(f.id).forEach(g=>{ if(!/^20\d\d$/.test(g.name)) nivel.set(clave(f.name)+'/'+clave(g.name),g) }) })
+// índice: clave de carpeta (nivel 1 y 2) → carpeta. Y las de nivel 2 también por
+// nombre solo: "Austral Derecho" vive en AUSTRAL / AUSTRAL_DERECHO aunque el sheet
+// no diga agencia (74 proyectos sin link eran de ahí). Solo si el nombre es único.
+const nivel=new Map(); const n2=new Map()
+raiz.forEach(f=>{ nivel.set(clave(f.name),f); hijosDe(f.id).forEach(g=>{ if(/^20\d\d$/.test(g.name)) return; nivel.set(clave(f.name)+'/'+clave(g.name),g); const k=clave(g.name); n2.set(k,[...(n2.get(k)||[]),g]) }) })
+// Clientes cuya carpeta no se llama como en el sheet. "Austral Derecho" y "Austral EDG"
+// viven las dos en AUSTRAL / FD DERECHO Y ESCUELA DE GOBIERNO (82 proyectos de 2026).
+const ALIAS={ 'AUSTRALDERECHO':'AUSTRAL/FDDERECHOYESCUELADEGOBIERNO', 'AUSTRALEDG':'AUSTRAL/FDDERECHOYESCUELADEGOBIERNO', 'OSTARA':'OSTARA360/CONTENIDOOSTARA' }
 const P=(await sheets.spreadsheets.values.get({spreadsheetId:ID,range:'PROYECTOS!A:ZZ'})).data.values; const H=P[0]
 const iN=H.indexOf('N° presupuesto'),iF=H.indexOf('Fecha Evento'),iE=H.indexOf('Drive Entrega'),iCl=H.indexOf('Cliente'),iAg=H.indexOf('Agencia'),iPr=H.indexOf('Proyecto')
 const sin=P.map((row,i)=>({row,fila:i+1})).slice(1).filter(x=>t(x.row[iN])&&!t(x.row[iE])&&/\/2026$/.test(t(x.row[iF])))
@@ -30,13 +36,17 @@ for(const x of sin){
   const r=x.row; const [d,m,y]=t(r[iF]).split('/').map(Number)
   const cli=clave(r[iCl]), ag=clave(r[iAg])
   // carpeta de cliente: AGENCIA/CLIENTE, o CLIENTE, o AGENCIA
-  const cand=[nivel.get(ag+'/'+cli), nivel.get(cli), nivel.get(ag), ...[...nivel.entries()].filter(([k])=>k.split('/').pop().startsWith(cli)&&cli.length>=4).map(([,v])=>v)].filter(Boolean)
+  const soloN2=(n2.get(cli)||[]).length===1 ? n2.get(cli) : []
+  const cand=[nivel.get(ALIAS[cli]), nivel.get(ag+'/'+cli), nivel.get(cli), ...soloN2, nivel.get(ag), ...[...nivel.entries()].filter(([k])=>k.split('/').pop().startsWith(cli)&&cli.length>=4).map(([,v])=>v)].filter(Boolean)
   const vistas=new Set(); const carpetasCli=cand.filter(c=>!vistas.has(c.id)&&vistas.add(c.id))
   if(!carpetasCli.length){ nada.push({...x,motivo:'sin carpeta de cliente'}); continue }
   // dentro: AÑO/proyecto o proyecto directo; el nombre lleva "d/m", "m | d", "m I d", "d de mes"
-  const re=[new RegExp(`\\b${d}\\s*/\\s*${m}\\b`), new RegExp(`^\\s*${m}\\s*[|Iil]\\s*${d}\\b`), new RegExp(`\\b${d}\\s*[|Iil]\\s*${m}\\b`)]
+  // Solo "d/m" o "m | d" al principio (la convención vieja): "d | m" se confunde con
+  // "m | d" del mes espejo — 8/4 y "8 | 4/8" (4 de agosto) parecían lo mismo.
+  const re=[new RegExp(`\\b${d}\\s*/\\s*${m}\\b`), new RegExp(`^\\s*${m}\\s*[|Iil]\\s*${d}\\b(?!\\s*/)`)]
+  // Dentro del cliente: AÑO/proyecto, proyecto directo, o un nivel más ("Videos Producto/8 | 6/8 …")
   const proyectos=[]
-  for(const c of carpetasCli){ for(const h of hijosDe(c.id)){ if(/^20\d\d$/.test(h.name)){ if(+h.name===y) proyectos.push(...hijosDe(h.id)) } else proyectos.push(h) } }
+  for(const c of carpetasCli){ for(const h of hijosDe(c.id)){ if(/^20\d\d$/.test(h.name)){ if(+h.name===y){ for(const g of hijosDe(h.id)){ proyectos.push(g); if(!/\d/.test(g.name)) proyectos.push(...hijosDe(g.id)) } } } else { proyectos.push(h); if(!/\d/.test(h.name)) proyectos.push(...hijosDe(h.id)) } } }
   const matchFecha=proyectos.filter(f=>re.some(x=>x.test(f.name)))
   // desempate por palabras del proyecto
   const palabras=t(r[iPr]).toLowerCase().split(/\W+/).filter(w=>w.length>=4)
