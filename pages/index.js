@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
-import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos } from '../lib/edicion'
+import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos, semaforo, hoyCero, fechaSugerida, parseFechaAR, estaCerrado, limpiarPedido, COLOR_SEM } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
@@ -252,7 +252,7 @@ export default function V2() {
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
               mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos}/>
+            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos} goTo={goTo}/>
             : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='edicion' ? <Edicion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
@@ -1888,11 +1888,34 @@ const ERR_SHEET = /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/
 const sinErr = v => { const s = String(v||'').trim(); return ERR_SHEET.test(s) ? '' : s }
 
 // soloVer = usuario de acceso parcial (ej Dani): ve la agenda, no aprueba ni edita.
-function Calendario({data, onRefresh, showToast, soloVer=false}){
+function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
   const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]
   const now=new Date()
   const [ref,setRef]=useState({a:now.getFullYear(), m:now.getMonth()})
   const [diaSel,setDiaSel]=useState(null)
+  // Dos capas: los RODAJES (lo que ya estaba) y las ENTREGAS de edición, cada
+  // una en el día en que se prometió. Juan, 14/9/2026: "un calendario con los
+  // edits, así Dani y Lulu ven más visual lo que tienen que hacer". Quien solo
+  // ve Edición + Calendario (Dani) arranca en Entregas; el resto ve las dos.
+  const [capa,setCapa]=useState(soloVer?'entregas':'todo')
+  const [editorF,setEditorF]=useState('todos')
+  const verRod = capa!=='entregas', verEnt = capa!=='rodajes'
+  const edicion=(data.edicion||[]).filter(f=>String(f.ID||'').trim())
+  const hoy0=hoyCero()
+  const entregasPorDia={}; let sinFecha=0
+  edicion.forEach(f=>{
+    const ed=String(f.Editor||'').trim()
+    if(editorF==='__sin__'){ if(ed) return } else if(editorF!=='todos' && ed!==editorF) return
+    const cerrado=estaCerrado(f.Estado)
+    // Abiertas: el día prometido (o el que sugiere el manual si el PM no puso fecha).
+    // Cerradas: el día en que se entregaron, en gris, para ver qué salió.
+    const d = cerrado ? parseFechaAR(f['Fecha entrega']) : (parseFechaAR(f['Fecha compromiso'])||fechaSugerida(f['Fecha Evento'], f.Entregable))
+    if(!d){ if(!cerrado) sinFecha++; return }
+    const k=dayKey(d)
+    ;(entregasPorDia[k]=entregasPorDia[k]||[]).push({...f, __sem:semaforo(f,hoy0), __estimada:!cerrado&&!String(f['Fecha compromiso']||'').trim(), __cerrado:cerrado})
+  })
+  const editores=[...new Set(edicion.filter(f=>!estaCerrado(f.Estado)).map(f=>String(f.Editor||'').trim()).filter(Boolean))].sort()
+  const sinAsignar=edicion.filter(f=>!estaCerrado(f.Estado)&&!String(f.Editor||'').trim()).length
   const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
   const [editando,setEditando]=useState(null)       // presupuesto a editar (fecha/horario/ubicación/etc)
@@ -1956,9 +1979,14 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
     vistosEs.add(key); totEsp+=parseMonto(p['Precio Final']); cntEsp++
   }))
 
+  // Entregas del mes: cuántas y cuántas ya están atrasadas
+  let cntEnt=0, entAtras=0, entHechas=0
+  Object.keys(entregasPorDia).filter(esDelMesRef).forEach(k=> entregasPorDia[k].forEach(f=>{ if(f.__cerrado) entHechas++; else { cntEnt++; if(f.__sem.nivel==='rojo') entAtras++ } }))
+
   const navMes=delta=>{ const d=new Date(ref.a, ref.m+delta, 1); setRef({a:d.getFullYear(),m:d.getMonth()}); setDiaSel(null) }
-  const aprobSel = diaSel ? (aprobadosPorDia[dayKey(diaSel)]||[]) : []
-  const espSel = diaSel ? (enEsperaPorDia[dayKey(diaSel)]||[]) : []
+  const aprobSel = diaSel&&verRod ? (aprobadosPorDia[dayKey(diaSel)]||[]) : []
+  const espSel = diaSel&&verRod ? (enEsperaPorDia[dayKey(diaSel)]||[]) : []
+  const entSel = diaSel&&verEnt ? (entregasPorDia[dayKey(diaSel)]||[]) : []
 
   async function setEstado(num, estado, motivo){
     if(estado!=='APROBADO' && !motivo && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
@@ -1977,8 +2005,17 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
           <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} aprobados · {fmtM(totAprob)}{jorAprob>0&&<span style={{color:T.ink3}}> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</span>}{porConfirmar>0&&<span style={{color:T.ink3}} title="Días del trabajo que todavía no tienen fecha confirmada — se ven en gris en la grilla."> · {porConfirmar} a confirmar</span>}</span>
           &nbsp;·&nbsp;
           <span title="Presupuestos en espera con evento este mes. Idem: cada uno cuenta una vez.">{cntEsp} en espera · {fmtM(totEsp)}{jorEsp>cntEsp&&<span style={{color:T.ink3}}> · {jorEsp} jornadas</span>}</span>
+          {verEnt && <>&nbsp;·&nbsp;<span title="Entregas de edición con fecha este mes (la prometida por el PM, o la del manual si no hay)">✂ {cntEnt} {cntEnt===1?'entrega':'entregas'}{entAtras>0&&<span style={{color:T.brand, fontWeight:600}}> · {entAtras} atrasadas</span>}{entHechas>0&&<span style={{color:T.ink3}}> · {entHechas} hechas</span>}{sinFecha>0&&<span style={{color:T.ink3}} title="Trabajos abiertos sin fecha de evento ni compromiso: no se pueden ubicar en el calendario"> · {sinFecha} sin fecha</span>}</span></>}
         </div></div>
-      <div style={{display:'flex', gap:8}}>
+      <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}>
+        {edicion.length>0 && <div style={{display:'flex', gap:4, marginRight:6}}>
+          {[['todo','Todo'],['rodajes','Rodajes'],['entregas','✂ Entregas']].map(([id,l])=><button key={id} onClick={()=>{setCapa(id);setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 12px', fontSize:12, background:capa===id?T.ink:T.surface, color:capa===id?'#fff':T.ink2, borderColor:capa===id?T.ink:T.border}}>{l}</button>)}
+        </div>}
+        {verEnt && edicion.length>0 && <select value={editorF} onChange={e=>setEditorF(e.target.value)} title="Quién edita" style={{...navBtn, width:'auto', padding:'0 10px', fontSize:12, cursor:'pointer', marginRight:6}}>
+          <option value="todos">Todo el equipo</option>
+          {sinAsignar>0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
+          {editores.map(e=><option key={e} value={e}>{e}</option>)}
+        </select>}
         <button onClick={()=>navMes(-1)} style={navBtn}>←</button>
         <button onClick={()=>{setRef({a:now.getFullYear(),m:now.getMonth()});setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 14px'}}>Hoy</button>
         <button onClick={()=>navMes(1)} style={navBtn}>→</button>
@@ -1990,7 +2027,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
           {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=><div key={d} style={{padding:'9px 0', textAlign:'center', fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, borderBottom:`1px solid ${T.border}`}}>{d}</div>)}
           {celdas.map((d,i)=>{
             if(!d) return <div key={i} style={{minHeight:96, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
-            const ap=aprobadosPorDia[dayKey(d)]||[], es=enEsperaPorDia[dayKey(d)]||[], total=ap.length+es.length
+            const ap=verRod?(aprobadosPorDia[dayKey(d)]||[]):[], es=verRod?(enEsperaPorDia[dayKey(d)]||[]):[], en=verEnt?(entregasPorDia[dayKey(d)]||[]):[], total=ap.length+es.length+en.length
+            const TOPE=capa==='todo'?4:3, quedan=n=>Math.max(0,TOPE-n)
             const sel = diaSel&&dayKey(diaSel)===dayKey(d)
             return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:96, padding:6, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, cursor:'pointer', background:sel?T.surfaceAlt:T.surface}}>
               <div style={{fontSize:11.5, fontWeight:esHoy(d)?700:500, color:esHoy(d)?T.brand:T.ink3, marginBottom:4, display:'flex', justifyContent:'space-between'}}>
@@ -2001,8 +2039,14 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
               {ap.slice(0,3).map((p,j)=>{ const tent=esTentDia(dayKey(d),p)
                 return <div key={'a'+j} title={tent?'Día a confirmar':undefined} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:tent?T.surfaceAlt:T.posSoft, borderLeft:`2px ${tent?'dashed':'solid'} ${tent?T.ink3:T.pos}`, color:tent?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>
               })}
-              {es.slice(0,Math.max(0,3-ap.length)).map((p,j)=><div key={'e'+j} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:T.warnSoft, borderLeft:`2px dashed ${T.warn}`, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>)}
-              {total>3&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-3} más</div>}
+              {es.slice(0,quedan(ap.length)).map((p,j)=><div key={'e'+j} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:T.warnSoft, borderLeft:`2px dashed ${T.warn}`, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>)}
+              {/* ✂ Entregas: el color es el semáforo del trabajo (rojo atrasado, naranja hoy,
+                  amarillo esta semana, verde en fecha, gris entregado). Punteado = fecha del
+                  manual, todavía no la confirmó el PM. */}
+              {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM[f.__sem.nivel]||COLOR_SEM.verde
+                return <div key={'n'+j} title={`${limpiarPedido(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}`} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedido(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
+              })}
+              {total>TOPE&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-TOPE} más</div>}
             </div>
           })}
         </div>
@@ -2012,7 +2056,20 @@ function Calendario({data, onRefresh, showToast, soloVer=false}){
       <div style={{flex:'0 0 340px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
         {!diaSel ? <Empty>Clickeá un día para ver el detalle</Empty> : <>
           <CardHead>{diaSel.getDate()} de {MESES_LARGO[diaSel.getMonth()]}</CardHead>
-          {aprobSel.length===0&&espSel.length===0 && <Empty>Sin eventos este día</Empty>}
+          {aprobSel.length===0&&espSel.length===0&&entSel.length===0 && <Empty>{capa==='entregas'?'Sin entregas este día':'Sin eventos este día'}</Empty>}
+          {entSel.map((f,i)=>{ const c=COLOR_SEM[f.__sem.nivel]||COLOR_SEM.verde; const ed=String(f.Editor||'').trim()
+            return <div key={'n'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`, borderLeft:`3px solid ${c.fg}`}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+                <span style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>✂ #{f['N° presupuesto']}</span>
+                <span style={{fontSize:11, fontWeight:600, color:c.fg, background:c.bg, padding:'2px 8px', borderRadius:6, whiteSpace:'nowrap'}}>{f.__sem.txt}</span>
+              </div>
+              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{limpiarPedido(f.Entregable)}</div>
+              <div style={{fontSize:12, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
+              <div style={{fontSize:11.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.brand}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
+              {f.__estimada && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}
+              {goTo && <div style={{display:'flex', gap:7, marginTop:9}}><button onClick={()=>goTo('edicion',{abrir:f.ID})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>Abrir en Edición</button></div>}
+            </div>
+          })}
           {aprobSel.map((p,i)=>{ const staff=staffDe(p); const num=p['N° presupuesto']; const tent=esTentDia(dayKey(diaSel),p)
             return <div key={'a'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
