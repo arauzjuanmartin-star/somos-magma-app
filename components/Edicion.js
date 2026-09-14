@@ -67,7 +67,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [scrollA, setScrollA] = useState(null)
   const cel = useEsCelular()
 
-  const crudas = data?.edicion || []
+  // Sin ID no es una fila del tablero: no se puede guardar ni reconocer. Las 133
+  // filas corridas del 14/9 se veían como renglones en blanco con el cartel MAGMA.
+  const crudas = useMemo(() => (data?.edicion || []).filter(f => String(f.ID || '').trim()), [data])
   const hoy = hoyCero()
 
   // Si llegó desde un aviso por mail (?e=<ID>), abrimos ese trabajo y sacamos

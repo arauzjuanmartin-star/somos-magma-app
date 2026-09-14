@@ -12,6 +12,7 @@
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, aAR, fechaSugerida, parseFechaAR, sumarHabiles, slaDias, hoyCero, CAMPOS_PIEZA, CAMPOS_BRIEF, limpiarPedido } from '../../lib/edicion'
+import { escribirFilasAlFinal } from '../../lib/edicion-sync'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT_COL = colLetra(HEADERS_EDICION.length - 1)
@@ -146,11 +147,8 @@ export default async function handler(req, res) {
       nuevas.push(fila)
     }
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID, range: `EDICION!A:${ULT_COL}`,
-      valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: nuevas },
-    })
+    // Por fila calculada, no con append: ver escribirFilasAlFinal (el append corría columnas).
+    await escribirFilasAlFinal({ sheets, SHEET_ID, filas: nuevas, filasLeidas: rows })
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',

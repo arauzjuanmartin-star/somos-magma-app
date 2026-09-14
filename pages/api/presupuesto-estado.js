@@ -74,8 +74,14 @@ export default async function handler(req, res) {
         }
       } catch (e) { console.error('Error eliminando proyecto al represupuestar:', e) }
 
-      // También eliminar facturas NO cobradas de ese presupuesto (quedaron huérfanas al
-      // represupuestar/desaprobar — ej: error + nota de crédito). Las cobradas se respetan.
+      // Las facturas de ese presupuesto:
+      //  · Represupuestado CON versión nueva → pasan al número nuevo. Es el mismo
+      //    trabajo con otro precio; la factura emitida sigue valiendo y lo que falta
+      //    se ve como saldo a facturar.
+      //  · Si no → se borran SOLO las filas sin N° de factura y sin cobrar. Una factura
+      //    con número existe en AFIP aunque el presupuesto se caiga: se anula con nota
+      //    de crédito, no borrando la fila. El 10/9/2026 esta lógica borró la 0001-149
+      //    de Farmacity ($968.000, emitida, mandada al cliente) y quedó sin rastro.
       try {
         const meta2 = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties)' })
         const factSheet = meta2.data.sheets.find(s => /facturacion/i.test(s.properties.title))
@@ -83,20 +89,34 @@ export default async function handler(req, res) {
           const rFact = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
           const fRows = rFact.data.values || [], fh = fRows[0] || []
           const iNum = fh.indexOf('N° Presupuesto'), iCob = fh.findIndex(x => /^cobrado$/i.test(x))
+          const iNroF = fh.findIndex(x => /^n(ro|°)\.? de factura$/i.test(String(x || '').trim()))
           const esCob = row => ['true','sí','si'].includes(String(row[iCob]||'').toLowerCase().trim())
-          const aBorrar = []
-          for (let i = 1; i < fRows.length; i++) {
-            if (String(fRows[i][iNum]||'').trim() === String(num).trim() && !esCob(fRows[i])) aBorrar.push(i)
-          }
-          if (aBorrar.length) {
-            await sheets.spreadsheets.batchUpdate({
+          const tieneNro = row => iNroF > -1 && String(row[iNroF] || '').trim() !== ''
+          const delPresu = []
+          for (let i = 1; i < fRows.length; i++) if (String(fRows[i][iNum]||'').trim() === String(num).trim()) delPresu.push(i)
+          const hayNuevo = estado === 'REPRESUPUESTADO' && nuevo && String(nuevo).trim() !== String(num).trim()
+          if (hayNuevo && delPresu.length) {
+            const colNum = String.fromCharCode(65 + iNum)
+            await sheets.spreadsheets.values.batchUpdate({
               spreadsheetId: SHEET_ID,
-              requestBody: { requests: aBorrar.sort((a,b)=>b-a).map(i => ({ deleteDimension: { range: { sheetId: factSheet.properties.sheetId, dimension: 'ROWS', startIndex: i, endIndex: i+1 } } })) }
+              requestBody: { valueInputOption: 'USER_ENTERED', data: delPresu.map(i => ({ range: `FACTURACION!${colNum}${i + 1}`, values: [[String(nuevo).trim()]] })) },
             })
-            try { await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'facturas-borradas-por-cambio-estado', 'FACTURACION', String(num), `${aBorrar.length} factura(s) no cobradas eliminadas por estado=${estado}`]] } }) } catch (e) {}
+            try { await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'facturas-migradas-represupuesto', 'FACTURACION', String(num), `${delPresu.length} factura(s) pasan al #${nuevo}`]] } }) } catch (e) {}
+          } else {
+            const aBorrar = delPresu.filter(i => !esCob(fRows[i]) && !tieneNro(fRows[i]))
+            const quedan = delPresu.length - aBorrar.length
+            if (aBorrar.length) {
+              await sheets.spreadsheets.batchUpdate({
+                spreadsheetId: SHEET_ID,
+                requestBody: { requests: aBorrar.sort((a,b)=>b-a).map(i => ({ deleteDimension: { range: { sheetId: factSheet.properties.sheetId, dimension: 'ROWS', startIndex: i, endIndex: i+1 } } })) }
+              })
+            }
+            if (aBorrar.length || quedan) {
+              try { await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'facturas-por-cambio-estado', 'FACTURACION', String(num), `estado=${estado}: ${aBorrar.length} sin número borradas · ${quedan} con número o cobradas quedan`]] } }) } catch (e) {}
+            }
           }
         }
-      } catch (e) { console.error('Error eliminando facturas al represupuestar:', e) }
+      } catch (e) { console.error('Error con las facturas al cambiar de estado:', e) }
     }
 
     // Escribir el motivo en col AY (Motivo Desaprobado, índice 50).
