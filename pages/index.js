@@ -2526,7 +2526,8 @@ function DriveDelProyecto({p, num, showToast, onRefresh, agencias=[], clientes=[
     {entrega && link(entrega,'📤 Entrega','La carpeta del proyecto en ENTREGAS CLIENTES (con Pre-entregas y Finales)')}
     {finales && link(finales,'📸 Finales','Lo que se le manda al cliente')}
     {recCl && link(recCl,`🎨 Recursos de ${p['Cliente']}`,'Logo, gráfica y lo general del cliente')}
-    {recAg && link(recAg,`🎨 Recursos de ${p['Agencia']}`,'Logo, gráfica y lo general de la agencia')}
+    {/* Si agencia y cliente son el mismo (CMQ/CMQ) es una sola carpeta: un solo botón. */}
+    {recAg && recAg!==recCl && link(recAg,`🎨 Recursos de ${p['Agencia']}`,'Logo, gráfica y lo general de la agencia')}
     {paraCliente && <button onClick={copiar} style={{...miniBtn, color:T.pos, borderColor:T.pos}}>{copiado?'✓ Copiado':'Copiar link para el cliente'}</button>}
     {!crudo && !entrega && <>
       <span style={{fontSize:12, color:T.ink2}}>Este proyecto no tiene carpetas en Drive todavía.</span>
