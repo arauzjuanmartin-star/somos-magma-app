@@ -34,6 +34,10 @@ export default async function handler(req, res) {
     const iEstado   = find(['Estado','Pagado'], 10)
     const iViaticos = find(['Viáticos','Viaticos'], -1)
     if (iViaticos === -1) return res.status(400).json({ error: 'Falta la columna "Viáticos" en PAGOS_STAFF. Corré: node scripts/pagos-staff-columna-viaticos.mjs --escribir' })
+    // Append dentro de A:(anterior a Período) y sin INSERT_ROWS: Período tiene fórmula por fila
+    // (MES A MES) y una fila insertada nace sin ella. Ver el mismo comentario en pago-staff-toggle.
+    const iPeriodo   = find(['Período','Periodo'], -1)
+    const anchoDatos = iPeriodo > 0 ? iPeriodo : headers.length
 
     const eq = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase()
     const PAG = x => ['PAGADO','SÍ','SI','TRUE'].includes(String(x||'').toUpperCase())
@@ -50,7 +54,7 @@ export default async function handler(req, res) {
         valueInputOption: 'USER_ENTERED', requestBody: { values: [[v || '']] },
       })
     } else if (v > 0) {
-      const maxCol = Math.max(iPersona, iMes, iNro, iProy, iPedido, iAdeudado, iEstado, iViaticos) + 1
+      const maxCol = Math.min(anchoDatos, Math.max(iPersona, iMes, iNro, iProy, iPedido, iAdeudado, iEstado, iViaticos) + 1)
       const newRow = new Array(maxCol).fill('')
       newRow[iPersona]  = persona
       newRow[iMes]      = mes
@@ -61,8 +65,8 @@ export default async function handler(req, res) {
       newRow[iEstado]   = 'Pendiente'
       newRow[iViaticos] = v
       await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID, range: 'PAGOS_STAFF!A:Z',
-        valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS',
+        spreadsheetId: SHEET_ID, range: `PAGOS_STAFF!A:${colLetra(anchoDatos - 1)}`,
+        valueInputOption: 'USER_ENTERED',
         requestBody: { values: [newRow] },
       })
     } else {

@@ -63,6 +63,10 @@ const LF=col(C_FAC), LP=col(C_PS), LR=col(C_PRO)
 const C_ADE=PH.findIndex(h=>txt(h).toLowerCase()==='monto adeudado'), C_PAG=PH.findIndex(h=>txt(h).toLowerCase()==='monto pagado')
 if(C_ADE===-1||C_PAG===-1){ console.error('Pagos_Staff: no encuentro "Monto Adeudado" / "Monto Pagado". Freno.'); process.exit(1) }
 const LADE=col(C_ADE), LPAG=col(C_PAG)
+// Viáticos (columna H de Pagos_Staff desde 09/2026): van aparte de FREELANCERS en el cuadro.
+const C_VIA=PH.findIndex(h=>['viáticos','viaticos'].includes(txt(h).toLowerCase()))
+if(C_VIA===-1){ console.error('Pagos_Staff: no encuentro la columna "Viáticos". Corré primero: node scripts/pagos-staff-columna-viaticos.mjs --escribir'); process.exit(1) }
+const LVIA=col(C_VIA)
 const N_FAC=Math.max(FACh.properties.gridProperties.rowCount, fK.length+40)
 const N_PS =Math.max(PSh.properties.gridProperties.rowCount, pG.length+60)
 const N_PRO=Math.max(PROh.properties.gridProperties.rowCount, rHH.length+40)
@@ -84,7 +88,7 @@ console.log(`   ${LR}2 = ${fPro(2)}`)
 console.log(`\n3) Pagos_Staff → ${LP} "Período" ${buscaPer(PH)===-1?'(NUEVA)':'(existe, se reescribe)'} · filas 2:${N_PS}`)
 console.log(`   ${LP}2 = ${fPs(2)}`)
 console.log(`\n4) Solapa "${TAB}" ${MMh?'(existe, se reescribe entera)':'(NUEVA, primera pestaña del libro)'}`)
-console.log(`   ${ANIO}: 12 meses + TOTAL · facturado / cobrado / producción / freelancers (Juan+Sofi vs externos) / %`)
+console.log(`   ${ANIO}: 12 meses + TOTAL · facturado / cobrado / producción / freelancers (Juan+Sofi vs externos) / VIÁTICOS (col M, nueva) / % / pagado / falta pagar`)
 console.log(`\n   NO se toca ninguna celda de datos. Solo columnas AL FINAL y una solapa nueva.`)
 if(!ESCRIBIR){ console.log('\n--- PREVIEW. Nada escrito. Correr con --escribir para aplicar. ---\n'); process.exit(0) }
 
@@ -106,11 +110,11 @@ console.log(`✓ Período escrito en FACTURACION!${LF} · PROYECTOS!${LR} · Pag
 let mmId=MMh?.properties.sheetId
 if(!mmId){
   const res=await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:[
-    {addSheet:{properties:{title:TAB,index:0,gridProperties:{rowCount:40,columnCount:15,frozenRowCount:4}}}}]}})
+    {addSheet:{properties:{title:TAB,index:0,gridProperties:{rowCount:40,columnCount:16,frozenRowCount:4}}}}]}})
   mmId=res.data.replies[0].addSheet.properties.sheetId
 }else{
-  if(MMh.properties.gridProperties.columnCount<15)
-    await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:[{appendDimension:{sheetId:mmId,dimension:'COLUMNS',length:15-MMh.properties.gridProperties.columnCount}}]}})
+  if(MMh.properties.gridProperties.columnCount<16)
+    await sheets.spreadsheets.batchUpdate({spreadsheetId:ID,requestBody:{requests:[{appendDimension:{sheetId:mmId,dimension:'COLUMNS',length:16-MMh.properties.gridProperties.columnCount}}]}})
   await sheets.spreadsheets.values.clear({spreadsheetId:ID,range:`${TAB}!A1:Z40`})
 }
 
@@ -118,10 +122,10 @@ const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','
 const F=`FACTURACION!$${LF}:$${LF}`, P=`Pagos_Staff!$${LP}:$${LP}`, PR=`PROYECTOS!$${LR}:$${LR}`
 const SOCIOS=['*Arauz*','Sofia*Grenier*']   // Juan Martin Arauz · Sofia Maria Grenier Basavilbaso
 const filas=[]
-filas.push(['SOMOS MAGMA · MES A MES','','','','','','','','','','','','AÑO →',ANIO,''])
-filas.push(['Cuánto se facturó, cuánto se produjo y cuánto se gastó en freelancers, mes por mes. Se actualiza solo: sale de FACTURACION, PROYECTOS y Pagos_Staff.','','','','','','','','','','','','','',''])
-filas.push(new Array(15).fill(''))
-filas.push(['Mes','Período','Facturas','FACTURADO (neto)','IVA','Facturado c/ IVA','Ya cobrado','Falta cobrar','PRODUCCIÓN del mes','FREELANCERS','de eso: JUAN + SOFI','de eso: externos','% s/ producción','Ya pagado','Falta pagar'])
+filas.push(['SOMOS MAGMA · MES A MES','','','','','','','','','','','','AÑO →',ANIO,'',''])
+filas.push(['Cuánto se facturó, cuánto se produjo y cuánto se gastó en freelancers (honorarios y viáticos), mes por mes. Se actualiza solo: sale de FACTURACION, PROYECTOS y Pagos_Staff.','','','','','','','','','','','','','','',''])
+filas.push(new Array(16).fill(''))
+filas.push(['Mes','Período','Facturas','FACTURADO (neto)','IVA','Facturado c/ IVA','Ya cobrado','Falta cobrar','PRODUCCIÓN del mes','FREELANCERS','de eso: JUAN + SOFI','de eso: externos','VIÁTICOS','% s/ producción','Ya pagado','Falta pagar'])
 for(let m=1;m<=12;m++){
   const r=4+m
   filas.push([MESES[m-1],
@@ -133,23 +137,25 @@ for(let m=1;m<=12;m++){
     `=SUMIFS(FACTURACION!$K:$K,${F},$B${r},FACTURACION!$E:$E,TRUE)`,
     `=$D${r}-$G${r}`,
     `=SUMIFS(PROYECTOS!$H:$H,${PR},$B${r})`,
-    `=SUMIFS(Pagos_Staff!${LADE}:${LADE},${P},$B${r})`,
-    SOCIOS.map(s=>`SUMIFS(Pagos_Staff!${LADE}:${LADE},${P},$B${r},Pagos_Staff!$B:$B,"${s}")`).join('+').replace(/^/,'='),
+    `=SUMIFS(Pagos_Staff!$${LADE}:$${LADE},${P},$B${r})`,
+    SOCIOS.map(s=>`SUMIFS(Pagos_Staff!$${LADE}:$${LADE},${P},$B${r},Pagos_Staff!$B:$B,"${s}")`).join('+').replace(/^/,'='),
     `=$J${r}-$K${r}`,
-    `=IFERROR(IF($I${r}=0,"",$J${r}/$I${r}),"")`,
-    `=SUMIFS(Pagos_Staff!${LPAG}:${LPAG},${P},$B${r})`,
-    `=$J${r}-$N${r}`])
+    `=SUMIFS(Pagos_Staff!$${LVIA}:$${LVIA},${P},$B${r})`,
+    `=IFERROR(IF($I${r}=0,"",($J${r}+$M${r})/$I${r}),"")`,
+    `=SUMIFS(Pagos_Staff!$${LPAG}:$${LPAG},${P},$B${r})`,
+    `=$J${r}+$M${r}-$O${r}`])
 }
-filas.push(['TOTAL '+ANIO,'','=SUM(C5:C16)','=SUM(D5:D16)','=SUM(E5:E16)','=SUM(F5:F16)','=SUM(G5:G16)','=SUM(H5:H16)','=SUM(I5:I16)','=SUM(J5:J16)','=SUM(K5:K16)','=SUM(L5:L16)','=IFERROR(IF($I$17=0,"",$J$17/$I$17),"")','=SUM(N5:N16)','=SUM(O5:O16)'])
-filas.push(new Array(15).fill(''))
-const nota=(a,b)=>[a,b,'','','','','','','','','','','','','']
+filas.push(['TOTAL '+ANIO,'','=SUM(C5:C16)','=SUM(D5:D16)','=SUM(E5:E16)','=SUM(F5:F16)','=SUM(G5:G16)','=SUM(H5:H16)','=SUM(I5:I16)','=SUM(J5:J16)','=SUM(K5:K16)','=SUM(L5:L16)','=SUM(M5:M16)','=IFERROR(IF($I$17=0,"",($J$17+$M$17)/$I$17),"")','=SUM(O5:O16)','=SUM(P5:P16)'])
+filas.push(new Array(16).fill(''))
+const nota=(a,b)=>[a,b,'','','','','','','','','','','','','','']
 filas.push(nota('CÓMO SE LEE',''))
 filas.push(nota('FACTURADO (neto)','sin IVA. Cada factura cae en el mes de su Fecha emisión (si no la tiene, el de la Fecha Evento).'))
 filas.push(nota('PRODUCCIÓN del mes','lo vendido en los eventos DE ESE MES (solapa PROYECTOS). Se factura después, por eso no coincide con FACTURADO.'))
-filas.push(nota('FREELANCERS','lo que se le debe al staff por el trabajo DE ESE MES (Monto Adeudado de Pagos_Staff, por Mes Referencia).'))
-filas.push(nota('Falta pagar','el pago sale el 15 del mes siguiente. Un mes recién cerrado siempre muestra casi todo acá: es normal, no es deuda atrasada.'))
+filas.push(nota('FREELANCERS','el honorario del staff por el trabajo DE ESE MES (Monto Adeudado de Pagos_Staff, por Mes Referencia). Sin viáticos.'))
+filas.push(nota('VIÁTICOS','lo que se le paga al staff además del honorario (nafta, traslados, comida). Se carga trabajo por trabajo en Pagos Staff de la app (columna H de Pagos_Staff). Va aparte de FREELANCERS; el % y "Falta pagar" sí lo cuentan.'))
+filas.push(nota('Falta pagar','FREELANCERS + VIÁTICOS − Ya pagado. El pago sale el 15 del mes siguiente: un mes recién cerrado siempre muestra casi todo acá, es normal, no es deuda atrasada.'))
 filas.push(nota('JUAN + SOFI','las jornadas que hacen los socios, ya incluidas en FREELANCERS. "externos" es el resto: lo que sale de la empresa hacia afuera.'))
-filas.push(nota('% s/ producción','cuánto de lo producido se va en freelancers. Va contra PRODUCCIÓN y no contra FACTURADO porque se factura tarde.'))
+filas.push(nota('% s/ producción','cuánto de lo producido se va en freelancers (honorarios + viáticos). Va contra PRODUCCIÓN y no contra FACTURADO porque se factura tarde.'))
 filas.push(nota('Ver el detalle','en FACTURACION, PROYECTOS y Pagos_Staff filtrá por la columna "Período" con el valor de la columna B (ej: '+ANIO+'-07).'))
 filas.push(nota('','En Pagos_Staff, Juan y Sofi figuran como "Juan Martin Arauz" y "Sofia Maria Grenier Basavilbaso".'))
 await sheets.spreadsheets.values.update({spreadsheetId:ID,range:`${TAB}!A1`,valueInputOption:'USER_ENTERED',requestBody:{values:filas}})
@@ -159,27 +165,27 @@ const rng=(r1,r2,c1,c2)=>({sheetId:mmId,startRowIndex:r1,endRowIndex:r2,startCol
 const rc=(r1,r2,c1,c2,f,fields)=>({repeatCell:{range:rng(r1,r2,c1,c2),cell:{userEnteredFormat:f},fields:'userEnteredFormat('+fields+')'}})
 const fmt=[]
 fmt.push({mergeCells:{range:rng(0,1,0,12),mergeType:'MERGE_ALL'}})
-fmt.push({mergeCells:{range:rng(1,2,0,15),mergeType:'MERGE_ALL'}})
-fmt.push(rc(0,1,0,15,{backgroundColor:NEGRO,textFormat:{foregroundColor:BLANCO,bold:true,fontSize:14},verticalAlignment:'MIDDLE',padding:{left:10}},'backgroundColor,textFormat,verticalAlignment,padding'))
+fmt.push({mergeCells:{range:rng(1,2,0,16),mergeType:'MERGE_ALL'}})
+fmt.push(rc(0,1,0,16,{backgroundColor:NEGRO,textFormat:{foregroundColor:BLANCO,bold:true,fontSize:14},verticalAlignment:'MIDDLE',padding:{left:10}},'backgroundColor,textFormat,verticalAlignment,padding'))
 fmt.push(rc(0,1,12,13,{horizontalAlignment:'RIGHT',textFormat:{foregroundColor:BLANCO,bold:true,fontSize:10}},'horizontalAlignment,textFormat'))
 fmt.push(rc(0,1,13,14,{backgroundColor:AMARILLO,horizontalAlignment:'CENTER',textFormat:{foregroundColor:NEGRO,bold:true,fontSize:12},numberFormat:{type:'NUMBER',pattern:'0'}},'backgroundColor,horizontalAlignment,textFormat,numberFormat'))
-fmt.push(rc(1,2,0,15,{textFormat:{foregroundColor:GRISTXT,fontSize:9,italic:true},wrapStrategy:'CLIP'},'textFormat,wrapStrategy'))
-fmt.push(rc(3,4,0,15,{backgroundColor:NEGRO,textFormat:{foregroundColor:BLANCO,bold:true,fontSize:10},horizontalAlignment:'CENTER',verticalAlignment:'MIDDLE',wrapStrategy:'WRAP'},'backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy'))
+fmt.push(rc(1,2,0,16,{textFormat:{foregroundColor:GRISTXT,fontSize:9,italic:true},wrapStrategy:'CLIP'},'textFormat,wrapStrategy'))
+fmt.push(rc(3,4,0,16,{backgroundColor:NEGRO,textFormat:{foregroundColor:BLANCO,bold:true,fontSize:10},horizontalAlignment:'CENTER',verticalAlignment:'MIDDLE',wrapStrategy:'WRAP'},'backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy'))
 fmt.push(rc(4,16,0,1,{textFormat:{bold:true},horizontalAlignment:'LEFT'},'textFormat,horizontalAlignment'))
 fmt.push(rc(4,17,1,2,{textFormat:{foregroundColor:GRISTXT,fontSize:9},horizontalAlignment:'CENTER'},'textFormat,horizontalAlignment'))
 fmt.push(rc(4,17,2,3,{horizontalAlignment:'CENTER',numberFormat:{type:'NUMBER',pattern:'0'}},'horizontalAlignment,numberFormat'))
-fmt.push(rc(4,17,3,12,{numberFormat:{type:'CURRENCY',pattern:'$#,##0'}},'numberFormat'))
-fmt.push(rc(4,17,13,15,{numberFormat:{type:'CURRENCY',pattern:'$#,##0'}},'numberFormat'))
-fmt.push(rc(4,17,12,13,{numberFormat:{type:'PERCENT',pattern:'0.0%'},horizontalAlignment:'CENTER'},'numberFormat,horizontalAlignment'))
+fmt.push(rc(4,17,3,13,{numberFormat:{type:'CURRENCY',pattern:'$#,##0'}},'numberFormat'))
+fmt.push(rc(4,17,14,16,{numberFormat:{type:'CURRENCY',pattern:'$#,##0'}},'numberFormat'))
+fmt.push(rc(4,17,13,14,{numberFormat:{type:'PERCENT',pattern:'0.0%'},horizontalAlignment:'CENTER'},'numberFormat,horizontalAlignment'))
 for(const c of [3,8,9]) fmt.push(rc(4,17,c,c+1,{backgroundColor:GRIS,textFormat:{bold:true}},'backgroundColor,textFormat'))
 fmt.push(rc(4,17,10,12,{backgroundColor:AZULITO},'backgroundColor'))
 fmt.push(rc(4,17,10,11,{textFormat:{bold:true,foregroundColor:AZUL}},'textFormat'))
-fmt.push(rc(16,17,0,15,{textFormat:{bold:true,fontSize:11},borders:{top:{style:'SOLID_MEDIUM',color:NEGRO}}},'textFormat,borders'))
-fmt.push(rc(18,19,0,15,{textFormat:{bold:true,fontSize:10,foregroundColor:MAGMA}},'textFormat'))
-fmt.push(rc(19,27,0,1,{textFormat:{bold:true,fontSize:9}},'textFormat'))
-fmt.push(rc(19,27,1,15,{textFormat:{fontSize:9,foregroundColor:GRISTXT},wrapStrategy:'CLIP'},'textFormat,wrapStrategy'))
-fmt.push({updateBorders:{range:rng(3,17,0,15),top:{style:'SOLID',color:LINEA},bottom:{style:'SOLID',color:LINEA},left:{style:'SOLID',color:LINEA},right:{style:'SOLID',color:LINEA},innerHorizontal:{style:'SOLID',color:LINEA},innerVertical:{style:'SOLID',color:LINEA}}})
-const anchos=[110,74,66,132,104,124,118,112,132,132,138,124,98,118,118]
+fmt.push(rc(16,17,0,16,{textFormat:{bold:true,fontSize:11},borders:{top:{style:'SOLID_MEDIUM',color:NEGRO}}},'textFormat,borders'))
+fmt.push(rc(18,19,0,16,{textFormat:{bold:true,fontSize:10,foregroundColor:MAGMA}},'textFormat'))
+fmt.push(rc(19,28,0,1,{textFormat:{bold:true,fontSize:9}},'textFormat'))
+fmt.push(rc(19,28,1,16,{textFormat:{fontSize:9,foregroundColor:GRISTXT},wrapStrategy:'CLIP'},'textFormat,wrapStrategy'))
+fmt.push({updateBorders:{range:rng(3,17,0,16),top:{style:'SOLID',color:LINEA},bottom:{style:'SOLID',color:LINEA},left:{style:'SOLID',color:LINEA},right:{style:'SOLID',color:LINEA},innerHorizontal:{style:'SOLID',color:LINEA},innerVertical:{style:'SOLID',color:LINEA}}})
+const anchos=[110,74,66,132,104,124,118,112,132,132,138,124,104,98,118,118]
 anchos.forEach((w,i)=>fmt.push({updateDimensionProperties:{range:{sheetId:mmId,dimension:'COLUMNS',startIndex:i,endIndex:i+1},properties:{pixelSize:w},fields:'pixelSize'}}))
 for(const [i,h] of [[0,38],[3,40]]) fmt.push({updateDimensionProperties:{range:{sheetId:mmId,dimension:'ROWS',startIndex:i,endIndex:i+1},properties:{pixelSize:h},fields:'pixelSize'}})
 fmt.push({updateSheetProperties:{properties:{sheetId:mmId,gridProperties:{frozenRowCount:4}},fields:'gridProperties.frozenRowCount'}})

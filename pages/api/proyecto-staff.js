@@ -122,6 +122,13 @@ export default async function handler(req, res) {
       notas: psHeaders.indexOf('Notas'),
     }
 
+    // Período (última columna) tiene fórmula por fila que usa MES A MES. Las filas nuevas se
+    // apendean dentro de A:(anterior a Período) y SIN insertar filas: una fila insertada nace
+    // sin esa fórmula y el mes no la cuenta (pasó con agosto/septiembre 2026: $10M sin Período).
+    const psIPeriodo = psHeaders.findIndex(h => ['período','periodo'].includes(String(h||'').trim().toLowerCase()))
+    const psAnchoDatos = psIPeriodo > 0 ? psIPeriodo : psHeaders.length
+    const psRangoAppend = `PAGOS_STAFF!A:${colToLetter(psAnchoDatos - 1)}`
+
     // Identificar líneas pre-existentes de este proyecto
     const filasExistentes = []
     psRows.forEach((row, i) => {
@@ -169,8 +176,9 @@ export default async function handler(req, res) {
     // Las nuevas (target que no estaban en existentes)
     target.forEach((t,ti) => {
       if (consumidas.has(ti)) return
-      // Del ancho del header real: si hay columnas nuevas en el medio (Viáticos), no se pisan.
-      const row = new Array(Math.max(psHeaders.length, 12)).fill('')
+      // Del ancho del header real hasta la columna ANTERIOR a Período: si hay columnas nuevas en
+      // el medio (Viáticos) no se pisan, y Período no se toca porque tiene fórmula por fila.
+      const row = new Array(Math.max(psAnchoDatos, 12)).fill('')
       row[psIdx.fechaPago] = ''
       row[psIdx.freelancer] = t.freelancer
       row[psIdx.mesRef] = mesRef
@@ -195,9 +203,8 @@ export default async function handler(req, res) {
     if (psNuevas.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: 'PAGOS_STAFF!A:Z',
+        range: psRangoAppend,
         valueInputOption: 'USER_ENTERED',
-        insertDataOption: 'INSERT_ROWS',
         requestBody: { values: psNuevas }
       })
     }

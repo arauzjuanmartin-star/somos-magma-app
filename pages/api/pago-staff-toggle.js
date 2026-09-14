@@ -56,6 +56,12 @@ export default async function handler(req, res) {
     const iEstado    = find(['Estado','Pagado'], 10)
     const iNotas     = find(['Notas','Observación'], 11)
     const iViaticos  = find(['Viáticos','Viaticos'], -1)   // -1 = la columna todavía no existe
+    // Las filas nuevas se apendean DENTRO de A:(columna anterior a Período) y sin tocar Período:
+    // esa columna tiene fórmula por fila (la usa MES A MES). Si el append incluyera P, Sheets
+    // vería la "tabla" hasta la última fórmula (fila ~1500) y la fila nueva caería ahí abajo.
+    const iPeriodo   = find(['Período','Periodo'], -1)
+    const anchoDatos = iPeriodo > 0 ? iPeriodo : headers.length
+    const rangoAppend = `PAGOS_STAFF!A:${colLetra(anchoDatos - 1)}`
 
     const eq = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase()
     const PAG = v => ['PAGADO','SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
@@ -94,7 +100,7 @@ export default async function handler(req, res) {
     } else {
       // No existe: si se está DESMARCANDO algo inexistente, no escribir nada.
       if (!pagado) return res.json({ ok: true, noop: true })
-      const maxCol = Math.max(iFechaPago,iPersona,iMes,iNro,iProy,iPedido,iAdeudado,iPagado$,iTipo,iCuenta,iEstado,iNotas,iViaticos) + 1
+      const maxCol = Math.min(anchoDatos, Math.max(iFechaPago,iPersona,iMes,iNro,iProy,iPedido,iAdeudado,iPagado$,iTipo,iCuenta,iEstado,iNotas,iViaticos) + 1)
       const newRow = new Array(maxCol).fill('')
       newRow[iFechaPago] = fechaStr
       newRow[iPersona]   = persona
@@ -111,7 +117,7 @@ export default async function handler(req, res) {
       if (observacion)   newRow[iNotas] = observacion
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: 'PAGOS_STAFF!A:Z',
+        range: rangoAppend,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [newRow] },
       })
