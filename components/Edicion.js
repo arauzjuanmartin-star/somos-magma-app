@@ -656,11 +656,11 @@ function Logo({ f, g, guardar, logos = {}, cel, rec = {} }) {
     <span style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>🎨 Logo y gráfica</span>
     {rec.cliente && <a href={rec.cliente} target="_blank" rel="noreferrer" title="La carpeta Recursos del cliente en ENTREGAS: logo, gráfica, lo general" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Cliente}</a>}
     {rec.agencia && <a href={rec.agencia} target="_blank" rel="noreferrer" title="La carpeta Recursos de la agencia" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Agencia}</a>}
-    {esURL(actual) && <a href={actual} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>Abrir el logo</a>}
+    {esURL(actual) && <a href={actual} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>Abrir lo puntual de esta pieza</a>}
     <input value={v} onChange={e => setV(e.target.value)} onBlur={confirmar} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmar() } }}
-      placeholder="Pegá el link del logo (Drive, WeTransfer…) o escribí “ya lo tenemos”" style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 260, fontSize: 12 }} />
+      placeholder={(rec.cliente || rec.agencia) ? 'Solo si esta pieza necesita algo que no está en Recursos (link o nota)' : 'Pegá el link del logo (Drive, WeTransfer…) o escribí “ya lo tenemos”'} style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 260, fontSize: 12 }} />
     {!actual && sugerido && <button onClick={() => { setV(sugerido.link); guardarLogo(sugerido.link) }} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>Usar el de {f.Cliente || f.Agencia} (#{sugerido.num})</button>}
-    {!cel && <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>{actual ? 'Queda para las otras piezas de este proyecto y va en el mail al editor.' : (rec.cliente || rec.agencia) ? 'Lo general (logo, gráfica) vive en la carpeta Recursos. Si esta pieza necesita algo puntual, pegá el link acá.' : 'Sin logo el editor arranca a ciegas: subilo a la carpeta Recursos del cliente en ENTREGAS y pegá el link acá.'}</span>}
+    {!cel && <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>{(rec.cliente || rec.agencia) ? 'El logo y la gráfica van en la carpeta Recursos (subilos ahí). Este campo es solo para algo puntual de esta pieza, y va en el mail al editor.' : actual ? 'Queda para las otras piezas de este proyecto y va en el mail al editor.' : 'Sin logo el editor arranca a ciegas: subilo a la carpeta Recursos del cliente en ENTREGAS y pegá el link acá.'}</span>}
   </div>
 }
 
@@ -945,8 +945,11 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
       </span>}
       <div style={{ flex: 1 }} />
-      {!logoGrupo && (rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Recursos</a>}
-      {logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="El logo y la gráfica del cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
+      {/* El logo vive en la carpeta Recursos del cliente (o de la agencia). El link
+          puntual de una pieza solo manda si no hay Recursos: el 14/9 el botón llevaba a
+          la referencia del video porque ese link estaba pegado en el campo. */}
+      {(rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
+      {!(rec.cliente || rec.agencia) && logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="Link puntual cargado en la pieza" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
       {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
