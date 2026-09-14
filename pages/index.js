@@ -2119,7 +2119,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
           <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Cargar staff · #{staffModal.proy['N° presupuesto']}</div>
           <button onClick={()=>setStaffModal(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
+        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
       </div>
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
@@ -2207,7 +2207,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
               {!p['Drive Crudo'] && !p['Drive Entrega'] && <span title="Sin carpetas en Drive todavía" style={{fontSize:11, color:T.ink3}}>—</span>}
             </span>
           </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
+          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
         </div>
       })}
     </div>
@@ -2215,7 +2215,7 @@ function Proyectos({data, onRefresh, showToast, nav, clearNav}){
   </>
 }
 
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], onRefresh, showToast, onClose, onEditarDatos}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], agencias=[], clientes=[], onRefresh, showToast, onClose, onEditarDatos}){
   // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
   // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
   // matcheaban y TODO servicio ya existente salía marcado como "+ servicio nuevo".
@@ -2362,7 +2362,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       <div style={{flex:1}}/>
       {onEditarDatos && <button onClick={onEditarDatos} style={{...miniBtn, alignSelf:'center'}}>Editar datos (fecha, etc)</button>}
     </div>
-    <DriveDelProyecto p={p} num={num} showToast={showToast} onRefresh={onRefresh}/>
+    <DriveDelProyecto p={p} num={num} showToast={showToast} onRefresh={onRefresh} agencias={agencias} clientes={clientes}/>
     {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       <div><label style={lblV2}>Horario (va al Calendar)</label>
         <div style={{display:'flex', gap:8, alignItems:'center'}}>
@@ -2425,8 +2425,12 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
 // tener los links de entrega de fotos en cada proyecto, así vemos fácil todos qué
 // mandarle al cliente". Lo que se manda es FINALES (o Fotos en las carpetas
 // viejas): nunca la carpeta del proyecto, que tiene Pre-entregas adentro.
-function DriveDelProyecto({p, num, showToast, onRefresh}){
+function DriveDelProyecto({p, num, showToast, onRefresh, agencias=[], clientes=[]}){
   const [creando,setCreando]=useState(false)
+  // Recursos de la agencia y del cliente (logo, gráfica): AGENCIAS / CLIENTES → "Drive Recursos"
+  const kk=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')
+  const recAg=(agencias.find(a=>kk(a.Nombre)===kk(p['Agencia']))||{})['Drive Recursos']||''
+  const recCl=(clientes.find(c=>kk(c.Nombre)===kk(p['Cliente']))||{})['Drive Recursos']||''
   const [copiado,setCopiado]=useState(false)
   const crudo=String(p['Drive Crudo']||'').trim(), entrega=String(p['Drive Entrega']||'').trim(), finales=String(p['Drive Finales']||'').trim()
   const paraCliente=finales||entrega
@@ -2446,6 +2450,8 @@ function DriveDelProyecto({p, num, showToast, onRefresh}){
     {crudo && link(crudo,'📁 Crudo','Lo que se filmó')}
     {entrega && link(entrega,'📤 Entrega','La carpeta del proyecto en ENTREGAS CLIENTES (con Pre-entregas y Finales)')}
     {finales && link(finales,'📸 Finales','Lo que se le manda al cliente')}
+    {recCl && link(recCl,`🎨 Recursos de ${p['Cliente']}`,'Logo, gráfica y lo general del cliente')}
+    {recAg && link(recAg,`🎨 Recursos de ${p['Agencia']}`,'Logo, gráfica y lo general de la agencia')}
     {paraCliente && <button onClick={copiar} style={{...miniBtn, color:T.pos, borderColor:T.pos}}>{copiado?'✓ Copiado':'Copiar link para el cliente'}</button>}
     {!crudo && !entrega && <>
       <span style={{fontSize:12, color:T.ink2}}>Este proyecto no tiene carpetas en Drive todavía.</span>

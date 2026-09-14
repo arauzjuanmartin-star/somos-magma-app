@@ -41,6 +41,7 @@ const FILTROS = [
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 const nombreDe = mail => String(mail || '').split('@')[0]
 const esURL = s => /^https?:\/\//i.test(String(s || '').trim())
+const claveNombre = s => norm(s).replace(/[^a-z0-9]/g, '')
 
 // ---------------------------------------------------------------- principal
 export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav }) {
@@ -358,7 +359,14 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }, [filas])
 
   const horas = data?.horasExtra || []
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos, horas, onRefresh, soloLoSuyo: data?.__soloLoSuyo || null }
+  // La carpeta Recursos de cada agencia y cliente (logo, gráfica, lo general).
+  // Sale de AGENCIAS / CLIENTES, columna "Drive Recursos" (scripts/drive-recursos.mjs).
+  const recursosDe = useMemo(() => {
+    const ag = new Map((data?.agencias || []).map(a => [claveNombre(a.Nombre), String(a['Drive Recursos'] || '').trim()]).filter(([k, v]) => k && esURL(v)))
+    const cl = new Map((data?.clientes || []).map(c => [claveNombre(c.Nombre), String(c['Drive Recursos'] || '').trim()]).filter(([k, v]) => k && esURL(v)))
+    return (agencia, cliente) => ({ agencia: ag.get(claveNombre(agencia)) || '', cliente: cl.get(claveNombre(cliente)) || '' })
+  }, [data])
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos, horas, onRefresh, soloLoSuyo: data?.__soloLoSuyo || null, recursosDe }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -633,7 +641,7 @@ function Campos({ f, campos, guardar, cols = 3 }) {
 // fila de 115 y el link terminaba en la bitácora. Se pega una vez: queda para
 // las otras piezas del proyecto, y las de otros trabajos del mismo cliente lo
 // toman con un clic. Va en el mail al editor.
-function Logo({ f, g, guardar, logos = {}, cel }) {
+function Logo({ f, g, guardar, logos = {}, cel, rec = {} }) {
   const actual = String(f['Logo y placas'] || '').trim()
   const [v, setV] = useState(actual)
   useEffect(() => { setV(actual) }, [actual])
@@ -646,11 +654,13 @@ function Logo({ f, g, guardar, logos = {}, cel }) {
   const confirmar = () => { if (v.trim() !== actual) guardarLogo(v.trim()) }
   return <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, padding: '9px 12px', borderRadius: 9, background: actual ? T.surface : T.brandSoft, border: `1px solid ${actual ? T.border : T.brand + '40'}` }}>
     <span style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>🎨 Logo y gráfica</span>
+    {rec.cliente && <a href={rec.cliente} target="_blank" rel="noreferrer" title="La carpeta Recursos del cliente en ENTREGAS: logo, gráfica, lo general" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Cliente}</a>}
+    {rec.agencia && <a href={rec.agencia} target="_blank" rel="noreferrer" title="La carpeta Recursos de la agencia" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Agencia}</a>}
     {esURL(actual) && <a href={actual} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>Abrir el logo</a>}
     <input value={v} onChange={e => setV(e.target.value)} onBlur={confirmar} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmar() } }}
       placeholder="Pegá el link del logo (Drive, WeTransfer…) o escribí “ya lo tenemos”" style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 260, fontSize: 12 }} />
     {!actual && sugerido && <button onClick={() => { setV(sugerido.link); guardarLogo(sugerido.link) }} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>Usar el de {f.Cliente || f.Agencia} (#{sugerido.num})</button>}
-    {!cel && <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>{actual ? 'Queda para las otras piezas de este proyecto y va en el mail al editor.' : 'Sin logo el editor arranca a ciegas: pegalo acá, no en la bitácora.'}</span>}
+    {!cel && <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>{actual ? 'Queda para las otras piezas de este proyecto y va en el mail al editor.' : (rec.cliente || rec.agencia) ? 'Lo general (logo, gráfica) vive en la carpeta Recursos. Si esta pieza necesita algo puntual, pegá el link acá.' : 'Sin logo el editor arranca a ciegas: subilo a la carpeta Recursos del cliente en ENTREGAS y pegá el link acá.'}</span>}
   </div>
 }
 
@@ -907,9 +917,10 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe }) {
   const peor = g.items[0].__sem
   const logoGrupo = g.items.map(h => String(h['Logo y placas'] || '').trim()).find(esURL)
+  const rec = recursosDe ? recursosDe(g.agencia, g.cliente) : {}
   const estadoDrive = drive[g.num]
   const creando = estadoDrive === 'creando'
   const linkCrudo = (typeof estadoDrive === 'string' && estadoDrive.startsWith('http')) ? estadoDrive : (g.linkCrudo || String(proy?.['Drive Crudo'] || '').trim())
@@ -934,6 +945,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
       </span>}
       <div style={{ flex: 1 }} />
+      {!logoGrupo && (rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Recursos</a>}
       {logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="El logo y la gráfica del cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
       {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
@@ -958,7 +970,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />)}
   </div>
 }
 
@@ -991,7 +1003,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo, recursosDe }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -1032,7 +1044,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
-      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />}
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />}
     </div>
   }
 
@@ -1052,11 +1064,11 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {}, horas = [], onRefresh, soloLoSuyo }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -1091,7 +1103,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} />
     </div>
 
-    <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} />
+    <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} rec={recursosDe ? recursosDe(f.Agencia, f.Cliente) : {}} />
     <HorasExtra f={f} horas={horas} editores={editores} showToast={showToast} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} cel={cel} />
 
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>

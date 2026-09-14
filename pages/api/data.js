@@ -25,6 +25,9 @@ function filtrarPorModulos(data, modulos, soloLoSuyo) {
     out.proyectos = sinPlata(data.proyectos)
     out.presupuestos = sinPlata(data.presupuestos)
     out.rrhh = (data.rrhh || []).map(r => ({ 'Nombre Apellido': r['Nombre Apellido'], Nombre: r.Nombre, Rubro: r.Rubro, Mail: r.Mail }))
+    // Solo el nombre y la carpeta de Recursos (logo, gráfica): nada de CUIT ni mails.
+    out.agencias = (data.agencias || []).map(a => ({ Nombre: a.Nombre, 'Drive Recursos': a['Drive Recursos'] || '' }))
+    out.clientes = (data.clientes || []).map(c => ({ Nombre: c.Nombre, 'Drive Recursos': c['Drive Recursos'] || '' }))
   }
   return out
 }
