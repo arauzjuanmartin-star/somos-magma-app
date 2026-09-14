@@ -12,6 +12,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { T, MONO, useEsCelular } from '../lib/ui'
+import { canonStaff } from '../lib/staff'
 import {
   ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX,
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero,
@@ -108,7 +109,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const cuenta = new Map()
     filas.forEach(f => {
       if (estaCerrado(f.Estado)) return
-      const e = String(f.Editor || '').trim()
+      const e = canonStaff(String(f.Editor || '').trim())
       if (e) cuenta.set(e, (cuenta.get(e) || 0) + 1)
     })
     return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
@@ -126,7 +127,8 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     })
     // Los que ya están asignados en el tablero van igual, aunque no tengan el rubro:
     // si no, abrir la ficha de alguien lo borraría de la lista sin querer.
-    filas.forEach(f => { const n = String(f.Editor || '').trim(); if (n && !de.has(n)) de.set(n, false) })
+    // Con el nombre de RRHH: "Dani" y "Daniela Viviana Ayala" son la misma persona.
+    filas.forEach(f => { const n = canonStaff(String(f.Editor || '').trim()); if (n && !de.has(n)) de.set(n, false) })
     return [...de.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([nombre, tieneMail]) => ({ nombre, tieneMail }))
   }, [data, filas])
 
@@ -355,7 +357,8 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return m
   }, [filas])
 
-  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos }
+  const horas = data?.horasExtra || []
+  const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos, horas, onRefresh, soloLoSuyo: data?.__soloLoSuyo || null }
 
   return <div>
     <div style={{ marginBottom: 14 }}>
@@ -651,6 +654,58 @@ function Logo({ f, g, guardar, logos = {}, cel }) {
   </div>
 }
 
+// Horas extra, cargadas en el momento y pegadas al trabajo. Juan, 14/9/2026:
+// "así Dani puede cargar ahí si laburó fuera de hora y no esperamos a fin de mes".
+// Cada carga es una fila de HORAS_EXTRA; acá se ven las de este proyecto y el
+// total del mes de la persona. Quien tiene acceso parcial carga a su nombre.
+const fmtH = n => (Math.round(n * 10) / 10).toLocaleString('es-AR') + ' hs'
+function HorasExtra({ f, horas = [], editores = [], showToast, onRefresh, soloLoSuyo, cel }) {
+  const editorFila = canonStaff(String(f.Editor || '').trim())
+  const [quien, setQuien] = useState(soloLoSuyo || (editorFila && !ES_MAGMA(editorFila) ? editorFila : ''))
+  const [h, setH] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [yendo, setYendo] = useState(false)
+  const [abierto, setAbierto] = useState(false)
+  const num = String(f['N° presupuesto'] || '').trim()
+  const delProyecto = horas.filter(x => String(x['N° presupuesto'] || '').trim() === num)
+  const totalProy = delProyecto.reduce((a, x) => a + (parseFloat(String(x.Horas || '').replace(',', '.')) || 0), 0)
+  const mesActual = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })()
+  const totalMes = quien ? horas.filter(x => canonStaff(x.Persona) === quien && String(x.Mes || '') === mesActual).reduce((a, x) => a + (parseFloat(String(x.Horas || '').replace(',', '.')) || 0), 0) : 0
+  const sumar = async () => {
+    const n = parseFloat(String(h).replace(',', '.'))
+    if (!n || n <= 0) return showToast && showToast('Poné cuántas horas', 'err')
+    setYendo(true)
+    try {
+      const r = await fetch('/api/horas-extra', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: f.ID, horas: n, motivo, persona: quien }) })
+      const j = await r.json()
+      if (!j.ok) showToast && showToast(j.error || 'No se pudo cargar', 'err')
+      else { showToast && showToast(`${fmtH(j.horas)} de ${String(j.persona).split(' ')[0]} anotadas ✓`); setH(''); setMotivo(''); onRefresh && onRefresh() }
+    } catch (e) { showToast && showToast('Error de conexión', 'err') }
+    setYendo(false)
+  }
+  return <div style={{ marginBottom: 14, padding: '9px 12px', borderRadius: 9, background: T.surface, border: `1px solid ${T.border}` }}>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>⏱ Horas extra</span>
+      <span style={{ fontSize: 12, color: T.ink2 }}>{delProyecto.length ? <>{fmtH(totalProy)} en este trabajo</> : 'ninguna cargada en este trabajo'}{quien && totalMes > 0 && <span style={{ color: T.ink3 }}> · {String(quien).split(' ')[0]} lleva {fmtH(totalMes)} este mes</span>}</span>
+      <div style={{ flex: 1 }} />
+      <button onClick={() => setAbierto(a => !a)} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>{abierto ? 'Cerrar' : '+ Cargar horas'}</button>
+    </div>
+    {abierto && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 9 }}>
+      {!soloLoSuyo && <select value={quien} onChange={e => setQuien(e.target.value)} style={{ ...inp, fontSize: 12, cursor: 'pointer' }}>
+        <option value="">— quién —</option>
+        {[...new Set([editorFila, ...editores.map(e => e.nombre)].filter(x => x && !ES_MAGMA(x)))].map(n => <option key={n} value={n}>{n}</option>)}
+      </select>}
+      <input type="number" step="0.5" min="0.5" max="24" value={h} onChange={e => setH(e.target.value)} placeholder="hs" style={{ ...inp, width: 70, fontFamily: MONO }} />
+      <input value={motivo} onChange={e => setMotivo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sumar() }} placeholder="Por qué (cambios del cliente, entrega urgente…)" style={{ ...inp, flex: 1, minWidth: cel ? '100%' : 220, fontSize: 12 }} />
+      <button onClick={sumar} disabled={yendo || !quien} style={{ ...btnPri, opacity: quien ? 1 : 0.5 }}>{yendo ? 'Anotando…' : 'Anotar'}</button>
+      <span style={{ fontSize: 10.5, color: T.ink3, flexBasis: '100%' }}>Queda con fecha de hoy en la solapa HORAS_EXTRA. A fin de mes se suma por persona: nadie tiene que acordarse.</span>
+    </div>}
+    {abierto && delProyecto.length > 0 && <div style={{ marginTop: 8, fontSize: 11.5, color: T.ink2, lineHeight: 1.6 }}>
+      {delProyecto.slice(-6).map((x, i) => <div key={i}>{x.Fecha} · {String(x.Persona || '').split(' ')[0]} · <strong>{fmtH(parseFloat(String(x.Horas || '').replace(',', '.')) || 0)}</strong>{x.Motivo ? ` · ${x.Motivo}` : ''}</div>)}
+    </div>}
+  </div>
+}
+
 function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = false }) {
   const [abierto, setAbierto] = useState(abiertoPorDefecto)
   return <div style={{ border: `1px solid ${alerta ? `${T.brand}55` : T.border}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
@@ -852,7 +907,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {} }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo }) {
   const peor = g.items[0].__sem
   const logoGrupo = g.items.map(h => String(h['Logo y placas'] || '').trim()).find(esURL)
   const estadoDrive = drive[g.num]
@@ -903,7 +958,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} />)}
+    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />)}
   </div>
 }
 
@@ -936,7 +991,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -977,7 +1032,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
-      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} />}
+      {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />}
     </div>
   }
 
@@ -997,11 +1052,11 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
       <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
     </div>
-    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} />}
+    {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} />}
   </div>
 }
 
-function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {} }) {
+function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {}, horas = [], onRefresh, soloLoSuyo }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
   const [pregunta, setPregunta] = useState('')
@@ -1037,6 +1092,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     </div>
 
     <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} />
+    <HorasExtra f={f} horas={horas} editores={editores} showToast={showToast} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} cel={cel} />
 
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>

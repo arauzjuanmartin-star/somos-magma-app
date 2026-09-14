@@ -158,7 +158,9 @@ export default function V2() {
   async function load(silencioso=false){
     if(silencioso) setRefreshing(true); else setLoading(true)
     setErr('')
-    try { const r=await fetch('/api/data?fresh=1'); const j=await r.json(); if(j.ok) setData(j.data); else setErr(j.error||'Error') }
+    // __soloLoSuyo: el nombre del usuario de acceso parcial (Dani). Edición lo usa
+    // para que las horas extra se carguen a su nombre y nada más.
+    try { const r=await fetch('/api/data?fresh=1'); const j=await r.json(); if(j.ok) setData({...j.data, __soloLoSuyo:j.soloLoSuyo||null}); else setErr(j.error||'Error') }
     catch(e){ setErr('Error de conexión') }
     setLoading(false); setRefreshing(false)
   }

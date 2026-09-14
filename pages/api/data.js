@@ -20,6 +20,7 @@ const soloSusFilas = (filas, quien) => (filas || []).filter(f => norm(f.Editor) 
 function filtrarPorModulos(data, modulos, soloLoSuyo) {
   const out = { listado: data.listado }
   if (modulos.includes('edicion')) out.edicion = soloLoSuyo ? soloSusFilas(data.edicion, soloLoSuyo) : data.edicion
+  if (modulos.includes('edicion')) out.horasExtra = soloLoSuyo ? (data.horasExtra || []).filter(f => norm(f.Persona) === norm(soloLoSuyo)) : data.horasExtra
   if (modulos.includes('edicion') || modulos.includes('calendario')) {
     out.proyectos = sinPlata(data.proyectos)
     out.presupuestos = sinPlata(data.presupuestos)

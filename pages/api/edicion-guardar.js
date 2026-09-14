@@ -7,6 +7,7 @@ import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { ultimaVersion } from '../../lib/edicion-version'
+import { canonStaff } from '../../lib/staff'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT_COL = colLetra(HEADERS_EDICION.length - 1)
@@ -78,7 +79,8 @@ export default async function handler(req, res) {
       if (k === 'Entregable' && !esManual) continue   // lo pisaría el sync
       const col = cE(k)
       const antes = String(actual[col] || '')
-      const ahora = String(v ?? '')
+      // "Dani" y "Daniela Viviana Ayala" eran dos personas para el tablero (14/9/2026).
+      const ahora = k === 'Editor' ? canonStaff(String(v ?? '')) : String(v ?? '')
       if (antes === ahora) continue
       data.push({ range: `EDICION!${colLetra(col)}${sheetRow}`, values: [[ahora]] })
       cambios.push(`${k}: "${antes}" → "${ahora}"`)
