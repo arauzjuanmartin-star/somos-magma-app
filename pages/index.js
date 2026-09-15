@@ -2101,14 +2101,16 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
     </div>
     <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
       <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)'}}>
+        {/* minmax(0,1fr) y minWidth:0: las fichas en una línea sin cortar ("Edit 60s · Austral Derecho")
+            estiraban las columnas hasta que sábado y domingo quedaban fuera de la caja, recortados. */}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(7,minmax(0,1fr))'}}>
           {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=><div key={d} style={{padding:'9px 0', textAlign:'center', fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, borderBottom:`1px solid ${T.border}`}}>{d}</div>)}
           {celdas.map((d,i)=>{
-            if(!d) return <div key={i} style={{minHeight:96, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
+            if(!d) return <div key={i} style={{minHeight:96, minWidth:0, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
             const ap=verRod?(aprobadosPorDia[dayKey(d)]||[]):[], es=verRod?(enEsperaPorDia[dayKey(d)]||[]):[], en=verEnt?(entregasPorDia[dayKey(d)]||[]):[], total=ap.length+es.length+en.length
             const TOPE=capa==='todo'?4:3, quedan=n=>Math.max(0,TOPE-n)
             const sel = diaSel&&dayKey(diaSel)===dayKey(d)
-            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:96, padding:6, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, cursor:'pointer', background:sel?T.surfaceAlt:T.surface}}>
+            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:96, minWidth:0, padding:6, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, cursor:'pointer', background:sel?T.surfaceAlt:T.surface}}>
               <div style={{fontSize:11.5, fontWeight:esHoy(d)?700:500, color:esHoy(d)?T.brand:T.ink3, marginBottom:4, display:'flex', justifyContent:'space-between'}}>
                 <span style={esHoy(d)?{background:T.brand,color:'#fff',borderRadius:10,width:18,height:18,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10.5}:{}}>{d.getDate()}</span>
               </div>
