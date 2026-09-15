@@ -2,13 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- La diaria de Magma: todos los días a las 8:00 manda el mail con lo que hay que hacer hoy.
-       NO está instalado: se instala a mano, una sola vez, con OK de Juan:
+  <!-- La diaria de Magma: a las 8:00 manda "qué hay que hacer hoy" y a las 15:00 "qué queda de hoy".
+       Se instala a mano, una sola vez (y se repite si este archivo cambia):
+         launchctl unload ~/Library/LaunchAgents/com.somosmagma.diaria.plist 2>/dev/null
          cp scripts/launchd/com.somosmagma.diaria.plist ~/Library/LaunchAgents/
          launchctl load ~/Library/LaunchAgents/com.somosmagma.diaria.plist
        Probar ahora mismo:   launchctl start com.somosmagma.diaria
        Frenar:               launchctl unload ~/Library/LaunchAgents/com.somosmagma.diaria.plist
-       Si la Mac estaba apagada o dormida a las 8, launchd lo corre al despertarse. -->
+       Si la Mac estaba dormida a esa hora, launchd lo corre al despertarse. -->
   <key>Label</key><string>com.somosmagma.diaria</string>
   <key>ProgramArguments</key>
   <array>
@@ -18,7 +19,10 @@
   </array>
   <key>WorkingDirectory</key><string>/Users/dronjuan/somos-magma-app</string>
   <key>StartCalendarInterval</key>
-  <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
   <key>StandardOutPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.diaria-stdout.log</string>
   <key>StandardErrorPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.diaria-stderr.log</string>
   <key>EnvironmentVariables</key>
