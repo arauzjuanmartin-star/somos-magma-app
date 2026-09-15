@@ -130,9 +130,9 @@ a{color:var(--azul)}
   <div class="note"><b>Ya agendado para octubre:</b> IVA 07-2026 de Magma, $2.584.486 (Diego lo avisó el 18/08, vos lo confirmaste el 20/08). Y la última cuota del plan de pago de Magma es la de septiembre; el de Sofi sigue a $595.813 por mes hasta diciembre.</div>
 
   <details>
-    <summary>Los seis viejos que hay que cerrar de una vez <span class="pill warn">un solo mail a Diego</span></summary>
+    <summary>Los seis viejos que hay que cerrar de una vez <span class="pill azul">borrador en tu Gmail</span></summary>
     <div class="body">
-      <p>Diego los marcó impagos y en el mail nadie confirmó el pago. No es prueba de deuda: vos a veces pagás y avisás por WhatsApp. Se cierran con un mail pidiéndole el estado de cuenta por titular, no persiguiendo hilo por hilo.</p>
+      <p>Diego los marcó impagos y en el mail nadie confirmó el pago. No es prueba de deuda: vos a veces pagás y avisás por WhatsApp. Se cierran con un mail pidiéndole el estado de cuenta por titular, no persiguiendo hilo por hilo. <b>El mail ya está escrito en Borradores de tu Gmail (15/09): abrilo y dale enviar.</b></p>
       <div class="tablewrap"><table>
         <thead><tr><th>Qué</th><th class="r">Monto original</th><th>Último dato en el mail</th></tr></thead>
         <tbody>
@@ -200,7 +200,7 @@ Gracias!</pre>
         <span class="lbl">Semana · martes y viernes</span>
         <ul>
           <li><b>Martes = día del contador.</b> Diego manda lunes o martes; ese día se paga todo lo que vence hasta el viernes siguiente y no queda nada sin contestar.</li>
-          <li><b>Viernes:</b> facturas emitidas de la semana (hoy vencen 7 por $8.040.450), cobros marcados en la app, y pisar los saldos de CUENTAS con el banco.</li>
+          <li><b>Viernes:</b> facturas emitidas de la semana (hoy vencen 7 por $8.040.450), cobros marcados en la app, y pisar los saldos de CUENTAS con el banco. Incluye los préstamos: BBVA tiene <b class="num">2 cuotas vencidas sin marcar</b> por $2.074.313 y la próxima del Galicia es el 28/09.</li>
           <li><b>El 15:</b> pagos al staff de todo el mes anterior.</li>
         </ul>
       </div>
@@ -309,15 +309,15 @@ Gracias!</pre>
   <div class="sechead">
     <span class="eyebrow">4 · Automatización</span>
     <h2>Que llegue solo</h2>
-    <p>Hoy nada te llega: no hay nada programado en la Mac ni en la nube. El brief y el radar del contador existen desde hace meses, pero hay que pedirlos. Esto los junta en un mail y lo manda solo.</p>
+    <p>Hasta hoy nada te llegaba: no había nada programado en la Mac ni en la nube. El brief y el radar del contador existen desde hace meses, pero había que pedirlos. Esto los junta en un mail y lo manda solo.</p>
   </div>
 
   <div class="steps">
     <div class="step">
-      <span class="lbl">Listo hoy · falta tu OK</span>
+      <span class="lbl">Primer mail enviado · 15/09 13:10 <span class="pill ok">funciona</span></span>
       <h3>El mail de las 8</h3>
-      <p>Un script nuevo junta el brief del día y el radar del contador (refrescando los mails de Diego) y lo manda a juan@somosmagma.com. Probado hoy sin enviar: genera bien las dos partes.</p>
-      <p>Se activa una sola vez, desde la carpeta de la app:</p>
+      <p>Un script nuevo junta el brief del día y el radar del contador (refrescando los mails de Diego) y lo manda a juan@somosmagma.com. El primero ya está en tu casilla: "☀️ La diaria de Magma — martes 15 de septiembre".</p>
+      <p><b>Falta un paso tuyo:</b> programarlo a las 8 en la Mac es algo que Claude no tiene permiso para instalar. Son dos líneas en la terminal, desde la carpeta de la app, una sola vez:</p>
 <pre>cp scripts/launchd/com.somosmagma.diaria.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.somosmagma.diaria.plist</pre>
       <p>Para verlo ahora mismo sin esperar a mañana:</p>
