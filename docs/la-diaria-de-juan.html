@@ -1,0 +1,343 @@
+<title>La diaria de Juan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F5F5F3; --surface:#FFFFFF; --ink:#111114; --muted:#6B6E78; --line:#E2E2DD; --soft:#EFEFEB;
+  --accent:#CE2637; --azul:#1543F8; --ok:#2E7D4F; --warn:#B7791F; --bad:#CE2637;
+  --badbg:#FBE9EB; --warnbg:#FBF1DD; --okbg:#E6F2EA; --azulbg:#E8ECFE;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F0F10; --surface:#18181B; --ink:#ECECEA; --muted:#9A9DA8; --line:#2A2A2E; --soft:#202024;
+    --azul:#6B86FF; --ok:#5DBB86; --warn:#E0A94C; --bad:#F0566A; --accent:#F0566A;
+    --badbg:#3A1C21; --warnbg:#3A2E16; --okbg:#173224; --azulbg:#1C2450;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F0F10; --surface:#18181B; --ink:#ECECEA; --muted:#9A9DA8; --line:#2A2A2E; --soft:#202024;
+  --azul:#6B86FF; --ok:#5DBB86; --warn:#E0A94C; --bad:#F0566A; --accent:#F0566A;
+  --badbg:#3A1C21; --warnbg:#3A2E16; --okbg:#173224; --azulbg:#1C2450;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",-apple-system,Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.5;padding-block:32px 64px;padding-inline:20px}
+.wrap{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:"Archivo","IBM Plex Sans",Helvetica,Arial,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,6vw,52px);font-weight:800;letter-spacing:-.02em;line-height:1.02}
+h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
+h3{font-size:17px;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.dek{font-size:18px;color:var(--muted);max-width:62ch;margin-top:12px}
+header{display:flex;flex-direction:column;gap:10px;border-bottom:3px solid var(--ink);padding-bottom:22px}
+section{display:flex;flex-direction:column;gap:16px}
+.sechead{display:flex;flex-direction:column;gap:6px}
+.sechead p{color:var(--muted);max-width:70ch}
+.mono{font-family:"IBM Plex Mono",Menlo,monospace;font-size:13.5px}
+.num{font-family:"IBM Plex Mono",Menlo,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{text-align:left;font-family:"IBM Plex Mono",Menlo,monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--soft)}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+.pill{display:inline-block;font-family:"IBM Plex Mono",Menlo,monospace;font-size:11.5px;letter-spacing:.03em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--badbg);color:var(--bad)}
+.pill.warn{background:var(--warnbg);color:var(--warn)}
+.pill.ok{background:var(--okbg);color:var(--ok)}
+.pill.azul{background:var(--azulbg);color:var(--azul)}
+.total{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:12px 14px;background:var(--soft);border-radius:6px}
+.total b{font-family:"Archivo",sans-serif;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.total span{color:var(--muted)}
+.note{border-left:3px solid var(--accent);padding:6px 14px;color:var(--ink);background:var(--surface);border-radius:0 6px 6px 0}
+.note b{color:var(--accent)}
+details{border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+details summary{cursor:pointer;padding:12px 14px;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:12px}
+details summary::after{content:"+";font-family:"IBM Plex Mono",monospace;color:var(--muted)}
+details[open] summary::after{content:"–"}
+details summary:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+details .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:12px}
+pre{margin:0;font-family:"IBM Plex Mono",Menlo,monospace;font-size:13px;line-height:1.5;background:var(--soft);padding:12px 14px;border-radius:6px;overflow-x:auto;white-space:pre-wrap}
+ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+li::marker{color:var(--muted)}
+.areas{display:flex;flex-direction:column;gap:14px}
+.area{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+.area .head{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.area .head h3{font-size:20px;font-weight:800;font-family:"Archivo",sans-serif}
+.area .head .what{color:var(--muted);flex:1 1 260px}
+.area .col{display:flex;flex-direction:column;gap:10px}
+.area .lbl{font-family:"IBM Plex Mono",Menlo,monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.area .lbl.hoy{color:var(--accent)}
+.area .cierra{grid-column:1/-1;border-top:1px dashed var(--line);padding-top:10px;color:var(--muted);font-size:14.5px}
+.area .cierra b{color:var(--ink)}
+.week{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 13px;display:flex;flex-direction:column;gap:8px}
+.day .d{font-family:"Archivo",sans-serif;font-weight:800;font-size:16px}
+.day .t{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--accent);letter-spacing:.04em}
+.day ul{font-size:14px}
+.always{background:var(--ink);color:var(--ground);border-radius:8px;padding:16px 20px;display:flex;flex-wrap:wrap;gap:10px 28px;align-items:baseline}
+.always b{font-family:"Archivo",sans-serif;font-size:20px;font-weight:800}
+.always span{opacity:.85}
+.steps{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.step .lbl{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cal{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.cal div{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:14px}
+.cal .d{font-family:"Archivo",sans-serif;font-weight:800;font-size:18px;display:block}
+.cal small{color:var(--muted)}
+footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:6px}
+a{color:var(--azul)}
+@media (max-width:720px){
+  .area{grid-template-columns:1fr}
+  .week{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}
+  body{padding-inline:16px}
+}
+@media (prefers-reduced-motion:no-preference){details .body{animation:fade .18s ease-out}}
+@keyframes fade{from{opacity:.4}to{opacity:1}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Somos Magma · al martes 15 de septiembre de 2026</span>
+  <h1>La diaria de Juan</h1>
+  <p class="dek">Cinco áreas tuyas, un hábito de 20 minutos a las 8 con un mail que llega solo, y lo que Diego necesita de vos esta semana.</p>
+</header>
+
+<!-- ============ 1. DIEGO ============ -->
+<section id="diego">
+  <div class="sechead">
+    <span class="eyebrow">1 · Administración · el contador</span>
+    <h2>Con Diego, esta semana</h2>
+    <p>Sale de los 310 mails con el estudio (barridos hoy) y de los PDF de cada VEP. Diego manda todo lunes o martes y avisa el impago semanas después: el radar corta eso.</p>
+  </div>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Qué</th><th>Titular</th><th class="r">Monto</th><th>Vence</th><th>Qué hacer</th></tr></thead>
+    <tbody>
+      <tr><td>IIBB 08-2026</td><td>Lucia</td><td class="r num">$18.000,00</td><td><span class="pill bad">HOY 15/09</span></td><td>Pagar el VEP 1679975739 y contestarle "pagado" en el mismo hilo.</td></tr>
+      <tr><td>Honorarios 08-2026</td><td>Magma + Sofi</td><td class="r num">$660.660 + $561.440</td><td><span class="pill bad">HOY 15/09</span></td><td>Las dos facturas del 05/09. Pagar y mandarle el comprobante como el mes pasado. Es la última que incluye a Juan: la próxima baja.</td></tr>
+      <tr><td>F.931 08-2026</td><td>Magma SRL</td><td class="r num">$70.659,24</td><td><span class="pill bad">venció 10/09</span></td><td>Pagarlo igual con el VEP 1676591291: en agosto Diego confirmó que el vencido "sigue vigente".</td></tr>
+      <tr><td>Autónomos 08-2026</td><td>Sofi</td><td class="r num">≈ $104.000</td><td><span class="pill bad">venció 07/09</span></td><td>Llegó como imagen, sin PDF. Pedirle a Diego el VEP nuevo (el de julio fue $103.603,74).</td></tr>
+      <tr><td>IVA 06-2026</td><td>Sofi</td><td class="r num">$3.314.817,27</td><td><span class="pill warn">lun 21/09</span></td><td>VEP 1674404311. Es la más grande de la semana: reservar la plata hoy.</td></tr>
+      <tr><td>IVA 06-2026</td><td>Magma SRL</td><td class="r num">$2.704.009,15</td><td><span class="pill warn">mié 23/09</span></td><td>VEP 1674405875.</td></tr>
+      <tr><td>IIBB 08-2026</td><td>Sofi</td><td class="r num">$0</td><td><span class="pill ok">sin pago</span></td><td>Cubierto por retenciones. Solo un "gracias".</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="total"><b class="num">≈ $7.433.000</b><span>salen esta semana entre hoy y el miércoles 23. De eso, $6.018.826 son los dos IVA de junio.</span></div>
+
+  <div class="note"><b>Ya agendado para octubre:</b> IVA 07-2026 de Magma, $2.584.486 (Diego lo avisó el 18/08, vos lo confirmaste el 20/08). Y la última cuota del plan de pago de Magma es la de septiembre; el de Sofi sigue a $595.813 por mes hasta diciembre.</div>
+
+  <details>
+    <summary>Los seis viejos que hay que cerrar de una vez <span class="pill warn">un solo mail a Diego</span></summary>
+    <div class="body">
+      <p>Diego los marcó impagos y en el mail nadie confirmó el pago. No es prueba de deuda: vos a veces pagás y avisás por WhatsApp. Se cierran con un mail pidiéndole el estado de cuenta por titular, no persiguiendo hilo por hilo.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Qué</th><th class="r">Monto original</th><th>Último dato en el mail</th></tr></thead>
+        <tbody>
+          <tr><td>IIBB 04-2026 Sofi</td><td class="r num">$197.704,48</td><td>Diego reenvió el VEP el 13/08 después de tu "hacés VEP así lo pagamos". Nadie escribió "pagado".</td></tr>
+          <tr><td>IIBB 06-2026 Lucia</td><td class="r num">$37.361,78</td><td>Reenviado el 13/08. El 14/08 escribiste "listo pagado este también" en el hilo de julio: casi seguro pagado, falta que Diego lo confirme.</td></tr>
+          <tr><td>IIBB 05-2026 Magma</td><td class="r num">$766.376,39</td><td>Diego el 16/07: "quedó impago, me avisan si quieren pagarlo". Sin respuesta.</td></tr>
+          <tr><td>IIBB 03 y 05-2026 Juan</td><td class="r num">? + $2.806,65</td><td>Diego el 17/07: "sigue impago". Vos te diste de baja de IIBB el 31/07: preguntarle si conviene cancelarlos o quedan en la baja.</td></tr>
+          <tr><td>IVA 02-2026 Magma</td><td class="r num">$2.762.508</td><td>Impago el 07/04 "con intereses". Probablemente entró al plan de pago de junio: que lo confirme.</td></tr>
+          <tr><td>Autónomos 02-2026 Sofi</td><td class="r num">$91.717,09</td><td>Diego el 02/03: "pagando hoy $91.717". Probablemente pagado ese día.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="lbl eyebrow">Borrador para mandar (lo mandás vos, o me decís y lo mando desde admin@)</p>
+<pre>Asunto: Estado de cuenta por titular — cerrar lo viejo
+
+Die, buen día. Estoy ordenando lo impositivo para no dejar más VEPs colgados.
+¿Me pasás qué queda realmente impago hoy, por titular (Magma, Sofi, Lucia, Juan)?
+
+Los que tengo con dudas:
+- IIBB 04-2026 Sofi (me reenviaste el VEP el 13/08)
+- IIBB 06-2026 Lucia (creo que lo pagué el 14/08 junto con el de julio)
+- IIBB 05-2026 Magma
+- IIBB 03 y 05-2026 Juan (con la baja del 31/07, ¿conviene cancelarlos?)
+- IVA 02-2026 Magma (¿entró al plan de pago?)
+- Autónomos 02-2026 Sofi
+
+Y dos cosas de esta semana:
+- Autónomos 08-2026 de Sofi me llegó como imagen, ¿me generás el VEP de nuevo?
+- El 931 08-2026 lo pago con el VEP que mandaste aunque venció el 10/09, como el mes pasado.
+
+Gracias!</pre>
+    </div>
+  </details>
+
+  <h3>El calendario fiscal de todos los meses</h3>
+  <div class="cal">
+    <div><span class="d">~7</span>Autónomos Sofi<br><small>≈ $104.000</small></div>
+    <div><span class="d">~10</span>F.931 (cargas sociales)<br><small>≈ $71.000</small></div>
+    <div><span class="d">~14</span>Honorarios de Diego<br><small>$1.222.100 este mes; desde octubre sin la parte de Juan</small></div>
+    <div><span class="d">15–20</span>IIBB Lucia, Sofi, Magma<br><small>Sofi y Magma vienen a favor; Lucia paga</small></div>
+    <div><span class="d">21 / 23</span>IVA Sofi / IVA Magma<br><small>$2,5M a $3,9M cada uno. El que decide la caja</small></div>
+    <div><span class="d">mes</span>Planes de pago<br><small>Magma termina en septiembre · Sofi $595.813 hasta diciembre</small></div>
+  </div>
+</section>
+
+<!-- ============ 2. ÁREAS ============ -->
+<section id="areas">
+  <div class="sechead">
+    <span class="eyebrow">2 · El reparto</span>
+    <h2>Tus cinco áreas, cerradas</h2>
+    <p>Lo que quedó escrito con Mariana el 14/08 y lo que decidiste después (17/08 comercial entero, 03/09 el precio entra en Comercial). Cada área dice qué mirás cada día, qué una vez por semana, y qué tiene que pasar para que deje de depender de vos.</p>
+  </div>
+
+  <div class="areas">
+
+    <div class="area">
+      <div class="head"><h3>Administración</h3><span class="what">Interna (contador, impuestos, gastos, oficina) y operativa (cobros, facturación, pagos al staff). Hoy Flor por canje; el puesto sigue vacante.</span></div>
+      <div class="col">
+        <span class="lbl hoy">Cada día · 5 min</span>
+        <ul>
+          <li>El bloque del contador en el mail de las 8: si dice "vence hoy" o "en 3 días", se paga y se contesta en el hilo.</li>
+          <li>Facturas vencidas sin cobrar: hoy son <b class="num">15 por $25.283.697</b>, la más vieja Unilever con 36 días. Una llamada por día, la más vieja primero.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="lbl">Semana · martes y viernes</span>
+        <ul>
+          <li><b>Martes = día del contador.</b> Diego manda lunes o martes; ese día se paga todo lo que vence hasta el viernes siguiente y no queda nada sin contestar.</li>
+          <li><b>Viernes:</b> facturas emitidas de la semana (hoy vencen 7 por $8.040.450), cobros marcados en la app, y pisar los saldos de CUENTAS con el banco.</li>
+          <li><b>El 15:</b> pagos al staff de todo el mes anterior.</li>
+        </ul>
+      </div>
+      <div class="cierra"><b>Se cierra cuando:</b> la operativa (facturar, seguir el cobro, avisar pagos) la ejecutan los PMs como dice su manual, y vos solo mirás el viernes. Lo interno lo hereda quien cubra el puesto de administración. Hasta entonces, el contador es tuyo.</div>
+    </div>
+
+    <div class="area">
+      <div class="head"><h3>Comercial</h3><span class="what">Qué se vende, a quién y a cuánto: precio, catálogo, cartera, cierre y condiciones de cobro (la seña se negocia al vender). Lo ejecutás vos solo por ahora.</span></div>
+      <div class="col">
+        <span class="lbl hoy">Cada día · 10 min</span>
+        <ul>
+          <li>Seguimiento del día 4: todo presupuesto en espera que cumplió 4 días recibe un mensaje. Hoy hay <b class="num">44 en espera por $84.510.731</b>.</li>
+          <li>Presupuestos nuevos que salen ese día: con seña del 30% escrita, no negociable.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="lbl">Semana · miércoles</span>
+        <ul>
+          <li><b>Miércoles afuera:</b> las canillas en orden. Primero los vivos con evento por delante, después los buenos que compran poco (Stadium), después los que se enfrían. Recién quinto lo frío (Agencias Argentinas).</li>
+          <li>Una reunión por semana con un cliente que ya conoce a Magma. No hace falta web ni IG para eso.</li>
+          <li>Buscar el "programa de jornadas" en cada recurrente, no cotizar evento por evento.</li>
+        </ul>
+      </div>
+      <div class="cierra"><b>Se cierra cuando:</b> el disparador que vos mismo pusiste el 03/09: si el seguimiento del día 4 se incumple dos semanas seguidas, el área necesita otro ejecutor (Tom o los PMs). El mail de las 8 es el que lo va a mostrar.</div>
+    </div>
+
+    <div class="area">
+      <div class="head"><h3>Sistemas</h3><span class="what">La app, los scripts, los procesos. Es la única área donde vos sos el proveedor, no el cliente.</span></div>
+      <div class="col">
+        <span class="lbl hoy">Cada día · 0 min</span>
+        <ul>
+          <li>Nada diario. Si alguien del equipo reporta que algo no anda, ese día se arregla eso y nada más.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="lbl">Semana · jueves</span>
+        <ul>
+          <li><b>Una mejora del backlog por semana</b>, chica y terminada. La próxima en la lista es el portal del cliente con estado de cuenta por proyecto: es el vehículo de la seña.</li>
+          <li>Antes de dar por hecha cualquier mejora: verificar el sheet y el deploy real, no el build local.</li>
+        </ul>
+      </div>
+      <div class="cierra"><b>Se cierra cuando:</b> el equipo tiene adentro de la app lo que hoy solo tenés vos por terminal (brief, cliente, plata). Mientras tanto, el jueves es el único día que programás; los otros cuatro no.</div>
+    </div>
+
+    <div class="area">
+      <div class="head"><h3>PM de tus proyectos</h3><span class="what">Tus clientes (Stadium, CMQ, ADN, Mercuria, Total, Hard Rock…): 78 proyectos en 2026, el 29% de Magma. Y el hueco de Lulu, 126 proyectos al año, que se va a repartir.</span></div>
+      <div class="col">
+        <span class="lbl hoy">Cada día · 5 min</span>
+        <ul>
+          <li>Del mail de las 8: tus proyectos de los próximos 7 días sin staff cargado. Hoy en toda Magma hay uno, <b>#2299 Panera Rosa (22/9)</b>, y Austral 16/9 y 17/9 están 1 de 2.</li>
+          <li>Tu regla del 07/09: el staff se carga antes del evento; el mail que le llega al freelancer es la prueba.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="lbl">Semana · lunes</span>
+        <ul>
+          <li>Tablero de Edición de tus proyectos: nada en rojo sin dueño.</li>
+          <li>Todo evento tuyo que terminó la semana pasada tiene su factura pedida y la carpeta de entrega en Drive.</li>
+        </ul>
+      </div>
+      <div class="cierra"><b>Se cierra cuando:</b> hay un PM nuevo (Chanas es el candidato) y los proyectos de Lulu no caen sobre vos y Sofi en plena temporada alta. Es la decisión que más urge de las cinco áreas.</div>
+    </div>
+
+    <div class="area">
+      <div class="head"><h3>Dueño</h3><span class="what">Lo que solo pueden decidir los socios: estructura, deuda entre ustedes, quién entra, qué se suelta. No es diario.</span></div>
+      <div class="col">
+        <span class="lbl hoy">Cada día · 0 min</span>
+        <ul>
+          <li>Nada. Si el día te lleva a decidir algo de dueño, se anota y se lleva al lunes.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <span class="lbl">Semana · lunes con Sofi</span>
+        <ul>
+          <li><b>Reunión Juan + Sofi, inamovible</b>, con el chequeo semanal ya leído: cobranzas, clientes que se enfrían, préstamos, deuda entre socios, zombis.</li>
+          <li>Las decisiones abiertas hoy: PM que reemplaza a Lulu · la deuda con Sofi (congelar la causa antes que elegir cuotas) · si la estructura se abre ahora o cuando entren los eventos.</li>
+        </ul>
+      </div>
+      <div class="cierra"><b>Se cierra cuando:</b> ningún proceso depende de uno de los dos, que es el objetivo que vos mismo escribiste en junio. Cada área de arriba tiene su "se cierra cuando" por eso.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ 3. LA SEMANA ============ -->
+<section id="semana">
+  <div class="sechead">
+    <span class="eyebrow">3 · Rutinas inamovibles</span>
+    <h2>La semana</h2>
+    <p>Un área por día además del hábito de las 8. Si un día se pisa, se corre a la mañana siguiente, no se salta.</p>
+  </div>
+
+  <div class="always"><b>Todos los días, 8:00 · 20 min</b><span>Llega el mail. Se leen las dos partes (cobros y contador), se eligen tres acciones y se hacen antes de abrir otra cosa.</span></div>
+
+  <div class="week">
+    <div class="day"><span class="d">Lunes</span><span class="t">DUEÑO + PM</span><ul><li>Chequeo semanal (llega solo)</li><li>Reunión con Sofi</li><li>Tablero de Edición y facturas de tus eventos</li></ul></div>
+    <div class="day"><span class="d">Martes</span><span class="t">CONTADOR</span><ul><li>Pagar lo que vence hasta el viernes siguiente</li><li>Contestar todos los hilos de Diego</li><li>Cero VEPs sin respuesta</li></ul></div>
+    <div class="day"><span class="d">Miércoles</span><span class="t">COMERCIAL</span><ul><li>Llamadas de la canilla en curso</li><li>Una reunión con cliente</li><li>Programas de jornadas a recurrentes</li></ul></div>
+    <div class="day"><span class="d">Jueves</span><span class="t">SISTEMAS</span><ul><li>Una mejora del backlog</li><li>Verificar sheet y deploy</li><li>Nada más de código</li></ul></div>
+    <div class="day"><span class="d">Viernes</span><span class="t">ADMINISTRACIÓN</span><ul><li>Facturas emitidas de la semana</li><li>Cobros marcados en la app</li><li>Saldos de CUENTAS contra el banco</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ 4. QUE LLEGUE SOLO ============ -->
+<section id="solo">
+  <div class="sechead">
+    <span class="eyebrow">4 · Automatización</span>
+    <h2>Que llegue solo</h2>
+    <p>Hoy nada te llega: no hay nada programado en la Mac ni en la nube. El brief y el radar del contador existen desde hace meses, pero hay que pedirlos. Esto los junta en un mail y lo manda solo.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <span class="lbl">Listo hoy · falta tu OK</span>
+      <h3>El mail de las 8</h3>
+      <p>Un script nuevo junta el brief del día y el radar del contador (refrescando los mails de Diego) y lo manda a juan@somosmagma.com. Probado hoy sin enviar: genera bien las dos partes.</p>
+      <p>Se activa una sola vez, desde la carpeta de la app:</p>
+<pre>cp scripts/launchd/com.somosmagma.diaria.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.somosmagma.diaria.plist</pre>
+      <p>Para verlo ahora mismo sin esperar a mañana:</p>
+<pre>launchctl start com.somosmagma.diaria</pre>
+      <p>Corre en tu Mac, así que si está apagada a las 8 lo manda cuando la prendés. Frenar: <span class="mono">launchctl unload</span> del mismo archivo.</p>
+    </div>
+    <div class="step">
+      <span class="lbl">Siguiente paso</span>
+      <h3>El lunes, el semanal</h3>
+      <p>El chequeo de la semana (cobranzas, churn, préstamos, deuda entre socios, zombis) ya sabe armar su propio HTML de mail. Es el mismo mecanismo con otro horario: lunes 7:30, a vos y a Sofi, para entrar a la reunión con los números leídos.</p>
+      <p>Cuando el diario lleve una semana funcionando, se agrega con una línea.</p>
+      <span class="lbl">Si querés que corra sin la Mac</span>
+      <p>La versión en la nube (rutinas de Claude) necesita que le cargues las credenciales del sheet y del mail en su entorno. Es media hora de setup tuyo; se hace cuando el mail de la Mac ya sea un hábito.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Fuentes de hoy: 310 mails con dmestudiocontable.com (contador-radar --refrescar y mail-veps, 15/09 12:30) · morning-brief del 15/09 · facturas de honorarios leídas de los PDF del 05/09. Los conteos de proyectos por PM son del 02/09 (carga-por-pm).</p>
+  <p>Los montos se recalculan corriendo los scripts; no se citan de memoria.</p>
+</footer>
+
+</div>

@@ -6,3 +6,6 @@ node_modules/
 .env*.local
 .claude/
 huerfanos-presupuestos.csv
+
+# generados por scripts/diaria.mjs
+scripts/.diaria*
