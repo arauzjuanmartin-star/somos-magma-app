@@ -317,7 +317,8 @@ Gracias!</pre>
     <div class="step">
       <span class="lbl">Primer mail enviado · 15/09 13:10 <span class="pill ok">funciona</span></span>
       <h3>El mail de las 8 y el de las 15</h3>
-      <p>Un script junta el brief del día y el radar del contador (refrescando los mails de Diego) y lo manda a juan@somosmagma.com. A las 8 es "☀️ La diaria de Magma": qué hacer hoy. A las 15 es "🕒 La tarde de Magma": qué sigue abierto, con lo de la mañana ya descontado. El primero ya está en tu casilla.</p>
+      <p>Un script junta el brief del día y el radar del contador (refrescando los mails de Diego) y lo manda a juan@somosmagma.com. A las 8 es "☀️ La diaria de Magma": qué hacer hoy. A las 15 es "🕒 La tarde de Magma": qué sigue abierto, con lo de la mañana ya descontado.</p>
+      <p><b>El mail abre con un botón "Abrir la diaria en la app"</b> que lleva a <a href="https://somos-magma-app.vercel.app/diaria">somos-magma-app.vercel.app/diaria</a>: la misma información, bien renderizada y recalculada en vivo al abrirla (cobros, proyectos, staff). El radar del contador que se ve ahí es el del último mail, porque necesita leer el correo de Diego. Cada aviso deja además una fila en la solapa DIARIA del Master, con los números del día: con el tiempo es la serie de cómo evoluciona lo vencido y lo por cobrar.</p>
       <p><b>Cada vez que este archivo cambia hay que recargarlo</b>, y eso Claude no tiene permiso para hacerlo. Son tres líneas en la terminal de VSCode:</p>
 <pre>launchctl unload ~/Library/LaunchAgents/com.somosmagma.diaria.plist
 cp /Users/dronjuan/somos-magma-app/scripts/launchd/com.somosmagma.diaria.plist ~/Library/LaunchAgents/

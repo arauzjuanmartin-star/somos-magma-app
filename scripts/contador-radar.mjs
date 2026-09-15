@@ -19,6 +19,10 @@ const SHEET_ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 const HOY = new Date(process.env.HOY_FAKE || Date.now()); HOY.setHours(0,0,0,0)
 const args = process.argv.slice(2)
 const WRITE = args.includes('--write')
+// --json: imprime solo el resultado estructurado (lo usa scripts/diaria.mjs). El texto de siempre se silencia.
+const JSON_MODE = args.includes('--json')
+const _log = console.log
+if (JSON_MODE) console.log = () => {}
 
 const env = Object.fromEntries(readFileSync('.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return[l.slice(0,i).trim(),v]}))
 
@@ -148,6 +152,16 @@ const pendientes = eventos.filter(e => e.pide && e.ultimoDelHilo && e.dir==='rec
 if (!pendientes.length) console.log('   (nada pendiente de respuesta)')
 for (const e of pendientes.sort((a,b)=> a.fecha<b.fecha?-1:1))
   console.log(`   ${e.fecha}  ${e.asunto}\n              → ${e.resumen}`)
+
+if (JSON_MODE) {
+  const pick = e => ({ titular: e.titular || '?', tipo: e.tipo, periodo: e.periodo, vto: fmt(e.vto), dias: e.vto ? dias(e.vto) : null, fecha: e.fecha, asunto: e.asunto })
+  _log(JSON.stringify({
+    generado: new Date().toISOString(), mails: mails.length,
+    impagos: impagos.map(pick), sinNoticias: sinNoticias.map(pick),
+    pendientes: pendientes.map(e => ({ fecha: e.fecha, asunto: e.asunto, resumen: e.resumen })),
+  }))
+  process.exit(0)
+}
 
 // 3. Cuánto tarda Diego en avisar que algo quedó impago
 const avisos = eventos.filter(e => e.dir==='recibido' && IMPAGO.test(e.resumen+e.asunto))
