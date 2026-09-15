@@ -328,8 +328,10 @@ export default async function handler(req, res) {
 
     // 📁 CARPETAS EN DRIVE (best-effort, no bloquea)
     // Al aprobar, el material ya tiene dónde ir, en las dos unidades madre:
-    //   CRUDO     CR_AGENCIA/CR_CLIENTE/AÑO/NRO_FECHA_Proyecto/{Fotos,Videos}
-    //   ENTREGAS  CLIENTE/AÑO/NRO_FECHA_Proyecto/{Fotos,Videos}
+    //   CRUDO     CR_AGENCIA/CR_CLIENTE/AÑO/9 I 14 Proyecto/{Fotos,Videos}
+    //   ENTREGAS  AGENCIA/CLIENTE/AÑO/9 I 14 Proyecto/{Fotos,Videos}
+    // La carpeta de la agencia y del cliente sale de AGENCIAS/CLIENTES ("Drive Crudo",
+    // "Drive Entregas") si está cargada; si no, se busca por nombre y se anota.
     // Las subcarpetas salen de lo que se vendió (ver subcarpetasDe). Es idempotente:
     // si ya existen solo guarda los links. NO comparte con nadie todavía — compartir
     // con el staff o darle el crudo al cliente son botones explícitos del módulo Edición.
