@@ -238,7 +238,7 @@ export default function V2() {
 
       {/* Main */}
       <main style={{flex:1, overflowY:'auto', background:T.bg, minWidth:0}}>
-        <div style={{position:'sticky', top:0, zIndex:50, background:T.bg}}>
+        <div>
           <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'10px 14px 0':'14px 36px 0', display:'flex', justifyContent:'flex-end'}}>
             {!modulos && !cel && <button onClick={()=>setShowSearch(true)} title="Buscar (⌘K)" style={{display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>
               <span style={{fontSize:13}}>🔍</span><span>Buscar</span>
@@ -2076,14 +2076,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
   const esHoy=d=>d&&dayKey(d)===dayKey(now)
 
   return <>
-    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:20}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>{MESES_LARGO[ref.m]} {ref.a}</h1>
-        <div style={{fontSize:13, color:T.ink3, marginTop:3}}>
-          <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} aprobados · {fmtM(totAprob)}{jorAprob>0&&<span style={{color:T.ink3}}> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</span>}{porConfirmar>0&&<span style={{color:T.ink3}} title="Días del trabajo que todavía no tienen fecha confirmada — se ven en gris en la grilla."> · {porConfirmar} a confirmar</span>}</span>
-          &nbsp;·&nbsp;
-          <span title="Presupuestos en espera con evento este mes. Idem: cada uno cuenta una vez.">{cntEsp} en espera · {fmtM(totEsp)}{jorEsp>cntEsp&&<span style={{color:T.ink3}}> · {jorEsp} jornadas</span>}</span>
-          {verEnt && <>&nbsp;·&nbsp;<span title="Entregas de edición con fecha este mes (la prometida por el PM, o la del manual si no hay)">✂ {cntEnt} {cntEnt===1?'entrega':'entregas'}{entAtras>0&&<span style={{color:T.brand, fontWeight:600}}> · {entAtras} atrasadas</span>}{entHechas>0&&<span style={{color:T.ink3}}> · {entHechas} hechas</span>}{sinFecha>0&&<span style={{color:T.ink3}} title="Trabajos abiertos sin fecha de evento ni compromiso: no se pueden ubicar en el calendario"> · {sinFecha} sin fecha</span>}</span></>}
-        </div></div>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>{MESES_LARGO[ref.m]} {ref.a}</h1>
       <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}>
         {edicion.length>0 && <div style={{display:'flex', gap:4, marginRight:6}}>
           {[['todo','Todo'],['rodajes','Rodajes'],['entregas','✂ Entregas']].map(([id,l])=><button key={id} onClick={()=>{setCapa(id);setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 12px', fontSize:12, background:capa===id?T.ink:T.surface, color:capa===id?'#fff':T.ink2, borderColor:capa===id?T.ink:T.border}}>{l}</button>)}
@@ -2097,6 +2091,13 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
         <button onClick={()=>{setRef({a:now.getFullYear(),m:now.getMonth()});setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 14px'}}>Hoy</button>
         <button onClick={()=>navMes(1)} style={navBtn}>→</button>
       </div>
+    </div>
+    {/* Los números van en su propia fila, a todo el ancho: al lado de los botones no entraban y se partían en dos renglones */}
+    <div style={{fontSize:13, color:T.ink3, marginTop:6, marginBottom:18, lineHeight:1.6}}>
+      <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} aprobados · {fmtM(totAprob)}{jorAprob>0&&<span style={{color:T.ink3}}> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</span>}{porConfirmar>0&&<span style={{color:T.ink3}} title="Días del trabajo que todavía no tienen fecha confirmada — se ven en gris en la grilla."> · {porConfirmar} a confirmar</span>}</span>
+      &nbsp;·&nbsp;
+      <span title="Presupuestos en espera con evento este mes. Idem: cada uno cuenta una vez.">{cntEsp} en espera · {fmtM(totEsp)}{jorEsp>cntEsp&&<span style={{color:T.ink3}}> · {jorEsp} jornadas</span>}</span>
+      {verEnt && <>&nbsp;·&nbsp;<span title="Entregas de edición con fecha este mes (la prometida por el PM, o la del manual si no hay)">✂ {cntEnt} {cntEnt===1?'entrega':'entregas'}{entAtras>0&&<span style={{color:T.brand, fontWeight:600}}> · {entAtras} atrasadas</span>}{entHechas>0&&<span style={{color:T.ink3}}> · {entHechas} hechas</span>}{sinFecha>0&&<span style={{color:T.ink3}} title="Trabajos abiertos sin fecha de evento ni compromiso: no se pueden ubicar en el calendario"> · {sinFecha} sin fecha</span>}</span></>}
     </div>
     <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
       <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>

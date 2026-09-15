@@ -15,21 +15,25 @@ const MESN=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','d
 const HOY=new Date()
 
 const r=await sheets.spreadsheets.values.get({spreadsheetId:ID,range:'PRESTAMOS',valueRenderOption:'FORMATTED_VALUE'})
+// Leer por nombre de header, no por posición: la solapa ganó la columna "Mes" (D) y corrió todo lo demás
+const H=r.data.values[0]
+const idx=name=>{const i=H.indexOf(name); if(i<0) throw new Error(`PRESTAMOS: falta la columna "${name}"`); return i}
+const C={prestamo:idx('Prestamo'),cuota:idx('Cuota nro'),total:idx('Cuotas total'),venc:idx('Vencimiento'),monto:idx('Monto cuota'),pagado:idx('Pagado'),notas:idx('Notas'),tipo:idx('Tipo'),deudor:idx('Deudor'),acreedor:idx('Acreedor'),cap:idx('Capital'),int:idx('Interes'),imp:idx('Impuestos')}
 const P=r.data.values.slice(1)
 
 const prest={}
 for(const row of P){
-  const nombre=String(row[0]||'').trim(); if(!nombre) continue
-  const c=cuotaNro(row[1])
-  const p=prest[nombre]||(prest[nombre]={nombre,total:N(row[2]),filas:0,cuotasVistas:new Set(),
+  const nombre=String(row[C.prestamo]||'').trim(); if(!nombre) continue
+  const c=cuotaNro(row[C.cuota])
+  const p=prest[nombre]||(prest[nombre]={nombre,total:N(row[C.total]),filas:0,cuotasVistas:new Set(),
     pagadas:0,pend:0,montoPend:0,capPend:0,intPend:0,impPend:0,montoPag:0,capPag:0,intPag:0,impPag:0,
-    deudor:String(row[12]||'').trim(),acreedor:String(row[13]||'').trim(),tipo:String(row[11]||'').trim(),
-    notas:String(row[10]||'').trim(),venc:[]})
+    deudor:String(row[C.deudor]||'').trim(),acreedor:String(row[C.acreedor]||'').trim(),tipo:String(row[C.tipo]||'').trim(),
+    notas:String(row[C.notas]||'').trim(),venc:[]})
   p.filas++
   if(c) p.cuotasVistas.add(c.n)
-  const pagado=/^s/i.test(String(row[6]||''))
-  const monto=N(row[4]), cap=N(row[15]), int=N(row[16]), imp=N(row[17])
-  const v=fecha(row[3])
+  const pagado=/^s/i.test(String(row[C.pagado]||''))
+  const monto=N(row[C.monto]), cap=N(row[C.cap]), int=N(row[C.int]), imp=N(row[C.imp])
+  const v=fecha(row[C.venc])
   if(pagado){ p.pagadas++; p.montoPag+=monto; p.capPag+=cap; p.intPag+=int; p.impPag+=imp }
   else { p.pend++; p.montoPend+=monto; p.capPend+=cap; p.intPend+=int; p.impPend+=imp; if(v) p.venc.push({v,monto,cap,int,imp}) }
 }
