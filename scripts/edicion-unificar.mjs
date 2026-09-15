@@ -63,10 +63,12 @@ if (trabajoSlot.length) { console.error(`✗ ${ID_SLOT} tiene trabajo encima (${
 
 const hoy = new Date()
 const fecha = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}`
-// Si la tarea manual llevaba el nombre de la persona como título, esa persona
-// es el editor. El título pasa a ser el de la línea del presupuesto.
+// El editor es SOLO el que tenga cargado la tarea manual. El título de la tarea
+// no dice quién edita: #2231 se llamaba "Sol Calbero" por la persona que
+// aparece en el video, y el 14/9 quedó cargada como editora (la editora real
+// dejó de ver el trabajo). El título queda en la bitácora, nada más.
 const tituloManual = v(man.row, 'Entregable')
-const editor = v(man.row, 'Editor') || tituloManual
+const editor = v(man.row, 'Editor')
 const cambios = {
   'ID': ID_SLOT,
   'Entregable': v(slot.row, 'Entregable'),
