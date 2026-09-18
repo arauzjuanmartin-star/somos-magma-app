@@ -18,7 +18,9 @@ import {
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero, diasEntre,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
   textoPedirBrief, textoParaElEditor, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
+  esPedidoFoto, llevaFotos,
 } from '../lib/edicion'
+import FotosProyecto from './FotosProyecto'
 
 // ---------------------------------------------------------------- estilos
 const card = { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12 }
@@ -475,49 +477,6 @@ function BotonCopiar({ texto, etiqueta }) {
     try { await navigator.clipboard.writeText(typeof texto === 'function' ? texto() : texto); setOk(true); setTimeout(() => setOk(false), 2000) } catch (e) {}
   }
   return <button onClick={copiar} style={{ ...btn, padding: '5px 11px', fontSize: 11.5 }}>{ok ? '✓ Copiado' : etiqueta}</button>
-}
-
-// Le pone el nombre de Magma a las fotos de la carpeta de entrega. Muestra el
-// preview antes de tocar nada — son archivos que el cliente ya puede estar
-// mirando. Solo renombra lo que todavía no tiene la firma, así se puede correr
-// de nuevo sin renumerar lo ya entregado.
-function FirmarFotos({ num }) {
-  const [plan, setPlan] = useState(null)
-  const [yendo, setYendo] = useState(false)
-  const [listo, setListo] = useState('')
-
-  const pedir = async (confirmar) => {
-    setYendo(true)
-    try {
-      const r = await fetch('/api/drive-renombrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num, confirmar }) })
-      const j = await r.json()
-      if (!j.ok) { setListo(j.error || 'No se pudo'); setPlan(null) }
-      else if (j.preview) { setPlan(j); setListo('') }
-      else { setListo(`${j.renombradas} fotos firmadas ✓`); setPlan(null) }
-    } catch (e) { setListo('Error de conexión') }
-    setYendo(false)
-  }
-
-  if (listo) return <div style={{ fontSize: 12, color: T.ink2 }}>{listo}</div>
-  if (!plan) return <div>
-    <button onClick={() => pedir(false)} disabled={yendo} style={{ ...btn, width: '100%' }}>{yendo ? 'Mirando la carpeta…' : '📸 Ver qué fotos hay para firmar'}</button>
-    <div style={{ fontSize: 11, color: T.ink3, marginTop: 5, lineHeight: 1.45 }}>Les pone Cliente_Proyecto_001_@somosmagma_ar. Primero te muestra qué va a cambiar.</div>
-  </div>
-
-  return <div>
-    <div style={{ fontSize: 12.5, color: T.ink, marginBottom: 8 }}>
-      {plan.total} fotos en la carpeta · <strong>{plan.aRenombrar} para firmar</strong>
-      {plan.yaFirmadas > 0 && <span style={{ color: T.ink3 }}> · {plan.yaFirmadas} ya estaban firmadas, no se tocan</span>}
-    </div>
-    {plan.plan.length > 0 && <div style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', maxHeight: 130, overflowY: 'auto', fontFamily: MONO, fontSize: 11, lineHeight: 1.7, marginBottom: 9 }}>
-      {plan.plan.slice(0, 6).map((p, i) => <div key={i} style={{ color: T.ink2 }}>{p.antes} <span style={{ color: T.ink3 }}>→</span> <span style={{ color: T.ink }}>{p.despues}</span></div>)}
-      {plan.aRenombrar > 6 && <div style={{ color: T.ink3 }}>y {plan.aRenombrar - 6} más…</div>}
-    </div>}
-    <div style={{ display: 'flex', gap: 8 }}>
-      <button onClick={() => pedir(true)} disabled={yendo || !plan.aRenombrar} style={{ ...btnPri, opacity: plan.aRenombrar ? 1 : 0.5 }}>{yendo ? 'Firmando…' : `Firmar ${plan.aRenombrar}`}</button>
-      <button onClick={() => setPlan(null)} style={btn}>Cancelar</button>
-    </div>
-  </div>
 }
 
 // ---------------------------------------------------- el OK del PM
@@ -997,6 +956,11 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
   const [copiado, setCopiado] = useState(false)
   const copiarCliente = async () => { try { await navigator.clipboard.writeText(linkFinales || linkEntrega); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch (e) {} }
   const [panel, setPanel] = useState(false)
+  // Las fotos van a la vista, no adentro de "Compartir…": ahí no las encontró nadie.
+  // El botón aparece si el trabajo lleva fotos — y un Film (filmmaker) las lleva
+  // aunque el presupuesto no tenga ninguna línea que diga "Foto".
+  const [verFotos, setVerFotos] = useState(false)
+  const conFotos = g.items.some(h => esPedidoFoto(h.Entregable)) || llevaFotos(Object.keys(proy || {}).filter(c => /^Pedido \d+$/.test(c)).map(c => proy[c]))
   // "Un video más" se carga desde el proyecto, no desde un formulario suelto arriba
   // donde hay que tipear el número y después buscar dónde cayó.
   const [nuevaAca, setNuevaAca] = useState(false)
@@ -1018,6 +982,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
       {(rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
       {!(rec.cliente || rec.agencia) && logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="Link puntual cargado en la pieza" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
       {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
+      {!fantasma && !soloLoSuyo && conFotos && <button onClick={() => setVerFotos(v => !v)} title="Las fotos que subió el fotógrafo: cuántas hay, firmarlas y dejarlas listas para el cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: verFotos ? T.ink : T.surface, color: verFotos ? '#fff' : T.ink2 }}>{verFotos ? 'Cerrar' : '🖼 Fotos'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
       {cel ? <>
@@ -1038,6 +1003,8 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         onCrear={async d => { const ok = await crearTarea(d); if (ok) setNuevaAca(false); return ok }} onCancelar={() => setNuevaAca(false)} />
     </div>}
 
+    {verFotos && <FotosProyecto num={g.num} showToast={showToast} onListo={j => { if (j?.finalesNueva && onRefresh) onRefresh() }} />}
+
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
     {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />)}
@@ -1053,10 +1020,6 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   }
   const conStaff = async () => { setYendo('staff'); await carpeta(g.num, ['crudo'], true); setYendo('') }
   return <div style={{ padding: '12px 14px', background: T.bg, borderBottom: `1px solid ${T.border}`, display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16 }}>
-    <div style={{ gridColumn: '1/-1', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${T.border}` }}>
-      <div style={lbl}>Firmar las fotos entregadas</div>
-      <FirmarFotos num={g.num} />
-    </div>
     <div>
       <div style={lbl}>Al equipo que filma y edita</div>
       <button onClick={conStaff} disabled={yendo === 'staff'} style={{ ...btn, width: '100%' }}>{yendo === 'staff' ? 'Compartiendo…' : 'Dar acceso al staff asignado'}</button>

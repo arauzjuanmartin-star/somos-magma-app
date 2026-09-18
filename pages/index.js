@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS } from '../lib/slots'
-import { CLASES_VIDEO, esPedidoEdicion, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
+import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
@@ -10,6 +10,7 @@ import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
+import FotosProyecto from '../components/FotosProyecto'
 import Novedades from '../components/Novedades'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
@@ -2510,6 +2511,8 @@ function DriveDelProyecto({p, num, showToast, onRefresh, agencias=[], clientes=[
   const recAg=(agencias.find(a=>kk(a.Nombre)===kk(p['Agencia']))||{})['Drive Recursos']||''
   const recCl=(clientes.find(c=>kk(c.Nombre)===kk(p['Cliente']))||{})['Drive Recursos']||''
   const [copiado,setCopiado]=useState(false)
+  const [verFotos,setVerFotos]=useState(false)
+  const conFotos=llevaFotos(Object.keys(p).filter(c=>/^Pedido \d+$/.test(c)).map(c=>p[c]))
   const crudo=String(p['Drive Crudo']||'').trim(), entrega=String(p['Drive Entrega']||'').trim(), finales=String(p['Drive Finales']||'').trim()
   const paraCliente=finales||entrega
   const copiar=async()=>{ try{ await navigator.clipboard.writeText(paraCliente); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }catch(e){} }
@@ -2537,6 +2540,9 @@ function DriveDelProyecto({p, num, showToast, onRefresh, agencias=[], clientes=[
       <button onClick={crear} disabled={creando} style={miniBtn}>{creando?'Creando…':'📁 Crear carpetas'}</button>
     </>}
     {paraCliente && !finales && <span style={{fontSize:11, color:T.ink3}}>Carpeta vieja sin “Finales”: el link es el de la carpeta entera.</span>}
+    {/* Las fotos también acá: un filmmaker sin edición no aparece en el tablero de Edición. */}
+    {conFotos && entrega && <button onClick={()=>setVerFotos(v=>!v)} style={{...miniBtn, background:verFotos?T.ink:undefined, color:verFotos?'#fff':undefined}}>{verFotos?'Cerrar fotos':'🖼 Fotos'}</button>}
+    {verFotos && <div style={{flexBasis:'100%', border:`1px solid ${T.border}`, borderRadius:10, overflow:'hidden'}}><FotosProyecto num={num} showToast={showToast} onListo={j=>{ if(j?.finalesNueva&&onRefresh) onRefresh() }}/></div>}
   </div>
 }
 

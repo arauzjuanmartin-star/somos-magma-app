@@ -9,7 +9,8 @@
 import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { compartirCarpeta } from '../../lib/drive'
+import { compartirCarpeta, carpetaParaSubirFotos } from '../../lib/drive'
+import { esPedidoFoto, esPedidoFilm } from '../../lib/edicion'
 
 const CALENDAR_ID = '5gc9hdvh4vi28bf8uemr2vfnn4@group.calendar.google.com'
 
@@ -172,6 +173,9 @@ export default async function handler(req, res) {
     const contactoLugar = get('Contacto Lugar')
     const contacto = get('Contacto')
     let staffAttendees = [], staffSinMail = [], compartidoCrudo = null
+    // Los que sacan fotos: la línea dice Foto, o Film (un filmmaker hace foto y video).
+    const sacanFotos = new Set()
+    let trabajoConFotos = false
     // Cada línea de staff puede tener su día: en un trabajo de varias fechas no va todo
     // el mundo todos los días (el 3 fue Juan, el 4 Felipe). El que no tiene día asignado
     // va a todas — es como venía funcionando y es lo correcto para un trabajo de un día.
@@ -238,6 +242,12 @@ export default async function handler(req, res) {
             slot++
             const nombre = String(pFila[i]||'').trim()
             if (nombre && nombre !== 'Somos Magma') staffPorSlot.push({ slot, nombre })
+            // El trío es Pedido / Precio / Staff: el pedido de este staff está dos columnas antes.
+            const pedido = pFila[i - 2]
+            if (esPedidoFoto(pedido) || esPedidoFilm(pedido)) {
+              trabajoConFotos = true
+              if (nombre && nombre !== 'Somos Magma') sacanFotos.add(nombre.toLowerCase())
+            }
           })
           const fechasSlot = {}
           const iFS = pHeaders.indexOf('Fechas Staff')
@@ -288,10 +298,20 @@ export default async function handler(req, res) {
         if (idCarpeta && staffAttendees.length) {
           try { compartidoCrudo = await compartirCarpeta(idCarpeta, staffAttendees.map(a => a.email)) } catch (e) {}
         }
-        if (crudo || entrega) {
+        // Las fotos: solo si el trabajo las lleva, con el link de la carpeta exacta
+        // (Pre-entregas, no la del proyecto) y con permiso para el que las saca.
+        let subirFotos = ''
+        const idEntrega = (entrega.match(/\/folders\/([A-Za-z0-9_-]+)/) || [])[1]
+        if (idEntrega && trabajoConFotos) {
+          try {
+            const mailsFoto = staffAttendees.filter(a => sacanFotos.has(String(a.displayName || '').toLowerCase())).map(a => a.email)
+            subirFotos = (await carpetaParaSubirFotos(idEntrega, mailsFoto)).link
+          } catch (e) { /* sin link de fotos la citación sale igual */ }
+        }
+        if (crudo || subirFotos) {
           descripcionPartes.push('', '— DÓNDE SUBIR EL MATERIAL —')
           if (crudo) descripcionPartes.push(`📤 Video crudo: ${crudo}`)
-          if (entrega) descripcionPartes.push(`📸 Fotos ya editadas: ${entrega}`)
+          if (subirFotos) descripcionPartes.push(`📸 Fotos ya editadas (sueltas en esta carpeta, sin renombrar — el nombre se lo ponemos nosotros): ${subirFotos}`)
           descripcionPartes.push(
             'Entrás con tu propio mail, el mismo al que te llegó esta invitación.',
             'No hace falta la contraseña de nadie y no te ocupa espacio en tu Drive.',
