@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/login',
   '/api/auth',  // todas las rutas de /api/auth/* (signin, callback, etc)
   '/api/whatsapp-webhook',  // Meta llama a este webhook sin login (verifica con hub.verify_token + firma)
+  '/api/cron',  // los cron de Vercel llaman sin login; cada endpoint verifica CRON_SECRET en el header Authorization
   '/_next',
   '/favicon.ico',
   '/web.html',  // preview público de la web nueva (para Sofi/equipo, sin login)
