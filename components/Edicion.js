@@ -54,7 +54,12 @@ const claveNombre = s => norm(s).replace(/[^a-z0-9]/g, '')
 
 // ---------------------------------------------------------------- principal
 export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav, goTo }) {
-  const [vista, setVista] = useState('tablero')   // 'tablero' | 'info'
+  // 'lista' | 'columnas' | 'info'. Lista y Tablero son DOS FORMAS DE MIRAR los mismos
+  // trabajos (como las vistas de Airtable): comparten "Lo mío", el buscador, los
+  // filtros y los chips de plazo. La elegida queda en el navegador de cada uno.
+  const [vista, setVistaSt] = useState('lista')
+  useEffect(() => { if (recordado('ed-vista') === 'columnas') setVistaSt('columnas') }, [])
+  const setVista = v => { setVistaSt(v); if (v !== 'info') recordar('ed-vista', v) }
   // La FICHA: un trabajo solo en pantalla, sin el resto del tablero alrededor.
   // Dani, 17/9/2026: en Airtable "hacía click en la tarea y se me abría una pág
   // solita con esa tarea sin ver las demás". `abierto` dice cuál, `enfoque` dice
@@ -109,11 +114,27 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   useEffect(() => {
     const id = nav?.abrir
     if (!id) return
-    setVista('tablero'); setAbierto(id); setEnfoque(true); setVolverA(nav.desde || null)
+    setVistaSt(v => v === 'info' ? 'lista' : v); setAbierto(id); setEnfoque(true); setVolverA(nav.desde || null)
     clearNav && clearNav()
   }, [nav]) // eslint-disable-line
 
   const abrir = id => { if (id) { setAbierto(id); setEnfoque(true) } else salirFicha() }
+  // Arrastrar una tarjeta a otra columna. Sirve para los pasos del EDITOR (arrancar,
+  // mandar a revisar — ahí la app busca sola la versión en Pre-entregas). Lo que
+  // decide un PM no se arrastra: mandar al cliente mueve el archivo a Finales y le da
+  // acceso, y pedir cambios lleva la nota al editor y cuenta la vuelta. Todo eso pasa
+  // en la ficha, así que soltar ahí la abre en vez de cambiar el estado a secas.
+  function moverA(id, col) {
+    const f = filas.find(x => x.ID === id)
+    if (!f) return
+    const de = estadoDe(f.Estado)
+    if (col.estados.includes(de)) return
+    if (col.id === 'Con el cliente') { showToast('Al cliente se manda desde la ficha: “Aprobar y mandar” pasa el archivo a Finales y le da acceso'); return abrir(id) }
+    if (col.id === 'Terminado' && de !== 'Con el cliente') { showToast('Se termina cuando el cliente da el OK: primero tiene que estar “Con el cliente”', 'err'); return }
+    if (col.id === 'Editando' && (de === 'Para revisar' || de === 'Con el cliente')) { showToast('Si vuelve con cambios, cargalos en la ficha: le llega la nota al editor y se cuenta la vuelta'); return abrir(id) }
+    guardar(id, { Estado: col.id })
+    showToast(`${limpiarPedido(f.Entregable)} → ${col.id}`)
+  }
   function salirFicha() {
     const id = abierto
     setEnfoque(false); setAbierto(null); setVolverA(null)
@@ -161,6 +182,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const edito = !!yo.editor && filas.some(f => !estaCerrado(f.Estado) && canonStaff(String(f.Editor || '').trim()) === yo.editor)
     setSoloMio(g === null ? edito : g === '1')
   }, [crudas]) // eslint-disable-line
+  // "Esperan tu OK" solo es verdad si sos PM de algo. Para quien solo edita (Dani) son
+  // trabajos que ELLA mandó y esperan el OK de otro: decirle "tu OK" es al revés.
+  const soyPM = useMemo(() => mias.some(f => (yo.pms || []).includes(norm(f.PM).trim())), [mias, yo])
+  const etiqueta = f => f.id === 'revisar' && hayMio && !soyPM ? 'Esperan el OK del PM' : f.label
   const elegirMio = v => { setSoloMio(v); recordar('ed-solo-mio', v ? '1' : '0'); if (v) { setPersonaF('todos'); setPmF('todos') } }
   // Todo lo que se cuenta y se lista sale de acá: si estoy en "lo mío", los números
   // de arriba también son los míos (si no, dice "5 atrasados" y al tocar hay 2).
@@ -279,10 +304,13 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // abajo, con UN aviso que dice cuántas hay y cuántas llevan días así. Si alguien
   // filtra (Atrasado, un estado, el buscador) la lista va entera, como siempre. Lo
   // tocado en la sesión no se pliega: si no, otra vez "la apretás y desaparece".
-  const separar = filtro === 'activos' && estadoF === 'todos' && !q.trim()
-  const espera = f => separar && estadoDe(f.Estado) === 'Sin material' && abierto !== f.ID && !tocados.has(f.ID)
-  const grupos = useMemo(() => armarGrupos(visibles.filter(f => !espera(f))), [visibles, separar, abierto, tocados]) // eslint-disable-line
-  const filasEspera = useMemo(() => visibles.filter(espera), [visibles, separar, abierto, tocados]) // eslint-disable-line
+  const enColumnas = vista === 'columnas'
+  const separar = enColumnas || (filtro === 'activos' && estadoF === 'todos' && !q.trim())
+  // En el tablero "Sin material" no tiene columna: va siempre a la sección plegada.
+  const espera = f => separar && estadoDe(f.Estado) === 'Sin material' && (enColumnas || (abierto !== f.ID && !tocados.has(f.ID)))
+  const filasActivas = useMemo(() => visibles.filter(f => !espera(f)), [visibles, separar, enColumnas, abierto, tocados]) // eslint-disable-line
+  const grupos = useMemo(() => armarGrupos(filasActivas), [filasActivas]) // eslint-disable-line
+  const filasEspera = useMemo(() => visibles.filter(espera), [visibles, separar, enColumnas, abierto, tocados]) // eslint-disable-line
   const gruposEspera = useMemo(() => armarGrupos(filasEspera), [filasEspera]) // eslint-disable-line
   const esperaViejas = filasEspera.filter(f => f.__sem.nivel === 'rojo').length
   const nFiltros = [estadoF, pmF, personaF].filter(v => v !== 'todos').length
@@ -487,7 +515,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: cel ? 10 : 22, marginBottom: 16, borderBottom: `1px solid ${T.border}` }}>
       <h1 style={{ fontSize: 21, fontWeight: 700, color: T.ink, margin: '0 0 8px' }}>Edición</h1>
       <div style={{ display: 'flex', gap: 2 }}>
-        {[['tablero', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
+        {[['lista', 'Lista'], ['columnas', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
           <button key={id} onClick={() => setVista(id)} style={{
             padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 13.5, fontWeight: vista === id ? 700 : 500, color: vista === id ? T.ink : T.ink2,
@@ -554,11 +582,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
             <Kpi n={cuenta.naranja} l="hoy" c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} cel={cel} />
             <Kpi n={cuenta.amarillo} l="semana" c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} cel={cel} />
-            <Kpi n={cuenta.revisar} l="tu OK" c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
+            <Kpi n={cuenta.revisar} l={hayMio && !soyPM ? 'OK del PM' : 'tu OK'} c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
           </div>}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             {cel && <select value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...inp, flex: '1 1 100%', fontSize: 13, padding: '9px 10px', cursor: 'pointer' }}>
-              {FILTROS.map(f => <option key={f.id} value={f.id}>{f.label} ({cuenta[f.id]})</option>)}
+              {FILTROS.map(f => <option key={f.id} value={f.id}>{etiqueta(f)} ({cuenta[f.id]})</option>)}
             </select>}
             {!cel && FILTROS.map(f => {
               const activo = filtro === f.id, n = cuenta[f.id], punto = COLOR_SEM[f.id]?.fg || (f.id === 'revisar' ? T.brand : null)
@@ -566,7 +594,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
                 ...btn, padding: '5px 11px', fontSize: 12, borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
                 border: `1px solid ${activo ? T.ink : T.border}`, background: activo ? T.ink : 'transparent', color: activo ? '#fff' : T.ink2, fontWeight: activo ? 600 : 500,
                 opacity: n || activo ? 1 : 0.45,
-              }}>{punto && n > 0 && f.id !== 'listo' && <span style={{ width: 7, height: 7, borderRadius: 7, background: punto, display: 'inline-block' }} />}{f.label} <span style={{ fontFamily: MONO, opacity: 0.65 }}>{n}</span></button>
+              }}>{punto && n > 0 && f.id !== 'listo' && <span style={{ width: 7, height: 7, borderRadius: 7, background: punto, display: 'inline-block' }} />}{etiqueta(f)} <span style={{ fontFamily: MONO, opacity: 0.65 }}>{n}</span></button>
             })}
           </div>
 
@@ -576,7 +604,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}{soloMio && hayMio && <button onClick={() => elegirMio(false)} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
             : <>
               {!grupos.length && <div style={{ fontSize: 13, color: T.ink2, padding: '6px 2px 16px' }}>{soloMio && hayMio ? 'No tenés nada en edición ahora.' : 'No hay nada en edición ahora.'}</div>}
-              {grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
+              {enColumnas
+                ? filasActivas.length > 0 && <Columnas filas={filasActivas} onAbrir={abrir} onMover={moverA} onEstado={(f, e) => { guardar(f.ID, { Estado: e }); showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} cel={cel} />
+                : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
               {gruposEspera.length > 0 && <>
                 <button onClick={() => { const n = !verEspera; setVerEspera(n); recordar('ed-ver-espera', n ? '1' : '0') }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', marginTop: grupos.length ? 8 : 0, marginBottom: 10, borderRadius: 12, border: `1px dashed ${T.border}`, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, color: T.ink3 }}>{verEspera ? '▼' : '▶'}</span>
@@ -1057,6 +1087,80 @@ function Barra({ estado, onChange, compacta = false, soloBarra = false }) {
 }
 
 // ---------------------------------------------------------------- pedazos
+// ---------------------------------------------------------------- tablero (columnas)
+// La otra forma de mirar los mismos trabajos: una columna por QUIÉN TIENE LA PELOTA.
+// Dani venía de Airtable en Disney; esta es su vista Kanban. Ocho estados serían ocho
+// columnas finitas, así que se agrupan en cuatro: por arrancar (hay material) →
+// editando (lo tiene el editor, incluidas las vueltas con cambios) → para revisar (lo
+// tiene el PM) → con el cliente. "Sin material" no es edición todavía: va plegado abajo.
+const COLUMNAS = [
+  { id: 'Material listo', titulo: 'Por arrancar', sub: 'hay material, falta empezar', estados: ['Material listo'] },
+  { id: 'Editando', titulo: 'Editando', sub: 'lo tiene el editor', estados: ['Editando', 'Cambios internos', 'Cambios del cliente'] },
+  { id: 'Para revisar', titulo: 'Para revisar', sub: 'espera el OK del PM', estados: ['Para revisar'] },
+  { id: 'Con el cliente', titulo: 'Con el cliente', sub: 'espera su OK', estados: ['Con el cliente'] },
+]
+const COL_TERMINADO = { id: 'Terminado', titulo: 'Terminado', sub: 'el cliente dio el OK', estados: ['Terminado'] }
+const primerNombre = n => String(n || '').trim().split(' ')[0]
+
+function Columnas({ filas, onAbrir, onMover, onEstado, cel }) {
+  const [arrastra, setArrastra] = useState(null)   // ID de la tarjeta en el aire
+  const [sobre, setSobre] = useState(null)         // columna bajo el mouse
+  const hayCerradas = filas.some(f => estaCerrado(f.Estado))
+  const cols = hayCerradas ? [...COLUMNAS, COL_TERMINADO] : COLUMNAS
+  const de = col => filas.filter(f => col.estados.includes(estadoDe(f.Estado)))
+    // primero lo que volvió con cambios (es lo que el editor tiene que agarrar ya), después por plazo
+    .sort((a, b) => (ES_VUELTA(estadoDe(b.Estado)) - ES_VUELTA(estadoDe(a.Estado))) || (a.__sem.orden - b.__sem.orden))
+
+  return <div style={{ marginBottom: 14 }}>
+    {!cel && <div style={{ fontSize: 11.5, color: T.ink3, margin: '-6px 2px 10px' }}>Arrastrá una tarjeta para pasarla de columna · tocala para abrirla</div>}
+    <div style={{ display: cel ? 'block' : 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))`, gap: 12, alignItems: 'start' }}>
+      {cols.map(col => {
+        const items = de(col), encima = sobre === col.id && arrastra
+        return <div key={col.id}
+          onDragOver={cel ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (sobre !== col.id) setSobre(col.id) }}
+          onDrop={cel ? undefined : e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain') || arrastra; setSobre(null); setArrastra(null); if (id) onMover(id, col) }}
+          style={{ background: encima ? T.brandSoft : T.surfaceAlt, border: `1px ${encima ? 'dashed' : 'solid'} ${encima ? T.brand : T.border}`, borderRadius: 12, padding: 8, marginBottom: cel ? 12 : 0, minHeight: cel ? undefined : 120, transition: 'background .12s' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, padding: '4px 6px 9px' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>{col.titulo}</span>
+            <span style={{ fontSize: 12, fontFamily: MONO, color: T.ink2 }}>{items.length}</span>
+            <span style={{ fontSize: 11, color: T.ink3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.sub}</span>
+          </div>
+          {!items.length && <div style={{ fontSize: 11.5, color: T.ink3, padding: '10px 6px 14px' }}>—</div>}
+          {items.map(f => {
+            const c = COLOR_SEM[f.__sem.nivel] || COLOR_SEM.verde, e = estadoDe(f.Estado), vuelta = ES_VUELTA(e)
+            const sinNadie = !String(f.Editor || '').trim()
+            return <div key={f.ID} id={`ed-${f.ID}`} draggable={!cel}
+              onDragStart={e2 => { e2.dataTransfer.setData('text/plain', f.ID); e2.dataTransfer.effectAllowed = 'move'; setArrastra(f.ID) }}
+              onDragEnd={() => { setArrastra(null); setSobre(null) }}
+              onClick={() => onAbrir(f.ID)} title="Abrir este trabajo"
+              style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${c.fg}`, borderRadius: 9, padding: '9px 10px', marginBottom: 7, cursor: cel ? 'pointer' : 'grab', opacity: arrastra === f.ID ? 0.4 : estaCerrado(f.Estado) ? 0.6 : 1 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.Cliente || f.Agencia || '—'}</span>
+                <span style={{ fontSize: 10.5, fontFamily: MONO, color: T.ink3 }}>#{f['N° presupuesto']}</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: T.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{limpiarPedido(f.Entregable)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.ink3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {sinNadie ? <span style={{ color: T.brand, fontWeight: 600 }}>sin asignar</span> : <span style={{ color: T.ink2 }}>{primerNombre(f.Editor)}</span>}
+                  {String(f.PM || '').trim() && <span> · PM {f.PM}</span>}
+                </span>
+                {!estaCerrado(f.Estado) && <span style={{ fontSize: 10.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>{f.__sem.txt}</span>}
+              </div>
+              {(vuelta || String(f.Prioridad || '').trim() === 'Urgente' || !!String(f.Consulta || '').trim()) && <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+                {vuelta && <span style={{ fontSize: 10.5, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap' }}>{e === 'Cambios internos' ? 'cambios internos' : 'cambios del cliente'}</span>}
+                {String(f.Prioridad || '').trim() === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}
+                {!!String(f.Consulta || '').trim() && <span style={{ fontSize: 11 }} title="Hay una pregunta sin responder">🙋</span>}
+              </div>}
+              {/* En el teléfono no se puede arrastrar: el estado se cambia con la píldora. */}
+              {cel && <div style={{ marginTop: 8 }}><EstadoPill estado={f.Estado} onChange={nuevo => onEstado(f, nuevo)} /></div>}
+            </div>
+          })}
+        </div>
+      })}
+    </div>
+  </div>
+}
+
 function Kpi({ n, l, c, onClick, activo, cel }) {
   return <button onClick={onClick} style={{ ...card, padding: cel ? '8px 6px' : '13px 15px', textAlign: cel ? 'center' : 'left', cursor: 'pointer', borderColor: activo ? c : T.border, borderWidth: activo ? 1.5 : 1 }}>
     <div style={{ fontSize: cel ? 19 : 25, fontWeight: 700, color: n ? c : T.ink3, fontFamily: MONO, lineHeight: 1.1 }}>{n}</div>
