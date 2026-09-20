@@ -21,6 +21,12 @@ import {
   esPedidoFoto, llevaFotos,
 } from '../lib/edicion'
 import FotosProyecto from './FotosProyecto'
+import { quienSoy, esMio } from '../lib/quien-soy'
+
+// Lo que cada uno elige (ver solo lo suyo, qué secciones deja abiertas) queda en
+// su navegador. No va al sheet: es cómo le gusta mirar a cada uno, no un dato.
+const recordar = (k, v) => { try { window.localStorage.setItem(k, v) } catch (e) {} }
+const recordado = k => { try { return window.localStorage.getItem(k) } catch (e) { return null } }
 
 // ---------------------------------------------------------------- estilos
 const card = { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12 }
@@ -47,8 +53,16 @@ const esURL = s => /^https?:\/\//i.test(String(s || '').trim())
 const claveNombre = s => norm(s).replace(/[^a-z0-9]/g, '')
 
 // ---------------------------------------------------------------- principal
-export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav }) {
+export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNav, goTo }) {
   const [vista, setVista] = useState('tablero')   // 'tablero' | 'info'
+  // La FICHA: un trabajo solo en pantalla, sin el resto del tablero alrededor.
+  // Dani, 17/9/2026: en Airtable "hacía click en la tarea y se me abría una pág
+  // solita con esa tarea sin ver las demás". `abierto` dice cuál, `enfoque` dice
+  // que se ve sola. (Abierto sin enfoque = desplegada en la lista: lo recién creado.)
+  const [enfoque, setEnfoque] = useState(false)
+  const [volverA, setVolverA] = useState(null)    // 'calendario' si vino de ahí
+  // "Lo mío": lo que edito o lo que respondo como PM. Queda recordado por navegador.
+  const [soloMio, setSoloMio] = useState(false)
   const [local, setLocal] = useState({})          // cambios ya aplicados en pantalla
   const [filtro, setFiltro] = useState('activos')
   const [q, setQ] = useState('')
@@ -78,19 +92,37 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const crudas = useMemo(() => (data?.edicion || []).filter(f => String(f.ID || '').trim()), [data])
   const hoy = hoyCero()
 
-  // Si llegó desde un aviso por mail (?e=<ID>), abrimos ese trabajo y sacamos
-  // los filtros de encima: si quedaba escondido detrás de uno, el link no servía.
+  // Si llegó desde un aviso por mail (?e=<ID>) o desde el calendario, se abre la
+  // FICHA de ese trabajo: él solo en pantalla. Antes se abría en medio del tablero
+  // y, para que no quedara escondido, se sacaban todos los filtros — o sea que
+  // quien venía de mirar solo lo suyo caía en las tareas de todos ("a veces tengo
+  // que andar buscando", Dani 17/9/2026). Los filtros ya no se tocan: al volver,
+  // el tablero está como lo dejó.
   useEffect(() => {
     const id = nav?.abrir
     if (!id) return
-    setFiltro('activos'); setPersonaF('todos'); setPmF('todos'); setEstadoF('todos'); setQ('')
-    setAbierto(id)
+    setVista('tablero'); setAbierto(id); setEnfoque(true); setVolverA(nav.desde || null)
     clearNav && clearNav()
-    setTimeout(() => {
-      const el = document.getElementById(`ed-${id}`)
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }, 350)
   }, [nav]) // eslint-disable-line
+
+  const abrir = id => { if (id) { setAbierto(id); setEnfoque(true) } else salirFicha() }
+  function salirFicha() {
+    const id = abierto
+    setEnfoque(false); setAbierto(null); setVolverA(null)
+    if (id) setScrollA(id)   // el tablero vuelve parado en la fila de la que salió
+  }
+  // Esc cierra la ficha, como el registro expandido de Airtable.
+  useEffect(() => {
+    if (!enfoque) return
+    const h = e => { if (e.key === 'Escape' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) salirFicha() }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  }, [enfoque, abierto]) // eslint-disable-line
+  // Al entrar a una ficha, arriba de todo: si no, queda scrolleada donde estaba el tablero.
+  useEffect(() => {
+    if (!enfoque || !abierto) return
+    const el = document.getElementById('ed-ficha-tope')
+    if (el) el.scrollIntoView({ block: 'start' })
+  }, [enfoque, abierto])
 
   const contactos = data?.contactos || []
   const mailsDe = (agencia, cliente) => {
@@ -104,6 +136,27 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     m.__sem = semaforo(m, hoy)
     return m
   }), [crudas, local]) // eslint-disable-line
+
+  // Quién soy en el tablero, y qué es "lo mío": lo que edito o lo que respondo como PM.
+  const yo = useMemo(() => quienSoy(mail, data?.rrhh), [mail, data])
+  const mias = useMemo(() => filas.filter(f => esMio(f, yo)), [filas, yo])
+  const miasAbiertas = useMemo(() => mias.filter(f => !estaCerrado(f.Estado)).length, [mias])
+  // Al freelancer /api/data ya le manda solo sus filas: el botón no le suma nada.
+  const hayMio = mias.length > 0 && !data?.__soloLoSuyo
+  // Quien edita arranca en lo suyo; el resto (Juan, Sofi) arranca viendo todo. Una
+  // vez que alguien lo cambia, manda lo que eligió.
+  const mioListo = useRef(false)
+  useEffect(() => {
+    if (mioListo.current || !crudas.length) return
+    mioListo.current = true
+    const g = recordado('ed-solo-mio')
+    const edito = !!yo.editor && filas.some(f => !estaCerrado(f.Estado) && canonStaff(String(f.Editor || '').trim()) === yo.editor)
+    setSoloMio(g === null ? edito : g === '1')
+  }, [crudas]) // eslint-disable-line
+  const elegirMio = v => { setSoloMio(v); recordar('ed-solo-mio', v ? '1' : '0'); if (v) { setPersonaF('todos'); setPmF('todos') } }
+  // Todo lo que se cuenta y se lista sale de acá: si estoy en "lo mío", los números
+  // de arriba también son los míos (si no, dice "5 atrasados" y al tocar hay 2).
+  const base = soloMio && hayMio ? mias : filas
 
   // Solo quien tenga trabajo ABIERTO. Si listamos a todos los que alguna vez
   // aparecieron, el desplegable arrastra fotógrafos y editores viejos con todo
@@ -149,11 +202,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
   }, [filas])
   const sinPM = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.PM || '').trim()).length, [filas])
-  const consultas = useMemo(() => filas.filter(f => String(f.Consulta || '').trim()), [filas])
+  const consultas = useMemo(() => base.filter(f => String(f.Consulta || '').trim()), [base])
 
   const visibles = useMemo(() => {
     const nq = norm(q.trim())
-    return filas.filter(f => {
+    return base.filter(f => {
       const nivel = f.__sem.nivel
       // Lo abierto desde un link y lo tocado en esta sesión se saltan el chip de
       // plazo y el desplegable de estado — son los que cambian cuando se mueve la
@@ -176,14 +229,14 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [filas, filtro, q, personaF, pmF, estadoF, abierto, tocados])
+  }, [base, filtro, q, personaF, pmF, estadoF, abierto, tocados])
 
   // Cuántos hay en cada estado, para no tener que elegir a ciegas en el desplegable.
   // Cuenta sobre lo que dejó pasar el chip de plazo y el filtro de persona: si estás
   // mirando "Atrasado", el desplegable dice cuántos atrasados hay en cada estado.
   const porEstado = useMemo(() => {
     const c = {}
-    filas.forEach(f => {
+    base.forEach(f => {
       if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return }
       else if (filtro === 'cliente') { if (!esperaAlCliente(f.Estado)) return }
       else if (filtro === 'activos') { if (f.__sem.nivel === 'listo') return }
@@ -196,7 +249,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       c[e] = (c[e] || 0) + 1
     })
     return c
-  }, [filas, filtro, personaF, pmF])
+  }, [base, filtro, personaF, pmF])
 
   const grupos = useMemo(() => {
     const m = new Map()
@@ -215,9 +268,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
 
   const cuenta = useMemo(() => {
     const c = { activos: 0, revisar: 0, cliente: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
-    filas.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++; if (esperaAlCliente(f.Estado)) c.cliente++ })
+    base.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++; if (esperaAlCliente(f.Estado)) c.cliente++ })
     return c
-  }, [filas])
+  }, [base])
 
   // `extra.nota` = el texto que se acaba de sumar a la bitácora. Es lo que hace
   // que salga el mail: sin eso, guardar un campo no le escribe a nadie. Y el
@@ -379,6 +432,36 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }, [data])
   const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos, horas, onRefresh, soloLoSuyo: data?.__soloLoSuyo || null, recursosDe }
 
+  // ------------------------------------------------------------ la ficha
+  // El trabajo abierto, solo. El grupo se arma con TODAS las piezas del proyecto
+  // (el logo se copia a las hermanas, "+ Video" copia el brief de una de ellas)
+  // pero se dibuja una sola: `soloId`. No pasa por ningún filtro.
+  const fichaF = enfoque && abierto ? filas.find(f => f.ID === abierto) : null
+  if (enfoque && abierto) {
+    const hermanas = fichaF ? filas.filter(f => String(f['N° presupuesto']) === String(fichaF['N° presupuesto'])) : []
+    const g = fichaF && {
+      num: String(fichaF['N° presupuesto'] || '—'), fecha: fichaF['Fecha Evento'], cliente: fichaF.Cliente, agencia: fichaF.Agencia, proyecto: fichaF.Proyecto,
+      linkCrudo: (hermanas.find(h => h['Link crudo']) || {})['Link crudo'] || '', linkEntrega: (hermanas.find(h => h['Link entrega']) || {})['Link entrega'] || '',
+      items: [fichaF, ...hermanas.filter(h => h.ID !== fichaF.ID)],
+    }
+    return <div id="ed-ficha-tope">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        {volverA === 'calendario' && goTo
+          ? <>
+              <button onClick={() => goTo('calendario')} style={{ ...btnPri, padding: '8px 14px', fontSize: 13 }}>← Volver al calendario</button>
+              <button onClick={salirFicha} style={{ ...btn, padding: '8px 12px' }}>Ver en el tablero</button>
+            </>
+          : <button onClick={salirFicha} style={{ ...btnPri, padding: '8px 14px', fontSize: 13 }}>← Volver al tablero</button>}
+        {!cel && <span style={{ fontSize: 11.5, color: T.ink3 }}>o apretá Esc</span>}
+      </div>
+      {g
+        ? <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} personaF="todos" soloId={abierto} />
+        : <div style={{ ...card, padding: 28, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>
+            {crudas.length ? `El trabajo ${abierto} no está en tu tablero: se cerró, se represupuestó o no lo tenés asignado.` : 'Cargando…'}
+          </div>}
+    </div>
+  }
+
   return <div>
     <div style={{ marginBottom: 14 }}>
       <h1 style={{ fontSize: 21, fontWeight: 700, color: T.ink, margin: 0 }}>Edición</h1>
@@ -407,7 +490,17 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 14 }}>Si da error de solapa, correr <code style={{ fontFamily: MONO }}>node scripts/edicion-setup.mjs --escribir</code></div>
           </div>
         : <>
-          {consultas.length > 0 && <Consultas consultas={consultas} responder={responder} setAbierto={setAbierto} />}
+          {consultas.length > 0 && <Consultas consultas={consultas} responder={responder} setAbierto={abrir} />}
+
+          {/* Lo mío / todo el equipo. Va primero y manda sobre todo lo de abajo: los
+              números, los chips y la lista. Dani, 17/9/2026: "siento que cuando aprieto
+              veo las de todos y a veces tengo que andar buscando". */}
+          {hayMio && <div style={{ display: 'flex', gap: 0, marginBottom: cel ? 10 : 14, border: `1px solid ${T.border}`, borderRadius: 9, overflow: 'hidden', width: cel ? '100%' : 'fit-content' }}>
+            {[[true, 'Lo mío', miasAbiertas], [false, 'Todo el equipo', filas.filter(f => !estaCerrado(f.Estado)).length]].map(([v, l, n]) => {
+              const activo = soloMio === v
+              return <button key={l} onClick={() => elegirMio(v)} style={{ flex: cel ? 1 : undefined, padding: cel ? '10px 12px' : '8px 16px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activo ? 700 : 500, background: activo ? T.ink : T.surface, color: activo ? '#fff' : T.ink2 }}>{l} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 4 }}>{n}</span></button>
+            })}
+          </div>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: cel ? 6 : 10, marginBottom: cel ? 12 : 16 }}>
             <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
@@ -434,12 +527,12 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               <option value="todos">Cualquier estado</option>
               {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
             </select>
-            <select value={pmF} onChange={e => setPmF(e.target.value)} title="Quién responde por el trabajo ante el cliente (distinto del editor)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 180, borderColor: pmF !== 'todos' ? T.ink : T.border, fontWeight: pmF !== 'todos' ? 600 : 400 }}>
+            <select value={pmF} onChange={e => { setPmF(e.target.value); if (e.target.value !== 'todos') setSoloMio(false) }} title="Quién responde por el trabajo ante el cliente (distinto del editor)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 180, borderColor: pmF !== 'todos' ? T.ink : T.border, fontWeight: pmF !== 'todos' ? 600 : 400 }}>
               <option value="todos">Cualquier PM</option>
               {sinPM > 0 && <option value="__sin__">Sin PM ({sinPM})</option>}
               {pms.map(([p, n]) => <option key={p} value={p}>PM {p} ({n})</option>)}
             </select>
-            <select value={personaF} onChange={e => setPersonaF(e.target.value)} title="Quién lo edita" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
+            <select value={personaF} onChange={e => { setPersonaF(e.target.value); if (e.target.value !== 'todos') setSoloMio(false) }} title="Quién lo edita" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
               <option value="todos">Todo el equipo</option>
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
@@ -452,8 +545,8 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
           {!grupos.length
-            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>Nada acá. {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}</div>
-            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={setAbierto} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
+            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}{soloMio && hayMio && <button onClick={() => elegirMio(false)} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
+            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
         </>}
     </>}
   </div>
@@ -742,14 +835,23 @@ function HorasExtra({ f, horas = [], editores = [], showToast, onRefresh, soloLo
   </div>
 }
 
-function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = false }) {
-  const [abierto, setAbierto] = useState(abiertoPorDefecto)
+// Con `id`, lo que cada uno deja abierto o cerrado queda así para la próxima vez
+// (en su navegador). Dani, 17/9/2026: "está bueno para ocultar y mostrar info y que
+// no esté toda a la vista". `siempreSiAlerta`: si falta algo se abre igual, aunque
+// la haya cerrado — lo que falta no se esconde.
+function Plegable({ titulo, contador, alerta, children, abiertoPorDefecto = false, id, siempreSiAlerta = false }) {
+  const [abierto, setAbierto] = useState(() => {
+    if (alerta && siempreSiAlerta) return true
+    const g = id ? recordado('ed-sec-' + id) : null
+    return g === null ? abiertoPorDefecto : g === '1'
+  })
+  const alternar = () => { const n = !abierto; setAbierto(n); if (id) recordar('ed-sec-' + id, n ? '1' : '0') }
   return <div style={{ border: `1px solid ${alerta ? `${T.brand}55` : T.border}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
-    <button onClick={() => setAbierto(a => !a)} style={{
-      width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer',
+    <button onClick={alternar} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', flexWrap: 'wrap',
       background: alerta ? T.brandSoft : T.surfaceAlt, border: 'none', textAlign: 'left', fontFamily: 'inherit',
     }}>
-      <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, flex: 1 }}>{titulo}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, flex: '1 1 140px' }}>{titulo}</span>
       <span style={{ fontSize: 11.5, fontFamily: MONO, color: alerta ? T.brand : T.ink3 }}>{contador}</span>
       <span style={{ fontSize: 11, color: T.ink3 }}>{abierto ? '▲' : '▼'}</span>
     </button>
@@ -943,7 +1045,7 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe }) {
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe, soloId = null }) {
   const peor = g.items[0].__sem
   const logoGrupo = g.items.map(h => String(h['Logo y placas'] || '').trim()).find(esURL)
   const rec = recursosDe ? recursosDe(g.agencia, g.cliente) : {}
@@ -1007,7 +1109,14 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />)}
+    {g.items.filter(f => !soloId || f.ID === soloId).map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} enFicha={!!soloId} />)}
+
+    {/* En la ficha se ve una pieza sola; las otras del proyecto quedan a un clic. */}
+    {soloId && g.items.length > 1 && <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', background: T.surfaceAlt, borderTop: `1px solid ${T.border}` }}>
+      <span style={{ fontSize: 11.5, color: T.ink3 }}>Otras piezas de este proyecto:</span>
+      {g.items.filter(h => h.ID !== soloId).map(h => { const c = COLOR_SEM[h.__sem.nivel] || COLOR_SEM.verde
+        return <button key={h.ID} onClick={() => setAbierto(h.ID)} title={`${String(h.Editor || '').trim() || 'sin asignar'} · ${h.__sem.txt}`} style={{ ...btn, padding: '4px 10px', fontSize: 11.5, borderLeft: `3px solid ${c.fg}` }}>{limpiarPedido(h.Entregable)} <span style={{ color: T.ink3 }}>· {estadoDe(h.Estado)}</span></button> })}
+    </div>}
   </div>
 }
 
@@ -1036,7 +1145,7 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
-function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo, recursosDe }) {
+function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo, recursosDe, enFicha = false }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
   const abierta = abierto === f.ID
@@ -1051,9 +1160,9 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   // plazo juntos en la última línea y todo el bloque tocable para abrir.
   if (cel) {
     return <div id={`ed-${f.ID}`} style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
-      <div onClick={() => setAbierto(abierta ? null : f.ID)} style={{
+      <div onClick={() => { if (!enFicha) setAbierto(abierta ? null : f.ID) }} style={{
         display: 'flex', flexDirection: 'column', gap: 7, padding: '11px 13px',
-        borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: 'pointer',
+        borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: enFicha ? 'default' : 'pointer',
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
           <span style={{ fontSize: 14, color: T.ink, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{limpiarPedido(f.Entregable)}</span>
@@ -1070,7 +1179,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           </span>
           <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11.5, color: T.ink3 }}>{abierta ? 'cerrar ▲' : 'abrir ▼'}</span>
+          {!enFicha && <span style={{ fontSize: 11.5, color: T.ink3 }}>{abierta ? 'cerrar ▲' : 'abrir →'}</span>}
         </div>
         {personaF === 'todos' && <div style={{ fontSize: 11.5, color: T.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
           {String(f.Editor || '').trim() || <em style={{ color: T.brand, fontStyle: 'normal' }}>sin asignar</em>}
@@ -1098,7 +1207,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
       {esperaAlCliente(f.Estado) && <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la fila." style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.pos, color: '#fff', border: 'none', fontWeight: 600 }}>✓ OK del cliente</button>}
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
-      <button onClick={() => setAbierto(abierta ? null : f.ID)} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>
+      {!enFicha && <button onClick={() => setAbierto(abierta ? null : f.ID)} title={abierta ? undefined : 'Abre este trabajo solo, en su ficha'} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>}
     </div>
     {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />}
   </div>
@@ -1122,6 +1231,8 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     setNotas(n); setNueva(''); guardar(f.ID, { Notas: n }, avisar ? { nota: t } : undefined)
   }
   const aQuienLeLlega = ES_MAGMA(f.Editor) ? '' : String(f.Editor || '').trim()
+  // Sin fecha confirmada o sin nadie a cargo, la sección se abre sola: es lo que hay que resolver.
+  const faltaPlazo = !estaCerrado(f.Estado) && (!String(f['Fecha compromiso'] || '').trim() || !String(f.Editor || '').trim())
 
 
   return <div style={{ padding: '14px 16px 16px 17px', background: T.bg, borderLeft: `3px solid ${T.border}` }}>
@@ -1139,10 +1250,16 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} />
     </div>
 
+    {/* Lo que hay que hacer AHORA va primero; el resto son secciones que se abren. */}
+    {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
+    {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
+
     <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} rec={recursosDe ? recursosDe(f.Agencia, f.Cliente) : {}} />
     <HorasExtra f={f} horas={horas} editores={editores} showToast={showToast} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} cel={cel} />
 
-    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+    <Plegable id="plazo" titulo="Para cuándo y quién" siempreSiAlerta alerta={faltaPlazo} abiertoPorDefecto={faltaPlazo}
+      contador={[`entregar ${compromiso || '—'}${String(f['Fecha compromiso'] || '').trim() ? '' : ' (estimado)'}`, String(f.Prioridad || '') === 'Urgente' ? 'URGENTE' : '', String(f.Editor || '').trim().split(' ')[0] || 'sin asignar', String(f.PM || '').trim() ? `PM ${f.PM}` : 'sin PM'].filter(Boolean).join(' · ')}>
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
       <div>
         <label style={lbl}>Entregar el {!String(f['Fecha compromiso'] || '').trim() && <span style={{ color: T.brand }}>· falta</span>}</label>
         <input type="date" defaultValue={aISO(parseFechaAR(compromiso))}
@@ -1181,18 +1298,16 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
           <div style={{ fontSize: 10.5, color: T.brand, marginTop: 4, lineHeight: 1.4 }}>No tiene mail en RRHH: no le van a llegar los avisos.</div>}
       </div>
     </div>
+    </Plegable>
 
-    {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
-    {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
-
-    <Plegable titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
+    <Plegable id="pieza" titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
       <Campos f={f} campos={CAMPOS_PIEZA} guardar={guardar} cols={cel ? 1 : 3} />
       <div style={{ fontSize: 11, color: T.ink3, marginTop: 9, lineHeight: 1.5 }}>
         Esto se contesta al presupuestar. Está acá para completar lo que falte — es lo que después permite saber cuánto tarda cada clase de trabajo.
       </div>
     </Plegable>
 
-    <Plegable titulo="Lo que necesita el editor" contador={`${briefLleno(f)}/${briefTotal(f)}`} alerta={briefLleno(f) < briefTotal(f)}>
+    <Plegable id="brief" titulo="Lo que necesita el editor" contador={`${briefLleno(f)}/${briefTotal(f)}`} alerta={briefLleno(f) < briefTotal(f)}>
       <Campos f={f} campos={CAMPOS_BRIEF} guardar={guardar} cols={cel ? 1 : 2} />
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <BotonCopiar texto={() => textoPedirBrief(f)} etiqueta="✉️ Copiar el pedido para el cliente" />
@@ -1203,6 +1318,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
     </Plegable>
 
+    <Plegable id="links" titulo="Links y vueltas" contador={`${['Link crudo', 'Link pre-entrega', 'Link entrega'].filter(k => String(f[k] || (k === 'Link crudo' ? g?.linkCrudo : '') || '').trim()).length}/3 links · ${(parseInt(f['Rondas internas']) || 0) + (parseInt(f['Rondas cliente']) || 0)} vueltas`}>
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
         <label style={lbl}>Link del material (crudo)</label>
@@ -1215,7 +1331,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12 }}>
       <div>
         <label style={lbl}>Link de la entrega final</label>
         <input defaultValue={String(f['Link entrega'] || '')} onBlur={e => { if (e.target.value !== String(f['Link entrega'] || '')) guardar(f.ID, { 'Link entrega': e.target.value }) }} placeholder="Drive / WeTransfer / Frame.io" style={{ ...inp, width: '100%', fontSize: 12 }} />
@@ -1229,8 +1345,9 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
         </div>
       </div>
     </div>
+    </Plegable>
 
-    <label style={lbl}>Bitácora — lo que se pidió, los cambios, las referencias</label>
+    <Plegable id="bitacora" titulo="Bitácora — lo que se pidió, los cambios, las referencias" abiertoPorDefecto contador={`${notas.split('\n').filter(l => l.trim()).length} ${notas.split('\n').filter(l => l.trim()).length === 1 ? 'nota' : 'notas'}`}>
     <div style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
       <input value={nueva} onChange={e => setNueva(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarNota(true) } }}
         placeholder={aQuienLeLlega ? `Escribí el cambio y Enter — le llega por mail a ${aQuienLeLlega.split(' ')[0]}` : 'Sumar una nota y Enter — queda fechada y firmada'}
@@ -1245,6 +1362,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     </div>
     <textarea value={notas} onChange={e => setNotas(e.target.value)} onBlur={() => { if (notas !== String(f.Notas || '')) guardar(f.ID, { Notas: notas }) }}
       rows={Math.min(10, Math.max(3, notas.split('\n').length + 1))} style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.55, fontSize: 12.5 }} />
+    </Plegable>
 
     <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
       <BotonCopiar texto={() => textoParaElEditor({ ...f, Notas: notas, 'Link crudo': f['Link crudo'] || g.linkCrudo })} etiqueta="📋 Copiar el brief para el editor" />
