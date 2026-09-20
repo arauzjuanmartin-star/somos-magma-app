@@ -10,6 +10,7 @@ import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
+import { quienSoy } from '../lib/quien-soy'
 import FotosProyecto from '../components/FotosProyecto'
 import Novedades from '../components/Novedades'
 import HoraInput from '../components/HoraInput'
@@ -72,8 +73,9 @@ const USER_NAME = {
 const NAV = [
   {id:'dashboard',label:'Dashboard'},
   {id:'calendario',label:'Calendario'},
-  {id:'presupuestos',label:'Presupuestos'},
-  {id:'proyectos',label:'Proyectos'},
+  // Presupuestos + Proyectos = Trabajos (una fila por trabajo, del presupuesto a la factura).
+  // El id sigue siendo 'presupuestos' para no tocar permisos ni links.
+  {id:'presupuestos',label:'Trabajos'},
   {id:'edicion',label:'Edición'},
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
@@ -124,8 +126,11 @@ export default function V2() {
     setMod('edicion'); setNav({mod:'edicion', abrir:id})
     window.history.replaceState({}, '', window.location.pathname)
   },[])
-  const goTo = (m, opts) => { setMod(m); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
-  const goSearch = (m, q) => { setMod(m); setNav({mod:m, q}) }
+  // 'proyectos' ya no es una solapa: es una vista de Trabajos. Los links de antes (dashboard,
+  // facturación, búsquedas recientes guardadas) siguen andando: el nav conserva de dónde venía.
+  const modReal = m => m==='proyectos' ? 'presupuestos' : m
+  const goTo = (m, opts) => { setMod(modReal(m)); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
+  const goSearch = (m, q) => { setMod(modReal(m)); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)
   const [showSearch,setShowSearch] = useState(false)
   const cel = useEsCelular()
@@ -254,9 +259,8 @@ export default function V2() {
             ? <Center>Cargando datos del sheet…</Center>
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
               mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
-            : mod==='presupuestos' ? <Presupuestos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos} goTo={goTo}/>
-            : mod==='proyectos' ? <Proyectos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
+            : (mod==='presupuestos'||mod==='proyectos') ? <Trabajos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
+            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos} goTo={goTo} mail={mail}/>
             : mod==='edicion' ? <Edicion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -879,13 +883,41 @@ function AnalisisMotivos({presus, esDesaprobado}){
   </div>
 }
 
-function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
+// ============================ TRABAJOS ============================
+// Presupuestos y Proyectos eran dos solapas para la misma cosa: los 309 aprobados
+// aparecían en las dos, con las mismas cuatro columnas y el mismo "Editar datos", y no
+// había un botón para pasar de una a la otra (Juan, 20/9/2026: "siento que son casi lo
+// mismo"). Acá un trabajo es UNA fila que va cambiando: se cotiza, se aprueba, se le
+// carga el staff, se factura. Lo que eran dos solapas ahora son vistas de esta lista.
+//
+// El sheet NO cambia: PRESUPUESTOS y PROYECTOS siguen siendo dos solapas y cada bloque
+// escribe donde escribía (lo cotizado → PRESUPUESTOS, producción → PROYECTOS).
+const VISTAS_TRABAJOS = [['todos','Todos'],['esp','En espera'],['prod','En producción'],['sinstaff','Sin staff'],['sinfact','Sin facturar'],['des','Caídos'],['rep','Represup.']]
+// Con qué filtro llegan los links de antes (dashboard, facturación, buscador) y a qué vista van.
+const VISTA_DE_FILTRO = {ap:'prod', cur:'prod', ok:'prod', pendiente:'sinstaff'}
+const VISTAS_DE_PRODUCCION = ['prod','sinstaff','sinfact']
+const GRID_TRABAJOS = '88px 1.6fr 1fr 104px 78px 96px 56px 124px'
+
+function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
+  const cel = useEsCelular()
   const [rows,setRows]=useState(data.presupuestos||[])
   useEffect(()=>{ setRows(data.presupuestos||[]) },[data.presupuestos])
-  useEffect(()=>{ if(nav?.mod==='presupuestos'){ if(nav.filtro==='__nuevo__'){ setNuevo(true) } else if(nav.filtro){ setF(nav.filtro) } if(nav.q){setQ(nav.q); setF('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
   const presus = rows
-  const [q,setQ]=useState(''), [f,setF]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
+  const proyectos = data.proyectos||[]
+  const rrhh=data.rrhh||[]
+  const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
+  const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
+  // La vista en la que cada uno dejó la lista queda en su navegador (es cómo mira, no un dato).
+  const [vista,setVistaSt]=useState(()=>{ try{ const g=window.localStorage.getItem('trabajos-vista'); return VISTAS_TRABAJOS.some(v=>v[0]===g)?g:'todos' }catch(e){ return 'todos' } })
+  const elegirVista=v=>{ setVistaSt(v); setOpen(null); try{ window.localStorage.setItem('trabajos-vista', v) }catch(e){} }
+  const [q,setQ]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [tab,setTab]=useState('prod'), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
   const [motivoModal,setMotivoModal]=useState(null), [motivoSaving,setMotivoSaving]=useState(false)
+  // Llegar con un número (desde Facturación, el buscador, el dashboard) abre ese trabajo.
+  const [abrirQ,setAbrirQ]=useState(null)
+  useEffect(()=>{ if(nav?.mod==='presupuestos'||nav?.mod==='proyectos'){
+    if(nav.filtro==='__nuevo__'){ setNuevo(true) } else if(nav.filtro){ setVistaSt(VISTA_DE_FILTRO[nav.filtro]||(VISTAS_TRABAJOS.some(v=>v[0]===nav.filtro)?nav.filtro:'todos')) }
+    if(nav.q){ setQ(nav.q); setVistaSt('todos'); setAbrirQ({q:nav.q, tab:nav.mod==='proyectos'?'prod':'coti'}) }
+    clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   async function eliminarPresupuesto(){
     const p=borrando; if(!p) return
@@ -931,78 +963,159 @@ function Presupuestos({data, onRefresh, showToast, nav, clearNav}){
       const j=await r.json()
       if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))); return }
       showToast(`#${id} → ${estadoInfo(nuevo).l}`)
-      if(onRefresh) onRefresh()  // refresca datos globales: Proyectos/Facturación/Calendar quedan sincronizados
+      if(onRefresh) onRefresh()  // refresca datos globales: producción/Facturación/Calendar quedan sincronizados
       // Calendar en segundo plano
       const accion = nuevo==='APROBADO'?'aprobar':(nuevo==='DESAPROBADO'||nuevo==='REPRESUPUESTADO')?'borrar':'pendiente'
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))) }
   }
 
-  const pms = [...new Set(presus.map(p=>p['PM Interno']).filter(Boolean))].sort()
-  const anios = [...new Set(presus.map(p=>{const f=p['Fecha Evento']||p['Fecha Presupuesto']||'';return f.split('/')[2]}).filter(Boolean))].sort().reverse()
+  // ---- un trabajo = el presupuesto + (si está aprobado) su fila de PROYECTOS
+  const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
+  // Un proyecto puede tener varias facturas (adelanto + saldo): las juntamos todas.
+  const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) (facByNum[n]||=[]).push(f) })
+  const facsDe=num=>facByNum[String(num||'').trim()]||[]
+  const proyByNum={}; proyectos.forEach(p=>{ proyByNum[String(p['N° presupuesto']||'').trim()]=p })
+  const numsPresu=new Set(presus.map(p=>String(p['Columna 1']||'').trim()))
+  const items=[
+    // lo último cargado, primero (como estaba Presupuestos)
+    ...presus.map(p=>{ const num=String(p['Columna 1']||p['N° presupuesto']||'').trim(), est=String(p['Estado']||'').toUpperCase()
+      return {key:'r'+(p.__row??num), num, p, est, proy: est==='APROBADO' ? (proyByNum[num]||null) : null} }).reverse(),
+    // Proyectos que no tienen presupuesto (viejos, cargados a mano en el sheet). Antes
+    // solo se veían en Proyectos: si la lista saliera de PRESUPUESTOS nada más, desaparecían.
+    ...proyectos.filter(y=>!numsPresu.has(String(y['N° presupuesto']||'').trim())).map(y=>{ const num=String(y['N° presupuesto']||'').trim(); return {key:'y'+num, num, p:null, est:'APROBADO', proy:y} }),
+  ]
+  const dato=(it,c)=>String((it.p?it.p[c]:'')||(it.proy?it.proy[c]:'')||'')
+  const pmDe=it=>String(it.p?.['PM Interno']||it.proy?.['PM']||'')
+  const totalDe=it=>it.p ? parseMonto(it.p['Precio Final']) : parseMonto(it.proy?.['Total ']||it.proy?.['Total'])
 
-  const filtered = presus.filter(p=>{
-    const e=String(p['Estado']||'').toUpperCase()
-    const mf = f==='todos'||(f==='ap'&&(e==='APROBADO'||e==='EN CURSO'||e==='ENTREGADO'))||(f==='esp'&&e==='EN ESPERA')||(f==='des'&&e==='DESAPROBADO')||(f==='rep'&&e==='REPRESUPUESTADO')||(f==='cur'&&e==='EN CURSO')
-    const mpm = pm==='todos'||p['PM Interno']===pm
-    const mq = !q||[p['Columna 1'],p['Proyecto'],p['Cliente'],p['Agencia'],p['PM Interno']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    const fp=p['Fecha Presupuesto']||'', fe=p['Fecha Evento']||''
+  const pms=[...new Set(items.map(pmDe).filter(Boolean))].sort()
+  const anios=[...new Set(items.map(it=>(dato(it,'Fecha Evento')||dato(it,'Fecha Presupuesto')).split('/')[2]).filter(Boolean))].sort().reverse()
+
+  const enVista=(it,v)=> v==='esp' ? it.est==='EN ESPERA'
+    : v==='prod' ? ['APROBADO','EN CURSO','ENTREGADO'].includes(it.est)
+    : v==='sinstaff' ? !!it.proy&&!tieneStaff(it.proy)
+    : v==='sinfact' ? !!it.proy&&!facsDe(it.num).length
+    : v==='des' ? it.est==='DESAPROBADO'
+    : v==='rep' ? it.est==='REPRESUPUESTADO' : true
+  const base=items.filter(it=>{
+    const fe=dato(it,'Fecha Evento'), fp=dato(it,'Fecha Presupuesto')
+    const mpm = pm==='todos'||pmDe(it)===pm
+    const mq = !q||[it.num,dato(it,'Proyecto'),dato(it,'Cliente'),dato(it,'Agencia'),pmDe(it)].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
     const manio = anio==='todos'||fe.includes(anio)||fp.includes(anio)
     const mmes = mes==='todos'||parseInt((fe||fp).split('/')[1])===parseInt(mes)
-    return mf&&mpm&&manio&&mmes&&mq
-  }).reverse()
+    return mpm&&mq&&manio&&mmes
+  })
+  // Cada vista dice cuántos tiene, sobre lo que dejaron pasar el buscador, el PM, el año y el mes.
+  const cuenta={}; VISTAS_TRABAJOS.forEach(([k])=>{ cuenta[k]=base.filter(it=>enVista(it,k)).length })
+  let filtered=base.filter(it=>enVista(it,vista))
+  // En producción importa qué viene: lo próximo arriba, después lo que ya pasó (como estaba Proyectos).
+  if(VISTAS_DE_PRODUCCION.includes(vista)) filtered=[...filtered].sort((a,b)=>{ const fa=parseD(dato(a,'Fecha Evento'))?.getTime()||0, fb=parseD(dato(b,'Fecha Evento'))?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
 
-  const FILTROS = [['todos','Todos'],['ap','Aprobados'],['esp','En espera'],['des','Desaprob.'],['rep','Represup.']]
+  useEffect(()=>{ if(!abrirQ||q!==abrirQ.q) return
+    const exactos=filtered.filter(it=>it.num===String(abrirQ.q).trim()), uno=exactos.length===1?exactos[0]:filtered.length===1?filtered[0]:null
+    if(uno){ setOpen(uno.key); setTab(abrirQ.tab) }
+    setAbrirQ(null) /* eslint-disable-next-line */ },[abrirQ,q])
+
+  const abrirFila=it=>{ if(open===it.key){ setOpen(null); return } setOpen(it.key); setTab(it.proy?'prod':'coti') }
+  const onEstado=(it,nuevo)=>{ const p=it.p, id=it.num
+    return nuevo==='REPRESUPUESTADO' ? setRepresu(p) : nuevo==='DESAPROBADO' ? setMotivoModal({num:id, estado:'DESAPROBADO', actual:p['Estado']}) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado']) }
 
   return <>
-    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:22}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Presupuestos</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>{filtered.length} de {presus.length}</div></div>
-      <button onClick={()=>setNuevo(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nuevo presupuesto</button>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:22, gap:12}}>
+      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Trabajos</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>{filtered.length} de {items.length} · del presupuesto a la factura, en una sola lista</div></div>
+      <button onClick={()=>setNuevo(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap'}}>+ Nuevo presupuesto</button>
     </div>
 
     {/* Filtros */}
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:16}}>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar N°, cliente, proyecto, PM…"
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar N°, cliente, proyecto, agencia, PM…"
         style={{flex:'1 1 260px', minWidth:200, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
       <select value={pm} onChange={e=>setPm(e.target.value)} style={selectStyle}><option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}</select>
       <select value={anio} onChange={e=>setAnio(e.target.value)} style={selectStyle}><option value="todos">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
       <select value={mes} onChange={e=>setMes(e.target.value)} style={selectStyle}><option value="todos">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
     </div>
 
-    {/* Pills de estado */}
-    <div style={{display:'flex', gap:7, marginBottom:14}}>
-      {FILTROS.map(([k,l])=>(
-        <button key={k} onClick={()=>setF(k)} style={{
-          padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer',
-          border:`1px solid ${f===k?T.ink:T.border}`,
-          background:f===k?T.ink:T.surface, color:f===k?'#fff':T.ink2,
-        }}>{l}</button>
-      ))}
-    </div>
+    {/* Las vistas: lo que antes eran dos solapas y sus chips */}
+    {cel
+      ? <select value={vista} onChange={e=>elegirVista(e.target.value)} style={{...selectStyle, width:'100%', marginBottom:14, padding:'10px 11px', fontSize:13}}>
+          {VISTAS_TRABAJOS.map(([k,l])=><option key={k} value={k}>{l} ({cuenta[k]})</option>)}
+        </select>
+      : <div style={{display:'flex', gap:7, marginBottom:14, flexWrap:'wrap'}}>
+          {VISTAS_TRABAJOS.map(([k,l])=>(
+            <button key={k} onClick={()=>elegirVista(k)} style={{
+              padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer',
+              border:`1px solid ${vista===k?T.ink:T.border}`,
+              background:vista===k?T.ink:T.surface, color:vista===k?'#fff':T.ink2,
+            }}>{l} <span style={{fontFamily:MONO, opacity:0.65, marginLeft:3}}>{cuenta[k]}</span></button>
+          ))}
+        </div>}
 
     {/* El porqué, sobre lo que esté filtrado (año/mes/PM valen) */}
-    {(f==='des'||f==='rep') && <AnalisisMotivos presus={filtered} esDesaprobado={f==='des'}/>}
+    {(vista==='des'||vista==='rep') && <AnalisisMotivos presus={filtered.map(it=>it.p).filter(Boolean)} esDesaprobado={vista==='des'}/>}
 
     {/* Tabla */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'90px 1.8fr 1.1fr 110px 130px', gap:0, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Estado</span>
-      </div>
+      {!cel && <div style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span><span style={{textAlign:'right'}}>Factura</span><span style={{textAlign:'right'}}>Drive</span><span style={{textAlign:'right'}}>Estado</span>
+      </div>}
       {filtered.length===0 && <Empty>Sin resultados</Empty>}
-      {filtered.slice(0,200).map((p,i)=>{
-        const id=p['Columna 1']||p['N° presupuesto']||''
-        const info=estadoInfo(p['Estado'])
-        const abierto = open===id
-        return <div key={id+'_'+i}>
-          <div onClick={()=>setOpen(abierto?null:id)} style={{display:'grid', gridTemplateColumns:'90px 1.8fr 1.1fr 110px 130px', gap:0, padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
-            onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
-            <span style={{fontSize:12, color:T.ink2}}>{p['Fecha Evento']||'—'}</span>
-            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||<em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}</span>
-            <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
-            <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Precio Final']))}</span>
-            <EstadoSelect value={p['Estado']} onChange={nuevo=> nuevo==='REPRESUPUESTADO' ? setRepresu(p) : nuevo==='DESAPROBADO' ? setMotivoModal({num:id, estado:'DESAPROBADO', actual:p['Estado']}) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado'])}/>
-          </div>
-          {abierto && <DetallePresupuesto p={p} id={id} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
+      {filtered.slice(0,200).map((it,i)=>{
+        const {p, proy:y, num}=it
+        const abierto = open===it.key
+        const ok = y&&tieneStaff(y)
+        // Con adelanto + saldo el proyecto tiene 2 facturas: mostramos cuántas se cobraron
+        // ("1/2 cobr.") en vez de decir "Cobrada" porque entró la seña.
+        const facs=y?facsDe(num):[], cobradas=facs.filter(isCobrada).length
+        const facInfo = !facs.length ? {c:T.brand,l:'Sin fact.'}
+          : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
+          : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
+        const celdaStaff = y
+          ? <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:ok?T.pos:T.warn}}/><span style={{fontSize:11.5, color:T.ink2}}>{cel?(ok?'Staff OK':'Sin staff'):(ok?'OK':'Pend.')}</span></span>
+          : it.est==='APROBADO' ? <span title="Está aprobado pero todavía no tiene fila en PROYECTOS. Si recién lo aprobaste, aparece al actualizar." style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin proyecto</span> : (cel?null:<span/>)
+        const celdaFac = y
+          ? <span onClick={goTo?e=>{e.stopPropagation(); goTo('facturacion',{q:String(num)})}:undefined} title={goTo?'Ver en Facturación':undefined} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5, cursor:goTo?'pointer':undefined}}><span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/><span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span></span>
+          : (cel?null:<span/>)
+        // Las carpetas del proyecto a un clic, sin abrir nada: 📁 crudo, 📸 lo que se le manda al cliente
+        const celdaDrive = y
+          ? <span onClick={e=>e.stopPropagation()} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6, fontSize:14}}>
+              {y['Drive Crudo'] && <a href={y['Drive Crudo']} target="_blank" rel="noreferrer" title="Crudo (lo que se filmó)" style={{textDecoration:'none'}}>📁</a>}
+              {(y['Drive Finales']||y['Drive Entrega']) && <a href={y['Drive Finales']||y['Drive Entrega']} target="_blank" rel="noreferrer" title={y['Drive Finales']?'Finales: lo que se le manda al cliente':'Carpeta de entrega'} style={{textDecoration:'none'}}>📸</a>}
+              {!y['Drive Crudo'] && !y['Drive Entrega'] && <span title="Sin carpetas en Drive todavía" style={{fontSize:11, color:T.ink3}}>—</span>}
+            </span>
+          : (cel?null:<span/>)
+        const celdaEstado = p
+          ? <EstadoSelect value={p['Estado']} onChange={nuevo=>onEstado(it,nuevo)}/>
+          : <span title="Está en PROYECTOS pero no tiene presupuesto cargado" style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin presupuesto</span>
+        const proyecto = dato(it,'Proyecto') || <em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>
+        const dosCaras = !!(p&&y), tabActual = dosCaras ? tab : (y?'prod':'coti')
+        return <div key={it.key+'_'+i}>
+          {cel
+            ? <div onClick={()=>abrirFila(it)} style={{padding:'12px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', background:abierto?T.surfaceAlt:'transparent'}}>
+                <div style={{display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline'}}>
+                  <span style={{fontSize:13.5, fontWeight:600, color:T.ink, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proyecto}</span>
+                  <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(totalDe(it))}</span>
+                </div>
+                <div style={{fontSize:12, color:T.ink2, marginTop:2}}>{dato(it,'Fecha Evento')||'—'} · {dato(it,'Cliente')||dato(it,'Agencia')||'—'} · #{num}</div>
+                <div style={{display:'flex', gap:12, alignItems:'center', marginTop:7, flexWrap:'wrap'}}>{celdaEstado}{celdaStaff}{celdaFac}{celdaDrive}</div>
+              </div>
+            : <div onClick={()=>abrirFila(it)} style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
+                onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
+                <span style={{fontSize:12, color:T.ink2}}>{dato(it,'Fecha Evento')||'—'}</span>
+                <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{proyecto}</span>
+                <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{dato(it,'Cliente')||'—'}</span>
+                <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(totalDe(it))}</span>
+                {celdaStaff}{celdaFac}{celdaDrive}{celdaEstado}
+              </div>}
+          {/* Un trabajo aprobado tiene dos caras: lo que se cotizó y cómo se produce. Antes
+              eran dos solapas y había que buscar el número dos veces. */}
+          {abierto && dosCaras && <div style={{display:'flex', gap:0, background:T.surfaceAlt, borderTop:`1px solid ${T.border}`, padding:'0 18px'}}>
+            {[['prod','Producción','staff · Drive · margen'],['coti','Lo cotizado','servicios · precio · PDF']].map(([k,l,s])=>(
+              <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tabActual===k?700:500, color:tabActual===k?T.ink:T.ink2, borderBottom:`2px solid ${tabActual===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{s}</span>}</button>
+            ))}
+          </div>}
+          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
+          {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
     </div>
@@ -1028,7 +1141,9 @@ function EstadoSelect({value, onChange}){
       title="Cambiar estado"
       style={{border:'none', background:'transparent', color:T.ink2, fontSize:12, cursor:'pointer', outline:'none', WebkitAppearance:'none', MozAppearance:'none', appearance:'none', textAlign:'right'}}>
       {!ESTADOS_DOT[cur] && <option value="">{info.l}</option>}
-      {Object.keys(ESTADOS_DOT).map(k=><option key={k} value={k}>{ESTADOS_DOT[k].l}</option>)}
+      {/* "En curso" y "Entregado" no se ofrecen: no los usa nadie (0 de 712 al 20/9/2026) y
+          cualquier estado que no sea Aprobado saca el trabajo de PROYECTOS. */}
+      {Object.keys(ESTADOS_DOT).filter(k=>!['EN CURSO','ENTREGADO'].includes(k)||k===cur).map(k=><option key={k} value={k}>{ESTADOS_DOT[k].l}</option>)}
     </select>
   </span>
 }
@@ -1966,23 +2081,39 @@ const ERR_SHEET = /^#(ERROR!|REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!)/
 const sinErr = v => { const s = String(v||'').trim(); return ERR_SHEET.test(s) ? '' : s }
 
 // soloVer = usuario de acceso parcial (ej Dani): ve la agenda, no aprueba ni edita.
-function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
+// El calendario se desmonta al abrir una entrega en Edición. Al volver tiene que
+// estar como quedó — mes, día elegido, capa y de quién — y no otra vez en "todo el
+// equipo". Vive lo que dura la pestaña.
+const calMem={}
+function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
   const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]
   const now=new Date()
-  const [ref,setRef]=useState({a:now.getFullYear(), m:now.getMonth()})
-  const [diaSel,setDiaSel]=useState(null)
+  const [ref,setRef]=useState(calMem.ref||{a:now.getFullYear(), m:now.getMonth()})
+  const [diaSel,setDiaSel]=useState(calMem.diaSel||null)
   // Dos capas: los RODAJES (lo que ya estaba) y las ENTREGAS de edición, cada
   // una en el día en que se prometió. Juan, 14/9/2026: "un calendario con los
   // edits, así Dani y Lulu ven más visual lo que tienen que hacer". Quien solo
   // ve Edición + Calendario (Dani) arranca en Entregas; el resto ve las dos.
-  const [capa,setCapa]=useState(soloVer?'entregas':'todo')
-  const [editorF,setEditorF]=useState('todos')
+  const [capa,setCapa]=useState(calMem.capa||(soloVer?'entregas':'todo'))
+  // Quien edita arranca viendo SUS entregas (Dani, 17/9/2026: "si yo quiero ver solo
+  // mi calendario…"). Lo que elija después queda recordado en su navegador.
+  const [editorF,setEditorF]=useState(()=>{
+    if(calMem.editorF) return calMem.editorF
+    let g=null; try{ g=window.localStorage.getItem('cal-editor') }catch(e){}
+    if(g) return g
+    const yo=quienSoy(mail, rrhh).editor
+    return yo && (data.edicion||[]).some(f=>!estaCerradoEd(f.Estado) && canonStaff(String(f.Editor||'').trim())===yo) ? yo : 'todos'
+  })
+  const elegirEditor=v=>{ setEditorF(v); try{ window.localStorage.setItem('cal-editor', v) }catch(e){} }
+  useEffect(()=>{ Object.assign(calMem,{ref,diaSel,capa,editorF}) },[ref,diaSel,capa,editorF])
+  // Un clic en la entrega abre su ficha: ese trabajo solo, sin el resto del tablero.
+  const abrirEntrega=(f,d)=>{ if(!goTo) return; if(d) calMem.diaSel=d; goTo('edicion',{abrir:f.ID, desde:'calendario'}) }
   const verRod = capa!=='entregas', verEnt = capa!=='rodajes'
   const edicion=(data.edicion||[]).filter(f=>String(f.ID||'').trim())
   const hoy0=hoyCeroEd()
   const entregasPorDia={}; let sinFecha=0
   edicion.forEach(f=>{
-    const ed=String(f.Editor||'').trim()
+    const ed=canonStaff(String(f.Editor||'').trim())
     if(editorF==='__sin__'){ if(ed) return } else if(editorF!=='todos' && ed!==editorF) return
     const cerrado=estaCerradoEd(f.Estado)
     // Abiertas: el día prometido (o el que sugiere el manual si el PM no puso fecha).
@@ -1992,7 +2123,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
     const k=dayKey(d)
     ;(entregasPorDia[k]=entregasPorDia[k]||[]).push({...f, __sem:semaforoEd(f,hoy0), __estimada:!cerrado&&!String(f['Fecha compromiso']||'').trim(), __cerrado:cerrado})
   })
-  const editores=[...new Set(edicion.filter(f=>!estaCerradoEd(f.Estado)).map(f=>String(f.Editor||'').trim()).filter(Boolean))].sort()
+  const editores=[...new Set(edicion.filter(f=>!estaCerradoEd(f.Estado)).map(f=>canonStaff(String(f.Editor||'').trim())).filter(Boolean))].sort()
   const sinAsignar=edicion.filter(f=>!estaCerradoEd(f.Estado)&&!String(f.Editor||'').trim()).length
   const [staffModal,setStaffModal]=useState(null)   // {proy, presu}
   const [pendingStaff,setPendingStaff]=useState(null) // num: abrir staff apenas exista el proyecto (tras aprobar)
@@ -2083,8 +2214,9 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
         {edicion.length>0 && <div style={{display:'flex', gap:4, marginRight:6}}>
           {[['todo','Todo'],['rodajes','Rodajes'],['entregas','✂ Entregas']].map(([id,l])=><button key={id} onClick={()=>{setCapa(id);setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 12px', fontSize:12, background:capa===id?T.ink:T.surface, color:capa===id?'#fff':T.ink2, borderColor:capa===id?T.ink:T.border}}>{l}</button>)}
         </div>}
-        {verEnt && edicion.length>0 && <select value={editorF} onChange={e=>setEditorF(e.target.value)} title="Quién edita" style={{...navBtn, width:'auto', padding:'0 10px', fontSize:12, cursor:'pointer', marginRight:6}}>
+        {verEnt && edicion.length>0 && <select value={editorF} onChange={e=>elegirEditor(e.target.value)} title="Quién edita" style={{...navBtn, width:'auto', padding:'0 10px', fontSize:12, cursor:'pointer', marginRight:6, ...(editorF!=='todos'?{borderColor:T.ink, fontWeight:600}:{})}}>
           <option value="todos">Todo el equipo</option>
+          {editorF!=='todos'&&editorF!=='__sin__'&&!editores.includes(editorF) && <option value={editorF}>{editorF}</option>}
           {sinAsignar>0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
           {editores.map(e=><option key={e} value={e}>{e}</option>)}
         </select>}
@@ -2125,7 +2257,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
                   amarillo esta semana, verde en fecha, gris entregado). Punteado = fecha del
                   manual, todavía no la confirmó el PM. */}
               {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
-                return <div key={'n'+j} title={`${limpiarPedidoEd(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}`} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
+                return <div key={'n'+j} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${limpiarPedidoEd(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{cursor:goTo?'pointer':undefined, fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
               })}
               {total>TOPE&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-TOPE} más</div>}
             </div>
@@ -2148,7 +2280,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
               <div style={{fontSize:12, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
               <div style={{fontSize:11.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.brand}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
               {f.__estimada && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}
-              {goTo && <div style={{display:'flex', gap:7, marginTop:9}}><button onClick={()=>goTo('edicion',{abrir:f.ID})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>Abrir en Edición</button></div>}
+              {goTo && <div style={{display:'flex', gap:7, marginTop:9}}><button onClick={()=>abrirEntrega(f)} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>Abrir este trabajo</button></div>}
             </div>
           })}
           {aprobSel.map((p,i)=>{ const staff=staffDe(p); const num=p['N° presupuesto']; const tent=esTentDia(dayKey(diaSel),p)
@@ -2210,90 +2342,8 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo}){
   </>
 }
 
-// ============================ PROYECTOS ============================
-function Proyectos({data, onRefresh, showToast, nav, clearNav}){
-  const proyectos=data.proyectos||[]
-  const rrhh=data.rrhh||[]
-  const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
-  const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
-  const presuByNum={}; (data.presupuestos||[]).forEach(p=>{presuByNum[String(p['Columna 1']||'').trim()]=p})
-  const [q,setQ]=useState(''), [estado,setEstado]=useState('todos'), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [open,setOpen]=useState(null), [editando,setEditando]=useState(null)
-  useEffect(()=>{ if(nav?.mod==='proyectos'){ if(nav.filtro)setEstado(nav.filtro); if(nav.q){setQ(nav.q); setEstado('todos')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
-  const anios=[...new Set(proyectos.map(p=>(p['Fecha Evento']||'').split('/')[2]).filter(Boolean))].sort().reverse()
-
-  const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
-  // Un proyecto puede tener varias facturas (adelanto + saldo): las juntamos todas.
-  // Antes se guardaba una sola y el chip mostraba solo la última cargada.
-  const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) (facByNum[n]||=[]).push(f) })
-  const facsDe=p=>facByNum[String(p['N° presupuesto']||'').trim()]||[]
-  const facDe=p=>facsDe(p)[0]
-  const filtrados=proyectos.filter(p=>{
-    const fecha=p['Fecha Evento']||''
-    const mMes=mes==='todos'||parseInt(fecha.split('/')[1])===parseInt(mes)
-    const mAnio=anio==='todos'||fecha.includes(anio)
-    const mEst=estado==='todos'||(estado==='ok'&&tieneStaff(p))||(estado==='pendiente'&&!tieneStaff(p))||(estado==='sinfact'&&!facDe(p))
-    const mq=!q||[p['N° presupuesto'],p['Proyecto'],p['Cliente'],p['Agencia']].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))
-    return mMes&&mAnio&&mEst&&mq
-  }).sort((a,b)=>{ const fa=parseD(a['Fecha Evento'])?.getTime()||0, fb=parseD(b['Fecha Evento'])?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
-
-  const pendientes=proyectos.filter(p=>!tieneStaff(p)).length
-  const sinFacturar=proyectos.filter(p=>!facDe(p)).length
-
-  return <>
-    <PageHead title="Proyectos" sub={`${filtrados.length} de ${proyectos.length}${pendientes?` · ${pendientes} sin staff`:''}${sinFacturar?` · ${sinFacturar} sin facturar`:''}`}/>
-    <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar N°, proyecto, cliente, agencia…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
-      <select value={anio} onChange={e=>setAnio(e.target.value)} style={selectStyle}><option value="todos">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
-      <select value={mes} onChange={e=>setMes(e.target.value)} style={selectStyle}><option value="todos">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
-    </div>
-    <div style={{display:'flex', gap:7, marginBottom:14}}>
-      {[['todos','Todos'],['pendiente','Sin staff'],['ok','Con staff'],['sinfact','Sin facturar']].map(([k,l])=>(
-        <button key={k} onClick={()=>setEstado(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${estado===k?T.ink:T.border}`, background:estado===k?T.ink:T.surface, color:estado===k?'#fff':T.ink2}}>{l}</button>
-      ))}
-    </div>
-    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px 64px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span><span style={{textAlign:'right'}}>Factura</span>
-      </div>
-      {filtrados.length===0&&<Empty>Sin resultados</Empty>}
-      {filtrados.slice(0,200).map((p,i)=>{
-        const num=p['N° presupuesto'], abierto=open===num, ok=tieneStaff(p)
-        // Con adelanto + saldo el proyecto tiene 2 facturas: mostramos cuántas se cobraron
-        // ("1/2 cobr.") en vez de decir "Cobrada" porque entró la seña.
-        const facs=facsDe(p), cobradas=facs.filter(isCobrada).length
-        const facInfo = !facs.length ? {c:T.brand,l:'Sin fact.'}
-          : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
-          : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
-        return <div key={num+'_'+i}>
-          <div onClick={()=>setOpen(abierto?null:num)} style={{display:'grid', gridTemplateColumns:'88px 1.5fr 1fr 100px 78px 96px 64px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
-            onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
-            <span style={{fontSize:12, color:T.ink2}}>{p['Fecha Evento']||'—'}</span>
-            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Proyecto']||'—'}</span>
-            <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{p['Cliente']||'—'}</span>
-            <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
-            <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
-              <span style={{width:7,height:7,borderRadius:7,background:ok?T.pos:T.warn}}/>
-              <span style={{fontSize:11.5, color:T.ink2}}>{ok?'OK':'Pend.'}</span>
-            </span>
-            <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
-              <span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/>
-              <span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span>
-            </span>
-            {/* Las carpetas del proyecto a un clic, sin abrir nada: 📁 crudo, 📸 lo que se le manda al cliente */}
-            <span onClick={e=>e.stopPropagation()} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6, fontSize:14}}>
-              {p['Drive Crudo'] && <a href={p['Drive Crudo']} target="_blank" rel="noreferrer" title="Crudo (lo que se filmó)" style={{textDecoration:'none'}}>📁</a>}
-              {(p['Drive Finales']||p['Drive Entrega']) && <a href={p['Drive Finales']||p['Drive Entrega']} target="_blank" rel="noreferrer" title={p['Drive Finales']?'Finales: lo que se le manda al cliente':'Carpeta de entrega'} style={{textDecoration:'none'}}>📸</a>}
-              {!p['Drive Crudo'] && !p['Drive Entrega'] && <span title="Sin carpetas en Drive todavía" style={{fontSize:11, color:T.ink3}}>—</span>}
-            </span>
-          </div>
-          {abierto && <StaffEditor p={p} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={presuByNum[String(num).trim()]} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditando(presuByNum[String(num).trim()]||p)}/>}
-        </div>
-      })}
-    </div>
-    {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
-  </>
-}
-
+// ============================ PRODUCCIÓN DE UN TRABAJO ============================
+// (La lista de Proyectos ahora es una vista de Trabajos. Esto es el bloque "Producción".)
 function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], agencias=[], clientes=[], onRefresh, showToast, onClose, onEditarDatos}){
   // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
   // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
@@ -5056,8 +5106,11 @@ function GlobalSearch({data, onClose, onNavegar}){
 
   const res=[]
   if(nq.length>=1){
-    ;(data?.presupuestos||[]).forEach(p=>{ const num=String(p['Columna 1']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Presupuesto',icon:'📋',mod:'presupuestos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Estado']||'',color:T.brand,q:num}) })
-    ;(data?.proyectos||[]).forEach(p=>{ const num=String(p['N° presupuesto']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Proyecto',icon:'🎬',mod:'proyectos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Fecha Evento']||'',color:T.pos,q:num}) })
+    ;(data?.presupuestos||[]).forEach(p=>{ const num=String(p['Columna 1']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Trabajo',icon:'📋',mod:'presupuestos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Estado']||'',color:T.brand,q:num}) })
+    // Un trabajo aprobado está en PRESUPUESTOS y en PROYECTOS: antes salía dos veces (📋 y 🎬)
+    // para el mismo número. De PROYECTOS solo se listan los que no tienen presupuesto.
+    const conPresu=new Set((data?.presupuestos||[]).map(p=>String(p['Columna 1']||'').trim()))
+    ;(data?.proyectos||[]).forEach(p=>{ const num=String(p['N° presupuesto']||''),cli=String(p['Cliente']||''),ag=String(p['Agencia']||''),pr=String(p['Proyecto']||''); if(!conPresu.has(num.trim()) && normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Proyecto',icon:'🎬',mod:'proyectos',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:p['Fecha Evento']||'',color:T.pos,q:num}) })
     ;(data?.facturacion||[]).forEach(f=>{ const num=String(f['N° Presupuesto']||''),cli=String(f['Cliente']||''),ag=String(f['Agencia']||''),pr=String(f['Proyecto']||''); if(normTxt(num+' '+cli+' '+ag+' '+pr).includes(nq)) res.push({tipo:'Factura',icon:'💵',mod:'facturacion',titulo:'#'+num+' · '+(cli||ag||'—'),sub:pr,meta:isCobrada(f)?'Cobrada':'Pendiente',color:T.warn,q:num}) })
     ;(data?.rrhh||[]).forEach(r=>{ const nombre=String(r['Nombre Apellido']||r['Nombre']||''),rubro=String(r['Rubro']||''),mail=String(r['Mail']||''); if(nombre.trim()&&normTxt(nombre+' '+rubro+' '+mail).includes(nq)) res.push({tipo:'Freelancer',icon:'👤',mod:'pagos',titulo:nombre,sub:rubro,meta:'',color:T.ink2,q:nombre}) })
     ;(data?.agencias||[]).forEach(a=>{ const nombre=String(a['Nombre']||''); if(nombre.trim()&&normTxt(nombre).includes(nq)) res.push({tipo:'Agencia',icon:'🏢',mod:'agencias',titulo:nombre,sub:a['Condicion IVA']||'',meta:'',color:T.ink2,q:nombre}) })
