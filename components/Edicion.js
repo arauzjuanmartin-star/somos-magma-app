@@ -63,6 +63,14 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [volverA, setVolverA] = useState(null)    // 'calendario' si vino de ahí
   // "Lo mío": lo que edito o lo que respondo como PM. Queda recordado por navegador.
   const [soloMio, setSoloMio] = useState(false)
+  // El tablero en reposo muestra lo mínimo. Juan, 20/9/2026, mirando la captura:
+  // "sigue siendo mucho en cuanto a lo visual, demasiada información". La lista es
+  // para ENCONTRAR un trabajo; para HACER algo está la ficha. Por eso los tres
+  // desplegables viven detrás de "Filtros" y lo que todavía no tiene material
+  // (2 de cada 3 filas) va plegado abajo.
+  const [verFiltros, setVerFiltros] = useState(false)
+  const [verEspera, setVerEspera] = useState(false)
+  useEffect(() => { if (recordado('ed-ver-espera') === '1') setVerEspera(true) }, [])
   const [local, setLocal] = useState({})          // cambios ya aplicados en pantalla
   const [filtro, setFiltro] = useState('activos')
   const [q, setQ] = useState('')
@@ -251,9 +259,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return c
   }, [base, filtro, personaF, pmF])
 
-  const grupos = useMemo(() => {
+  const armarGrupos = lista => {
     const m = new Map()
-    visibles.forEach(f => {
+    lista.forEach(f => {
       const k = String(f['N° presupuesto'] || '—')
       if (!m.has(k)) m.set(k, { num: k, fecha: f['Fecha Evento'], cliente: f.Cliente, agencia: f.Agencia, proyecto: f.Proyecto, linkCrudo: '', linkEntrega: '', items: [] })
       const g = m.get(k)
@@ -264,7 +272,20 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const gs = [...m.values()]
     gs.forEach(g => { g.items.sort((a, b) => a.__sem.orden - b.__sem.orden); g.orden = Math.min(...g.items.map(i => i.__sem.orden)) })
     return gs.sort((a, b) => a.orden - b.orden)
-  }, [visibles])
+  }
+  // "Sin material" no es trabajo de edición todavía: es un trabajo esperando que
+  // llegue el crudo. Al 20/9/2026 eran 52 de las 77 abiertas, todas en rojo, tapando
+  // las 25 que sí se están editando. En la vista de todos los días van plegadas
+  // abajo, con UN aviso que dice cuántas hay y cuántas llevan días así. Si alguien
+  // filtra (Atrasado, un estado, el buscador) la lista va entera, como siempre. Lo
+  // tocado en la sesión no se pliega: si no, otra vez "la apretás y desaparece".
+  const separar = filtro === 'activos' && estadoF === 'todos' && !q.trim()
+  const espera = f => separar && estadoDe(f.Estado) === 'Sin material' && abierto !== f.ID && !tocados.has(f.ID)
+  const grupos = useMemo(() => armarGrupos(visibles.filter(f => !espera(f))), [visibles, separar, abierto, tocados]) // eslint-disable-line
+  const filasEspera = useMemo(() => visibles.filter(espera), [visibles, separar, abierto, tocados]) // eslint-disable-line
+  const gruposEspera = useMemo(() => armarGrupos(filasEspera), [filasEspera]) // eslint-disable-line
+  const esperaViejas = filasEspera.filter(f => f.__sem.nivel === 'rojo').length
+  const nFiltros = [estadoF, pmF, personaF].filter(v => v !== 'todos').length
 
   const cuenta = useMemo(() => {
     const c = { activos: 0, revisar: 0, cliente: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
@@ -463,19 +484,17 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }
 
   return <div>
-    <div style={{ marginBottom: 14 }}>
-      <h1 style={{ fontSize: 21, fontWeight: 700, color: T.ink, margin: 0 }}>Edición</h1>
-      <div style={{ fontSize: 12.5, color: T.ink2, marginTop: 4 }}>Qué se está editando, quién lo tiene y para cuándo. Lo que cambia acá queda en el sheet.</div>
-    </div>
-
-    <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: `1px solid ${T.border}` }}>
-      {[['tablero', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
-        <button key={id} onClick={() => setVista(id)} style={{
-          padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer',
-          fontSize: 13.5, fontWeight: vista === id ? 700 : 500, color: vista === id ? T.ink : T.ink2,
-          borderBottom: `2px solid ${vista === id ? T.brand : 'transparent'}`, marginBottom: -1,
-        }}>{l}</button>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: cel ? 10 : 22, marginBottom: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h1 style={{ fontSize: 21, fontWeight: 700, color: T.ink, margin: '0 0 8px' }}>Edición</h1>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {[['tablero', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
+          <button key={id} onClick={() => setVista(id)} style={{
+            padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 13.5, fontWeight: vista === id ? 700 : 500, color: vista === id ? T.ink : T.ink2,
+            borderBottom: `2px solid ${vista === id ? T.brand : 'transparent'}`, marginBottom: -1,
+          }}>{l}</button>
+        ))}
+      </div>
     </div>
 
     {vista === 'info' ? <Info mail={mail} showToast={showToast} /> : <>
@@ -492,37 +511,26 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
         : <>
           {consultas.length > 0 && <Consultas consultas={consultas} responder={responder} setAbierto={abrir} />}
 
-          {/* Lo mío / todo el equipo. Va primero y manda sobre todo lo de abajo: los
-              números, los chips y la lista. Dani, 17/9/2026: "siento que cuando aprieto
-              veo las de todos y a veces tengo que andar buscando". */}
-          {hayMio && <div style={{ display: 'flex', gap: 0, marginBottom: cel ? 10 : 14, border: `1px solid ${T.border}`, borderRadius: 9, overflow: 'hidden', width: cel ? '100%' : 'fit-content' }}>
-            {[[true, 'Lo mío', miasAbiertas], [false, 'Todo el equipo', filas.filter(f => !estaCerrado(f.Estado)).length]].map(([v, l, n]) => {
-              const activo = soloMio === v
-              return <button key={l} onClick={() => elegirMio(v)} style={{ flex: cel ? 1 : undefined, padding: cel ? '10px 12px' : '8px 16px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activo ? 700 : 500, background: activo ? T.ink : T.surface, color: activo ? '#fff' : T.ink2 }}>{l} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 4 }}>{n}</span></button>
-            })}
-          </div>}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: cel ? 6 : 10, marginBottom: cel ? 12 : 16 }}>
-            <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
-            <Kpi n={cuenta.naranja} l={cel ? 'hoy' : 'vencen hoy'} c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} cel={cel} />
-            <Kpi n={cuenta.amarillo} l={cel ? 'semana' : 'esta semana'} c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} cel={cel} />
-            <Kpi n={cuenta.revisar} l={cel ? 'tu OK' : 'esperan tu OK'} c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
+          {/* UNA línea: de quién · buscar · filtros · actualizar · nuevo. Antes eran cuatro
+              filas de controles antes del primer trabajo (y las tarjetas repetían los
+              mismos números que los chips de abajo: 13 · 4 · 0 · 3 dos veces). */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+            {/* Lo mío / todo el equipo: manda sobre los números, los chips y la lista. Dani,
+                17/9/2026: "cuando aprieto veo las de todos y a veces tengo que andar buscando". */}
+            {hayMio && <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: 9, overflow: 'hidden', flex: cel ? '1 1 100%' : undefined }}>
+              {[[true, 'Lo mío', miasAbiertas], [false, 'Todo el equipo', filas.filter(f => !estaCerrado(f.Estado)).length]].map(([v, l, n]) => {
+                const activo = soloMio === v
+                return <button key={l} onClick={() => elegirMio(v)} style={{ flex: cel ? 1 : undefined, padding: cel ? '10px 12px' : '7px 14px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activo ? 700 : 500, background: activo ? T.ink : T.surface, color: activo ? '#fff' : T.ink2 }}>{l} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 4 }}>{n}</span></button>
+              })}
+            </div>}
+            {!cel && <div style={{ flex: 1 }} />}
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '7px 10px', fontSize: cel ? 13 : 12.5, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 210 }} />
+            <button onClick={() => setVerFiltros(v => !v)} title="Por estado, por PM o por quién lo edita" style={{ ...btn, padding: cel ? '9px 12px' : '7px 12px', flex: cel ? 1 : undefined, background: nFiltros ? T.ink : T.surface, color: nFiltros ? '#fff' : T.ink2, borderColor: nFiltros || verFiltros ? T.ink : T.border }}>Filtros{nFiltros ? ` · ${nFiltros}` : ''} {verFiltros ? '▴' : '▾'}</button>
+            <button onClick={() => sincronizar(false)} disabled={sincro} title="Trae los entregables nuevos desde Proyectos (también corre solo al abrir)" style={{ ...btn, padding: cel ? '9px 12px' : '7px 11px' }}>{sincro ? '…' : '↻'}</button>
+            <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un proyecto que ya está en el tablero, usá el “+ Video” de ese proyecto" style={{ ...btnPri, padding: cel ? '9px 14px' : '7px 13px', flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-            {/* Siete chips en un teléfono son tres renglones antes del primer
-                trabajo. En celular van como un solo desplegable. */}
-            {cel && <select value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...inp, flex: '1 1 100%', fontSize: 13, padding: '9px 10px', cursor: 'pointer' }}>
-              {FILTROS.map(f => <option key={f.id} value={f.id}>{f.label} ({cuenta[f.id]})</option>)}
-            </select>}
-            {!cel && FILTROS.map(f => {
-              const activo = filtro === f.id
-              return <button key={f.id} onClick={() => setFiltro(f.id)} style={{
-                ...btn, padding: '6px 11px', fontSize: 12,
-                border: `1px solid ${activo ? T.ink : T.border}`, background: activo ? T.ink : T.surface, color: activo ? '#fff' : T.ink2, fontWeight: activo ? 600 : 500,
-              }}>{f.label} <span style={{ fontFamily: MONO, opacity: 0.65, marginLeft: 3 }}>{cuenta[f.id]}</span></button>
-            })}
-            {!cel && <div style={{ flex: 1 }} />}
+          {verFiltros && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', padding: '9px 11px', background: T.surfaceAlt, borderRadius: 9 }}>
             <select value={estadoF} onChange={e => setEstadoF(e.target.value)} title="En qué anda cada entregable (distinto del plazo)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 200, borderColor: estadoF !== 'todos' ? T.ink : T.border, fontWeight: estadoF !== 'todos' ? 600 : 400 }}>
               <option value="todos">Cualquier estado</option>
               {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
@@ -532,21 +540,55 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               {sinPM > 0 && <option value="__sin__">Sin PM ({sinPM})</option>}
               {pms.map(([p, n]) => <option key={p} value={p}>PM {p} ({n})</option>)}
             </select>
-            <select value={personaF} onChange={e => { setPersonaF(e.target.value); if (e.target.value !== 'todos') setSoloMio(false) }} title="Quién lo edita" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230 }}>
-              <option value="todos">Todo el equipo</option>
+            <select value={personaF} onChange={e => { setPersonaF(e.target.value); if (e.target.value !== 'todos') setSoloMio(false) }} title="Quién lo edita" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 230, borderColor: personaF !== 'todos' ? T.ink : T.border, fontWeight: personaF !== 'todos' ? 600 : 400 }}>
+              <option value="todos">Cualquier editor</option>
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
             </select>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '6px 10px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 190 }} />
-            <button onClick={() => sincronizar(false)} disabled={sincro} title="Trae los entregables nuevos desde Proyectos (también corre solo al abrir)" style={{ ...btn, padding: cel ? '9px 12px' : '6px 11px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{sincro ? '…' : '↻ Actualizar'}</button>
-            <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un proyecto que ya está en el tablero, usá el “+ Video” de ese proyecto" style={{ ...btnPri, padding: cel ? '9px 14px' : '6px 12px', fontSize: cel ? 13 : 12, flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
+            {nFiltros > 0 && <button onClick={() => { setEstadoF('todos'); setPmF('todos'); setPersonaF('todos') }} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, border: 'none', background: 'transparent', color: T.ink2, textDecoration: 'underline' }}>Sacar filtros</button>}
+          </div>}
+
+          {/* Los plazos. En el celular los chips son tres renglones: ahí van las cuatro
+              tarjetas (que se leen de un vistazo) y un desplegable. */}
+          {cel && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 10 }}>
+            <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
+            <Kpi n={cuenta.naranja} l="hoy" c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} cel={cel} />
+            <Kpi n={cuenta.amarillo} l="semana" c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} cel={cel} />
+            <Kpi n={cuenta.revisar} l="tu OK" c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
+          </div>}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            {cel && <select value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...inp, flex: '1 1 100%', fontSize: 13, padding: '9px 10px', cursor: 'pointer' }}>
+              {FILTROS.map(f => <option key={f.id} value={f.id}>{f.label} ({cuenta[f.id]})</option>)}
+            </select>}
+            {!cel && FILTROS.map(f => {
+              const activo = filtro === f.id, n = cuenta[f.id], punto = COLOR_SEM[f.id]?.fg || (f.id === 'revisar' ? T.brand : null)
+              return <button key={f.id} onClick={() => setFiltro(f.id)} style={{
+                ...btn, padding: '5px 11px', fontSize: 12, borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
+                border: `1px solid ${activo ? T.ink : T.border}`, background: activo ? T.ink : 'transparent', color: activo ? '#fff' : T.ink2, fontWeight: activo ? 600 : 500,
+                opacity: n || activo ? 1 : 0.45,
+              }}>{punto && n > 0 && f.id !== 'listo' && <span style={{ width: 7, height: 7, borderRadius: 7, background: punto, display: 'inline-block' }} />}{f.label} <span style={{ fontFamily: MONO, opacity: 0.65 }}>{n}</span></button>
+            })}
           </div>
 
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
-          {!grupos.length
+          {!grupos.length && !gruposEspera.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}{soloMio && hayMio && <button onClick={() => elegirMio(false)} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
-            : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
+            : <>
+              {!grupos.length && <div style={{ fontSize: 13, color: T.ink2, padding: '6px 2px 16px' }}>{soloMio && hayMio ? 'No tenés nada en edición ahora.' : 'No hay nada en edición ahora.'}</div>}
+              {grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
+              {gruposEspera.length > 0 && <>
+                <button onClick={() => { const n = !verEspera; setVerEspera(n); recordar('ed-ver-espera', n ? '1' : '0') }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', marginTop: grupos.length ? 8 : 0, marginBottom: 10, borderRadius: 12, border: `1px dashed ${T.border}`, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, color: T.ink3 }}>{verEspera ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Esperando material</span>
+                  <span style={{ fontSize: 12.5, fontFamily: MONO, color: T.ink2 }}>{filasEspera.length}</span>
+                  <span style={{ fontSize: 12, color: T.ink3 }}>todavía no hay nada para editar</span>
+                  <span style={{ flex: 1 }} />
+                  {esperaViejas > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: T.brand }}>{esperaViejas} con el evento hace 3 días o más</span>}
+                </button>
+                {verEspera && gruposEspera.map(g => <Grupo key={'e' + g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
+              </>}
+            </>}
         </>}
     </>}
   </div>
@@ -771,7 +813,9 @@ function Logo({ f, g, guardar, logos = {}, cel, rec = {} }) {
     ;(g?.items || []).filter(h => h.ID !== f.ID && !String(h['Logo y placas'] || '').trim()).forEach(h => guardar(h.ID, { 'Logo y placas': val }))
   }
   const confirmar = () => { if (v.trim() !== actual) guardarLogo(v.trim()) }
-  return <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, padding: '9px 12px', borderRadius: 9, background: actual ? T.surface : T.brandSoft, border: `1px solid ${actual ? T.border : T.brand + '40'}` }}>
+  // Rosa solo si de verdad falta: con carpeta de Recursos, el campo puntual vacío es lo normal.
+  const resuelto = !!actual || !!rec.cliente || !!rec.agencia
+  return <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, padding: '9px 12px', borderRadius: 9, background: resuelto ? T.surface : T.brandSoft, border: `1px solid ${resuelto ? T.border : T.brand + '40'}` }}>
     <span style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>🎨 Logo y gráfica</span>
     {rec.cliente && <a href={rec.cliente} target="_blank" rel="noreferrer" title="La carpeta Recursos del cliente en ENTREGAS: logo, gráfica, lo general" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Cliente}</a>}
     {rec.agencia && rec.agencia !== rec.cliente && <a href={rec.agencia} target="_blank" rel="noreferrer" title="La carpeta Recursos de la agencia" style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>📁 Recursos de {f.Agencia}</a>}
@@ -1066,25 +1110,37 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
   // "Un video más" se carga desde el proyecto, no desde un formulario suelto arriba
   // donde hay que tipear el número y después buscar dónde cayó.
   const [nuevaAca, setNuevaAca] = useState(false)
+  // Los botones del proyecto (hasta 7: Logo, + Video, Crudo, Entrega, Finales, Copiar,
+  // Compartir…) eran lo que más ruido metía en la lista. En reposo no se ven: aparecen
+  // al pasar el mouse por el proyecto. En la ficha y en el celular están siempre.
+  const [encima, setEncima] = useState(false)
+  const verBotones = cel || !!soloId || encima || panel || nuevaAca || verFotos || creando
+  const flotan = !cel && !soloId
+  // En el teléfono, en la lista, solo los íconos de Drive: el resto está en la ficha.
+  const enLista = !cel || !!soloId
 
-  return <div style={{ ...card, marginBottom: 10, overflow: 'hidden' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '11px 14px', background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: 'wrap' }}>
-      <Punto nivel={peor.nivel} />
+  return <div onMouseEnter={() => setEncima(true)} onMouseLeave={() => setEncima(false)} style={{ ...card, marginBottom: 10, overflow: 'hidden' }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '9px 14px', minHeight: cel ? undefined : 46, background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: flotan ? 'nowrap' : 'wrap', overflow: flotan ? 'hidden' : undefined }}>
       <span style={{ fontFamily: MONO, fontSize: cel ? 11 : 12, color: T.ink2 }}>#{g.num}</span>
-      <span style={{ fontSize: cel ? 13 : 13.5, fontWeight: 600, color: T.ink }}>{g.cliente || g.agencia || '—'}</span>
-      {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2, ...(cel ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } : {}) }}>· {g.proyecto}</span>}
+      <span style={{ fontSize: cel ? 13 : 13.5, fontWeight: 600, color: T.ink, whiteSpace: flotan ? 'nowrap' : undefined }}>{g.cliente || g.agencia || '—'}</span>
+      {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2, ...(cel ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } : flotan ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 } : {}) }}>· {g.proyecto}</span>}
       {!cel && <span style={{ fontSize: 11.5, color: T.ink3, fontFamily: MONO }}>{g.fecha}</span>}
       {fantasma && <span title="Este número ya no está en Proyectos: se represupuestó, se desaprobó o se borró. Las carpetas y el material van con el número vigente." style={{ fontSize: 11, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '2px 8px', borderRadius: 5, whiteSpace: 'nowrap' }}>
         ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
       </span>}
       <div style={{ flex: 1 }} />
+      {/* En la lista flotan sobre la derecha de la cabecera: si fueran parte del renglón,
+          escondidos seguirían ocupando lugar (y con títulos largos lo partían en dos). */}
+      <div style={flotan
+        ? { position: 'absolute', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 0 28px', background: `linear-gradient(90deg, transparent, ${T.surfaceAlt} 22px)`, opacity: verBotones ? 1 : 0, pointerEvents: verBotones ? 'auto' : 'none', transition: 'opacity .12s', whiteSpace: 'nowrap' }
+        : { display: 'flex', alignItems: 'center', gap: cel ? 7 : 8, flexWrap: 'wrap' }}>
       {/* El logo vive en la carpeta Recursos del cliente (o de la agencia). El link
           puntual de una pieza solo manda si no hay Recursos: el 14/9 el botón llevaba a
           la referencia del video porque ese link estaba pegado en el campo. */}
-      {(rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
-      {!(rec.cliente || rec.agencia) && logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="Link puntual cargado en la pieza" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
-      {!fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
-      {!fantasma && !soloLoSuyo && conFotos && <button onClick={() => setVerFotos(v => !v)} title="Las fotos que subió el fotógrafo: cuántas hay, firmarlas y dejarlas listas para el cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: verFotos ? T.ink : T.surface, color: verFotos ? '#fff' : T.ink2 }}>{verFotos ? 'Cerrar' : '🖼 Fotos'}</button>}
+      {enLista && (rec.cliente || rec.agencia) && <a href={rec.cliente || rec.agencia} target="_blank" rel="noreferrer" title={rec.cliente ? `Recursos de ${g.cliente}: logo, gráfica, lo general` : `Recursos de ${g.agencia}`} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
+      {enLista && !(rec.cliente || rec.agencia) && logoGrupo && <a href={logoGrupo} target="_blank" rel="noreferrer" title="Link puntual cargado en la pieza" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, textDecoration: 'none', display: 'inline-block' }}>🎨 Logo</a>}
+      {enLista && !fantasma && crearTarea && <button onClick={() => setNuevaAca(v => !v)} title="Otro video de este proyecto (copia el brief de la pieza que elijas), o una tarea suelta" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: nuevaAca ? T.ink : T.surface, color: nuevaAca ? '#fff' : T.ink2 }}>{nuevaAca ? 'Cerrar' : '+ Video'}</button>}
+      {enLista && !fantasma && !soloLoSuyo && conFotos && <button onClick={() => setVerFotos(v => !v)} title="Las fotos que subió el fotógrafo: cuántas hay, firmarlas y dejarlas listas para el cliente" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: verFotos ? T.ink : T.surface, color: verFotos ? '#fff' : T.ink2 }}>{verFotos ? 'Cerrar' : '🖼 Fotos'}</button>}
       {/* En el celular los botones de Drive se comen la pantalla antes del primer
           trabajo: van adentro, cuando se abre la fila. */}
       {cel ? <>
@@ -1098,6 +1154,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         {(linkFinales || linkEntrega) && <button onClick={copiarCliente} title="Copia el link de Finales (o el de entrega si no hay)" style={{ ...btn, padding: '5px 10px', fontSize: 11.5, color: T.pos, borderColor: T.pos }}>{copiado ? '✓ Copiado' : 'Copiar para el cliente'}</button>}
         <button onClick={() => setPanel(p => !p)} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, background: panel ? T.ink : T.surface, color: panel ? '#fff' : T.ink2 }}>Compartir…</button>
       </> : !fantasma && <button onClick={() => carpeta(g.num, ['crudo', 'entregas'], false)} disabled={creando} title="Crea la carpeta en CRUDO y en ENTREGAS CLIENTES, con las subcarpetas de lo que se vendió" style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>{creando ? 'Creando…' : '📁 Crear carpetas'}</button>}
+      </div>
     </div>
 
     {nuevaAca && <div style={{ padding: '10px 14px 0', background: T.bg, borderBottom: `1px solid ${T.border}` }}>
@@ -1145,6 +1202,28 @@ function PanelCompartir({ g, carpeta, crudoAlCliente, mailsCliente }) {
   </div>
 }
 
+// El estado en la lista: una píldora que es un desplegable. La barra de 8 pasos queda
+// para la ficha, donde hay lugar para leerla; en la lista eran 8 bloquecitos por fila.
+// Color = sentido: gris no hay nada que hacer todavía, oscuro se está trabajando, rojo
+// espera el OK del PM, ámbar volvió con cambios, verde lo tiene el cliente o terminó.
+const colorEstado = e => e === 'Sin material' ? { bg: T.surfaceAlt, fg: T.ink3 }
+  : esperaAlPM(e) ? { bg: T.brandSoft, fg: T.brand }
+  : ES_VUELTA(e) ? { bg: T.warnSoft, fg: T.warn }
+  : (esperaAlCliente(e) || estaCerrado(e)) ? { bg: T.posSoft, fg: T.pos }
+  : { bg: '#ECEAE6', fg: T.ink }
+function EstadoPill({ estado, onChange }) {
+  const e = estadoDe(estado), c = colorEstado(e)
+  return <span onClick={ev => ev.stopPropagation()} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+    <select value={e} onChange={ev => onChange(ev.target.value)} title="Cambiar el estado" style={{
+      appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', border: 'none', outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+      borderRadius: 20, padding: '4px 24px 4px 11px', fontSize: 11.5, fontWeight: 600, background: c.bg, color: c.fg,
+    }}>
+      {ESTADOS.map(x => <option key={x} value={x}>{x}</option>)}
+    </select>
+    <span style={{ position: 'absolute', right: 9, fontSize: 7.5, color: c.fg, pointerEvents: 'none' }}>▼</span>
+  </span>
+}
+
 function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo, recursosDe, enFicha = false }) {
   const sem = f.__sem
   const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
@@ -1169,45 +1248,52 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
           {hayConsulta && <span style={{ fontSize: 13 }}>🙋</span>}
           {prio === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>URGENTE</span>}
         </div>
-        <Barra estado={f.Estado} soloBarra />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-            <select value={estadoDe(f.Estado)} onChange={e => cambiarEstado(e.target.value)}
-              style={{ ...inp, padding: '6px 8px', fontSize: 12.5, cursor: 'pointer', maxWidth: 168 }}>
-              {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
-            </select>
-          </span>
+          <EstadoPill estado={f.Estado} onChange={cambiarEstado} />
           <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
           <div style={{ flex: 1 }} />
           {!enFicha && <span style={{ fontSize: 11.5, color: T.ink3 }}>{abierta ? 'cerrar ▲' : 'abrir →'}</span>}
         </div>
         {personaF === 'todos' && <div style={{ fontSize: 11.5, color: T.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
           {String(f.Editor || '').trim() || <em style={{ color: T.brand, fontStyle: 'normal' }}>sin asignar</em>}
-          {String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
+          {enFicha && String(f.Interno || '').trim() && <span style={{ fontSize: 9, fontWeight: 700, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 4px', borderRadius: 3 }}>MAGMA</span>}
         </div>}
       </div>
       {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />}
     </div>
   }
 
+  // Toda la fila abre la ficha (antes había un botón "Abrir" por fila). Lo que se
+  // puede tocar sin abrir —el estado, Revisar, OK del cliente— frena el clic.
+  const sinNadie = !String(f.Editor || '').trim()
+  const clicFila = !enFicha && !abierta
   return <div id={`ed-${f.ID}`} style={{ borderBottom: abierta ? `1px solid ${T.border}` : 'none' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1 }}>
-      <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, minWidth: 130 }}>{limpiarPedido(f.Entregable)}</span>
-      {prio === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}
-      {hayConsulta && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4 }}>🙋 PREGUNTA</span>}
-      <span style={{ fontSize: 12.5, color: T.ink2, minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {String(f.Editor || '').trim() || <em style={{ color: T.brand, fontStyle: 'normal' }}>sin asignar</em>}
-        {/* "Interno" es de facturación: la plata queda en Magma. No dice quién lo hace. */}
-        {String(f.Interno || '').trim() && <span title="Este trabajo lo cobra Magma, no un freelancer" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 4 }}>MAGMA</span>}
+    <div onClick={clicFila ? () => setAbierto(f.ID) : undefined} title={clicFila ? 'Abrir este trabajo' : undefined}
+      onMouseEnter={clicFila ? e => { e.currentTarget.style.background = T.surfaceAlt } : undefined} onMouseLeave={clicFila ? e => { e.currentTarget.style.background = 'transparent' } : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: clicFila ? 'pointer' : 'default' }}>
+      <span style={{ flex: '1.5 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{limpiarPedido(f.Entregable)}</span>
+        {prio === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3, flexShrink: 0 }}>URGENTE</span>}
+        {hayConsulta && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>🙋 PREGUNTA</span>}
       </span>
-      <Barra estado={f.Estado} compacta onChange={cambiarEstado} />
-      {esperaAlPM(f.Estado) && <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>}
-      {/* Un clic cierra: el cliente ya dijo que sí, no hay nada más que mirar. Si pidió
-          cambios, se abre la fila y va con la nota. */}
-      {esperaAlCliente(f.Estado) && <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la fila." style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.pos, color: '#fff', border: 'none', fontWeight: 600 }}>✓ OK del cliente</button>}
-      <div style={{ flex: 1 }} />
-      <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
-      {!enFicha && <button onClick={() => setAbierto(abierta ? null : f.ID)} title={abierta ? undefined : 'Abre este trabajo solo, en su ficha'} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>{abierta ? 'Cerrar' : 'Abrir'}</button>}
+      {/* "Sin asignar" solo grita cuando ya hay material: ahí es trabajo parado sin dueño.
+          Si todavía no llegó el crudo, es un dato y va en gris. */}
+      <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 12.5, color: T.ink2, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {sinNadie ? <span style={{ color: estadoDe(f.Estado) === 'Sin material' || cerrado ? T.ink3 : T.brand, fontWeight: estadoDe(f.Estado) === 'Sin material' || cerrado ? 400 : 600 }}>sin asignar</span> : String(f.Editor).trim()}
+        {/* "Interno" es de facturación: la plata queda en Magma. No dice quién lo hace. */}
+        {enFicha && String(f.Interno || '').trim() && <span title="Este trabajo lo cobra Magma, no un freelancer" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, color: T.ink3, border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 4 }}>MAGMA</span>}
+      </span>
+      {!enFicha && <span style={{ width: 172, display: 'flex', flexShrink: 0 }}><EstadoPill estado={f.Estado} onChange={cambiarEstado} /></span>}
+      <span onClick={e => e.stopPropagation()} style={{ width: 118, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+        {esperaAlPM(f.Estado) && !enFicha && <button onClick={() => setAbierto(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.brand, color: '#fff', border: 'none', fontWeight: 600 }}>Revisar</button>}
+        {/* Un clic cierra: el cliente ya dijo que sí, no hay nada más que mirar. Si pidió
+            cambios, se abre la fila y va con la nota. */}
+        {esperaAlCliente(f.Estado) && <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la fila." style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.pos, color: '#fff', border: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>✓ OK del cliente</button>}
+      </span>
+      <span style={{ width: 176, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}><span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span></span>
+      {enFicha ? null : abierta
+        ? <button onClick={e => { e.stopPropagation(); setAbierto(null) }} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>Cerrar</button>
+        : <span style={{ fontSize: 15, color: T.ink3, width: 12, textAlign: 'right', flexShrink: 0 }}>›</span>}
     </div>
     {abierta && <Detalle f={f} g={g} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} />}
   </div>
