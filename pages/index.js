@@ -3605,8 +3605,10 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   // agrupar por persona
   const personas={}
   proyMes.forEach(proy=>{
-    const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', agencia=proy['Agencia']||'', fechaEvento=proy['Fecha Evento']||''
-    for(let j=1;j<=MAX_SLOTS;j++){ const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
+    const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', agencia=proy['Agencia']||'', fechaProy=proy['Fecha Evento']||''
+    // En un trabajo de varias fechas cada línea de staff tiene SU día (col "Fechas Staff": "1:08/09/2026|2:09/09/2026").
+    const diaDeSlot={}; String(proy['Fechas Staff']||'').split('|').forEach(x=>{ const [k,...v]=x.split(':'); if(k&&v.length) diaDeSlot[k.trim()]=v.join(':').trim() })
+    for(let j=1;j<=MAX_SLOTS;j++){ const fechaEvento=diaDeSlot[String(j)]||fechaProy; const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
       if(!staffRaw||staffRaw==='Somos Magma'||!pedido||precio<=0) continue
       const staff=canonStaff(staffRaw), gk=canonKey(staff)
       if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
@@ -3754,7 +3756,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   }
   function mensajeDe(persona){
     const nombre=persona.nombre.split(' ')[0]
-    const items=persona.trabajos.filter(t=>!t.pagado).map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`).join('\n')
+    const items=ordenCrono(persona.trabajos.filter(t=>!t.pagado)).map(renglonMailStaff).join('\n')
     const tot=persona.trabajos.filter(t=>!t.pagado).reduce((s,t)=>s+t.precio+(t.viaticos||0),0)
     return `Hola ${nombre}!\n\nTe paso el detalle de los trabajos de ${MESES_LARGO[mesIdx-1]} para que nos hagas factura:\n\n${items}\n\nTotal: ${fmt(tot)}\n\nCuando tengas la factura lista mandala a admin@somosmagma.com\n\n¡Gracias!`
   }
@@ -3845,7 +3847,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
               <button onClick={()=>setFreelEdit({nombre:persona.nombre, datos})} style={{...miniBtn, alignSelf:'center'}}>{datos&&Object.keys(datos).length?'✎ Editar datos':'+ Completar datos'}</button>
             </div>
             {persona.totalPendiente>0 && <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Tildá los trabajos que vas a pagar (podés mezclar varias personas) y dale <strong style={{color:T.pos}}>Pagar seleccionados</strong> abajo. Cada tanda puede ir a una cuenta distinta.</div>}
-            {persona.trabajos.map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
+            {ordenCrono(persona.trabajos).map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
               <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
                 <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
                 <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}</div>
@@ -5019,7 +5021,9 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
   const [rubroInput,setRubroInput]=useState('')
   const fnInit=()=>{ const v=datos['Fecha de nac']||datos['Fecha de Nac']||''; return v?(String(v).includes('/')?dmyToISO(v):v):'' }
   const [form,setForm]=useState(()=>({ celular:datos['Celular']||'', mailFreelancer:datos['Mail']||'', dni:datos['Dni']||'', fechaNac:fnInit(), cuit:datos['CUIT/CUIL']||'', banco:datos['Banco']||'', alias:datos['Alias']||'', cbu:datos['CBU']||'',
-    tarifaMedia:datos['Tarifa media jornada']||'', tarifaJornada:datos['Tarifa jornada']||'', tarifaHoraExtra:datos['Tarifa hora extra']||'', zona:datos['Zona']||'', estado:datos['Estado']||'', notas:datos['Notas']||'' }))
+    tarifaMedia:datos['Tarifa media jornada']||'', tarifaJornada:datos['Tarifa jornada']||'', tarifaHoraExtra:datos['Tarifa hora extra']||'', zona:datos['Zona']||'', estado:datos['Estado']||'', notas:datos['Notas']||'',
+    // Quién puede entrar a su espacio (/mi). Se abre de a uno: primero los fijos (Juan, 22/9/2026).
+    accesoMiMagma:/^(s[ií]|x|true|1|✓)$/i.test(String(datos['Acceso Mi Magma']||'').trim())?'SÍ':'' }))
   const [saving,setSaving]=useState(false)
   const existe = datos && Object.keys(datos).length>0
   const sugeridos=[...new Set([...RUBROS_DEFAULT, ...rubrosConocidos])].filter(r=>r&&!rubros.includes(r)).sort()
@@ -5076,6 +5080,20 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
             placeholder="Ej: buenísimo con drone · no cobra IVA · avisar con 3 días"
             style={{...inpV2,resize:'vertical',fontFamily:'inherit'}}/>
         </div>
+        {/* Mi Magma: su espacio en la app (agenda, para facturar, cómo quedó, su ficha). Se abre
+            de a uno. Sin mail no sirve de nada: entra con ESA cuenta de Google. */}
+        {(()=>{ const on=form.accesoMiMagma==='SÍ', mail=String(form.mailFreelancer||'').trim(), google=/@(gmail\.com|somosmagma\.com)$/i.test(mail)
+          return <div style={{marginTop:14, padding:'12px 14px', borderRadius:10, border:`1px solid ${on?T.pos:T.border}`, background:on?T.posSoft:T.surfaceAlt}}>
+            <label style={{display:'flex', gap:10, alignItems:'center', cursor:'pointer', fontSize:13.5, fontWeight:600, color:T.ink}}>
+              <input type="checkbox" checked={on} onChange={e=>setForm(f=>({...f,accesoMiMagma:e.target.checked?'SÍ':''}))} style={{width:17,height:17,accentColor:T.pos}}/>
+              Puede entrar a Mi Magma
+            </label>
+            <div style={{fontSize:11.5, color:T.ink2, marginTop:6, lineHeight:1.5}}>
+              Ve <b>solo lo suyo</b>: su agenda, lo que tiene para facturar, cómo quedó lo que filmó y su ficha. Entra en <span style={{fontFamily:MONO}}>somos-magma-app.vercel.app/mi</span> con su cuenta de Google.
+              {on && !mail && <div style={{color:T.brand, fontWeight:600, marginTop:4}}>Falta el mail: sin mail no puede entrar.</div>}
+              {on && mail && !google && <div style={{color:T.warn, fontWeight:600, marginTop:4}}>Ese mail no es de Gmail: tiene que tener una cuenta de Google con ese mail, o pasarte un Gmail.</div>}
+            </div>
+          </div> })()}
       </div>
       <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
@@ -5086,6 +5104,15 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
 }
 
 // ============================ MAIL A STAFF (facturación) ============================
+// El detalle que recibe el freelancer para facturar. Pedido de los chicos (reunión del 18/9/2026):
+// llegaba en el orden de las filas del sheet ("1/8 tal trabajo, 10/8 tal otro, 5/8 tal otro")
+// y con la fecha al final. Ahora va en orden cronológico y con el día adelante, que es como
+// ellos lo cruzan contra su propia agenda. El día es el que fue ESA persona (col "Fechas
+// Staff" en los trabajos de varias fechas), no la primera fecha del proyecto.
+const ordenCrono = ts => [...ts].sort((a,b)=>(parseD(a.fechaEvento)?.getTime()||Infinity)-(parseD(b.fechaEvento)?.getTime()||Infinity))
+const diaCorto = f => { const d=parseD(f); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` : '' }
+const renglonMailStaff = t => `- ${diaCorto(t.fechaEvento)?diaCorto(t.fechaEvento)+' · ':''}${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`
+
 function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSent, showToast}){
   // Entidades fiscales (a quién factura el freelancer) con sus datos, desde CUENTAS
   const entidades={}; cuentas.forEach(c=>{ const ef=c['Entidad fiscal']; if(ef && !entidades[ef]) entidades[ef]={ titular:c['Titular']||'', datos:c['Datos transferencia adicionales']||'' } })
@@ -5096,8 +5123,8 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
   const [saving,setSaving]=useState(false)
   const [facturarA,setFacturarA]=useState(FACTURAR_OPC.find(e=>/somos magma/i.test(e))||FACTURAR_OPC[0])
   const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
-  const pend=persona.trabajos.filter(t=>!t.pagado)
-  const items=pend.map(t=>`- ${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}${t.fechaEvento?` [${t.fechaEvento}]`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`).join('\n')
+  const pend=ordenCrono(persona.trabajos.filter(t=>!t.pagado))
+  const items=pend.map(renglonMailStaff).join('\n')
   const tot=pend.reduce((s,t)=>s+t.precio+(t.viaticos||0),0)
   const nombre=String(persona.nombre).split(' ')[0]
   const ent=entidades[facturarA]||{}

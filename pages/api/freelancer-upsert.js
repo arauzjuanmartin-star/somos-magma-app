@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   const mail = auth.mail
 
   const { nombre, nombreOriginal, rubro, celular, mailFreelancer, dni, cuit, banco, alias, cbu, fechaNac, nacionalidad,
-          tarifaMedia, tarifaJornada, tarifaHoraExtra, zona, estado, notas } = req.body
+          tarifaMedia, tarifaJornada, tarifaHoraExtra, zona, estado, notas, accesoMiMagma } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
@@ -62,6 +62,7 @@ export default async function handler(req, res) {
       tarifaMedia: headers.indexOf('Tarifa media jornada'),
       tarifaJornada: headers.indexOf('Tarifa jornada'),
       tarifaHoraExtra: headers.indexOf('Tarifa hora extra'),
+      acceso: headers.indexOf('Acceso Mi Magma'),   // quién puede entrar a /mi (se da y se saca: por eso es nulleable)
       zona: headers.indexOf('Zona'),
       estado: headers.indexOf('Estado'),
       notas: headers.indexOf('Notas'),
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
         set('dni', dni), set('cuit', cuit), set('banco', banco),
         set('alias', alias), set('cbu', cbu), set('fechaNac', fechaNac), set('nac', nacionalidad),
         set('tarifaMedia', tarifaMedia), set('tarifaJornada', tarifaJornada), set('tarifaHoraExtra', tarifaHoraExtra), set('zona', zona),
-        setNulleable('estado', estado), setNulleable('notas', notas),
+        setNulleable('estado', estado), setNulleable('notas', notas), setNulleable('acceso', accesoMiMagma),
       ].filter(Boolean)
       // Renombrar: si cambió el nombre, actualizar la columna Nombre Apellido
       if (nombreOriginal && norm(nombreOriginal) !== norm(nombre) && idx.nombre !== -1) {
@@ -130,7 +131,7 @@ export default async function handler(req, res) {
     put('fechaNac', fechaNac); put('nac', nacionalidad); put('cuit', cuit); put('banco', banco)
     put('alias', alias); put('cbu', cbu)
     put('tarifaMedia', tarifaMedia); put('tarifaJornada', tarifaJornada); put('tarifaHoraExtra', tarifaHoraExtra); put('zona', zona)
-    put('estado', estado); put('notas', notas)
+    put('estado', estado); put('notas', notas); put('acceso', accesoMiMagma)
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
