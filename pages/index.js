@@ -8,7 +8,7 @@ import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
-import { nroDeNombreArchivo } from '../lib/factura-numero'
+import { nroDeNombreArchivo, emisorDelArchivo, avisoPdfAjeno } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
 import { quienSoy } from '../lib/quien-soy'
 import FotosProyecto from '../components/FotosProyecto'
@@ -3020,11 +3020,21 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
             <label style={lblV2}>PDF de la factura (opcional)</label>
             <div style={{display:'flex', alignItems:'center', gap:10}}>
               <input type="file" accept="application/pdf,image/*" onChange={e=>{
-                const f=e.target.files?.[0]||null; setPdfFile(f)
+                const f=e.target.files?.[0]||null
+                // El CUIT emisor viene en el nombre: si no es nuestro, es la factura de un
+                // freelancer a Magma. No se adjunta ni se le copia el número.
+                const emisor=f?emisorDelArchivo(f.name):null
+                if(emisor && !emisor.propio){
+                  e.target.value=''; setPdfFile(null); if(nroAuto&&nro===nroAuto) setNro(''); setNroAuto('')
+                  showToast(avisoPdfAjeno(emisor),'err'); return
+                }
+                setPdfFile(f)
                 // El PDF que baja de AFIP se llama CUIT_TIPO_PTOVTA_NRO.pdf: el número
                 // lo sacamos de ahí en vez de que alguien lo tipee.
                 const detectado=f?nroDeNombreArchivo(f.name):null
                 if(detectado){ setNro(detectado); setNroAuto(detectado) } else setNroAuto('')
+                // Y de paso la entidad y el tipo: 26 facturas de Sofi están en la carpeta de la SRL.
+                if(emisor){ setEntidad(emisor.entidad); if(emisor.tipo) setTipo(emisor.tipo) }
               }} style={{fontSize:12.5, color:T.ink2}}/>
               {pdfFile && <span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ {pdfFile.name}</span>}
             </div>

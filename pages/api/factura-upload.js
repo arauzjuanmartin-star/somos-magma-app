@@ -4,7 +4,7 @@ import Busboy from 'busboy'
 import { Readable } from 'stream'
 import { requireAuth } from '../../lib/auth-helpers'
 import { ubicarFilaFactura } from '../../lib/factura-fila'
-import { nroDeNombreArchivo, compararConPdf } from '../../lib/factura-numero'
+import { nroDeNombreArchivo, compararConPdf, emisorDelArchivo, avisoPdfAjeno } from '../../lib/factura-numero'
 import { nroDesdeElPdf } from '../../lib/factura-leer-pdf'
 
 const FOLDER_ROOT = '0AHMUebE7UIa_Uk9PVA'  // Shared drive ADMINISTRACION
@@ -87,6 +87,13 @@ export default async function handler(req, res) {
   const { fields, fileBuffer, fileName, fileMime } = parsed
   if (!fileBuffer || fileBuffer.length === 0) {
     return res.status(400).json({ error: 'No llegó archivo o está vacío' })
+  }
+
+  // Antes de subir nada: si el nombre es de AFIP y el CUIT emisor no es nuestro,
+  // es la factura de un freelancer a Magma. No va a Drive ni toca FACTURACION.
+  const emisor = emisorDelArchivo(fileName)
+  if (emisor && !emisor.propio) {
+    return res.status(400).json({ error: avisoPdfAjeno(emisor) })
   }
 
   const entidad = fields.entidad || 'SRL'
