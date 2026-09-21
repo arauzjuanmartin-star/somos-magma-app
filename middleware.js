@@ -40,6 +40,18 @@ export async function middleware(req) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Freelancers (entran con el mail de su ficha de RRHH): lo único que existe para ellos
+  // es su espacio. Cualquier otra página los devuelve a /mi y cualquier otro endpoint
+  // responde 403 — además de que requireAuth ya rechaza a quien no es del equipo.
+  if (token.freelancer) {
+    const suyo = pathname === '/mi' || pathname === '/api/mi' || pathname.startsWith('/api/mi/')
+    if (!suyo) {
+      if (pathname.startsWith('/api/')) return new NextResponse(JSON.stringify({ error: 'No tenés acceso a esta parte de la app' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
+      return NextResponse.redirect(new URL('/mi', req.url))
+    }
+    return NextResponse.next()
+  }
+
   // Acceso parcial (ej: Dani solo Edición + Calendario): las páginas sueltas
   // (/v1, /semana, /presupuesto…) le quedan fuera. Los endpoints los filtra
   // requireAuth; acá cerramos las páginas.
