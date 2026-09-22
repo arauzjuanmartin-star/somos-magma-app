@@ -41,7 +41,8 @@ const fecha = v => {
   const d = new Date(y, +m[2] - 1, +m[1]); return isNaN(d) ? null : d
 }
 const money = n => '$' + Math.round(n).toLocaleString('es-AR')
-const HOY = new Date('2026-08-13T00:00:00'); HOY.setHours(0, 0, 0, 0)
+// Fecha fija = la del brief publicado a Tom (el verificador compara contra eso). BRIEF_HOY=2026-09-18 la pisa.
+const HOY = new Date((process.env.BRIEF_HOY || '2026-08-13') + 'T00:00:00'); HOY.setHours(0, 0, 0, 0)
 const dd = d => d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` : '—'
 const norm = s => txt(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
 const mediana = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }

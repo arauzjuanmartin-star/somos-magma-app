@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 'react'
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
-import { MAX_SLOTS } from '../lib/slots'
+import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
@@ -46,6 +46,21 @@ const isCobrada = f => { const v=f['Cobrado']; return v===true||String(v).toUppe
 const esActiva = v => { const s=String(v||'').toUpperCase(); return s==='SÍ'||s==='SI'||s==='TRUE'||v===true }
 const parseD = s => { if(!s) return null; const p=String(s).split('/'); if(p.length<3) return null; const d=parseInt(p[0]),m=parseInt(p[1]),y=parseInt(p[2]); if(!d||!m||!y) return null; return new Date(y,m-1,d) }
 const esDelMes = (s,m,a) => { const d=parseD(s); return !!d && d.getMonth()+1===m && d.getFullYear()===a }
+// "2026-09-16" (así guarda la app la Fecha Presupuesto) o "16/9/2026"
+const parseFechaAny = s => { const m=String(s||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1],+m[2]-1,+m[3]) : parseD(s) }
+const fechaDDMMYYYY = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
+// Seguimiento comercial de un presupuesto en espera (PRESUPUESTOS DQ-DS, ver lib/slots.js).
+// El reloj arranca en el último contacto; si nunca se llamó, en la fecha del presupuesto.
+// "Toca" = pasó el día 4 sin noticias, o llegó la fecha que se dejó en "Seguir el".
+// Misma regla que lib/brief.mjs (la diaria): si se cambia acá, cambiarla allá.
+const segDe = p => {
+  const hoy=new Date(); hoy.setHours(0,0,0,0)
+  const d=x=>x?Math.round((hoy-x)/864e5):null
+  const ultimo=parseFechaAny(p['Último contacto']), seguir=parseFechaAny(p['Seguir el']), presu=parseFechaAny(p['Fecha Presupuesto'])
+  const dUlt=d(ultimo), dPre=d(presu), base=ultimo?dUlt:dPre
+  const toca = seguir ? seguir<=hoy : (base===null ? true : base>=DIAS_SEGUIMIENTO)
+  return { ultimo, seguir, dUlt, dPre, toca, nunca:!ultimo, paso:String(p['Próximo paso']||'').trim() }
+}
 // Dedup case-insensitive: une variantes ("No soup media" / "No Soup Media") en una sola,
 // quedándose con la de mejor escritura (más mayúsculas). Para datalists de agencias/clientes.
 const dedupCI = arr => { const m=new Map(); arr.map(v=>String(v||'').trim()).filter(Boolean).forEach(v=>{ const k=v.toLowerCase(); const caps=s=>(s.match(/[A-ZÁÉÍÓÚÑ]/g)||[]).length; const cur=m.get(k); if(!cur||caps(v)>caps(cur)) m.set(k,v) }); return [...m.values()].sort((a,b)=>a.localeCompare(b,'es')) }
@@ -119,11 +134,14 @@ export default function V2() {
   const [nav,setNav] = useState(null)  // {mod, filtro?, q?} → al navegar, deja el destino filtrado/buscado
   // Un aviso por mail linkea a ?e=<ID del entregable>: la app abre Edición con
   // ese trabajo desplegado, en vez de dejarlo en el tablero entero buscándolo.
+  // Y ?t=<N° de presupuesto> (desde la diaria, "hoy te toca llamar") abre ese trabajo en Trabajos.
   useEffect(()=>{
     if(typeof window==='undefined') return
-    const id = new URLSearchParams(window.location.search).get('e')
-    if(!id) return
-    setMod('edicion'); setNav({mod:'edicion', abrir:id})
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('e'), t = params.get('t')
+    if(!id && !t) return
+    if(id){ setMod('edicion'); setNav({mod:'edicion', abrir:id}) }
+    else { setMod('presupuestos'); setNav({mod:'presupuestos', q:t}) }
     window.history.replaceState({}, '', window.location.pathname)
   },[])
   // 'proyectos' ya no es una solapa: es una vista de Trabajos. Los links de antes (dashboard,
@@ -799,6 +817,77 @@ function MotivoEstadoModal({num, estado, saving, onClose, onConfirm}){
   </div>
 }
 
+// ── Seguimiento comercial: "hablé con el cliente" ─────────────────────────────
+// Un presupuesto en espera solo tenía la fecha en que se armó; no se distinguía "lo están
+// viendo" de "nadie lo volvió a llamar". Esto anota qué pasó y cuándo volver a llamar.
+// Los chips existen para que después se pueda contar por qué se demoran (escritos a mano
+// cada uno sale distinto). Lo que se guarda: Último contacto = hoy · Próximo paso = chip + nota
+// · Seguir el = la fecha. Historial completo en LOG.
+const SEG_CHIPS = ['Lo están viendo','Sin respuesta, insistí','Piden ajustar el precio','Esperan al cliente final','Confirman esta semana','Cambió la fecha']
+function SeguimientoModal({p, saving, onClose, onConfirm}){
+  const s = segDe(p)
+  const [chip,setChip]=useState(''), [nota,setNota]=useState('')
+  const hoy=new Date(); hoy.setHours(0,0,0,0)
+  const masDias=n=>{ const d=new Date(hoy); d.setDate(d.getDate()+n); return d }
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const [seguir,setSeguir]=useState(iso(masDias(DIAS_SEGUIMIENTO)))
+  const evento=parseFechaAny(p['Fecha Evento'])
+  const texto=[chip, nota.trim()].filter(Boolean).join(' · ')
+  const seguirD=seguir?new Date(seguir+'T00:00:00'):null
+  const atajos=[[2,'en 2 días'],[DIAS_SEGUIMIENTO,`en ${DIAS_SEGUIMIENTO} días`],[7,'en 1 semana']]
+  return <div onClick={()=>!saving&&onClose()} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:950, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:490, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
+      <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10}}>
+        <span style={{fontSize:16}}>📞</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:15.5, fontWeight:700, color:T.ink}}>Hablé con el cliente · #{p['Columna 1']}</div>
+          <div style={{fontSize:12, color:T.ink3, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']} — {p['Proyecto']||'sin nombre'}{p['Contacto']?` · ${p['Contacto']}`:''}{evento?` · evento ${fechaDDMMYYYY(evento)}`:''}</div>
+        </div>
+        <button onClick={onClose} disabled={saving} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px'}}>
+        <div style={{fontSize:12, color:T.ink3, marginBottom:12}}>{s.nunca
+          ? <>Nadie lo llamó desde que se mandó{s.dPre!==null?` (hace ${s.dPre} días)`:''}.</>
+          : <>Último contacto hace {s.dUlt} días{s.paso?<>: <span style={{color:T.ink2}}>{s.paso}</span></>:null}.</>}</div>
+        <div style={{fontSize:12.5, color:T.ink2, marginBottom:8}}>¿Qué pasó?</div>
+        <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:10}}>
+          {SEG_CHIPS.map(m=>{ const sel=chip===m
+            return <button key={m} onClick={()=>setChip(sel?'':m)} style={{padding:'6px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:`1px solid ${sel?T.ink:T.border}`, background:sel?T.ink:T.surface, color:sel?'#fff':T.ink2, fontWeight:sel?600:400}}>{m}</button>
+          })}
+        </div>
+        <textarea autoFocus value={nota} onChange={e=>setNota(e.target.value)} placeholder="Y qué sigue. Ej: lo ve con su jefa el jueves · pide versión con 1 cámara"
+          style={{...inpV2, minHeight:56, resize:'vertical', fontFamily:'inherit', boxSizing:'border-box'}}/>
+        <div style={{fontSize:12.5, color:T.ink2, margin:'16px 0 8px'}}>Volver a llamar el</div>
+        <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+          {atajos.map(([n,l])=>{ const d=masDias(n), sel=seguir===iso(d)
+            return <button key={n} onClick={()=>setSeguir(iso(d))} style={{padding:'6px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:`1px solid ${sel?T.ink:T.border}`, background:sel?T.ink:T.surface, color:sel?'#fff':T.ink2, fontWeight:sel?600:400}}>{l}</button>
+          })}
+          <input type="date" value={seguir} onChange={e=>setSeguir(e.target.value)} style={{...inpV2, width:'auto', padding:'6px 10px', fontSize:12.5}}/>
+        </div>
+        {evento && seguirD && seguirD>evento && <div style={{fontSize:12, color:T.warn, marginTop:8}}>Ojo: esa fecha es después del evento ({fechaDDMMYYYY(evento)}).</div>}
+      </div>
+      <div style={{padding:'13px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>
+        <span style={{fontSize:11.5, color:T.ink3, marginRight:'auto'}}>Queda en PRESUPUESTOS y en la diaria de mañana.</span>
+        <button onClick={onClose} disabled={saving} style={miniBtn}>Cancelar</button>
+        <button onClick={()=>onConfirm({proximoPaso:texto, seguirEl:seguirD?fechaDDMMYYYY(seguirD):''})} disabled={saving||!texto}
+          style={{padding:'8px 20px', borderRadius:8, border:'none', background:texto?T.brand:T.ink3, color:'#fff', fontSize:12.5, fontWeight:600, cursor:texto?'pointer':'default', opacity:saving?0.6:1}}>
+          {saving?'Guardando…':'Anotar'}</button>
+      </div>
+    </div>
+  </div>
+}
+// El chip de la fila: cuánto hace que no se habla y si toca llamar. Un clic abre el modal.
+function SegChip({p, onClick, corto}){
+  const s = segDe(p)
+  const fmtDM = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
+  const label = s.toca ? (s.nunca ? (corto?`📞 ${s.dPre??'?'}d`:`📞 sin llamar · ${s.dPre??'?'}d`) : (corto?`📞 ${s.dUlt}d`:`📞 hace ${s.dUlt}d`))
+    : s.seguir ? `⏳ ${fmtDM(s.seguir)}` : `✓ ${s.dUlt}d`
+  const title = s.toca ? (s.nunca ? `Nadie lo llamó desde que se mandó (hace ${s.dPre} días). Clic para anotar que hablaste.` : `Último contacto hace ${s.dUlt} días${s.paso?`: ${s.paso}`:''}. Clic para anotar.`)
+    : s.seguir ? `Seguir el ${fechaDDMMYYYY(s.seguir)}${s.paso?` · ${s.paso}`:''}` : `Hablaste hace ${s.dUlt} días${s.paso?`: ${s.paso}`:''}`
+  return <span onClick={e=>{e.stopPropagation(); onClick()}} title={title} style={{display:'inline-flex', alignItems:'center', justifyContent:'flex-end', gap:4, fontSize:11.5, fontFamily:MONO, padding:'3px 8px', borderRadius:20, cursor:'pointer', whiteSpace:'nowrap',
+    background:s.toca?T.brandSoft:T.surfaceAlt, color:s.toca?T.brand:T.ink2, border:`1px solid ${s.toca?T.brand+'55':T.border}`, fontWeight:s.toca?600:500}}>{label}</span>
+}
+
 // ── Por qué se caen los trabajos ──────────────────────────────────────────────
 // Desaprobado y represupuestado NO son lo mismo y no se suman: el desaprobado es
 // plata que se perdió, el represupuestado se rehizo y sigue vivo en otra versión.
@@ -913,6 +1002,8 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const elegirVista=v=>{ setVistaSt(v); setOpen(null); try{ window.localStorage.setItem('trabajos-vista', v) }catch(e){} }
   const [q,setQ]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [tab,setTab]=useState('prod'), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
   const [motivoModal,setMotivoModal]=useState(null), [motivoSaving,setMotivoSaving]=useState(false)
+  // Seguimiento comercial: el presupuesto al que se le anota "hablé con el cliente", y el filtro "📞 Por llamar" de En espera
+  const [seg,setSeg]=useState(null), [segSaving,setSegSaving]=useState(false), [soloLlamar,setSoloLlamar]=useState(false)
   // Llegar con un número (desde Facturación, el buscador, el dashboard) abre ese trabajo.
   const [abrirQ,setAbrirQ]=useState(null)
   useEffect(()=>{ if(nav?.mod==='presupuestos'||nav?.mod==='proyectos'){
@@ -950,6 +1041,22 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       if(onRefresh) onRefresh()
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion:'aprobar'})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
+  }
+
+  async function guardarSeguimiento({proximoPaso, seguirEl}){
+    const p=seg; if(!p) return
+    const id=p['Columna 1']
+    setSegSaving(true)
+    try{
+      const r=await fetch('/api/presupuesto-seguimiento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, fila:p.__row, proximoPaso, seguirEl})})
+      const j=await r.json()
+      if(j.error){ showToast(j.error,'err'); setSegSaving(false); return }
+      // por fila, no por número: hay N° repetidos
+      setRows(rs=>rs.map(rr=> (p.__row ? rr.__row===p.__row : String(rr['Columna 1'])===String(id)) ? {...rr, 'Último contacto':j.ultimoContacto, 'Próximo paso':j.proximoPaso, 'Seguir el':j.seguirEl} : rr))
+      setSeg(null); setSegSaving(false)
+      showToast(`#${id} anotado · volver a llamar el ${j.seguirEl}`)
+      if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err'); setSegSaving(false) }
   }
 
   async function cambiarEstado(id, nuevo, actual, motivo){
@@ -1010,6 +1117,11 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Cada vista dice cuántos tiene, sobre lo que dejaron pasar el buscador, el PM, el año y el mes.
   const cuenta={}; VISTAS_TRABAJOS.forEach(([k])=>{ cuenta[k]=base.filter(it=>enVista(it,k)).length })
   let filtered=base.filter(it=>enVista(it,vista))
+  // En espera: cuántos esperan un llamado (evento por delante y pasó el día 4 sin noticias), y el filtro para ver solo esos
+  const hoy0=new Date(); hoy0.setHours(0,0,0,0)
+  const tocaLlamar=it=>{ if(!it.p||it.est!=='EN ESPERA') return false; const fe=parseFechaAny(it.p['Fecha Evento']); return !!fe && fe>=hoy0 && segDe(it.p).toca }
+  const porLlamar=vista==='esp' ? filtered.filter(tocaLlamar) : []
+  if(vista==='esp' && soloLlamar) filtered=porLlamar
   // En producción importa qué viene: lo próximo arriba, después lo que ya pasó (como estaba Proyectos).
   if(VISTAS_DE_PRODUCCION.includes(vista)) filtered=[...filtered].sort((a,b)=>{ const fa=parseD(dato(a,'Fecha Evento'))?.getTime()||0, fb=parseD(dato(b,'Fecha Evento'))?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
 
@@ -1055,10 +1167,18 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     {/* El porqué, sobre lo que esté filtrado (año/mes/PM valen) */}
     {(vista==='des'||vista==='rep') && <AnalisisMotivos presus={filtered.map(it=>it.p).filter(Boolean)} esDesaprobado={vista==='des'}/>}
 
+    {/* En espera: la lista de llamados del día. Mismo criterio que la diaria de las 8. */}
+    {vista==='esp' && <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:12, fontSize:12.5, color:T.ink2}}>
+      <button onClick={()=>setSoloLlamar(v=>!v)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${soloLlamar?T.brand:T.brand+'66'}`, background:soloLlamar?T.brand:T.brandSoft, color:soloLlamar?'#fff':T.brand}}>
+        📞 Por llamar <span style={{fontFamily:MONO, opacity:0.8, marginLeft:3}}>{porLlamar.length}</span>{porLlamar.length ? <span style={{fontFamily:MONO, opacity:0.8, marginLeft:6}}>{fmt(porLlamar.reduce((s,it)=>s+totalDe(it),0))}</span> : null}
+      </button>
+      <span style={{color:T.ink3}}>{porLlamar.length ? `Evento por delante y ${DIAS_SEGUIMIENTO} días sin noticias (o llegó la fecha de "Seguir el"). Tocá el 📞 de la fila cuando hables.` : 'Nadie espera un llamado: todos con seguimiento al día ✓'}</span>
+    </div>}
+
     {/* Tabla */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       {!cel && <div style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Staff</span><span style={{textAlign:'right'}}>Factura</span><span style={{textAlign:'right'}}>Drive</span><span style={{textAlign:'right'}}>Estado</span>
+        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>{vista==='esp'?'':'Staff'}</span><span style={{textAlign:'right'}}>{vista==='esp'?'Llamar':'Factura'}</span><span style={{textAlign:'right'}}>{vista==='esp'?'':'Drive'}</span><span style={{textAlign:'right'}}>Estado</span>
       </div>}
       {filtered.length===0 && <Empty>Sin resultados</Empty>}
       {filtered.slice(0,200).map((it,i)=>{
@@ -1074,8 +1194,11 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
         const celdaStaff = y
           ? <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:ok?T.pos:T.warn}}/><span style={{fontSize:11.5, color:T.ink2}}>{cel?(ok?'Staff OK':'Sin staff'):(ok?'OK':'Pend.')}</span></span>
           : it.est==='APROBADO' ? <span title="Está aprobado pero todavía no tiene fila en PROYECTOS. Si recién lo aprobaste, aparece al actualizar." style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin proyecto</span> : (cel?null:<span/>)
+        // Un presupuesto en espera no tiene factura: en esa celda va el seguimiento (📞 cuánto hace que no se habla).
+        const enEspera = !!p && it.est==='EN ESPERA'
         const celdaFac = y
           ? <span onClick={goTo?e=>{e.stopPropagation(); goTo('facturacion',{q:String(num)})}:undefined} title={goTo?'Ver en Facturación':undefined} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5, cursor:goTo?'pointer':undefined}}><span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/><span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span></span>
+          : enEspera ? <span style={{display:'flex', justifyContent:'flex-end'}}><SegChip p={p} corto={!cel} onClick={()=>setSeg(p)}/></span>
           : (cel?null:<span/>)
         // Las carpetas del proyecto a un clic, sin abrir nada: 📁 crudo, 📸 lo que se le manda al cliente
         const celdaDrive = y
@@ -1115,7 +1238,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
               <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tabActual===k?700:500, color:tabActual===k?T.ink:T.ink2, borderBottom:`2px solid ${tabActual===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{s}</span>}</button>
             ))}
           </div>}
-          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)}/>}
+          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null}/>}
           {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
@@ -1130,6 +1253,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       onClose={()=>setMotivoModal(null)}
       onConfirm={async motivo=>{ setMotivoSaving(true); await cambiarEstado(motivoModal.num, motivoModal.estado, motivoModal.actual, motivo); setMotivoSaving(false); setMotivoModal(null) }}/>}
     {borrando && <EliminarPresupuestoModal presu={borrando} saving={borrSaving} onClose={()=>setBorrando(null)} onConfirm={eliminarPresupuesto}/>}
+    {seg && <SeguimientoModal p={seg} saving={segSaving} onClose={()=>setSeg(null)} onConfirm={guardarSeguimiento}/>}
   </>
 }
 
@@ -1330,7 +1454,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   </div>
 }
 
-function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar}){
+function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSeguimiento}){
   const servicios=[]
   for(let j=1;j<=MAX_SLOTS;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
@@ -1349,6 +1473,16 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar}){
       {motivo ? <><span style={{color:T.ink3}}>{estU==='DESAPROBADO'?'Por qué no salió:':'Por qué se rehizo:'}</span> <strong style={{color:T.ink, fontWeight:600}}>{motivo}</strong></>
               : <>Sin motivo cargado — cambiale el estado de nuevo para dejarlo anotado.</>}
     </div>}
+    {/* Seguimiento comercial: solo mientras está en espera. Cuánto hace que no se habla y qué sigue. */}
+    {onSeguimiento && (()=>{ const s=segDe(p)
+      return <div style={{marginTop:12, padding:'10px 13px', borderRadius:9, background:s.toca?T.brandSoft:T.surface, border:`1px solid ${s.toca?T.brand+'55':T.border}`, fontSize:12.5, color:T.ink2, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+        <span style={{flex:1, minWidth:200}}>
+          {s.nunca ? <><strong style={{color:s.toca?T.brand:T.ink, fontWeight:600}}>Nadie lo llamó desde que se mandó</strong>{s.dPre!==null?` (hace ${s.dPre} días)`:''}.</>
+            : <><span style={{color:T.ink3}}>Último contacto:</span> <strong style={{color:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.ultimo)}</strong> (hace {s.dUlt} días){s.paso?<> · {s.paso}</>:null}{s.seguir?<> · <span style={{color:T.ink3}}>seguir el</span> <strong style={{color:s.toca?T.brand:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.seguir)}</strong></>:null}</>}
+          {s.toca && !s.nunca && <span style={{color:T.brand, fontWeight:600}}> · toca llamar</span>}
+        </span>
+        <button onClick={e=>{e.stopPropagation(); onSeguimiento()}} style={{...miniBtn, background:s.toca?T.brand:T.surface, color:s.toca?'#fff':T.ink2, border:`1px solid ${s.toca?T.brand:T.border}`, fontWeight:600}}>📞 Hablé con el cliente</button>
+      </div> })()}
     <div style={{display:'flex', gap:32, padding:'14px 0', flexWrap:'wrap'}}>
       {[['N°',id],['Agencia',p['Agencia']],['Carga',p['Fecha Presupuesto']],['Contacto',p['Contacto']],['PM',p['PM Interno']],['Horario',p['Horario']],['Ubicación',p['Ubicación']]].filter(x=>x[1]).map(([k,v])=>(
         <div key={k}><div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:3}}>{v}</div></div>

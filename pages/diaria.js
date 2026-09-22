@@ -106,6 +106,39 @@ export default function Diaria(){
           </div>}
         </Card>
 
+        {/* COMERCIAL — a quién llamar hoy. Sale de las columnas de seguimiento de PRESUPUESTOS (DQ-DS). */}
+        {b.comercial && <Card accent={b.comercial.urgentesN?'#F0C9CD':T.border}>
+          <Label color={T.brand}>📞 Comercial · hoy te toca llamar</Label>
+          {!b.comercial.porLlamarN
+            ? <p style={{color:T.pos, fontSize:14, marginTop:12}}>Nadie espera tu llamado ✓ · {b.comercial.vivosN} presupuestos vivos por {fmt(b.comercial.vivosMonto)}, todos con seguimiento al día.</p>
+            : <>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14, marginTop:14}}>
+                <Stat v={b.comercial.porLlamarN} l={`esperan un llamado · ${fmtM(b.comercial.porLlamarMonto)}`} color={T.brand}/>
+                <Stat v={b.comercial.urgentesN} l={`con el evento en ${b.comercial.diasUrgente} días o menos · ${fmtM(b.comercial.urgentesMonto)}`} color={b.comercial.urgentesN?T.brand:T.ink}/>
+                <Stat v={b.comercial.vivosN} l={`vivos en total · ${fmtM(b.comercial.vivosMonto)}`}/>
+              </div>
+              {Object.keys(b.comercial.porPM).length>1 && <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:12}}>
+                {Object.entries(b.comercial.porPM).sort((a,c)=>c[1].monto-a[1].monto).map(([pm,v])=><Pill key={pm} color={T.ink2} soft={T.surfaceAlt}>{pm} · {v.n} · {fmtM(v.monto)}</Pill>)}
+              </div>}
+              <div style={{display:'grid', gap:0, marginTop:12, borderTop:`1px solid ${T.border}`}}>
+                {b.comercial.lista.map((p,i)=><div key={i} style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:'4px 10px', fontSize:13.5, padding:'9px 0', borderBottom:`1px solid ${T.border}`}}>
+                  <span style={{fontFamily:MONO, fontWeight:700, minWidth:96}}>{fmt(p.monto)}</span>
+                  <a href={`/?t=${encodeURIComponent(p.nro)}`} style={{color:T.azul, fontFamily:MONO, fontSize:12, textDecoration:'none'}} title="Abrir en Trabajos y anotar el contacto">#{p.nro}</a>
+                  <span style={{fontWeight:600}}>{p.cliente}</span>
+                  <span style={{color:T.ink2, flex:1, minWidth:120}}>{p.proyecto}</span>
+                  {p.urgente ? <Pill color={T.brand} soft={T.brandSoft}>🔴 evento en {p.diasEvento}d · {p.evento}</Pill> : <Pill color={T.ink2} soft={T.surfaceAlt}>evento {p.evento} · en {p.diasEvento}d</Pill>}
+                  {p.nunca ? <Pill color={T.warn} soft={T.warnSoft}>sin llamar{p.diasPresu!==null?` · presu hace ${p.diasPresu}d`:''}</Pill> : <Pill color={T.ink2} soft={T.surfaceAlt}>último contacto hace {p.diasUltimo}d</Pill>}
+                  {p.pm && <span style={{color:T.ink3, fontSize:12}}>PM {p.pm}</span>}
+                  {(p.paso||p.contacto) && <span style={{color:T.ink2, fontSize:12.5, flexBasis:'100%'}}>{p.paso ? <>→ {p.paso}{p.contacto?' · ':''}</> : null}{p.contacto}</span>}
+                </div>)}
+              </div>
+              {b.comercial.porLlamarN>b.comercial.lista.length && <p style={{fontSize:12.5, color:T.ink3, marginTop:8}}>…y {b.comercial.porLlamarN-b.comercial.lista.length} más en la app.</p>}
+              <p style={{fontSize:12, color:T.ink3, marginTop:12, lineHeight:1.5}}>{b.comercial.hayColumnas
+                ? <>Cuando hables, anotalo con el 📞 de la fila en Trabajos → En espera: el reloj arranca de nuevo y mañana no aparece. "Toca" = pasaron {b.comercial.diasSeguimiento} días sin noticias, o llegó la fecha que dejaste en "Seguir el".</>
+                : <>⚠️ PRESUPUESTOS no tiene las columnas de seguimiento: correr scripts/presupuestos-columnas-seguimiento.mjs --escribir.</>}</p>
+            </>}
+        </Card>}
+
         {/* PRÓXIMOS 7 DÍAS */}
         <Card accent={b.en7SinStaffN?'#F5E4C6':T.border}>
           <Label color={T.warn}>📅 Próximos 7 días · {b.en7N} proyectos · {b.en7SinStaffN} sin staff</Label>
