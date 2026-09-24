@@ -3756,14 +3756,14 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   // agrupar por persona
   const personas={}
   proyMes.forEach(proy=>{
-    const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', agencia=proy['Agencia']||'', fechaProy=proy['Fecha Evento']||''
+    const nro=proy['N° presupuesto']||'', proyecto=proy['Proyecto']||proy['Cliente']||'', cliente=proy['Cliente']||'', agencia=proy['Agencia']||'', fechaProy=proy['Fecha Evento']||''
     // En un trabajo de varias fechas cada línea de staff tiene SU día (col "Fechas Staff": "1:08/09/2026|2:09/09/2026").
     const diaDeSlot={}; String(proy['Fechas Staff']||'').split('|').forEach(x=>{ const [k,...v]=x.split(':'); if(k&&v.length) diaDeSlot[k.trim()]=v.join(':').trim() })
     for(let j=1;j<=MAX_SLOTS;j++){ const fechaEvento=diaDeSlot[String(j)]||fechaProy; const pedido=proy['Pedido '+j]||(j===1?proy['Pedido']:'')||''; const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); const staffRaw=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim()
       if(!staffRaw||staffRaw==='Somos Magma'||!pedido||precio<=0) continue
       const staff=canonStaff(staffRaw), gk=canonKey(staff)
       if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
-      personas[gk].trabajos.push({nro,proyecto,agencia,pedido,precio,fechaEvento, key:nro+'|'+pedido+'|'+j})
+      personas[gk].trabajos.push({nro,proyecto,cliente,agencia,pedido,precio,fechaEvento, key:nro+'|'+pedido+'|'+j})
       personas[gk].total+=precio
     }
   })
@@ -3780,8 +3780,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     const horas=parseFloat(String(h.Horas||'').replace(',','.'))||0; if(horas<=0) return
     const tarifa=tarifaHoraDe(staff), precio=Math.round(horas*tarifa)
     if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
-    const nro=String(h['N° presupuesto']||'').trim(), hs=String(horas).replace('.',',')
-    personas[gk].trabajos.push({ nro, proyecto:h.Proyecto||h.Cliente||'', agencia:'', fechaEvento:h.Fecha||'',
+    const nro=String(h['N° presupuesto']||'').trim(), hs=String(horas).replace('.',','), proyHX=proyectos.find(p=>String(p['N° presupuesto']||'').trim()===nro)
+    personas[gk].trabajos.push({ nro, proyecto:h.Proyecto||h.Cliente||'', cliente:proyHX?.['Cliente']||h.Cliente||'', agencia:proyHX?.['Agencia']||'', fechaEvento:h.Fecha||'',
       pedido:`⏱ Horas extra ${h.Fecha||''} · ${hs} hs${h.Motivo?` · ${h.Motivo}`:''}${tarifa?'':' · SIN TARIFA en RRHH'}`,
       precio, key:'hx|'+nro+'|'+(h.Fecha||'')+'|'+(h.__row||''), horasExtra:horas })
     personas[gk].total+=precio
@@ -4001,7 +4001,8 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
             {ordenCrono(persona.trabajos).map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
               <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
                 <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
-                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}</div>
+                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}
+                  {clienteAgenciaDe(t) && <div style={{fontSize:11.5, color:T.ink2, marginTop:1}}>{clienteAgenciaDe(t)}</div>}</div>
                 {/* Viáticos: un campo en cada trabajo. Si se carga se suma al pago; vacío = 0. Pagado: solo se muestra. */}
                 {t.pagado
                   ? (t.viaticos>0 ? <span style={{fontSize:11, color:T.ink3, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
@@ -5265,7 +5266,14 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
 // Staff" en los trabajos de varias fechas), no la primera fecha del proyecto.
 const ordenCrono = ts => [...ts].sort((a,b)=>(parseD(a.fechaEvento)?.getTime()||Infinity)-(parseD(b.fechaEvento)?.getTime()||Infinity))
 const diaCorto = f => { const d=parseD(f); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` : '' }
-const renglonMailStaff = t => `- ${diaCorto(t.fechaEvento)?diaCorto(t.fechaEvento)+' · ':''}${t.pedido} — ${t.proyecto}${t.agencia?` (${t.agencia})`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}`
+// Cliente y agencia de un trabajo, para que se vea de quién es (Juan, 24/9/2026: "así los chicos la pueden ver bien").
+// No repite el cliente si el proyecto se llama igual; "Sin agencia / Directo" no cuenta como agencia.
+const agenciaReal = a => { const x=String(a||'').trim(); return (x && !/^(sin agencia|directo)/i.test(x)) ? x : '' }
+// Cliente directo (sin agencia en el medio): en PROYECTOS la agencia repite el nombre del cliente → se muestra una vez.
+const clienteAgenciaDe = t => { const nrm=x=>String(x||'').toLowerCase().trim(); const cli=String(t.cliente||'').trim(), ag=agenciaReal(t.agencia), directo=ag&&nrm(ag)===nrm(cli)
+  return [cli && nrm(cli)!==nrm(t.proyecto) ? `🎯 ${cli}` : '', directo ? 'directo' : ag ? `🏢 ${ag}` : ''].filter(Boolean).join(' · ') }
+const renglonMailStaff = t => { const nrm=x=>String(x||'').toLowerCase().trim(); const cli=String(t.cliente||'').trim(), ag=agenciaReal(t.agencia), agDistinta=ag&&nrm(ag)!==nrm(cli)
+  return `- ${diaCorto(t.fechaEvento)?diaCorto(t.fechaEvento)+' · ':''}${t.pedido} — ${t.proyecto}${cli && nrm(cli)!==nrm(t.proyecto)?` · ${cli}`:''}${agDistinta?` (${ag})`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}` }
 
 function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSent, showToast}){
   // Entidades fiscales (a quién factura el freelancer) con sus datos, desde CUENTAS
