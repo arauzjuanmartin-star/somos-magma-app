@@ -13,3 +13,6 @@ scripts/.diaria*
 # paquete para la Mac de Sofi (zips grandes, no van al repo)
 _para-sofi-*
 de-sofi/
+
+# cache de los mails del contador (lo regenera scripts/contador-radar.mjs)
+scripts/.cache-contador-mails.json
