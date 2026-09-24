@@ -36,7 +36,7 @@ Concreto, al tocar una solapa:
 Ejemplo de referencia: `scripts/prestamos-columna-mes.mjs` (preview por default, `--escribir` para aplicar, y verifica la alineación de los datos al terminar).
 
 ## Memoria persistente
-Existe sistema de memoria en `~/.claude/projects/-Users-dronjuan-somos-magma-app/memory/` con info crítica del proyecto. Leer `MEMORY.md` (índice) en cada chat nuevo. Memorias clave:
+Existe sistema de memoria en la carpeta de este proyecto dentro de `~/.claude/projects/` (la ruta es la carpeta del repo con `/` reemplazadas por `-`; en la Mac de Juan: `-Users-dronjuan-somos-magma-app/memory/`) con info crítica del proyecto. Leer `MEMORY.md` (índice) en cada chat nuevo. Sofi tiene una copia curada de esta memoria en su Mac (se regenera con `node scripts/paquete-sofi.mjs`); las dos no se sincronizan solas. Memorias clave:
 
 - `project_app_status_real.md` — estado real de uso
 - `project_margen_formula.md` — fórmula de margen y precio (35% Gan + 4% IIBB sobre margen Magma; IVA siempre por fuera)

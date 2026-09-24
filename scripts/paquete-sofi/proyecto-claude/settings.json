@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/*.mjs)",
+      "Bash(node scripts/*.mjs --json)",
+      "Bash(node scripts/*.mjs --html)",
+      "Bash(node scripts/*.mjs --preview)",
+      "Bash(node scripts/*.mjs --dry)",
+      "Bash(node scripts/contador-radar.mjs --refrescar)",
+      "Bash(node scripts/presupuestos-verificar.mjs *)",
+      "Bash(node scripts/cliente.mjs *)",
+      "Bash(node scripts/fiscal-ddjj-iibb.mjs *)",
+      "Bash(node scripts/mail-buscar.mjs *)",
+      "Bash(node scripts/mail-leer.mjs *)",
+      "Bash(node scripts/mail-abrir.mjs *)",
+      "Bash(node scripts/gmail-leer.mjs *)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git pull*)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(sed -n *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(ls *)",
+      "Bash(find *)"
+    ],
+    "deny": [
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf /*)",
+      "Bash(git push*)",
+      "Bash(git commit*)",
+      "Edit(.env*)",
+      "Edit(**/.env*)",
+      "Read(.env*)",
+      "Read(**/.env*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/verificar-sheet.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Chequeando si esto toca el sheet..."
+          }
+        ]
+      }
+    ]
+  }
+}

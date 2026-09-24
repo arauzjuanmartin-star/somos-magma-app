@@ -9,3 +9,7 @@ huerfanos-presupuestos.csv
 
 # generados por scripts/diaria.mjs
 scripts/.diaria*
+
+# paquete para la Mac de Sofi (zips grandes, no van al repo)
+_para-sofi-*
+de-sofi/

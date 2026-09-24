@@ -1,0 +1,9 @@
+# Memorias de Juan que NO van al paquete de Sofi (una por línea). Comentarios con #.
+# Personal de Juan:
+user_calendar_invitados_no_son_acompanantes.md
+reference_microsoft_cuentas_juan.md
+reference_doc_cuenta_personal_juan.md
+project_juan_sistema_personal_y_automatizacion.md
+# Estas OTRAS se reemplazan por la versión de memoria-extra/ (mismo nombre de archivo, contenido adaptado):
+#   user_role.md · user_juan_communication_style.md · como_trabajar_con_juan_eficiente.md
+#   reference_mails_como_mandar.md · project_reparto_comercial_sofi_juan.md
