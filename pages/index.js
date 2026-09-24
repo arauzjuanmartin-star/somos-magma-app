@@ -436,8 +436,8 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   // Pagos staff: lo que voy gastando en staff por los eventos del mes.
   // NO cuenta "Somos Magma" (esa línea es ganancia de la empresa, no un gasto).
   const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
-  // Ganancia Magma del mes = fee + líneas "Somos Magma" + diferencia de los eventos del mes.
-  const ganMagmaMes = proyMesEvento.reduce((s,p)=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma'){ const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(pr2>0) sm+=pr2 } } return s+fee+sm+parseMonto(p['Diferencia']) },0)
+  // Ganancia Magma del mes = precio − staff de afuera, de los eventos del mes (ver gananciaProyecto).
+  const ganMagmaMes = proyMesEvento.reduce((s,p)=>s+gananciaProyecto(p),0)
   const rentabilidadMes = ganMagmaMes
 
   // --- Conversión + ticket ---
@@ -454,14 +454,10 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
 
   // --- Pipeline próximos 3 meses ---
   const proyByNro={}; proyectos.forEach(prj=>{proyByNro[String(prj['N° presupuesto'])]=prj})
+  // Con proyecto, el staff real (o presupuestado donde falta cargar); sin proyecto, el presu.
   const calcGanReal = (presu)=>{
     const proy = proyByNro[String(presu['Columna 1']||presu['N° presupuesto'])]
-    const fee = parseMonto((proy?proy['Fee Agencia']:presu['Fee Agencia'])||0)
-    if(!proy) return fee
-    let somosMagma=0
-    for(let j=1;j<=MAX_SLOTS;j++){ const staff=String(proy['Staff '+j]||(j===1?proy['Staff']:'')||'').trim(); if(staff==='Somos Magma'){ const precio=parseMonto(proy['Precio '+j]||(j===1?proy['Precio']:'')); if(precio>0) somosMagma+=precio } }
-    const diferencia = parseMonto(proy['Diferencia'])
-    return fee+somosMagma+diferencia
+    return proy ? gananciaProyecto(proy) : gananciaPresu(presu)
   }
   // Mes anterior + este + 2 siguientes (ej: mayo, junio, julio, agosto)
   const proxMeses = [-1,0,1,2].map(i=>{ const idx=mesActual-1+i+12; return {m:(idx%12)+1, a:anioActual+Math.floor((mesActual-1+i)/12)} })
@@ -614,7 +610,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
       {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`pagadas dentro de 30 días (objetivo). Hoy tardan ${diasPromCobro} días en promedio · ${facMedibles.length} fact.`}/>}
       <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
       <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
-      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="fee + Somos Magma + diferencia del mes"/>
+      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="precio − staff de afuera (impuestos y Somos Magma adentro)"/>
       <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
       <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub={`${eventosMes} ${eventosMes===1?'evento aprobado':'eventos aprobados'} este mes`}/>
     </div>
@@ -1584,7 +1580,24 @@ const readPedidosOrig = p => {
   }
   return out
 }
-const semaforo = pct => pct>=50?{c:T.pos,l:'sano'}:pct>=35?{c:T.warn,l:'aceptable'}:{c:T.brand,l:'bajo'}
+// ---- Ganancia Magma: UNA sola definición (Juan, 24/09/2026) ----
+// Es la "diferencia total": lo que queda del precio después de pagar al staff de afuera.
+// Adentro van el fee, los impuestos (Ganancias, IIBB), el ajuste, las líneas "Somos Magma"
+// y el ahorro (o sobrecosto) entre lo presupuestado y lo pagado. Cuánto de eso se va en
+// impuestos es una pregunta aparte, no una resta acá.
+// Por línea: si la hace "Somos Magma" no es costo; si tiene otro nombre (o todavía nadie)
+// cuesta lo que dice Precio N — el presupuestado hasta que se carga el staff.
+// Antes había dos números con el mismo nombre: Histórico y Dashboard sumaban Fee Agencia
+// + Somos Magma + Diferencia (sin impuestos y sin el ahorro de staff) y Trabajos restaba
+// el staff pagado. Caso #1729 Santander: $1.540.000 vs $2.700.000 para el mismo trabajo.
+const costoStaffProyecto = p => { let c=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma') continue; c+=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')) } return c }
+const gananciaProyecto = p => parseMonto(p['Total ']||p['Total']) - costoStaffProyecto(p)
+// Un presupuesto que todavía no es proyecto: el precio menos lo que se presupuestó de staff.
+const gananciaPresu = p => parseMonto(p['Precio Final']) - parseMonto(p['Subtotal'])
+// Semáforo recalibrado a la definición nueva. Con la vieja el corte era 50/35 y la mediana
+// 2026 daba 49%; con esta la mediana es 60% (326 proyectos, medido el 24/09/2026), así que
+// "sano" sigue siendo estar arriba de la mitad de los trabajos, y "bajo" menos de 45%.
+const semaforo = pct => pct>=60?{c:T.pos,l:'sano'}:pct>=45?{c:T.warn,l:'aceptable'}:{c:T.brand,l:'bajo'}
 
 function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const hoyISO = new Date().toISOString().slice(0,10)
@@ -4415,7 +4428,9 @@ function Historico({data}){
   const [anio,setAnio]=useState('2026')
   const [mesF,setMesF]=useState('todos')
   const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
-  const magma2026=p=>{ const fee=parseMonto(p['Fee Agencia']||p['Fee Final']); let sm=0; for(let j=1;j<=MAX_SLOTS;j++){ if(String(p['Staff '+j]||'').trim()==='Somos Magma') sm+=parseMonto(p['Precio '+j]) } return fee+sm+parseMonto(p['Diferencia']) }
+  // Misma definición que Trabajos y el Dashboard: precio − staff de afuera (gananciaProyecto).
+  // Los años viejos (HISTORICO_2023/24/25) ya venían así: Magma + Viáticos + Impuestos + Extra M.
+  const magma2026=gananciaProyecto
 
   let filasAll=[]
   if(anio==='2026'){
