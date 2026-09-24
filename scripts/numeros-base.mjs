@@ -5,6 +5,7 @@
  */
 import { google } from 'googleapis'
 import { readFileSync } from 'fs'
+import { RANGOS_SOCIOS, calcularCuentaSocios, fraseSaldo, nombreMes } from '../lib/socios.mjs'
 const env=Object.fromEntries(readFileSync('.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return [l.slice(0,i).trim(),v]}))
 const auth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets.readonly']})
 const sheets=google.sheets({version:'v4',auth}); const ID='1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
@@ -16,8 +17,8 @@ const PED=[11,14,17,20,23,26,29,32,35,38,41,44,47,60,63,66,69,72,75,78,81]
 const JSONOUT=process.argv.includes('--json')
 
 const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,
-  ranges:['GASTOS_FIJOS!A:M','PROYECTOS!A:CI'],valueRenderOption:'FORMATTED_VALUE'})
-const [GF,PRO]=R.data.valueRanges.map(v=>v.values||[])
+  ranges:['GASTOS_FIJOS!A:M','PROYECTOS!A:CI',...RANGOS_SOCIOS],valueRenderOption:'FORMATTED_VALUE'})
+const [GF,PRO,...SOC]=R.data.valueRanges.map(v=>v.values||[])
 
 // ---- 1. Estructura mensual real (solo activos y mensuales)
 const cat={}, fijos={}
@@ -68,6 +69,11 @@ const out={
   eventos_para_empatar:tickets.length/NM+eventosFaltan, eventos_faltan:eventosFaltan,
   equipo:Object.fromEntries(Object.keys(SUELDO).map(k=>[k,{fijo:SUELDO[k],extras_mes:(ext[k]?.$||0)/NM,cobra:SUELDO[k]+(ext[k]?.$||0)/NM}]))
 }
+// ---- 4. Cuenta de socios: EL MISMO cálculo que la app (lib/socios.mjs). Nunca otro.
+const { nombreMes:_nm, ...socios }=calcularCuentaSocios(SOC)
+out.cuenta_socios={ hasta_sueldo:socios.hastaSueldo, hasta_extras:socios.hastaExtras,
+  socios:socios.socios.map(x=>({nombre:x.nombre,devengado:x.devengado,recibido:x.recibido,tarjetas:x.tarjetas,puso:x.puso,saldo:x.saldo,frase:fraseSaldo(x)})),
+  tarjetas_cargadas_hasta:socios.tarjetasCargadas.hasta }
 if(JSONOUT){console.log(JSON.stringify(out,null,2));process.exit(0)}
 
 console.log(`\n╔${'═'.repeat(58)}╗`)
@@ -92,6 +98,10 @@ console.log('   ritmo real      ',out.eventos_reales.toFixed(0),'eventos/mes  �
     ? `\x1b[31mFALTAN ${Math.ceil(eventosFaltan)} = ${M(brecha)}/mes de producción\x1b[0m`
     : `\x1b[32mempatado\x1b[0m`)
 console.log('   \x1b[2mno usar el margen bruto de '+(out.margen_bruto_no_usar*100).toFixed(0)+'% (producción − freelancers): no descuenta Ganancias ni IIBB\x1b[0m')
+console.log(`\n── CUENTA DE SOCIOS (lo mismo que muestra la app · sueldo ${nombreMes(socios.desdeSueldo)}–${nombreMes(socios.hastaSueldo)}, extras ${nombreMes(socios.desdeExtras)}–${nombreMes(socios.hastaExtras)})`)
+socios.socios.forEach(x=>console.log('   '+fraseSaldo(x).padEnd(44),`(devengó ${M(x.devengado)} · recibió ${M(x.recibido)} · tarjeta ${M(x.tarjetas)} · puso ${M(x.puso)})`))
+console.log(`   \x1b[33mtarjetas cargadas hasta ${socios.tarjetasCargadas.hasta}: los meses que faltan inflan el saldo a favor del socio\x1b[0m`)
+console.log('   \x1b[2mdetalle: node scripts/cuenta-socios.mjs · el criterio vive en lib/socios.mjs, la app lee de ahí\x1b[0m')
 console.log('\n── CONCEPTOS QUE SE CITAN SEGUIDO')
 ;['CM (María)','Alquiler oficina','Contador','ADOBE','Ads (Gloria)','IIBB Magma','Monotributo Lulu'].forEach(c=>
   fijos[c]!==undefined&&console.log('   '+c.padEnd(20),M(fijos[c]).padStart(13)))

@@ -4493,6 +4493,7 @@ function CuentaSocios({showToast}){
     <CardHead>Cuenta de socios · cuánto queda por cobrar</CardHead>
     <div style={{padding:'4px 18px 10px', fontSize:11, color:T.ink3}}>
       Sueldo de {MES[d.desdeSueldo]} a {MES[d.hastaSueldo]} ({d.socios[0].meses} × {fmt(d.sueldoMensual)}) + extras de {MES[d.desdeExtras]} a {MES[d.hastaExtras]}, menos lo que ya retiró cada uno (transferencias + gastos personales con tarjeta de la empresa).
+      {d.tarjetasCargadas?.hasta && <div style={{marginTop:4, color:T.brand}}>⚠ Tarjetas cargadas hasta <b>{d.tarjetasCargadas.hasta}</b>: los meses sin resumen inflan el saldo a favor del socio.</div>}
     </div>
     <div style={{display:'flex', gap:12, padding:'0 18px 16px', flexWrap:'wrap'}}>
       {d.socios.map(s=>{ const aFavor=s.saldo>=0, icon=/juan/i.test(s.nombre)?'👨':'👩'

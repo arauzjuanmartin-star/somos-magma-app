@@ -1,118 +1,68 @@
 /**
- * CUENTA CORRIENTE DE SOCIOS — Juan y Sofi contra Magma, desde mayo 2026.
+ * CUENTA CORRIENTE DE SOCIOS — Juan y Sofi contra Magma. ESTE ES EL NÚMERO DE LA APP.
  *
- * Criterios (definidos por Juan 2026-07-31):
- *  · Sueldo acordado: $3.000.000/mes por socio (el $3,2M era del recibo de Juan, no del acuerdo)
- *  · SUELDOS: se devengan desde MAYO (el de abril se paga en mayo). Marzo y anteriores ya cobrados.
- *  · EXTRAS (trabajo en proyectos): se devengan desde MARZO (se pagan desde abril). Nunca se cobraron.
- *  · Los préstamos Galicia SGR NO entran: aunque estén a nombre de Sofi, los paga Magma
- *  · Cuotas de préstamo: se toman del cronograma de la solapa PRESTAMOS
- *  · Gastos personales con tarjeta de Magma = plata que el socio recibió
- * Solo lectura.
+ * El cálculo NO está acá: está en lib/socios.mjs y es el mismo que usa pages/api/socios-cuenta.js
+ * (la tarjeta "Cuenta de socios" de Egresos). Este script solo lo imprime.
+ * Si alguna vez la consola y la app dan distinto, el bug es de datos (otra lectura del sheet), no de criterio.
+ *
+ * Solo lectura. Uso: node scripts/cuenta-socios.mjs [--json]
  */
 import { google } from 'googleapis'
 import { readFileSync } from 'fs'
+import { RANGOS_SOCIOS, calcularCuentaSocios, fraseSaldo, nombreMes } from '../lib/socios.mjs'
 const env=Object.fromEntries(readFileSync('/Users/dronjuan/somos-magma-app/.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return [l.slice(0,i).trim(),v]}))
 const auth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets.readonly']})
 const sheets=google.sheets({version:'v4',auth})
-const ID='1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
-const txt=v=>String(v??'').trim()
-const num=v=>{if(typeof v==='number')return v;const s=txt(v).replace(/[^\d.-]/g,'');const n=parseFloat(s);return isNaN(n)?0:n}
+const ID=env.SHEET_ID||'1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 const M=n=>'$'+Math.round(n).toLocaleString('es-AR')
-const fecha=v=>{const m=txt(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return null;let y=+m[3];if(y<100)y+=2000;return new Date(y,+m[2]-1,+m[1])}
-const SUELDO=3000000, DESDE_MES=5, MESES=[5,6,7,8]   // el sueldo de agosto corresponde al trabajo de julio, ya devengado
-const EXTRAS_DESDE=3, EXTRAS_HASTA=7   // trabajo de marzo a julio (agosto recién arranca)
+const JSONOUT=process.argv.includes('--json')
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['SOCIOS_MOVIMIENTOS','MOVIMIENTOS_TARJETA','PRESTAMOS','PROYECTOS'],valueRenderOption:'FORMATTED_VALUE'})
-const [SM,MT,PRE,PRO]=R.data.valueRanges.map(v=>v.values||[])
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:RANGOS_SOCIOS,valueRenderOption:'FORMATTED_VALUE'})
+const { nombreMes: _n, ...c } = calcularCuentaSocios(R.data.valueRanges.map(v=>v.values||[]))
+if(JSONOUT){ console.log(JSON.stringify(c,null,2)); process.exit(0) }
 
-// SOCIOS_MOVIMIENTOS es la fuente única de los DOS socios (antes los de Sofi estaban
-// hardcodeados acá y lo que se cargara desde la app no impactaba su saldo).
-const pagosSofi=[], pusoSofi=[]
+const hoy=new Date()
+console.log(`\n${'█'.repeat(72)}\n  CUENTA DE SOCIOS · lo mismo que muestra la app · ${hoy.toLocaleDateString('es-AR')}\n${'█'.repeat(72)}`)
+console.log(`  Sueldo ${M(c.sueldoMensual)}/mes de ${nombreMes(c.desdeSueldo)} a ${nombreMes(c.hastaSueldo)} (${c.socios[0].meses} meses)`)
+console.log(`  + extras por trabajo en proyectos de ${nombreMes(c.desdeExtras)} a ${nombreMes(c.hastaExtras)}`)
+console.log(`  − lo que recibió − gastos personales con tarjeta de Magma + lo que puso de su bolsillo`)
 
-// ── de SOCIOS_MOVIMIENTOS (solo ARS para el saldo; USD y deuda entre socios van aparte)
-const recJuan=[], pusoJuan=[], usd=[], entreSocios=[]
-SM.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return
-  const socio=txt(r[1]), dir=txt(r[2]), moneda=txt(r[9]||'ARS').toUpperCase()
-  const f=fecha(r[0]); if(!f||f.getFullYear()!==2026)return
-  const item={mes:f.getMonth()+1, socio, concepto:txt(r[3]), monto:num(r[4]), moneda, dir}
-  // deuda entre socios: no toca la cuenta con Magma
-  if(/→/.test(dir)&&!/magma/i.test(dir)){ entreSocios.push(item); return }
-  if(moneda!=='ARS'){ usd.push(item); return }
-  if(f.getMonth()+1<DESDE_MES) return
-  const esJuan=/juan/i.test(socio), esSofi=/sof/i.test(socio)
-  if(!esJuan&&!esSofi) return
-  const recibe=/Magma→Socio/i.test(dir)
-  if(esJuan) (recibe?recJuan:pusoJuan).push(item)
-  else       (recibe?pagosSofi:pusoSofi).push(item) })
-
-// ── gastos personales con tarjeta de Magma (col 4 = titular)
-const tarj={Juan:[],Sofi:[]}
-MT.slice(1).forEach(r=>{ if(!r||!txt(r[0]))return
-  if(!/personal/i.test(txt(r[8])))return
-  const mes=num(r[1]); if(mes<DESDE_MES)return
-  const tit=/sof/i.test(txt(r[4]))?'Sofi':(/juan/i.test(txt(r[4]))?'Juan':null)
-  if(!tit)return
-  tarj[tit].push({mes, monto:num(r[7]), tarjeta:txt(r[0])}) })
-const sumaTarj=t=>{const o={}; tarj[t].forEach(x=>o[x.mes]=(o[x.mes]||0)+x.monto); return o}
-
-// ── EXTRAS: lo que trabajaron en proyectos y no cobraron
-const PED=[11,14,17,20,23,26,29,32,35,38,41,44,47,60,63,66,69,72,75,78,81]
-const extras={Juan:{},Sofi:{}}
-PRO.slice(1).forEach(r=>{
-  const f=fecha(r[3]); if(!f||f.getFullYear()!==2026)return
-  const mes=f.getMonth()+1; if(mes<EXTRAS_DESDE||mes>EXTRAS_HASTA)return
-  PED.forEach(c=>{const p=txt(r[c]); if(!p)return; const v=num(r[c+1]); const pers=txt(r[c+2])
-    if(v<=1||!pers)return
-    const q=/juan martin arauz/i.test(pers)?'Juan':(/sofia maria grenier/i.test(pers)?'Sofi':null)
-    if(!q)return
-    extras[q][mes]=(extras[q][mes]||0)+v })})
-
-function cuenta(nombre, recibidos, puestos, gastosTarj, extrasMes){
-  const sueldoDev=SUELDO*MESES.length
-  const extraDev=Object.values(extrasMes).reduce((s,v)=>s+v,0)
-  const devengado=sueldoDev+extraDev
-  const rec=recibidos.reduce((s,x)=>s+x.monto,0)
-  const gt=Object.values(gastosTarj).reduce((s,v)=>s+v,0)
-  const pus=puestos.reduce((s,x)=>s+x.monto,0)
-  const neto=devengado-rec-gt+pus
-  console.log(`\n${'━'.repeat(72)}\n  ${nombre.toUpperCase()}\n${'━'.repeat(72)}`)
-  console.log(`  Sueldo devengado may–ago (${MESES.length} × ${M(SUELDO)})        ${M(sueldoDev).padStart(15)}`)
-  console.log(`  + Extras por trabajo en proyectos (mar–jul)          ${M(extraDev).padStart(15)}`)
-  Object.entries(extrasMes).sort().forEach(([m,v])=>console.log(`       mes ${m}  ${M(v).padStart(13)}`))
-  console.log(`  = TOTAL DEVENGADO                                    ${M(devengado).padStart(15)}`)
+for (const s of c.socios) {
+  console.log(`\n${'━'.repeat(72)}\n  ${s.nombre.toUpperCase()} → ${fraseSaldo(s)}\n${'━'.repeat(72)}`)
+  console.log(`  Sueldo devengado (${s.meses} × ${M(c.sueldoMensual)})                  ${M(s.sueldo).padStart(15)}`)
+  console.log(`  + Extras                                             ${M(s.extra).padStart(15)}`)
+  Object.entries(s.extrasPorMes).sort((a,b)=>a[0]-b[0]).forEach(([m,v])=>console.log(`       ${nombreMes(+m).padEnd(12)} ${M(v).padStart(13)}`))
+  console.log(`  = TOTAL DEVENGADO                                    ${M(s.devengado).padStart(15)}`)
   console.log(`\n  ── lo que recibió de Magma ──`)
   const porMes={}
-  recibidos.forEach(x=>{const k=`${x.mes}|${x.concepto}`; porMes[k]=(porMes[k]||0)+x.monto})
-  Object.entries(porMes).sort().forEach(([k,v])=>{const [m,c]=k.split('|')
-    console.log(`     mes ${m}  ${c.slice(0,38).padEnd(40)} ${M(v).padStart(14)}`)})
-  console.log(`     ${'subtotal transferencias/pagos'.padEnd(46)} ${M(rec).padStart(14)}`)
+  s.detalleRecibido.forEach(x=>{const k=`${x.mes}|${x.concepto}`; porMes[k]=(porMes[k]||0)+x.monto})
+  Object.entries(porMes).sort((a,b)=>+a[0].split('|')[0]-+b[0].split('|')[0]).forEach(([k,v])=>{const [m,co]=k.split('|')
+    console.log(`     ${nombreMes(+m).padEnd(11)} ${co.slice(0,38).padEnd(40)} ${M(v).padStart(14)}`)})
+  console.log(`     ${'subtotal'.padEnd(52)} ${M(s.recibido).padStart(14)}`)
   console.log(`\n  ── gastos personales con tarjeta de Magma ──`)
-  Object.entries(gastosTarj).sort().forEach(([m,v])=>console.log(`     mes ${m}  ${''.padEnd(40)} ${M(v).padStart(14)}`))
-  console.log(`     ${'subtotal tarjetas'.padEnd(46)} ${M(gt).padStart(14)}`)
+  Object.entries(s.tarjPorMes).sort((a,b)=>a[0]-b[0]).forEach(([m,v])=>console.log(`     ${nombreMes(+m).padEnd(52)} ${M(v).padStart(14)}`))
+  console.log(`     ${'subtotal tarjetas'.padEnd(52)} ${M(s.tarjetas).padStart(14)}`)
   console.log(`\n  ── lo que puso de su bolsillo ──`)
-  if(!puestos.length) console.log(`     (nada)`)
-  puestos.forEach(x=>console.log(`     mes ${x.mes}  ${x.concepto.slice(0,38).padEnd(40)} ${M(x.monto).padStart(14)}`))
-  console.log(`     ${'subtotal'.padEnd(46)} ${M(pus).padStart(14)}`)
-  console.log(`\n  ${'─'.repeat(68)}`)
-  console.log(`  SALDO = devengado − recibido − tarjetas + puesto`)
-  console.log(`        = ${M(devengado)} − ${M(rec)} − ${M(gt)} + ${M(pus)}`)
-  console.log(`        = ${M(neto)}   ${neto>=0?'← a FAVOR del socio (Magma le debe)':'← el socio le DEBE a Magma'}`)
-  return {nombre, devengado, rec, gt, pus, neto}
+  if(!s.detallePuso.length) console.log(`     (nada)`)
+  s.detallePuso.forEach(x=>console.log(`     ${nombreMes(x.mes).padEnd(11)} ${x.concepto.slice(0,38).padEnd(40)} ${M(x.monto).padStart(14)}`))
+  console.log(`     ${'subtotal'.padEnd(52)} ${M(s.puso).padStart(14)}`)
+  console.log(`\n  SALDO = ${M(s.devengado)} − ${M(s.recibido)} − ${M(s.tarjetas)} + ${M(s.puso)} = ${M(s.saldo)}`)
 }
-console.log(`\n${'█'.repeat(72)}\n  CUENTA DE SOCIOS — mayo a agosto 2026 · sueldo ${M(SUELDO)}/mes\n${'█'.repeat(72)}`)
-const a=cuenta('Sofi', pagosSofi, pusoSofi, sumaTarj('Sofi'), extras.Sofi)
-const b=cuenta('Juan', recJuan, pusoJuan, sumaTarj('Juan'), extras.Juan)
-console.log(`\n${'█'.repeat(72)}\n  COMPARACIÓN\n${'█'.repeat(72)}`)
-console.log(`  ${'socio'.padEnd(8)}${'devengado'.padStart(14)}${'recibido'.padStart(14)}${'tarjetas'.padStart(14)}${'puso'.padStart(13)}${'SALDO'.padStart(15)}`)
-;[a,b].forEach(x=>console.log(`  ${x.nombre.padEnd(8)}${M(x.devengado).padStart(14)}${M(x.rec).padStart(14)}${M(x.gt).padStart(14)}${M(x.pus).padStart(13)}${M(x.neto).padStart(15)}`))
-console.log(`\n  Diferencia de retiro entre socios: ${M(Math.abs((a.rec+a.gt)-(b.rec+b.gt)))}`)
 
-if(usd.length){
-  console.log(`\n${'━'.repeat(72)}\n  EN DÓLARES (aparte, no se mezcla con el saldo en pesos)\n${'━'.repeat(72)}`)
-  usd.forEach(x=>console.log(`  ${x.socio.padEnd(6)} ${x.dir.padEnd(13)} ${x.concepto.slice(0,40).padEnd(42)} USD ${x.monto}`))
+console.log(`\n${'█'.repeat(72)}\n  RESUMEN\n${'█'.repeat(72)}`)
+console.log(`  ${'socio'.padEnd(8)}${'devengado'.padStart(14)}${'recibido'.padStart(14)}${'tarjetas'.padStart(14)}${'puso'.padStart(13)}${'SALDO'.padStart(15)}`)
+c.socios.forEach(s=>console.log(`  ${s.nombre.padEnd(8)}${M(s.devengado).padStart(14)}${M(s.recibido).padStart(14)}${M(s.tarjetas).padStart(14)}${M(s.puso).padStart(13)}${M(s.saldo).padStart(15)}`))
+c.socios.forEach(s=>console.log(`  → ${fraseSaldo(s)}`))
+
+if(c.usd.length){
+  console.log(`\n  EN DÓLARES (aparte, no se mezcla con el saldo en pesos)`)
+  c.usd.forEach(x=>console.log(`  ${x.socio.padEnd(6)} ${x.dir.padEnd(13)} ${x.concepto.slice(0,40).padEnd(42)} USD ${x.monto}`))
 }
-// La deuda personal Juan↔Sofi NO se reporta acá: es entre ellos, no pasa por Magma (Juan, 02/08/2026).
-// Las filas siguen en SOCIOS_MOVIMIENTOS y el filtro de arriba ya las excluye del saldo.
-if(entreSocios.length) console.log(`\n  (${entreSocios.length} movimientos entre socios excluidos — van por otro lado)`)
-console.log(`\n  Tarjetas cargadas hasta JULIO 2026 (BBVA Visa + Master Galicia, cierre 30/07).`)
+if(c.entreSocios.length) console.log(`\n  (${c.entreSocios.length} movimientos entre socios excluidos — van por otro lado)`)
+
+const t=c.tarjetasCargadas
+console.log(`\n  ⚠ TARJETAS: resúmenes cargados hasta ${t.hasta.toUpperCase()}.`)
+t.lista.forEach(x=>console.log(`     ${x.tarjeta.padEnd(18)} hasta ${x.texto}`))
+const faltan=[]; for(let m=t.hastaMes+1; m<=hoy.getMonth()+1; m++) faltan.push(nombreMes(m))
+if(faltan.length) console.log(`     Faltan ${faltan.join(', ')}: cada mes sin resumen infla el saldo a favor del socio (sus gastos personales de ese mes no están restados).`)
+console.log()
