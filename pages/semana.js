@@ -47,6 +47,7 @@ export default function Semana(){
           <div style={{fontFamily:MONO, fontSize:12, textTransform:'uppercase', letterSpacing:1.4, color:T.ink3}}>Chequeo semanal · Somos Magma</div>
           <h1 style={{margin:'4px 0 0', fontSize:26, fontWeight:800, letterSpacing:-.5}}>Números de la semana</h1>
         </div>
+        <Link href="/lunes" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>lunes</Link>
         <Link href="/" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>← app</Link>
       </div>
       <div style={{display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', fontSize:12.5, color:T.ink3, borderTop:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, padding:'11px 0', marginBottom:22}}>

@@ -82,6 +82,7 @@ export default function Diaria(){
           <h1 style={{margin:'4px 0 0', fontSize:26, fontWeight:800, letterSpacing:-.5, textTransform:'capitalize'}}>{b ? b.titulo : 'Hoy'}</h1>
         </div>
         <Link href="/semana" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>semana</Link>
+        <Link href="/lunes" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>lunes</Link>
         <Link href="/" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>← app</Link>
       </div>
       <div style={{display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', fontSize:12.5, color:T.ink3, borderTop:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, padding:'11px 0', marginBottom:22}}>

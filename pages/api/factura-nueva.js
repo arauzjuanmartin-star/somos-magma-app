@@ -19,6 +19,17 @@ export default async function handler(req, res) {
     const hoy = new Date()
     const mesStr = String(hoy.getMonth()+1).padStart(2,'0') + ' - ' + MESES[hoy.getMonth()]
 
+    // Fecha Evento (col G): hasta el 24/09/2026 quedaba vacía y "Atrasadas +30d del evento" daba siempre $0 en la
+    // diaria (las 42 facturas por cobrar de ese día no tenían fecha). Se busca por N° en PROYECTOS y, si no, en PRESUPUESTOS.
+    let fechaEvento = ''
+    try {
+      const ev = await withRetry(() => sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['PROYECTOS!C:D', 'PRESUPUESTOS!A:B'], valueRenderOption: 'FORMATTED_VALUE' }))
+      const [PRO, PRE] = ev.data.valueRanges.map(v => v.values || [])
+      const nro = String(presupuestoNum ?? '').trim()
+      const enPro = PRO.find(r => String(r[0] ?? '').trim() === nro), enPre = PRE.find(r => String(r[0] ?? '').trim() === nro)
+      fechaEvento = String((enPro && enPro[1]) || (enPre && enPre[1]) || '').trim()
+    } catch (e) { /* sin fecha es como estaba antes: la diaria la busca en PROYECTOS igual */ }
+
     // Validar duplicados si no se forzó
     if (!forzar) {
       try {
@@ -58,7 +69,7 @@ export default async function handler(req, res) {
       insertDataOption: 'INSERT_ROWS',   // ← fuerza nueva fila en vez de overwrite
       includeValuesInResponse: true,
       requestBody: { values: [[
-        mesStr, presupuestoNum, false, false, false, '', '',
+        mesStr, presupuestoNum, false, false, false, '', fechaEvento,
         agencia||'', cliente||'', proyecto||'',
         neto, iva, total,
         'Factura '+tipo, nroFactura||'',

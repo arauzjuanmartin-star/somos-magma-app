@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer'
 import { getSheets, withSheetsRetry } from '../../../../lib/sheets'
 import { calcularBrief } from '../../../../lib/brief.mjs'
 import { horaArgentina, recalcularDias, armarMail, asegurarSolapa, leerDiaria, yaEnviado, ultimoContador, filaDiaria, escribirFila } from '../../../../lib/diaria-mail.mjs'
+import { correrLunes } from '../../../../lib/lunes.mjs'
 
 // La diaria mandada desde Vercel: sale a las 8:10 y a las 15:10 aunque la Mac de Juan esté cerrada.
 // (El 18/09/2026 el mail de las 8 no llegó: la Mac dormía, corrió el script sin red y falló.)
@@ -16,6 +17,11 @@ import { horaArgentina, recalcularDias, armarMail, asegurarSolapa, leerDiaria, y
 // No pasa por el login de la app (middleware.js lo deja pasar): lo protege CRON_SECRET, que Vercel manda solo
 // en el header Authorization de cada cron.
 //   ?dry=1 → calcula todo y devuelve qué haría, sin mandar mail ni escribir el sheet.
+//
+// Los LUNES a la mañana sale además "El lunes de Magma" (lib/lunes.mjs) a Juan y Sofi: el reporte de su reunión
+// semanal. Va colgado de este cron porque el plan Hobby de Vercel permite 2 crons y ya están usados. Tiene su
+// propia marca en la solapa SEMANAL para no repetirse, y se manda ANTES del corte "la diaria ya la mandó la Mac":
+// ese corte es de la diaria, no de este mail.   ?lunes=1 lo fuerza cualquier día (con ?dry=1 para probar).
 
 export const config = { maxDuration: 60 }
 
@@ -35,10 +41,24 @@ export default async function handler(req, res) {
     const { sheets, SHEET_ID } = await getSheets()
     if (!dry) await withSheetsRetry(() => asegurarSolapa(sheets, SHEET_ID))
 
+    const USER = process.env.MAIL_USER, PASS = process.env.MAIL_APP_PASSWORD
+    const APP = process.env.DIARIA_APP_URL || 'https://somos-magma-app.vercel.app'
+
+    let lunes = null
+    if (!tarde && (ahoraAR.getDay() === 1 || req.query.lunes === '1')) {
+      try {
+        const t = USER && PASS ? nodemailer.createTransport({ service: 'gmail', auth: { user: USER, pass: PASS } }) : null
+        const enviar = t ? m => t.sendMail({ from: `Somos Magma <${USER}>`, ...m }) : null
+        lunes = await correrLunes({ sheets, SHEET_ID, ahoraAR, dry: dry || !enviar, enviar, retry: withSheetsRetry, para: process.env.LUNES_TO || 'juan@somosmagma.com, sofi@somosmagma.com', link: `${APP}/lunes`, origen: 'Vercel' })
+        if (!dry && lunes.html) delete lunes.html
+        if (!dry && lunes.texto) delete lunes.texto
+      } catch (e) { lunes = { ok: false, error: e.message } }
+    }
+
     let filas = []
     try { filas = await withSheetsRetry(() => leerDiaria(sheets, SHEET_ID)) } catch (e) { /* sin columna N o sin solapa todavía: se toma como "nadie mandó nada" */ }
     const quien = yaEnviado(filas, ahoraAR, aviso)
-    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.` })
+    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.`, lunes })
 
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
@@ -50,12 +70,11 @@ export default async function handler(req, res) {
 
     const ult = ultimoContador(filas)
     const contador = ult ? recalcularDias(ult.contador, ahoraAR) : null
-    const link = `${process.env.DIARIA_APP_URL || 'https://somos-magma-app.vercel.app'}/diaria`
+    const link = `${APP}/diaria`
     const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '' })
 
-    if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, html })
+    if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, lunes, html })
 
-    const USER = process.env.MAIL_USER, PASS = process.env.MAIL_APP_PASSWORD
     if (!USER || !PASS) return res.status(503).json({ error: 'Faltan MAIL_USER / MAIL_APP_PASSWORD en Vercel.' })
     const t = nodemailer.createTransport({ service: 'gmail', auth: { user: USER, pass: PASS } })
     let mail = 'Vercel', fallo = null
@@ -65,7 +84,7 @@ export default async function handler(req, res) {
     // Regla de oro #1: quede enviado o no, queda anotado en el sheet
     await withSheetsRetry(() => escribirFila(sheets, SHEET_ID, filaDiaria({ brief, contador, contadorLeidoAhora: false, aviso, ahoraAR, mail })))
     if (fallo) return res.status(502).json({ error: `No se pudo mandar el mail: ${fallo}` })
-    res.json({ ok: true, enviado: true, aviso, para, subject })
+    res.json({ ok: true, enviado: true, aviso, para, subject, lunes })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
