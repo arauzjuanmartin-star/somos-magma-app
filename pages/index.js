@@ -2969,7 +2969,7 @@ function msgUpload(j, base='PDF subido ✓'){
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
           <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
             <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Crear factura real (con número y mail)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
-            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
+            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya está ✓</button>
           </span>
         </div>
       )})}
@@ -2999,7 +2999,7 @@ function msgUpload(j, base='PDF subido ✓'){
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink2, fontWeight:600}}>{fmt(x.pendiente)}</span>
           <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
             <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Facturar por adelantado (el evento todavía no pasó)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
-            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste y cobraste en su momento — la marca lista sin tocar saldos">Ya está ✓</button>
+            <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya está ✓</button>
           </span>
         </div>
       )})}
@@ -3527,7 +3527,7 @@ function YaCobradaModal({x, onClose, onConfirm}){
   const presupuestado=Math.round(x.pendiente)
   const [monto,setMonto]=useState(String(presupuestado))
   const [saving,setSaving]=useState(false)
-  const [yaCobrada,setYaCobrada]=useState(true)
+  const [yaCobrada,setYaCobrada]=useState(false)  // arranca SIN cobrar: el 14/9 Popstars (#2255 y #2256, $7,5M) quedó "cobrada" porque venía tildado
   const evDef = x.p['Fecha Evento']||''
   const [fEnv,setFEnv]=useState(evDef)
   const [fCob,setFCob]=useState(evDef)
@@ -3545,7 +3545,7 @@ function YaCobradaModal({x, onClose, onConfirm}){
         <div style={{fontSize:11.5, color:T.ink3}}>Presupuestado: <span style={{fontFamily:MONO}}>{fmt(presupuestado)}</span>{dif!==0 && <span style={{color:dif>0?T.pos:T.brand, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif>0?'de más':'de menos'}</span>}</div>
         <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', marginTop:14, background:yaCobrada?T.surfaceAlt:T.warnSoft, border:`1px solid ${yaCobrada?T.border:T.warn}`, borderRadius:10, padding:'10px 12px'}}>
           <input type="checkbox" checked={yaCobrada} onChange={e=>setYaCobrada(e.target.checked)} style={{marginTop:2}}/>
-          <span><strong style={{color:T.ink}}>Ya la cobré también.</strong> Si la <strong>destildás</strong>, queda registrada como <strong>facturada pero SIN cobrar</strong> (aparece pendiente de cobro, no la da por pagada).</span>
+          <span><strong style={{color:T.ink}}>Ya la cobré también.</strong> Tildá <strong>solo si la plata ya entró</strong>. Si no, queda <strong>facturada pendiente de cobro</strong> y la cobrás después con "Cobrar".</span>
         </label>
         <div style={{display:'flex', gap:10, marginTop:12}}>
           <div style={{flex:1}}>
