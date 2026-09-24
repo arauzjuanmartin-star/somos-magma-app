@@ -1,4 +1,4 @@
-import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED, COL_PDF } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
@@ -129,6 +129,11 @@ export default async function handler(req, res) {
       // el tablero de Edición (lib/edicion-sync.js) — el editor no tiene que preguntar
       // por WhatsApp qué video es.
       HEADERS_BRIEF_ED.forEach((h, i) => { row[COL_BRIEF_ED + i] = p[h] || '' })
+      // DT: el PDF armado del presupuesto original, cuando esto es un represupuesto. Sin
+      // esto la versión nueva abría el generador de PDF en blanco y había que reescribir
+      // todo. Solo se extiende la fila si hay algo que copiar: la columna existe recién
+      // desde que alguien guardó un PDF (la crea /api/presupuesto-pdf).
+      if (p['PDF Config']) row[COL_PDF] = String(p['PDF Config'])
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({

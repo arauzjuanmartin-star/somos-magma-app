@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { desglosarPrecio, agruparLineas, opcionesDePresu, presuDesglosado } from '../lib/desglose'
+import { prettifySvc as prettifySvcBase, labelsDeListado } from '../lib/servicios-pdf'
 
 // Parsea formatos AR ($1.234,56) y US ($1,234.56) de forma robusta
 const parseMonto = v => {
@@ -48,76 +49,11 @@ const getPedidos = (p) => {
   return pares.sort((a,b) => a.n - b.n).map(x => x.val).filter(Boolean)
 }
 
-// Limpia emojis y variation selectors. Mantiene letras latinas, números, puntuación común.
-// BUG histórico: el regex [ -⁯] eliminaba TODO el texto (rango Unicode U+0020 a U+206F incluye letras).
-// Ahora apunto a caracteres invisibles específicos sin tocar texto normal.
-const stripSvc = s => String(s||'')
-  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')   // emojis pictográficos (😀🎥🚚 etc)
-  .replace(/[☀-➿]/g,'')          // símbolos misceláneos (☀ ✈ ⚠ etc)
-  .replace(/[​-‏‪-‮⁠-⁯﻿]/g,'')  // zero-width + bidi + word joiner
-  .replace(/[︀-️]/g,'')          // variation selectors
-  .replace(/^[\s!'"`þÞ]+/, '')              // prefijos de basura al inicio
-  .trim()
-
-// Mapeo de códigos cortos a descripciones ricas para el PDF al cliente.
-// Juan 2026-06-09: descripciones más detalladas (ej. Viáticos → Hospedaje, transportes y comida)
-const SVC_LABELS = {
-  // Fotografía
-  'Foto ½':       'Media jornada fotógrafo (hasta 4 horas, edición incluida)',
-  'Foto 1/2':     'Media jornada fotógrafo (hasta 4 horas, edición incluida)',
-  'Foto 1':       'Jornada completa fotógrafo (hasta 8 horas, edición incluida)',
-  'Foto 2':       'Doble jornada fotógrafo (2 jornadas completas, edición incluida)',
-  'Foto 12hs':    'Jornada extendida fotógrafo (hasta 12 horas, edición incluida)',
-  // Video / Filmmaker
-  'Video ½':      'Media jornada videógrafo (hasta 4 horas)',
-  'Video 1/2':    'Media jornada videógrafo (hasta 4 horas)',
-  'Video 1':      'Jornada completa videógrafo (hasta 8 horas)',
-  'Video 2':      'Doble jornada videógrafo (2 jornadas completas)',
-  'Film ½':       'Media jornada filmmaker (hasta 4 horas)',
-  'Film 1/2':     'Media jornada filmmaker (hasta 4 horas)',
-  'Film 1':       'Jornada completa filmmaker (hasta 8 horas)',
-  'Film 12hs':    'Jornada extendida filmmaker (hasta 12 horas)',
-  // Equipos especiales
-  'Drone':        'Operador de drone con piloto habilitado',
-  'FPV':          'Dron FPV (cinematic FPV con piloto especializado)',
-  'Go Pro':       'Cámara GoPro adicional para tomas dinámicas',
-  'Rental':       'Rental de equipos (cámaras, lentes, luces, accesorios)',
-  // Postproducción / Animación
-  'Motion':       'Animación motion graphics 2D',
-  'Edit 60s':     'Edición video resumen 60 segundos + adaptación vertical 9:16',
-  'Edit 60s+':    'Edición video resumen extendido (más de 60 segundos)',
-  'Edit 15-30s':  'Edición video corto (15 a 30 segundos)',
-  // Directores y roles especializados
-  'Sonido':       'Sonido directo (microfonía + grabador)',
-  'DirFoto':      'Director de Fotografía (DOP)',
-  // Streaming
-  'Vivo 1':       'Streaming en vivo jornada completa (1 cámara + transmisión)',
-  'Vivo ½':       'Streaming en vivo media jornada (1 cámara + transmisión)',
-  'Vivo 1/2':     'Streaming en vivo media jornada (1 cámara + transmisión)',
-  // Asistentes y producción
-  'Asist 1':      'Asistente de producción jornada completa',
-  'Asist ½':      'Asistente de producción media jornada',
-  'Asist 1/2':    'Asistente de producción media jornada',
-  'Produ':        'Productor en set',
-  // Misceláneos / talento
-  'MakeUp':       'Maquilladora profesional',
-  'Model':        'Modelo (talento contratado)',
-  'Catering':     'Catering en set',
-  'Viaticos':     'Viáticos (hospedaje, transportes y comida)',
-  'Crudos':       'Entrega de archivos crudos sin editar',
-  'Fotos':        'Fotografías editadas en alta resolución',
-}
-const prettifySvc = s => {
-  if (!s) return ''
-  const limpio = stripSvc(s)
-  const limpioNorm = limpio.replace(/\s+/g,' ').replace(/½/g,'1/2').toLowerCase()
-  for (const [key, label] of Object.entries(SVC_LABELS)) {
-    const keyNorm = key.replace(/\s+/g,' ').replace(/½/g,'1/2').toLowerCase()
-    if (limpioNorm === keyNorm) return label
-  }
-  return limpio
-}
-const cleanSvc = prettifySvc
+// Cómo se llama cada servicio cuando lo ve el cliente: lib/servicios-pdf.js. Las
+// descripciones que vienen de la solapa "listado" (col "Descripción PDF") se cargan en
+// cargarDelSheet y pisan a las del código.
+let LABELS_SHEET = {}
+const prettifySvc = s => prettifySvcBase(s, LABELS_SHEET)
 
 // Cláusulas predefinidas según tipo de presupuesto
 const CLAUSULAS_PROD = {
@@ -166,6 +102,74 @@ const loadImageAsDataURL = async (url) => {
   } catch { return null }
 }
 
+// ════════════════════════════════════════════════════════════════════
+// EL PDF GUARDADO — columna "PDF Config" de PRESUPUESTOS
+// ════════════════════════════════════════════════════════════════════
+// Cada PDF que se genera (y cada cambio, con un par de segundos de demora) queda
+// guardado en el presu como JSON. Al reabrirlo —o al abrir su represupuesto, que hereda
+// la columna— la pantalla arranca de ahí y no de cero (24/09/2026: "cuando ponemos
+// represupuestar el PDF se hace de 0").
+// Regla: el PRESUPUESTO manda sobre lo que se escribió acá. Si desde que se guardó
+// cambió el precio, los servicios o el cliente en el presu, ESO se toma del presu y se
+// avisa; el resto (descripción, cláusulas, plazo, tipo, textos) vuelve tal cual.
+const leerConfig = raw => { try { const c = JSON.parse(String(raw || '')); return c && c.v === 1 && c.form ? c : null } catch { return null } }
+const fmtFechaHora = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}) }
+
+// `ahora` = lo que dice el sheet hoy: { base, svcs, raw, costos, adicionales }.
+// Devuelve qué poner en el form, las cláusulas, y la lista de lo que cambió en el presu.
+function aplicarConfig(cfg, ahora) {
+  const f = cfg.form || {}, b = cfg.base || {}
+  const out = {}, cambios = []
+  const igual = k => String(b[k] ?? '') === String(ahora.base[k] ?? '')
+  // Textos del encabezado: vale lo escrito acá, salvo que el presu haya cambiado
+  const ETIQ = { cliente:'el cliente', agencia:'la agencia', proyecto:'el proyecto', fechaEvento:'la fecha', observaciones:'las observaciones' }
+  for (const k of Object.keys(ETIQ)) {
+    if (igual(k)) { if (f[k] != null) out[k] = f[k] }
+    else cambios.push(ETIQ[k])
+  }
+  // Servicios. Si el presu no cambió, vuelven exactos (con los que se agregaron o sacaron
+  // acá). Si cambió, se cruzan por nombre: los que siguen conservan su texto, los nuevos
+  // entran con la descripción estándar, los que ya no están se van.
+  const mismosPedidos = igual('pedidos')
+  const lineas = Array.isArray(f.lineas) ? f.lineas : null
+  if (lineas && mismosPedidos) {
+    out.servicios = lineas.map(l => l.texto)
+    out.costos = lineas.map(l => ({ ...(l.costo || { costo: 0, fee: true }), origen: l.origen ?? null }))
+    out.adicionales = (f.adicionales || []).map(a => ({ origen: a.origen ?? null, nombre: a.nombre, precio: a.precio }))
+  } else if (lineas) {
+    cambios.push('los servicios')
+    const libres = ahora.raw.map((r, i) => ({ r, i, usado: false }))
+    const servicios = [], costos = []
+    for (const l of lineas) {
+      if (l.origen == null) { servicios.push(l.texto); costos.push({ costo: 0, fee: true, origen: null }); continue }
+      const m = libres.find(x => !x.usado && x.r === l.origen)
+      if (!m) continue
+      m.usado = true; servicios.push(l.texto); costos.push(ahora.costos[m.i])
+    }
+    libres.filter(x => !x.usado).forEach(x => { servicios.push(ahora.svcs[x.i]); costos.push(ahora.costos[x.i]) })
+    out.servicios = servicios; out.costos = costos
+    // Adicionales: el nombre escrito acá se conserva, el precio lo dice el presu
+    const guardados = f.adicionales || []
+    out.adicionales = ahora.adicionales
+      .map(a => { const g = guardados.find(x => x.origen != null && x.origen === a.origen); return g ? { ...a, nombre: g.nombre } : a })
+      .concat(guardados.filter(x => x.origen == null).map(x => ({ origen: null, nombre: x.nombre, precio: x.precio })))
+  }
+  // Precio: si el presu sigue valiendo lo que decía este PDF, vuelven el precio de lista,
+  // el descuento y los precios por ítem. Si no, manda el presu.
+  const lista = Math.round(Number(f.precioTotal) || 0)
+  const pct = Math.min(100, Math.max(0, Number(f.descPct) || 0))
+  const finalGuardado = lista - Math.round(lista * pct / 100)
+  if (lista > 0 && finalGuardado === Number(ahora.base.precioFinal)) {
+    out.precioTotal = String(lista); out.descPct = f.descPct || ''; out.descMotivo = f.descMotivo || ''
+    if (mismosPedidos && f.preciosItem && typeof f.preciosItem === 'object') out.preciosItem = f.preciosItem
+  } else if (lista > 0) cambios.push('el precio')
+  // Lo que solo existe en el PDF vuelve siempre
+  for (const k of ['tipoPresu', 'descripcion', 'pagoAlt', 'pagoAltDias', 'pagoAltMonto', 'plazo']) if (f[k] != null) out[k] = f[k]
+  const cl = cfg.clausulas
+  const clausulas = cl && typeof cl.validez === 'string' && Array.isArray(cl.pago) && Array.isArray(cl.clausulas) ? cl : null
+  return { form: out, clausulas, cambios }
+}
+
 export default function Presupuesto() {
   const hoy = new Date().toISOString().slice(0,10)
   const [form, setForm] = useState({
@@ -184,14 +188,11 @@ export default function Presupuesto() {
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
   })
   const [validez, setValidez] = useState(addDays(hoy, 5))
-  // Cláusulas editables — se reinician cuando cambia el tipo
-  const tipoActual = form.tipoPresu
-  const tplBase = tipoActual === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA
-  const [clausulas, setClausulas] = useState(tplBase)
-  useEffect(() => {
-    setClausulas(form.tipoPresu === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.tipoPresu])
+  // Cláusulas editables. Cambiar el tipo de presupuesto las reinicia con el template
+  // (cambiarTipo); cargarlas del PDF guardado no las toca. Antes era un efecto sobre
+  // form.tipoPresu, y pisaba las cláusulas guardadas al restaurar un presu de producción.
+  const [clausulas, setClausulas] = useState(CLAUSULAS_COBERTURA)
+  const cambiarTipo = t => { setForm(p => ({...p, tipoPresu: t})); setClausulas(t === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA) }
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
   // Lo que dice el sheet para este presu. Sirve para avisar cuando el precio del PDF
@@ -200,6 +201,12 @@ export default function Presupuesto() {
   const [guardandoPrecio, setGuardandoPrecio] = useState(false)
   const [serviciosRecargando, setServiciosRecargando] = useState(false)
   const [ultimosServiciosDelSheet, setUltimosServiciosDelSheet] = useState([])  // para mostrar en UI
+  // ---- El PDF guardado en el presu (columna "PDF Config") ----
+  const baseRef = useRef(null)            // lo que decía el sheet al cargar (viaja con el PDF guardado)
+  const cargadoRef = useRef(false)        // recién después de cargar se empieza a guardar
+  const ultimoGuardadoRef = useRef('INIT')
+  const [guardadoPdf, setGuardadoPdf] = useState(null)   // {estado:'guardando'|'ok'|'error', hora, msg}
+  const [configInfo, setConfigInfo] = useState(null)     // del PDF recuperado: {fecha, por, deOtro, cambios}
 
   // Carga el presu del sheet y rellena el form (lo extraemos a función reusable)
   const cargarDelSheet = async (nro) => {
@@ -207,6 +214,9 @@ export default function Presupuesto() {
     try {
       const r = await fetch('/api/data?fresh=1&_t='+Date.now(), { cache: 'no-store' })
       const d = await r.json()
+      // Las descripciones de la solapa "listado" (col "Descripción PDF") pisan a las del
+      // código. Van ANTES de traducir los pedidos, si no la primera carga sale sin ellas.
+      LABELS_SHEET = labelsDeListado(d.data?.listado?.serviciosFull)
       const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
       if (!p) { console.warn('Presu no encontrado:', nro); setLoading(false); return null }
       const pedidosRaw = getPedidos(p)
@@ -228,6 +238,8 @@ export default function Presupuesto() {
       // Separar base y adicionales
       // baseCostos va en paralelo a baseSvcs (mismo índice): es lo que necesita el
       // desglose para abrir el precio por ítem. Sin esto sólo tendríamos los nombres.
+      // `origen` = el pedido tal como está en el sheet. Viaja en costos (base) y en cada
+      // adicional para que el PDF guardado se pueda cruzar línea por línea al reabrir.
       const baseSvcs = [], baseCostos = [], adicionales = []
       pedidosRaw.forEach((ped, i) => {
         if (!ped) return
@@ -236,15 +248,17 @@ export default function Presupuesto() {
           const costo = parseMontoLocal(preciosRaw[i])
           const manual = parseMontoLocal(preciosClienteManualCSV[i])
           const precioCliente = manual > 0 ? manual : Math.round(costo * factor)
-          adicionales.push({nombre, precio: precioCliente})
+          adicionales.push({origen: ped, nombre, precio: precioCliente})
         } else {
           baseSvcs.push(nombre)
-          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1' })
+          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1', origen: ped })
         }
       })
+      // Huella de los servicios del presu: si cambia, el PDF guardado se cruza por nombre
+      const pedidosKey = pedidosRaw.map((ped, i) => [ped, preciosRaw[i] || '', esAdicCSV[i] || '', feeCSV[i] || '', preciosClienteManualCSV[i] || ''].join('~')).join('|')
       console.log('[Presu '+nro+'] base:', baseSvcs, '· adicionales:', adicionales)
       setUltimosServiciosDelSheet(baseSvcs)
-      return { p, svcs: baseSvcs, costos: baseCostos, adicionales }
+      return { p, svcs: baseSvcs, costos: baseCostos, adicionales, pedidosKey }
     } catch (e) {
       console.error('Error cargando presu:', e)
       setLoading(false)
@@ -258,7 +272,7 @@ export default function Presupuesto() {
     if (!nro) return
     cargarDelSheet(nro).then(res => {
       if (!res) { setLoading(false); return }
-      const { p, svcs, costos, adicionales } = res
+      const { p, svcs, costos, adicionales, pedidosKey } = res
       const fechaHoy = new Date().toISOString().slice(0,10)
       const fechaEv = (() => {
         const tipo = String(p['Tipo Fechas']||'').trim()
@@ -276,24 +290,34 @@ export default function Presupuesto() {
         }
         return fe
       })()
-      setForm(prev => ({
-        ...prev,
+      const precioFinal = Math.round(parseMonto(p['Precio Final']))
+      const delSheet = {
         nro: String(p['Columna 1']||''),
         cliente: p['Cliente']||'',
         agencia: p['Agencia']||'',
         proyecto: p['Proyecto']||'',
         fechaEvento: fechaEv,
-        precioTotal: String(Math.round(parseMonto(p['Precio Final']))),
+        precioTotal: String(precioFinal),
         servicios: svcs.length > 0 ? svcs : [''],
         costos: costos || [],
         desglosar: presuDesglosado(p),
         adicionales: adicionales || [],
         observaciones: p['Observaciones']||'',
         fechaEmision: fechaHoy,
-      }))
+      }
+      // Lo que decía el presu al cargar. Se guarda junto con el PDF para que, al reabrir,
+      // se sepa qué cambió en el sheet desde entonces (ver aplicarConfig).
+      baseRef.current = { cliente: delSheet.cliente, agencia: delSheet.agencia, proyecto: delSheet.proyecto, fechaEvento: fechaEv, observaciones: delSheet.observaciones, pedidos: pedidosKey, precioFinal }
+      // Si este presu (o el que represupuestó) ya tiene un PDF armado, se arranca de ahí.
+      const cfg = leerConfig(p['PDF Config'])
+      const rec = cfg ? aplicarConfig(cfg, { base: baseRef.current, svcs, raw: (costos || []).map(c => c.origen), costos: costos || [], adicionales: adicionales || [] }) : null
+      setForm(prev => ({ ...prev, ...delSheet, ...(rec?.form || {}) }))
+      if (rec?.clausulas) setClausulas(rec.clausulas)
+      setConfigInfo(cfg ? { fecha: cfg.guardado, por: cfg.por, deOtro: cfg.nro && String(cfg.nro) !== delSheet.nro ? String(cfg.nro) : null, cambios: rec.cambios } : null)
       setValidez(addDays(fechaHoy, 20))
       // opts = con qué impuestos y plazo se armó ESE presu. El desglose los repite por ítem.
-      setPresuSheet({ nro: String(p['Columna 1']||''), precioFinal: Math.round(parseMonto(p['Precio Final'])), fila: p.__row || null, opts: opcionesDePresu(p) })
+      setPresuSheet({ nro: delSheet.nro, precioFinal, fila: p.__row || null, opts: opcionesDePresu(p) })
+      cargadoRef.current = true
       setLoading(false)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,6 +350,55 @@ export default function Presupuesto() {
   const updAdic = (i,k,v) => setForm(p => ({...p, adicionales:(p.adicionales||[]).map((a,j)=>j===i?{...a,[k]:v}:a)}))
   const addAdic = () => setForm(p => ({...p, adicionales:[...(p.adicionales||[]),{nombre:'',precio:''}]}))
   const delAdic = i => setForm(p => ({...p, adicionales:(p.adicionales||[]).filter((_,j)=>j!==i)}))
+
+  // ---- Guardar el PDF en el presu ----
+  // Todo lo editable de esta pantalla, más `base` (lo que decía el sheet) para poder
+  // detectar al reabrir qué cambió en el presupuesto. `desglosar` no va: ya tiene su
+  // columna (DJ) y los costos vuelven del presu.
+  const armarConfig = () => ({
+    v: 1, nro: presuSheet?.nro || form.nro, guardado: new Date().toISOString(),
+    base: baseRef.current,
+    form: {
+      tipoPresu: form.tipoPresu, cliente: form.cliente, agencia: form.agencia, proyecto: form.proyecto, fechaEvento: form.fechaEvento,
+      lineas: form.servicios.map((texto, i) => ({ origen: form.costos?.[i]?.origen ?? null, texto, costo: { costo: form.costos?.[i]?.costo || 0, fee: form.costos?.[i]?.fee !== false } })),
+      adicionales: (form.adicionales || []).map(a => ({ origen: a.origen ?? null, nombre: a.nombre, precio: a.precio })),
+      descripcion: form.descripcion, observaciones: form.observaciones,
+      precioTotal: form.precioTotal, descPct: form.descPct, descMotivo: form.descMotivo, preciosItem: form.preciosItem,
+      pagoAlt: form.pagoAlt, pagoAltDias: form.pagoAltDias, pagoAltMonto: form.pagoAltMonto, plazo: form.plazo,
+    },
+    clausulas,
+  })
+  const huella = cfg => JSON.stringify({ ...cfg, guardado: null })
+  const guardarConfig = async (cfg) => {
+    const c = cfg || armarConfig()
+    if (!c.nro) return false
+    const h = huella(c)
+    if (h === ultimoGuardadoRef.current) return true
+    setGuardadoPdf({ estado: 'guardando' })
+    try {
+      const r = await fetch('/api/presupuesto-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ num: c.nro, fila: presuSheet?.fila || null, config: c }) })
+      const j = await r.json()
+      if (!j.ok) throw new Error(j.error || 'no se pudo guardar')
+      ultimoGuardadoRef.current = h
+      setGuardadoPdf({ estado: 'ok', hora: new Date() })
+      return true
+    } catch (e) {
+      console.warn('El PDF no se guardó en el presu:', e.message)
+      setGuardadoPdf({ estado: 'error', msg: e.message })
+      return false
+    }
+  }
+  // Autosave: 1,5 s después del último cambio. La primera pasada después de cargar solo
+  // toma la huella (lo que se acaba de restaurar no hace falta volver a escribirlo).
+  useEffect(() => {
+    if (!cargadoRef.current || !presuSheet?.nro) return
+    const cfg = armarConfig()
+    if (ultimoGuardadoRef.current === 'INIT') { ultimoGuardadoRef.current = huella(cfg); return }
+    if (huella(cfg) === ultimoGuardadoRef.current) return
+    const t = setTimeout(() => guardarConfig(cfg), 1500)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, clausulas, presuSheet?.nro])
 
   // ---- Precio: redondeo + volver a escribirlo en el presupuesto ----
   // El "Valor total" de acá es el que ve el cliente en el PDF. Si lo tocás y no lo guardás,
@@ -411,6 +484,9 @@ export default function Presupuesto() {
       }
       if (!j.ok) { alert(j.error || 'No se pudo guardar'); setGuardandoPrecio(false); return }
       setPresuSheet(s => ({...s, precioFinal: precioNum}))
+      // El PDF guardado tiene que saber que el presu ahora vale esto: si no, al reabrir
+      // creería que el precio cambió por afuera y tiraría el descuento y los ítems.
+      if (baseRef.current) { baseRef.current = { ...baseRef.current, precioFinal: precioNum }; guardarConfig() }
       alert(`Listo — el presupuesto #${presuSheet.nro} ahora vale $${precioNum.toLocaleString('es-AR')}.`
         + (j.proyecto ? '\nTambién se actualizó el proyecto.' : ''))
     } catch (e) { alert('Error de conexión') }
@@ -427,6 +503,9 @@ export default function Presupuesto() {
   const generarPDF = async () => {
     if (!form.cliente || !form.precioTotal) return
     setGenerando(true)
+    // Lo que se ve acá queda guardado en el presu antes de bajar el PDF: mañana se
+    // reabre igual, y el represupuesto lo hereda.
+    if (presuSheet?.nro) await guardarConfig()
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
@@ -760,23 +839,31 @@ export default function Presupuesto() {
         <span style={{color:'#2A2A2A',fontSize:12}}>→</span>
         <span style={{fontSize:12,color:'#555'}}>Generador de Presupuesto</span>
         {form.nro&&<span style={{fontSize:11,fontFamily:'monospace',color:'#1543F8',background:'#1543F810',padding:'2px 8px',borderRadius:4}}>#{form.nro}</span>}
+        {guardadoPdf&&<span style={{fontSize:11,color:guardadoPdf.estado==='error'?'#BA7517':'#555',marginLeft:'auto'}}>
+          {guardadoPdf.estado==='guardando'?'guardando en el presu…':guardadoPdf.estado==='ok'?'✓ guardado en el presu '+guardadoPdf.hora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):'⚠ no se guardó: '+(guardadoPdf.msg||'')}
+        </span>}
       </div>
 
       <div style={{maxWidth:1480,margin:'0 auto',padding:'24px 20px 60px',display:'grid',gridTemplateColumns:'minmax(360px,1fr) minmax(440px,1.05fr)',gap:24}}>
         <div>
         <h1 style={{fontSize:22,fontWeight:900,margin:'0 0 4px',letterSpacing:-0.5}}>Generar <span style={{color:'#CE2637'}}>PDF</span></h1>
-        <p style={{color:'#555',fontSize:12,margin:'0 0 20px'}}>Editá los datos. El preview de la derecha muestra cómo va a quedar el PDF.</p>
+        <p style={{color:'#555',fontSize:12,margin:'0 0 20px'}}>Editá los datos. El preview de la derecha muestra cómo va a quedar el PDF. Lo que escribas queda guardado en el presupuesto.</p>
 
         <div style={{display:'grid',gap:14}}>
+          {configInfo&&<div style={{padding:'10px 12px',background:'#1543F80D',border:'0.5px solid #1543F840',borderRadius:8,fontSize:11.5,color:'#BBB',lineHeight:1.5}}>
+            <span style={{color:'#1543F8',fontWeight:600}}>↩ Este PDF ya estaba armado</span>
+            {' '}(guardado {fmtFechaHora(configInfo.fecha)}{configInfo.por?' por '+String(configInfo.por).split('@')[0]:''}{configInfo.deOtro?`, en el #${configInfo.deOtro} que se represupuestó`:''}). Lo que se escribió volvió a aparecer.
+            {configInfo.cambios?.length>0&&<div style={{marginTop:4,color:'#BA7517'}}>⚠ Desde entonces cambió en el presupuesto: <strong>{configInfo.cambios.join(', ')}</strong>. Eso se tomó del presu — revisalo antes de generar.</div>}
+          </div>}
 
           <div style={S.card}>
             <div style={{...S.sec,color:'#CE2637'}}>Tipo de presupuesto</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-              <button onClick={()=>setF('tipoPresu','cobertura')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='cobertura'?'#1543F8':'#2A2A2A'),background:form.tipoPresu==='cobertura'?'#1543F818':'transparent',color:form.tipoPresu==='cobertura'?'#1543F8':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
+              <button onClick={()=>cambiarTipo('cobertura')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='cobertura'?'#1543F8':'#2A2A2A'),background:form.tipoPresu==='cobertura'?'#1543F818':'transparent',color:form.tipoPresu==='cobertura'?'#1543F8':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
                 <div style={{fontWeight:600,marginBottom:3}}>📸 Cobertura / Evento</div>
                 <div style={{fontSize:10,color:form.tipoPresu==='cobertura'?'#1543F8':'#555',lineHeight:1.4}}>Fotografía, video, evento corporativo, casamiento. Pago 50/50. Validez 20 días.</div>
               </button>
-              <button onClick={()=>setF('tipoPresu','produccion')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='produccion'?'#CE2637':'#2A2A2A'),background:form.tipoPresu==='produccion'?'#CE263718':'transparent',color:form.tipoPresu==='produccion'?'#CE2637':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
+              <button onClick={()=>cambiarTipo('produccion')} style={{padding:'12px',borderRadius:8,border:'0.5px solid '+(form.tipoPresu==='produccion'?'#CE2637':'#2A2A2A'),background:form.tipoPresu==='produccion'?'#CE263718':'transparent',color:form.tipoPresu==='produccion'?'#CE2637':'#888',fontSize:12,cursor:'pointer',textAlign:'left'}}>
                 <div style={{fontWeight:600,marginBottom:3}}>🎬 Producción Audiovisual</div>
                 <div style={{fontSize:10,color:form.tipoPresu==='produccion'?'#CE2637':'#555',lineHeight:1.4}}>Animación, motion, IA, post-producción larga. Pago 50/30/20. Validez 5 días hábiles.</div>
               </button>

@@ -1752,6 +1752,10 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       'Contacto Lugar':form.contacto,          // por defecto = el mismo contacto; si es otro, se cambia en el Calendar
     }
     valid.forEach((p,idx)=>{ row[`Pedido ${idx+1}`]=p.svc; row[`Precio ${idx+1}`]=Math.round(parseFloat(p.precio)||0) })
+    // El PDF que ya se armó para el original viaja a la versión nueva (col "PDF Config"):
+    // represupuestar es el mismo trabajo con otro número, no un PDF de cero. El generador
+    // cruza línea por línea lo que cambió (precio, servicios) y conserva el resto.
+    if(isRep && initialData['PDF Config']) row['PDF Config']=initialData['PDF Config']
     try{
       const r=await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j=await r.json()

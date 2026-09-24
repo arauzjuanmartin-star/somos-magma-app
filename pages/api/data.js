@@ -6,9 +6,10 @@ import { requireAuth } from '../../lib/auth-helpers'
 // Si no filtráramos acá, alcanzaba con mirar la respuesta de /api/data en el
 // navegador para ver sueldos, márgenes y facturación.
 const ES_PLATA = /precio|total|fee|subtotal|ganancias|iibb|inter[eé]s|ajuste|diferencia|monto|comisi[oó]n|costo|saldo|cbu|cuit|alias|banco/i
+// "PDF Config" es el PDF guardado como JSON y adentro lleva costos y precios: va afuera también.
 const sinPlata = filas => (filas || []).map(f => {
   const o = {}
-  Object.keys(f).forEach(k => { if (!ES_PLATA.test(k)) o[k] = f[k] })
+  Object.keys(f).forEach(k => { if (!ES_PLATA.test(k) && k !== 'PDF Config') o[k] = f[k] })
   return o
 })
 
