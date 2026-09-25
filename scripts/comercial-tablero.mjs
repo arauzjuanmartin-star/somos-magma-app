@@ -47,7 +47,7 @@ const vivos=espera.filter(p=>p.fEvento&&p.fEvento>=hoy)
 const pasados=espera.filter(p=>p.fEvento&&p.fEvento<hoy)
 const sinFecha=espera.filter(p=>!p.fEvento)
 // "Toca llamar": llegó la fecha de Seguir el; si no hay, pasó el día 4 desde el último contacto (o desde el presupuesto si nunca se llamó)
-const tocaDe=p=>{ const base=p.ultimo||p.fPresu; return p.seguir ? p.seguir<=hoy : (!base || dias(base)>DIA_SEGUIMIENTO) }
+const tocaDe=p=>{ const base=p.ultimo||p.fPresu; return p.seguir ? p.seguir<=hoy : (!base || dias(base)>=DIA_SEGUIMIENTO) }
 const conDias=p=>({...p, diasPresu:p.fPresu?dias(p.fPresu):null, diasUltimo:p.ultimo?dias(p.ultimo):null, diasAlEvento:p.fEvento?-dias(p.fEvento):null, toca:tocaDe(p)})
 const vencidosSeguimiento=vivos.filter(p=>(p.fPresu||p.ultimo)&&tocaDe(p))
 const dentroPlazo=vivos.filter(p=>(p.fPresu||p.ultimo)&&!tocaDe(p))

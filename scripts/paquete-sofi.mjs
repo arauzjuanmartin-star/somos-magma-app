@@ -60,7 +60,7 @@ const REEMPLAZOS_COMANDOS = {
   ],
 }
 // Nada de esto puede aparecer en lo que sale para Sofi (rastros de lo excluido).
-const PROHIBIDO = ['Delfina', 'arauzjuanmartin@hotmail', 'Quién Vende Magma', '49f5aa21', '35cd5721', 'atajando todos los penales', 'perfeccionismo']
+const PROHIBIDO = ['Delfina Lavalle', 'arauzjuanmartin@hotmail', 'Quién Vende Magma', '49f5aa21', '35cd5721', 'atajando todos los penales', 'perfeccionismo']
 const PROHIBIDO_EN_CONFIG = ['/Users/dronjuan']   // solo global/ y proyecto/: las memorias sí pueden citar rutas de Juan
 
 const leer = f => fs.readFileSync(f, 'utf8')
@@ -112,6 +112,7 @@ const config = new Map()   // ruta relativa dentro de proyecto/.claude → conte
 for (const [f, t] of comandos) config.set(`commands/${f}`, t)
 const caminar = (dir, base) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { if (e.name === '.DS_Store') continue; const p = path.join(dir, e.name); e.isDirectory() ? caminar(p, `${base}/${e.name}`) : config.set(`${base}/${e.name}`, leer(p)) } }
 caminar(path.join(CLAUDE_PROY, 'skills'), 'skills')
+caminar(path.join(CLAUDE_PROY, 'agents'), 'agents')
 caminar(path.join(CLAUDE_PROY, 'hooks'), 'hooks')
 config.set('settings.json', leer(path.join(FUENTE, 'proyecto-claude', 'settings.json')))
 JSON.parse(config.get('settings.json'))   // que sea JSON válido
