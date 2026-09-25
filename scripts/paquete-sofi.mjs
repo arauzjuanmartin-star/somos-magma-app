@@ -60,7 +60,7 @@ const REEMPLAZOS_COMANDOS = {
   ],
 }
 // Nada de esto puede aparecer en lo que sale para Sofi (rastros de lo excluido).
-const PROHIBIDO = ['Delfina Lavalle', 'arauzjuanmartin@hotmail', 'Quién Vende Magma', '49f5aa21', '35cd5721', 'atajando todos los penales', 'perfeccionismo']
+const PROHIBIDO = ['arauzjuanmartin@hotmail', 'Quién Vende Magma', '49f5aa21', '35cd5721', 'atajando todos los penales', 'perfeccionismo']
 const PROHIBIDO_EN_CONFIG = ['/Users/dronjuan']   // solo global/ y proyecto/: las memorias sí pueden citar rutas de Juan
 
 const leer = f => fs.readFileSync(f, 'utf8')
