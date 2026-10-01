@@ -1608,6 +1608,10 @@ function atarGastosATrabajos(data){
   ;(data.gastosFijos||[]).forEach(g=>{ const n=String(g['N° trabajo']||'').trim(); if(!n) return
     const act=String(g['Activo']||'').trim(); if(act && !/^(s[ií]|true)$/i.test(act)) return
     ;(porNro[n]=porNro[n]||[]).push({concepto:String(g['Concepto']||'').trim(), monto:parseMonto(g['Monto']), fecha:String(g['Fecha pago']||'').trim(), cuenta:String(g['Cuenta pago']||'').trim(), rubro:[g['Rubro'],g['Subrubro']].map(x=>String(x||'').trim()).filter(Boolean).join(' · ')}) })
+  // Lo que se pagó con tarjeta y dice de qué trabajo fue (el auto alquilado para un rodaje). Los consumos en dólares
+  // no se restan: no hay con qué cotización pasarlos a pesos.
+  ;(data.movimientosTarjeta||[]).forEach(m=>{ const n=String(m['N° trabajo']||'').trim(); if(!n || String(m['Moneda']||'').toUpperCase()==='USD') return
+    ;(porNro[n]=porNro[n]||[]).push({concepto:String(m['Comercio']||m['Descripcion']||'').trim(), monto:parseMonto(m['Monto']), fecha:String(m['Fecha']||'').trim(), cuenta:String(m['Tarjeta']||'').trim(), rubro:String(m['Subcategoria']||'').trim()}) })
   ;(data.proyectos||[]).forEach(p=>{ const n=String(p['N° presupuesto']||'').trim(); p.__gastos=(n&&porNro[n])||[]; p.__gastoTotal=p.__gastos.reduce((t,x)=>t+x.monto,0) })
   return data
 }
@@ -5469,7 +5473,7 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
     </Sec>}
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={cuentaOpts} cuentas={cuentas} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
-    {editGasto && <EditarGasto g={editGasto} onClose={()=>setEditGasto(null)} onDone={()=>{ setEditGasto(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {editGasto && <EditarGasto g={editGasto} cuentas={cuentas.map(c=>String(c['Nombre']||'').trim()).filter(Boolean)} onClose={()=>setEditGasto(null)} onDone={()=>{ setEditGasto(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} cuotas={cuotasAll.filter(c=>normTxt(c['Tarjeta'])===normTxt(detalle['Tarjeta']))} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
   </>
 }
@@ -5598,16 +5602,20 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
 }
 const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, border:'none', background:disabled?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:700, cursor:disabled?'default':'pointer'})
 
-// Editar un gasto ya cargado (concepto, categoría, monto, día). Si ya está pagado y cambia el monto, ajusta la cuenta.
-function EditarGasto({g, onClose, onDone, showToast}){
-  const [f,setF]=useState({Concepto:g['Concepto']||'', Categoria:g['Categoria']||'', Monto:numAMontoAR(parseMonto(g['Monto'])), 'Dia pago':g['Dia pago']||''})
+// Editar un gasto ya cargado (concepto, categoría, monto, día, cómo se paga y de qué cuenta). Si ya está pagado y cambia el monto, ajusta la cuenta.
+const MEDIOS_GASTO=['Transferencia','Débito automático','Efectivo','Tarjeta']
+function EditarGasto({g, cuentas=[], onClose, onDone, showToast}){
+  // "Persona/Cuenta" a veces trae el número de la cuenta ("Galicia Sofi (CA 4014…)") o el nombre de una persona.
+  const cuentaDe=s=>cuentas.find(n=>normTxt(s).startsWith(normTxt(n)))||''
+  const medio0=String(g['Medio de pago']||'').trim(), cuenta0=cuentaDe(g['Persona/Cuenta'])
+  const [f,setF]=useState({Concepto:g['Concepto']||'', Categoria:g['Categoria']||'', Monto:numAMontoAR(parseMonto(g['Monto'])), 'Dia pago':g['Dia pago']||'', medio:medio0, cuenta:cuenta0})
   const [saving,setSaving]=useState(false)
   const pagado=/^s[íi]$|^true$/i.test(String(g['Pagado']||''))||String(g['Meses pagados']||'').trim()!==''
   async function guardar(){
     if(!String(f.Concepto).trim()){showToast('Poné el concepto','err');return}
     if(parseMontoAR(f.Monto)<=0){showToast('El monto tiene que ser mayor a 0','err');return}
     setSaving(true)
-    try{ const r=await fetch('/api/gasto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:g.__row, cambios:{Concepto:f.Concepto, Categoria:f.Categoria, Monto:parseMontoAR(f.Monto), 'Dia pago':f['Dia pago']}})})
+    try{ const r=await fetch('/api/gasto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fila:g.__row, cambios:{Concepto:f.Concepto, Categoria:f.Categoria, Monto:parseMontoAR(f.Monto), 'Dia pago':f['Dia pago'], ...(f.medio!==medio0?{'Medio de pago':f.medio}:{}), ...(f.cuenta!==cuenta0?{'Persona/Cuenta':f.cuenta}:{})}})})
       const j=await r.json(); if(j&&j.error){showToast(j.error,'err');setSaving(false);return}
       showToast('Gasto actualizado ✓'+(j.ajusteCuenta?` · cuenta ajustada ${fmt(Math.abs(j.ajusteCuenta))}`:'')); onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) } }
@@ -5624,6 +5632,11 @@ function EditarGasto({g, onClose, onDone, showToast}){
           <div style={{flex:'0 1 100px'}}><label style={lblV2}>Día de pago</label><input value={f['Dia pago']} onChange={e=>setF(s=>({...s,['Dia pago']:e.target.value}))} placeholder="ej 23" style={inpV2}/></div>
         </div>
         <div style={{marginBottom:14}}><label style={lblV2}>Monto{String(g['Moneda']||'').toUpperCase()==='USD'?' (USD)':''}</label><MontoInput value={f.Monto} onChange={v=>setF(s=>({...s,Monto:v}))} style={{...inpV2, fontFamily:MONO}}/></div>
+        <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:6}}>
+          <div style={{flex:'1 1 150px'}}><label style={lblV2}>Cómo se paga</label><select value={f.medio} onChange={e=>setF(s=>({...s,medio:e.target.value}))} style={inpV2}>{!MEDIOS_GASTO.includes(f.medio) && <option value={f.medio}>{f.medio||'Sin definir'}</option>}{MEDIOS_GASTO.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+          <div style={{flex:'1 1 150px'}}><label style={lblV2}>De qué cuenta sale</label><select value={f.cuenta} onChange={e=>setF(s=>({...s,cuenta:e.target.value}))} style={inpV2}><option value="">Sin definir</option>{cuentas.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+        </div>
+        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14, lineHeight:1.45}}>{/d[eé]bito/i.test(f.medio)?'Se debita solo: en Caja solo hay que mirar que esa cuenta tenga saldo.':/^tarjeta$/i.test(f.medio)?'Viene adentro del resumen de la tarjeta: Caja no lo cuenta aparte.':'Hay que pagarlo a mano: Caja lo muestra para que alguien lo pague.'}</div>
         {pagado && parseMontoAR(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:11.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMontoAR(f.Monto))}).</div>}
         <button disabled={saving} onClick={guardar} style={btnAgregar(saving)}>{saving?'Guardando…':'Guardar cambios'}</button>
       </div>

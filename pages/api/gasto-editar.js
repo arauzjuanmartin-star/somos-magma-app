@@ -4,7 +4,8 @@ import { requireAuth } from '../../lib/auth-helpers'
 const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26);} return s }
 const numv = v => parseFloat(String(v==null?'':v).replace(/[^\d.-]/g,'')) || 0
 
-// Edita campos de un gasto en GASTOS_FIJOS (Concepto, Categoria, Monto, Dia pago, Moneda, Observacion).
+// Edita campos de un gasto en GASTOS_FIJOS (Concepto, Categoria, Monto, Dia pago, Moneda, Observacion, y cómo
+// se paga: Medio de pago, Persona/Cuenta, Rubro, Subrubro, N° trabajo).
 // Si cambia el Monto y el gasto ya estaba pagado, ajusta la cuenta por la diferencia (para no descuadrar).
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -20,11 +21,13 @@ export default async function handler(req, res) {
     const rH = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!1:1' })
     const headers = rH.data.values?.[0] || []
     const H = n => headers.indexOf(n)
-    const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `GASTOS_FIJOS!A${fila}:Q${fila}` })
+    const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `GASTOS_FIJOS!A${fila}:W${fila}` })
     const row = rRow.data.values?.[0] || []
     if (!row.length) return res.status(404).json({ error: 'Gasto no encontrado' })
 
-    const permitidos = ['Concepto', 'Categoria', 'Monto', 'Dia pago', 'Moneda', 'Observacion']
+    const permitidos = ['Concepto', 'Categoria', 'Monto', 'Dia pago', 'Moneda', 'Observacion', 'Medio de pago', 'Persona/Cuenta', 'Rubro', 'Subrubro', 'N° trabajo']
+    // Estos van como texto: un N° de trabajo no es un monto, y un nombre que empieza con = + - @ no es una fórmula.
+    const comoTexto = ['Medio de pago', 'Persona/Cuenta', 'Rubro', 'Subrubro', 'N° trabajo']
     const updates = []
     let deltaMonto = 0
     const montoViejo = numv(row[H('Monto')])
@@ -32,7 +35,8 @@ export default async function handler(req, res) {
       if (!permitidos.includes(campo)) continue
       const idx = H(campo)
       if (idx === -1) continue
-      const val = campo === 'Monto' ? numv(valor) : valor
+      const s = String(valor ?? '').trim()
+      const val = campo === 'Monto' ? numv(valor) : comoTexto.includes(campo) ? (s ? `'${s}` : '') : valor
       updates.push({ range: `GASTOS_FIJOS!${colLetra(idx)}${fila}`, values: [[val]] })
       if (campo === 'Monto') deltaMonto = numv(valor) - montoViejo
     }

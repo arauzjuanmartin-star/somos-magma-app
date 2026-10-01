@@ -90,7 +90,8 @@ console.log(`   ${'─'.repeat(46)}`)
 console.log(`   MARGEN NETO (antes de gastos fijos) ${money(T.bruto).padStart(9)}   ${pct(T.bruto,T.total)}`)
 
 // ========================= 2. GASTOS FIJOS =========================
-const gasAct=GAS.slice(1).filter(g=>txt(g[1]) && !/^no$|^false$/i.test(txt(g[7])))
+// Solo los recurrentes: la solapa mezcla pagos de una vez (el IVA de un mes, VEPs sueltos) que no son estructura mensual.
+const gasAct=GAS.slice(1).filter(g=>txt(g[1]) && !/^no$|^false$/i.test(txt(g[7])) && !/[uú]nico/i.test(txt(g[4])))
 const porCat={}
 gasAct.forEach(g=>{ const c=txt(g[0])||'Sin categoría'; porCat[c]=(porCat[c]||0)+num(g[2]) })
 const gastoMes=Object.values(porCat).reduce((a,b)=>a+b,0)
