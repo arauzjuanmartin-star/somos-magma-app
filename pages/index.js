@@ -2814,6 +2814,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const [promDraft,setPromDraft]=useState({}), [loteBusy,setLoteBusy]=useState('')
   // Al abrir "Nueva factura" desde una agencia con varios trabajos tildados: los que van en la misma factura.
   const [nuevaFextras,setNuevaFextras]=useState([])
+  // Pedido de orden de compra (Austral): la agencia para la que está abierto el mail, y por cada
+  // trabajo, cuándo fue la última vez que se pidió (solapa OC_PEDIDOS).
+  const [pedirOC,setPedirOC]=useState(null)
+  const ocDe={}; (data.ocPedidos||[]).forEach(r=>{ const n=String(r['N° Presupuesto']||'').trim(), d=parseD(r['Fecha pedido']); if(!n||!d) return; if(!ocDe[n]||d>=ocDe[n].d) ocDe[n]={d, fecha:`${d.getDate()}/${d.getMonth()+1}`, nOC:String(r['N° OC']||'').trim()} })
   // Las columnas "Prometió pagar" y "Nota cobranza" pueden no estar todavía en el sheet: sin ellas el control no aparece.
   const hayPromesa=fc.length>0 && Object.prototype.hasOwnProperty.call(fc[0],'Prometió pagar')
   const aISO=s=>{ const d=parseD(s); return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'' }
@@ -3093,13 +3097,15 @@ function msgUpload(j, base='PDF subido ✓'){
               {(()=>{ const esCom=x=>/comunicaci/i.test(String(x.p['Cliente']||'')), orden=[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias)
                 const tandas={}; orden.forEach(x=>{ const k=claveAg(x.p)+(esCom(x)?'|com':''); (tandas[k]=tandas[k]||[]).push(x) })
                 return Object.values(tandas).filter(g=>g.length>1).map((g,k)=><button key={k} onClick={()=>{ setNuevaFsel(g[0]); setNuevaFextras(g.slice(1).map(x=>String(x.p['Columna 1']||'').trim())); setNuevaF(true) }} style={{...miniBtn, background:T.ink, color:'#fff', border:'none', padding:'6px 12px', fontWeight:600}} title="Una sola factura que cubre todos estos trabajos. En el formulario podés destildar los que no van.">Facturar juntos {esCom(g[0])?'los de Comunicación':''} · {g.length} trabajos · {fmt(g.reduce((t,x)=>t+x.pendiente,0))}</button>) })()}
+              {/* Clientes que no reciben la factura por mail (Austral): primero se les pide que carguen los trabajos en su sistema. */}
+              <button onClick={()=>setPedirOC(a)} style={{...miniBtn, padding:'6px 12px', fontWeight:600}} title="Mail con la lista de trabajos hechos para que el cliente los cargue en su sistema de cobro. Queda anotado qué se pidió y cuándo.">✉ Pedir orden de compra{(()=>{ const n=a.sinFact.filter(x=>ocDe[String(x.p['Columna 1']||'').trim()]).length; return n?` · ${n} ya ${n===1?'pedida':'pedidas'}`:'' })()}</button>
             </div>}
             {[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias).map((x,j)=>{ const fi=semEvento(x.p['Fecha Evento'])
               return <div key={'s'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
                 <span style={{fontSize:11.5, fontWeight:fi.dias>30?700:500, color:fi.c, gridColumn:cel?'1 / -1':'auto'}}>{fi.fecha==='s/f'?'sin fecha':`evento ${fi.fecha}`}{fi.dias>0?` · hace ${fi.dias}d`:''}</span>
                 <span style={{minWidth:0}}>
                   <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
-                  <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']}{x.p['Cliente']?` · ${x.p['Cliente']}`:''}{x.facturado>0?` · ya facturado ${fmt(x.facturado)} (${Math.round(x.facturado/x.neto*100)}%)`:''}</span>
+                  <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']}{x.p['Cliente']?` · ${x.p['Cliente']}`:''}{x.facturado>0?` · ya facturado ${fmt(x.facturado)} (${Math.round(x.facturado/x.neto*100)}%)`:''}{(()=>{ const oc=ocDe[String(x.p['Columna 1']||'').trim()]; if(!oc) return null; const dd=Math.round((hoy0-oc.d)/864e5); return <span style={{color:dd>7?T.warn:T.ink2, fontWeight:600}}> · orden de compra pedida el {oc.fecha}{dd>0?` (hace ${dd}d)`:''}</span> })()}</span>
                 </span>
                 <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.warn, fontWeight:600}}>{fmt(x.pendiente)}</span>
                 <span style={{display:'flex', gap:5, justifyContent:'flex-end', gridColumn:cel?'1 / -1':'auto'}}>
@@ -3247,6 +3253,7 @@ function msgUpload(j, base='PDF subido ✓'){
     </div>
     </>)}
     </>)}
+    {pedirOC && <PedirOCModal agencia={pedirOC.nombre} trabajos={pedirOC.sinFact} ocDe={ocDe} agencias={data.agencias||[]} contactos={data.contactos||[]} onClose={()=>setPedirOC(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {cobrando && <CobroModal f={cobrando} hermanas={hermanasDe(cobrando)} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
@@ -3254,6 +3261,112 @@ function msgUpload(j, base='PDF subido ✓'){
     {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} initialExtras={nuevaFextras} onClose={()=>{setNuevaF(false); setNuevaFsel(null); setNuevaFextras([])}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); setNuevaFextras([]); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
+}
+
+// Pedir la orden de compra: el mail con la lista de trabajos hechos para que el cliente los cargue
+// en SU sistema de cobro (Universidad Austral). No lleva la factura: la factura se sube después a
+// ese sistema, cuando lo habilitan. Lo puede mandar cualquiera del equipo; sale desde administración
+// con copia a quien lo manda, y cada trabajo queda anotado en la solapa OC_PEDIDOS.
+function PedirOCModal({agencia, trabajos, ocDe, agencias=[], contactos=[], onClose, onSent, showToast}){
+  const { data: session } = useSession()
+  const firma=String(session?.user?.name||'').trim().split(' ')[0]
+  const nroDe=x=>String(x.p['Columna 1']||'').trim()
+  // Los de Comunicación van en una orden de compra aparte: en el mail salen en su propia lista.
+  const esCom=x=>/comunicaci/i.test(String(x.p['Cliente']||''))
+  const orden=[...trabajos].sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
+  const sinPedir=orden.filter(x=>!ocDe[nroDe(x)])
+  // Por defecto van los que todavía no se pidieron. Si ya se pidieron todos, es un recordatorio y van todos.
+  const [sel,setSel]=useState(()=>(sinPedir.length?sinPedir:orden).map(nroDe))
+  const elegidos=orden.filter(x=>sel.includes(nroDe(x)))
+  const esRecordatorio=elegidos.length>0 && elegidos.every(x=>ocDe[nroDe(x)])
+  const agRow=agencias.find(a=>normTxt(a['Nombre'])===normTxt(agencia))
+  const mailAg=String(agRow?.['Mail facturacion']||'').trim()
+  const [dests,setDests]=useState(()=>{ const d=[]; const push=x=>{ if(x.mail && !d.find(y=>y.mail.toLowerCase()===x.mail.toLowerCase())) d.push(x) }
+    if(mailAg) push({mail:mailAg, nombre:`Administración de ${agencia}`, sel:true})
+    contactos.filter(c=>normTxt(c['Agencia'])===normTxt(agencia) && String(c['Mail']||'').trim()).forEach(c=>push({mail:String(c['Mail']).trim(), nombre:[c['Nombre'],c['Cargo']].filter(Boolean).join(' · '), sel:false}))
+    return d })
+  const [nuevo,setNuevo]=useState(''), [recordar,setRecordar]=useState(true), [copia,setCopia]=useState(true), [saving,setSaving]=useState(false)
+  // null = el texto que arma la app (sigue a los trabajos tildados); con valor = lo editó quien lo manda y no se pisa
+  const [asuntoM,setAsuntoM]=useState(null), [cuerpoM,setCuerpoM]=useState(null)
+  const linea=(x,i)=>`${i+1}. ${semEvento(x.p['Fecha Evento']).fecha} · ${String(x.p['Proyecto']||'Trabajo').trim()}${x.p['Cliente']?` (${x.p['Cliente']})`:''} · ${fmt(x.pendiente)} + IVA`
+  const gen=elegidos.filter(x=>!esCom(x)), com=elegidos.filter(esCom), suma=a=>a.reduce((s,x)=>s+x.pendiente,0)
+  const totalDe=a=>`Total: ${a.length} ${a.length===1?'trabajo':'trabajos'} · ${fmt(suma(a))} + IVA`
+  const asuntoAuto=`${esRecordatorio?'Recordatorio: ':''}Somos Magma · ${elegidos.length} ${elegidos.length===1?'trabajo':'trabajos'} para cargar en el sistema`
+  const cuerpoAuto=[
+    'Hola,', '',
+    esRecordatorio
+      ? 'Te vuelvo a pasar estos trabajos que ya realizamos y todavía no pudimos facturar. ¿Los podrás cargar en el sistema, así subimos la factura?'
+      : 'Te paso los trabajos que ya realizamos, para que los puedas cargar en el sistema y así subimos la factura.',
+    '',
+    ...(gen.length&&com.length ? ['Para la orden de compra general:'] : []),
+    ...gen.map(linea), ...(gen.length?[totalDe(gen), '']:[]),
+    ...(com.length ? [gen.length?'Estos son de Comunicación y van en una orden de compra aparte:':'Son de Comunicación:', ...com.map(linea), totalDe(com), ''] : []),
+    'Cuando estén cargados avisanos y subimos la factura.', '',
+    'Muchas gracias,', ...(firma?[firma]:[]), 'Somos Magma',
+  ].join('\n')
+  const asunto=asuntoM??asuntoAuto, cuerpo=cuerpoM??cuerpoAuto
+  const elegidosDest=dests.filter(d=>d.sel).map(d=>d.mail)
+  // Si la agencia no tiene cargado a quién se le pide, se ofrece guardar el mail que se use ahora.
+  const candidato=!mailAg && agRow ? (elegidosDest[0]||'') : ''
+  const agregar=()=>{ const m=nuevo.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){ showToast('Mail inválido','err'); return } if(dests.find(d=>d.mail.toLowerCase()===m.toLowerCase())){ setNuevo(''); return } setDests(d=>[...d,{mail:m, nombre:'agregado a mano', sel:true}]); setNuevo('') }
+  async function enviar(){
+    if(!elegidos.length){ showToast('Tildá al menos un trabajo','err'); return }
+    if(!elegidosDest.length){ showToast('Elegí a quién se lo mandás','err'); return }
+    setSaving(true)
+    try{ const r=await fetch('/api/oc-pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agencia, to:elegidosDest, asunto, cuerpo, copiaAMi:copia,
+        trabajos:elegidos.map(x=>({presupuestoNum:nroDe(x), proyecto:x.p['Proyecto']||'', cliente:x.p['Cliente']||'', fechaEvento:x.p['Fecha Evento']||'', monto:Math.round(x.pendiente), aparte:esCom(x)}))})})
+      const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
+      if(recordar && candidato){ try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agRow['Nombre'], mailFact:candidato})}) }catch(e){} }
+      showToast(j.aviso || `Pedido enviado ✓ · ${elegidos.length} ${elegidos.length===1?'trabajo':'trabajos'} a ${elegidosDest.join(', ')}`, j.aviso?'err':undefined); onSent&&onSent(); onClose()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  const chk={display:'flex', gap:9, alignItems:'center', padding:'6px 0', cursor:'pointer', fontSize:12.5}
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:620, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Pedir orden de compra · {agencia}</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>Un mail con los trabajos hechos, para que los carguen en su sistema. La factura no va en este mail.</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
+          <label style={{...lblV2, marginBottom:0}}>Trabajos · {elegidos.length} de {orden.length} · {fmt(suma(elegidos))} + IVA</label>
+          <span style={{display:'flex', gap:6}}><button onClick={()=>setSel(orden.map(nroDe))} style={miniBtn}>Todos</button><button onClick={()=>setSel([])} style={miniBtn}>Ninguno</button></span>
+        </div>
+        <div style={{maxHeight:210, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:10, padding:'2px 12px', margin:'8px 0 16px'}}>
+          {orden.map((x,i)=>{ const n=nroDe(x), on=sel.includes(n), oc=ocDe[n]; return (
+            <label key={n} style={{...chk, borderTop:i===0?'none':`1px solid ${T.border}`}}>
+              <input type="checkbox" checked={on} onChange={()=>setSel(s=>on?s.filter(v=>v!==n):[...s,n])}/>
+              <span style={{flex:1, minWidth:0}}><span style={{display:'block', color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||'—'}</span><span style={{display:'block', fontSize:11, color:T.ink3}}>#{n} · {x.p['Cliente']||''} · {semEvento(x.p['Fecha Evento']).fecha}{esCom(x) && <span style={{color:T.ink2, fontWeight:600}}> · orden de compra aparte</span>}{oc && <span style={{color:T.warn, fontWeight:600}}> · ya se pidió el {oc.fecha}</span>}</span></span>
+              <span style={{fontFamily:MONO, fontSize:12, color:on?T.ink:T.ink3}}>{fmt(x.pendiente)}</span>
+            </label> )})}
+        </div>
+        <label style={lblV2}>Para</label>
+        <div style={{border:`1px solid ${T.border}`, borderRadius:10, padding:'2px 12px', marginBottom:8}}>
+          {dests.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'9px 0'}}>{agencia} no tiene cargado a quién se le pide. Escribí el mail abajo y queda guardado para la próxima.</div>}
+          {dests.map((d,i)=><label key={d.mail} style={{...chk, borderTop:i===0?'none':`1px solid ${T.border}`}}>
+            <input type="checkbox" checked={!!d.sel} onChange={()=>setDests(a=>a.map((x,j)=>j===i?{...x,sel:!x.sel}:x))}/>
+            <span style={{flex:1, minWidth:0}}><span style={{color:T.ink}}>{d.mail}</span>{d.nombre && <span style={{color:T.ink3}}> · {d.nombre}</span>}</span>
+          </label>)}
+        </div>
+        <div style={{display:'flex', gap:8, marginBottom:8}}>
+          <input value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); agregar() } }} placeholder="Agregar otro mail" style={{...inpV2, flex:1}}/>
+          <button onClick={agregar} style={{...miniBtn, padding:'8px 14px'}}>Agregar</button>
+        </div>
+        {candidato && <label style={{...chk, color:T.ink2, padding:'2px 0 8px'}}><input type="checkbox" checked={recordar} onChange={e=>setRecordar(e.target.checked)}/> Guardar {candidato} como el mail de administración de {agRow['Nombre']}</label>}
+        <label style={{...chk, color:T.ink2, padding:'2px 0 14px'}}><input type="checkbox" checked={copia} onChange={e=>setCopia(e.target.checked)}/> Mandarme una copia (la respuesta te llega a vos y a administración)</label>
+        <label style={lblV2}>Asunto</label>
+        <input value={asunto} onChange={e=>setAsuntoM(e.target.value)} style={{...inpV2, marginBottom:12}}/>
+        <label style={lblV2}>Mensaje{cuerpoM!==null && <button onClick={()=>{setCuerpoM(null); setAsuntoM(null)}} style={{border:'none', background:'none', color:T.brand, cursor:'pointer', fontSize:11, fontWeight:600, textTransform:'none', letterSpacing:0, marginLeft:8}}>volver al texto armado</button>}</label>
+        <textarea value={cuerpo} onChange={e=>setCuerpoM(e.target.value)} rows={13} style={{...inpV2, fontFamily:'inherit', lineHeight:1.5, resize:'vertical'}}/>
+        {cuerpoM!==null && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Editaste el mensaje: si cambiás los trabajos tildados, la lista del mensaje no se actualiza sola.</div>}
+      </div>
+      <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>
+        <span style={{flex:1, fontSize:11.5, color:T.ink3}}>Queda anotado en la solapa OC_PEDIDOS.</span>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={enviar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Enviando…':`Mandar el pedido · ${elegidos.length} ${elegidos.length===1?'trabajo':'trabajos'}`}</button>
+      </div>
+    </div>
+  </div>
 }
 
 function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, initialExtras=[], onClose, onCreada, showToast}){
