@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
   // medio = CÓMO se pagó (Efectivo, Transferencia…): va a la columna "Medio de pago". Antes este endpoint no la
   // escribía y había que completarla a mano en el sheet.
-  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago, medio } = req.body
+  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago, medio, rubro, subrubro, nroTrabajo } = req.body
   monto = numv(monto)
   moneda = String(moneda || 'ARS').toUpperCase()
   const esUnico = recurrencia === 'unico'
@@ -48,6 +48,12 @@ export default async function handler(req, res) {
     set('Año carga', gAnio)
     set('Tipo', tipo || (esUnico ? 'impuesto' : 'gasto'))
     if (medio) set('Medio de pago', String(medio).trim())
+    // Rubro y subrubro son los de la solapa RUBROS (la lista única). N° trabajo: si el gasto fue para un trabajo.
+    // Con apóstrofo para que el sheet no lo tome como número ni como fórmula.
+    const comoTexto = v => { const s = String(v ?? '').trim(); return s ? `'${s}` : '' }
+    if (rubro) set('Rubro', comoTexto(rubro))
+    if (subrubro) set('Subrubro', comoTexto(subrubro))
+    if (nroTrabajo) set('N° trabajo', comoTexto(nroTrabajo))
     // Marcar pagado de una (opcional)
     if (pagado) {
       set('Pagado', 'SI')
@@ -59,7 +65,7 @@ export default async function handler(req, res) {
       set('Cuenta pago', '')
     }
 
-    const ap = await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!A:T', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
+    const ap = await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!A:W', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
     const filaNum = (() => { const m = String(ap.data.updates?.updatedRange || '').match(/![A-Z]+(\d+)/); return m ? parseInt(m[1]) : null })()
 
     // "Mes carga" se reescribe como TEXTO con RAW. Si va como número y la celda quedó con
@@ -72,7 +78,11 @@ export default async function handler(req, res) {
       } catch (e) { console.error('mes carga como texto:', e.message) }
     }
 
-    // Descontar de la cuenta si se pagó
+    // Descontar de la cuenta si se pagó.
+    // PERO si el pago es de un día ANTERIOR al último saldo cargado desde el banco (o contado en la caja), no se
+    // resta: ese saldo ya lo tiene descontado. Ej: el 1/10 se actualiza Efectivo y después se anota un pago del
+    // 30/9. Restarlo otra vez dejaría la caja $315.000 abajo de lo que hay.
+    let aviso = ''
     if (pagado && cuentaPago) {
       try {
         const rC = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:N' })
@@ -80,7 +90,13 @@ export default async function handler(req, res) {
         const iN = ch.indexOf('Nombre'), iArs = ch.indexOf('Saldo actual'), iUsd = ch.indexOf('Saldo USD'), iF = ch.indexOf('Última actualización')
         const idx = rows.findIndex((row, i) => i > 0 && String(row[iN] || '').trim().toLowerCase() === String(cuentaPago).trim().toLowerCase())
         const col = moneda === 'USD' ? iUsd : iArs
-        if (idx > 0 && col >= 0) {
+        const iHist = ch.indexOf('Hist saldos')
+        const aFecha = s => { const m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null }
+        const ultimaLinea = idx > 0 && iHist >= 0 ? String(rows[idx][iHist] || '').trim().split('\n').filter(Boolean).pop() || '' : ''
+        const chequeado = aFecha(ultimaLinea), delPago = aFecha(hoy)
+        if (idx > 0 && chequeado && delPago && delPago < chequeado) {
+          aviso = `No se restó de ${cuentaPago}: su saldo se actualizó el ${chequeado.getDate()}/${chequeado.getMonth() + 1}, después de este pago, así que ya lo tiene descontado.`
+        } else if (idx > 0 && col >= 0) {
           const nuevo = numv(rows[idx][col]) - monto
           const ups = [{ range: `CUENTAS!${colLetra(col)}${idx + 1}`, values: [[nuevo]] }]
           if (iF >= 0) ups.push({ range: `CUENTAS!${colLetra(iF)}${idx + 1}`, values: [[hoy]] })
@@ -90,10 +106,10 @@ export default async function handler(req, res) {
     }
 
     try {
-      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'gasto-nuevo', 'GASTOS_FIJOS', concepto, `${esUnico?'único':'mensual'} ${moneda} ${monto} ${esUnico?`(${gMes}/${gAnio})`:''}${pagado?` · PAGADO ${cuentaPago}`:''}`]] } })
+      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, 'gasto-nuevo', 'GASTOS_FIJOS', concepto, `${esUnico?'único':'mensual'} ${moneda} ${monto} ${esUnico?`(${gMes}/${gAnio})`:''}${pagado?` · PAGADO ${cuentaPago}`:''}${rubro?` · ${rubro}${subrubro?' / '+subrubro:''}`:''}${nroTrabajo?` · trabajo #${nroTrabajo}`:''}${aviso?' · sin tocar el saldo':''}`]] } })
     } catch (e) {}
 
-    res.json({ ok: true, fila: filaNum })
+    res.json({ ok: true, fila: filaNum, aviso })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })

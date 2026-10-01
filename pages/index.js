@@ -4973,13 +4973,24 @@ function Caja({data, onRefresh, showToast, goTo}){
   // Tres datos y listo: qué, cuánto y de dónde salió. La fecha es hoy y el rubro se aprende de la vez anterior.
   // Lo que sale por débito o con tarjeta NO se carga acá: entra cuando se sube el resumen.
   const hoyISO=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-  const [qa,setQa]=useState({concepto:'', monto:'', cuenta:'', rubro:'', fecha:hoyISO}), [qaBusy,setQaBusy]=useState(false)
+  const [qa,setQa]=useState({concepto:'', monto:'', cuenta:'', rubro:'', trabajo:'', fecha:hoyISO}), [qaBusy,setQaBusy]=useState(false)
   // Traba contra el Enter repetido: el estado tarda un render en avisar que ya se está guardando, y en ese
   // rato un segundo Enter cargaría el pago dos veces (y restaría dos veces de la cuenta).
   const qaLock=useRef(false)
   // Lo que ya se pagó así alguna vez: sirve para sugerir el nombre y traer el monto, la cuenta y el rubro de la última vez.
-  const previos={}; (data.gastosFijos||[]).forEach(g=>{ if(!/[uú]nico/i.test(String(g['Frecuencia']||''))) return; const k=normTxt(g['Concepto']); if(k) previos[k]={concepto:String(g['Concepto']).trim(), monto:parseMonto(g['Monto']), cuenta:String(g['Cuenta pago']||'').trim(), rubro:String(g['Categoria']||'').trim()} })
-  const rubros=[...new Set([...(data.gastosFijos||[]).map(g=>String(g['Categoria']||'').trim()).filter(Boolean), 'Otros'])]
+  const previos={}; (data.gastosFijos||[]).forEach(g=>{ if(!/[uú]nico/i.test(String(g['Frecuencia']||''))) return; const k=normTxt(g['Concepto']); if(k) previos[k]={concepto:String(g['Concepto']).trim(), monto:parseMonto(g['Monto']), cuenta:String(g['Cuenta pago']||'').trim(), rubro:String(g['Rubro']||'').trim() ? `${String(g['Rubro']).trim()}|${String(g['Subrubro']||'').trim()}` : ''} })
+  // Los rubros salen de la solapa RUBROS: UNA sola lista para todo (tarjetas, efectivo, transferencias). Cada renglón
+  // trae "qué incluye", y con eso se sugiere el rubro según lo que se escribe: nadie tiene que saber si la limpieza
+  // es "Operativos" u "Oficina". Lo personal de los socios no se carga acá: va por "Sacó plata".
+  // Palabras enteras y sin plural ("equipos" = "equipo"), de 3 letras o más: así "IVA" encuentra Impuestos y no "productIVIdad".
+  const palabrasDe=t=>normTxt(t).split(/[^a-z0-9ñ]+/).filter(w=>w.length>=3).map(w=>w.length>4?w.replace(/(es|s)$/,''):w)
+  const rubros=(data.rubros||[]).filter(r=>!/^personal/i.test(r.rubro)).map(r=>({...r, key:`${r.rubro}|${r.subrubro}`, label:r.subrubro?`${r.rubro} · ${r.subrubro}`:r.rubro, pal:new Set(palabrasDe(`${r.rubro} ${r.subrubro} ${r.incluye}`))}))
+  const sugerirRubro=texto=>{ const pal=palabrasDe(texto); if(!pal.length) return ''
+    let mejor='', pts=0; rubros.forEach(r=>{ const p=pal.filter(w=>r.pal.has(w)).length; if(p>pts){ pts=p; mejor=r.key } }); return mejor }
+  // El rubro contable de siempre (la columna Categoria) se deduce del rubro: lo siguen usando el detalle y los números de Mariana.
+  const categoriaDe=rubro=>/sueldo/i.test(rubro)?'Sueldos':/impuesto/i.test(rubro)?'Impuestos':/bancari|financ/i.test(rubro)?'Financieros':'Operativos'
+  // Trabajos recientes, para atar un gasto de Producción a su trabajo (el alquiler de equipos de un rodaje le baja la ganancia a ESE trabajo).
+  const trabajosRec=(data.proyectos||[]).filter(p=>{ const d=parseD(p['Fecha Evento']); if(!d) return false; const dias=(now-d)/864e5; return dias>-20 && dias<75 }).sort((a,b)=>parseD(b['Fecha Evento'])-parseD(a['Fecha Evento'])).map(p=>`#${String(p['N° presupuesto']||'').trim()} · ${[p['Cliente'],p['Proyecto']].filter(Boolean).join(' · ')}`)
   const cel=useEsCelular()
   const c=calcularCaja(data,{mes:mesIdx, anio, hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
   const t=c.totales, seguro=modo==='seguro'
@@ -4989,7 +5000,9 @@ function Caja({data, onRefresh, showToast, goTo}){
   const cuentaOpts=c.cuentas.filter(x=>x.activa&&!x.usd).map(x=>x.nombre)
   const cuentaDeItem=i=>cuentaDe[i.id]??i.cuenta
   const qaCuenta=qa.cuenta || cuentaOpts.find(n=>/efectivo/i.test(n)) || cuentaOpts[0] || ''
-  const qaRubro=qa.rubro || previos[normTxt(qa.concepto)]?.rubro || (rubros.includes('Operativos')?'Operativos':rubros[0]||'Otros')
+  // Rubro: el que se eligió a mano; si no, el de la última vez que se pagó eso; si no, el que sugieren las palabras.
+  const qaRubro=qa.rubro || previos[normTxt(qa.concepto)]?.rubro || sugerirRubro(qa.concepto)
+  const qaRub=rubros.find(r=>r.key===qaRubro)||null, esDeTrabajo=!!qaRub && /^producci/i.test(normTxt(qaRub.rubro))
   // Al escribir algo que ya se pagó antes, trae el monto y la cuenta de esa vez (si todavía no se tipeó un monto).
   const qaConcepto=v=>setQa(q=>{ const p=previos[normTxt(v)]; return p && !q.monto ? {...q, concepto:v, monto:numAMontoAR(p.monto), cuenta:cuentaOpts.includes(p.cuenta)?p.cuenta:q.cuenta, rubro:p.rubro||q.rubro} : {...q, concepto:v} })
   async function anotarPago(){
@@ -5000,9 +5013,9 @@ function Caja({data, onRefresh, showToast, goTo}){
     if(!qaCuenta){ showToast('Elegí de dónde salió la plata','err'); return }
     const [Y,M,D]=(qa.fecha||hoyISO).split('-').map(Number)
     qaLock.current=true; setQaBusy(true)
-    try{ const r=await fetch('/api/gasto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categoria:qaRubro, concepto, monto, moneda:'ARS', recurrencia:'unico', diaPago:D, mes:M, anio:Y, pagado:true, cuentaPago:qaCuenta, fechaPago:`${D}/${M}/${Y}`, medio:/efectivo/i.test(qaCuenta)?'Efectivo':'Transferencia', tipo:'gasto'})})
+    try{ const r=await fetch('/api/gasto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categoria:categoriaDe(qaRub?.rubro||''), rubro:qaRub?.rubro||'', subrubro:qaRub?.subrubro||'', nroTrabajo:esDeTrabajo?((qa.trabajo||'').match(/\d{3,}/)||[''])[0]:'', concepto, monto, moneda:'ARS', recurrencia:'unico', diaPago:D, mes:M, anio:Y, pagado:true, cuentaPago:qaCuenta, fechaPago:`${D}/${M}/${Y}`, medio:/efectivo/i.test(qaCuenta)?'Efectivo':'Transferencia', tipo:'gasto'})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); qaLock.current=false; setQaBusy(false); return }
-      showToast(`Anotado ✓ · ${concepto} · ${fmt(monto)} desde ${qaCuenta}`); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', fecha:hoyISO}); if(onRefresh) await onRefresh()
+      showToast(`Anotado ✓ · ${concepto} · ${fmt(monto)} desde ${qaCuenta}${qaRub?` · ${qaRub.label}`:''}${j.aviso?` · ${j.aviso}`:''}`); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', trabajo:'', fecha:hoyISO}); if(onRefresh) await onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
     qaLock.current=false; setQaBusy(false)
   }
@@ -5106,7 +5119,8 @@ function Caja({data, onRefresh, showToast, goTo}){
       <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:11.5, color:T.ink3}}>
         <span>Para lo que pagás en efectivo o con una transferencia suelta. Lo que sale por débito o con tarjeta entra solo al subir el resumen.</span>
         <span style={{flex:1}}/>
-        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>{rubros.map(r=><option key={r} value={r}>{r}</option>)}</select></label>
+        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} title={qaRub?.incluye||'Los rubros son los de la solapa RUBROS'} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px ${qaRubro?'solid':'dashed'} ${qaRubro?T.border:T.warn}`, background:T.surface, color:qaRubro?T.ink2:T.warn, cursor:'pointer', maxWidth:230}}>{!qaRubro && <option value="">elegir rubro</option>}{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
+        {esDeTrabajo && <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>¿Para qué trabajo? <input list="caja-trabajos" value={qa.trabajo} onChange={e=>setQa(q=>({...q,trabajo:e.target.value}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="N° o cliente" style={{fontSize:11.5, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, width:190, fontFamily:'inherit', outline:'none'}}/><datalist id="caja-trabajos">{trabajosRec.map(t=><option key={t} value={t}/>)}</datalist></label>}
         <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
       </div>
     </div>
