@@ -18,6 +18,7 @@ import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
 import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
+import { calcularCaja } from '../lib/caja.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -96,6 +97,8 @@ const NAV = [
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
   {id:'freelancers',label:'Freelancers'},
+  // Caja = mirar y pagar (lo que entra, lo que sale, si alcanza). Egresos = cargar (gastos, resúmenes, cuenta de socios).
+  {id:'caja',label:'Caja'},
   {id:'egresos',label:'Egresos'},
   {id:'agencias',label:'Agencias'},
   {id:'clientes',label:'Clientes'},
@@ -284,6 +287,7 @@ export default function V2() {
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast}/>
+            : mod==='caja' ? <Caja data={data} onRefresh={()=>load(true)} showToast={showToast} goTo={goTo}/>
             : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
@@ -2958,9 +2962,13 @@ function msgUpload(j, base='PDF subido ✓'){
   const agLista=Object.values(agMap).map(a=>{
     const venc=a.deben.filter(f=>(diffVenc(f)??99)<0)
     const vencido=venc.reduce((s,f)=>s+saldoF(f),0), debe=a.deben.reduce((s,f)=>s+saldoF(f),0)
-    // Lo que prometió la agencia cuando se le reclamó: se anota una vez y queda en todas sus facturas reclamadas.
-    const dato=campo=>a.deben.map(f=>String(f[campo]||'').trim()).find(Boolean)||''
-    return {...a, razones:[...a.razones], venc, vencido, enPlazo:debe-vencido, sinFactMonto:a.sinFact.reduce((s,x)=>s+x.pendiente,0), sinEnviar:a.deben.filter(f=>!enviadaF(f)), atraso:mediana(a.atrasos), promesa:dato('Prometió pagar'), notaCob:dato('Nota cobranza')}
+    // Lo que prometió pagar va POR FACTURA: en Ostara cada factura tiene su tiempo. La agencia muestra la
+    // fecha más próxima. "Misma fecha para todas" queda para cuando de verdad entra todo junto (Telefe:
+    // un trabajo partido en tres facturas) y solo muestra una fecha si todas las que abarca la comparten.
+    const proms=a.deben.map(f=>parseD(f['Prometió pagar'])).filter(Boolean).sort((x,y)=>x-y)
+    const grupoProm=venc.length?venc:a.deben
+    const comun=campo=>{ const v=[...new Set(grupoProm.map(f=>String(f[campo]||'').trim()))]; return v.length===1?v[0]:'' }
+    return {...a, razones:[...a.razones], venc, vencido, enPlazo:debe-vencido, sinFactMonto:a.sinFact.reduce((s,x)=>s+x.pendiente,0), sinEnviar:a.deben.filter(f=>!enviadaF(f)), atraso:mediana(a.atrasos), promProx:proms[0]||null, nProm:proms.length, promesa:comun('Prometió pagar'), notaCob:comun('Nota cobranza')}
   }).sort((a,b)=>(b.vencido-a.vencido)||((b.enPlazo+b.sinFactMonto)-(a.enPlazo+a.sinFactMonto)))
   const ql=q.trim().toLowerCase(), tiene=v=>String(v||'').toLowerCase().includes(ql)
   const agFiltradas=agLista.filter(a=>{
@@ -3041,12 +3049,13 @@ function msgUpload(j, base='PDF subido ✓'){
         // El reclamo sale por razón social: si lo vencido es de varias, un botón por cada una.
         const razonesVenc=[...new Set(a.venc.map(claveAg))].filter(Boolean)
         // La fecha que prometió: verde si todavía no llegó, roja si ya pasó y sigue debiendo.
-        const prom=parseD(a.promesa), promPaso=!!prom && prom<hoy0
+        const prom=a.promProx, promPaso=!!prom && prom<hoy0
+        const promTodas=a.nProm===a.deben.length && new Set(a.deben.map(f=>String(f['Prometió pagar']||'').trim())).size===1
         return <div key={a.nombre} style={{borderTop:i===0?'none':`1px solid ${T.border}`}}>
           <div onClick={()=>setAgOpen(o=>({...o,[a.nombre]:!ab}))} style={{display:'grid', gridTemplateColumns:cel?'repeat(3,minmax(0,1fr))':'minmax(0,1.6fr) 125px 125px 125px 22px', gap:10, padding:'13px 18px', alignItems:'center', cursor:'pointer', background:ab?T.surfaceAlt:'transparent'}}>
             <span style={{minWidth:0, gridColumn:cel?'1 / -1':'auto'}}>
               <span style={{display:'block', fontSize:14, fontWeight:600, color:T.ink}}>{a.nombre}{a.razones.length>1 && <span style={{fontSize:10.5, fontWeight:600, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, padding:'2px 8px', borderRadius:20, marginLeft:8}}>{a.razones.length} razones sociales</span>}</span>
-              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2}}>{[a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:'', a.sinFact.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:'', paga].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}{prom && <span style={{color:promPaso?T.brand:T.pos, fontWeight:600}}> · prometió pagar el {prom.getDate()}/{prom.getMonth()+1}{promPaso?' y no entró':''}</span>}</span>
+              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2}}>{[a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:'', a.sinFact.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:'', paga].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}{prom && <span style={{color:promPaso?T.brand:T.pos, fontWeight:600}}> · {promTodas?'prometió pagar el':`${a.nProm} de ${a.deben.length} con fecha prometida, la próxima el`} {prom.getDate()}/{prom.getMonth()+1}{promPaso?' y no entró':''}</span>}</span>
             </span>
             <Num l="Vencido" v={a.vencido} c={T.brand}/><Num l="En plazo" v={a.enPlazo} c={T.ink}/><Num l="Falta facturar" v={a.sinFactMonto} c={T.warn}/>
             {!cel && <span style={{fontSize:10, color:T.ink3, textAlign:'right'}}>{ab?'▼':'▶'}</span>}
@@ -3060,22 +3069,26 @@ function msgUpload(j, base='PDF subido ✓'){
                 await lote(a.sinEnviar, {'Fc Enviada':true}, `enviadas ${a.nombre}`, `${a.nombre}: ${n} ${n===1?'factura marcada como enviada':'facturas marcadas como enviadas'} ✓`, f=>({'Fecha enviada':String(f['Fecha emision']||'').trim()||hoyStr})) }}
                 style={{padding:'8px 14px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12.5, fontWeight:600, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}} title="Si ya salieron por mail directo o WhatsApp, se marcan todas de una">Ya salieron: marcar {a.sinEnviar.length===1?'1 como enviada':`las ${a.sinEnviar.length} como enviadas`}</button>}
             </div>}
-            {/* Lo que prometió cuando se le reclamó. Se anota una vez y queda en lo vencido de la agencia
-                (o en todo lo que debe, si no tiene nada vencido). Caja va a contar esa plata en esa fecha. */}
-            {hayPromesa && a.deben.length>0 && (()=>{ const dr=promDraft[a.nombre]||{}, fechaV=dr.fecha!==undefined?dr.fecha:aISO(a.promesa), notaV=dr.nota!==undefined?dr.nota:a.notaCob
+            {/* La misma fecha para varias facturas de una: sirve cuando entra todo junto (Telefe, un trabajo en tres
+                facturas). Se aplica a lo vencido de la agencia, o a todo lo que debe si no tiene nada vencido.
+                Cuando cada factura tiene su tiempo (Ostara), la fecha se pone en cada fila con "Prometió…". */}
+            {hayPromesa && a.deben.length>1 && (()=>{ const dr=promDraft[a.nombre]||{}, fechaV=dr.fecha!==undefined?dr.fecha:aISO(a.promesa), notaV=dr.nota!==undefined?dr.nota:a.notaCob
               const cambio=fechaV!==aISO(a.promesa) || notaV.trim()!==a.notaCob
-              const conDato=a.deben.filter(f=>String(f['Prometió pagar']||'').trim()||String(f['Nota cobranza']||'').trim())
-              const destino=[...new Set([...(a.venc.length?a.venc:a.deben), ...conDato])]
+              const destino=a.venc.length?a.venc:a.deben
               const escribir=v=>setPromDraft(o=>({...o,[a.nombre]:{...(o[a.nombre]||{}), ...v}}))
               const guardar=async()=>{ const ok=await lote(destino, {'Prometió pagar':deISO(fechaV), 'Nota cobranza':notaV.trim()}, `promesa ${a.nombre}`, fechaV?`${a.nombre}: prometió pagar el ${deISO(fechaV)} ✓`:`${a.nombre}: seguimiento guardado ✓`); if(ok) setPromDraft(o=>{ const n={...o}; delete n[a.nombre]; return n }) }
               return <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'12px 0 2px'}}>
-                <span style={{fontSize:12, color:T.ink2, fontWeight:600}}>Prometió pagar el</span>
+                <span style={{fontSize:12, color:T.ink2, fontWeight:600}} title="Pone la misma fecha en varias facturas de una. Para una sola factura, usá «Prometió…» en su fila.">Misma fecha para {a.venc.length===1?'la vencida':a.venc.length?`las ${a.venc.length} vencidas`:`las ${a.deben.length} facturas`}</span>
                 <input type="date" value={fechaV} onChange={e=>escribir({fecha:e.target.value})} style={{padding:'6px 9px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
                 <input value={notaV} onChange={e=>escribir({nota:e.target.value})} onKeyDown={e=>{ if(e.key==='Enter'&&cambio) guardar() }} placeholder="Con quién hablaste y qué dijo" style={{flex:'1 1 220px', minWidth:160, padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
                 {cambio && <button disabled={!!loteBusy} onClick={guardar} style={{padding:'7px 14px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:700, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}}>{loteBusy?'Guardando…':'Guardar'}</button>}
               </div> })()}
             {a.deben.length>0 && <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, margin:'14px 0 2px'}}>Te debe · {fmt(a.vencido+a.enPlazo)}</div>}
             {[...a.deben].sort((x,y)=>(diffVenc(x)??99)-(diffVenc(y)??99)).map((f,j)=>{ const d=diffVenc(f), r=fechaRef(f), dd=r?`${r.d.getDate()}/${r.d.getMonth()+1}`:'', lbl=!r?'sin fecha':r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida', tot=parseMonto(f['Precio FINAL']), k=claveAg(f)
+              // La fecha que prometió para ESTA factura (cada una tiene la suya) y el editor que se abre en la fila.
+              const pf=parseD(f['Prometió pagar']), pfPaso=!!pf && pf<hoy0, notaF=String(f['Nota cobranza']||'').trim(), keyP='f'+f.__row, drP=promDraft[keyP]
+              const cerrarP=()=>setPromDraft(o=>{ const n={...o}; delete n[keyP]; return n })
+              const guardarP=async fecha=>{ const ok=await lote([f], {'Prometió pagar':deISO(fecha), 'Nota cobranza':String(drP?.nota||'').trim()}, `promesa #${f['N° Presupuesto']}`, fecha?`#${f['N° Presupuesto']}: prometió pagar el ${deISO(fecha)} ✓`:`#${f['N° Presupuesto']}: fecha prometida borrada ✓`); if(ok) cerrarP() }
               return <div key={'d'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
                 <span style={{fontSize:11.5, fontWeight:d!=null&&d<0?700:500, color:d!=null&&d<0?T.brand:d!=null&&d<7?T.warn:T.ink2, gridColumn:cel?'1 / -1':'auto'}}>{d!=null&&d<0?`${-d}d atrasada`:d===0?'vence hoy':`${lbl} ${dd}`}</span>
                 <span style={{minWidth:0}}>
@@ -3086,9 +3099,18 @@ function msgUpload(j, base='PDF subido ✓'){
                 <span style={{display:'flex', gap:5, justifyContent:'flex-end', gridColumn:cel?'1 / -1':'auto'}}>
                   <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>
                   <button onClick={()=>setReclamo({agencia:k, fila:f.__row, nro:String(f['N° Presupuesto']||'').trim()})} style={{...miniBtn, padding:'6px 9px', ...(d!=null&&d<0?{color:T.brand, borderColor:`${T.brand}66`, fontWeight:600}:{})}} title="Reclamar esta factura por mail (junto con lo demás que deba)">Reclamar</button>
+                  {hayPromesa && <button onClick={()=>drP?cerrarP():setPromDraft(o=>({...o,[keyP]:{fecha:aISO(f['Prometió pagar']), nota:notaF}}))} style={{...miniBtn, padding:'6px 9px', ...(pf?{color:pfPaso?T.brand:T.pos, borderColor:`${pfPaso?T.brand:T.pos}66`, fontWeight:600}:{})}} title={pf?`Prometió pagar esta factura el ${f['Prometió pagar']}${notaF?` · ${notaF}`:''}. Tocá para cambiarlo.`:'Anotar la fecha que prometió para ESTA factura'}>{pf?`Prometió ${pf.getDate()}/${pf.getMonth()+1}`:'Prometió…'}</button>}
                   <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar la factura por mail (desde la app)">✉</button>
                   {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>}
                 </span>
+                {drP && <div style={{gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'9px 11px', borderRadius:9, background:T.surfaceAlt}}>
+                  <span style={{fontSize:12, color:T.ink2, fontWeight:600}}>Esta factura: prometió pagar el</span>
+                  <input type="date" value={drP.fecha} onChange={e=>setPromDraft(o=>({...o,[keyP]:{...o[keyP], fecha:e.target.value}}))} style={{padding:'6px 9px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
+                  <input value={drP.nota} onChange={e=>setPromDraft(o=>({...o,[keyP]:{...o[keyP], nota:e.target.value}}))} onKeyDown={e=>{ if(e.key==='Enter') guardarP(drP.fecha) }} placeholder="Con quién hablaste y qué dijo" style={{flex:'1 1 200px', minWidth:150, padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
+                  <button disabled={!!loteBusy} onClick={()=>guardarP(drP.fecha)} style={{padding:'7px 14px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:700, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}}>{loteBusy?'Guardando…':'Guardar'}</button>
+                  {pf && <button disabled={!!loteBusy} onClick={()=>guardarP('')} style={{...miniBtn, padding:'6px 10px'}}>Quitar la fecha</button>}
+                  <button onClick={cerrarP} style={{...miniBtn, padding:'6px 10px'}}>Cancelar</button>
+                </div>}
               </div> })}
             {a.sinFact.length>0 && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', margin:'16px 0 4px'}}>
               <span style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Falta facturar · {fmt(a.sinFactMonto)} sin IVA</span>
@@ -4930,6 +4952,178 @@ function MovimientoSocio({socio, tipo, onClose, onHecho, showToast}){
       </div>
     </div>
   </div>
+}
+
+// CAJA: lo que entra y lo que sale en el mes, semana a semana, contra el saldo de las cuentas.
+// Junta en una pantalla lo que antes había que mirar en cuatro (Egresos, Facturación, Pagos Staff
+// y las cuentas). Acá se MIRA y se PAGA; la carga (un gasto nuevo, un resumen de tarjeta, la cuenta
+// de socios) sigue en Egresos. El cálculo vive en lib/caja.mjs para que todos den el mismo número.
+function Caja({data, onRefresh, showToast, goTo}){
+  const now=new Date()
+  const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
+  // Cómo contar lo que entra: 'seguro' deja afuera lo que vence de agencias que hoy ya deben algo vencido.
+  const [modo,setModo]=useState('seguro')
+  const [filtro,setFiltro]=useState('todo'), [cuentaSel,setCuentaSel]=useState(''), [abiertos,setAbiertos]=useState({}), [cuentaDe,setCuentaDe]=useState({}), [busy,setBusy]=useState('')
+  const cel=useEsCelular()
+  const c=calcularCaja(data,{mes:mesIdx, anio, hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
+  const t=c.totales, seguro=modo==='seguro'
+  const fm=n=>(n<0?'−':'')+fmt(n)
+  const DIAS_SEM=['dom','lun','mar','mié','jue','vie','sáb']
+  const hoyDia=c.esMesActual?c.hoy0.getDate():null
+  const cuentaOpts=c.cuentas.filter(x=>x.activa&&!x.usd).map(x=>x.nombre)
+  const cuentaDeItem=i=>cuentaDe[i.id]??i.cuenta
+  const mover=d=>{ let m=mesIdx+d, a=anio; if(m<1){m=12;a--} if(m>12){m=1;a++} setMesIdx(m); setAnio(a); setAbiertos({}) }
+
+  // Un clic: marca pagado en el mes que se está mirando, con la cuenta elegida, y la cuenta queda guardada para el mes que viene.
+  async function pagar(i, pagado){
+    const cuenta=cuentaDeItem(i), esDebito=i.tipo==='debito'
+    if(pagado && !cuenta && !esDebito){ showToast(`Elegí de qué cuenta sale ${i.nombre}`,'err'); return }
+    const fecha=c.esMesActual ? `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}` : `${i.dia||15}/${mesIdx}/${anio}`
+    setBusy(i.id)
+    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hoja:i.hoja, fila:i.fila, pagado, tipoPago:'total', cuentaPago:esDebito?undefined:cuenta, fechaPago:pagado?fecha:'', mesPagoKey:i.hoja==='GASTOS_FIJOS'?i.mesPagoKey:undefined})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setBusy(''); return }
+      showToast(!pagado?(esDebito?`${i.nombre}: quedó sin marcar`:`${i.nombre}: quedó sin pagar y la plata volvió a ${cuenta}`):esDebito?`${i.nombre}: marcado como debitado ✓ (no toca el saldo: ya está en el del banco)`:`${i.nombre}: pagado desde ${cuenta} ✓`); if(onRefresh) await onRefresh()
+    }catch(e){ showToast('Error de conexión','err') }
+    setBusy('')
+  }
+
+  // Lo que entra, agrupado por semana (una fila por semana con sus facturas adentro)
+  const cobrosDe=s=>c.cobros.filter(x=>x.dia!==null && x.dia>=s.desde && x.dia<=s.hasta).sort((a,b)=>a.dia-b.dia)
+  const pasa=i=>(filtro==='todo'||i.tipo===filtro||(filtro==='mano'&&(i.tipo==='socios'||i.tipo==='falta')))&&(!cuentaSel||cuentaDeItem(i)===cuentaSel)
+  const bloques=[...c.semanas.map((s,k)=>({key:'s'+k, s, titulo:s.esActual?`Esta semana · del ${s.desde} al ${s.hasta}`:`Del ${s.desde} al ${s.hasta}`, items:c.items.filter(i=>i.dia!==null && i.dia>=s.desde && i.dia<=s.hasta), cobros:cobrosDe(s)})),
+    {key:'sin', s:null, titulo:'Sin día de pago cargado', items:c.items.filter(i=>i.dia===null), cobros:[]}]
+
+  const chip={fontSize:11.5, padding:'4px 10px', borderRadius:20, background:T.surfaceAlt, color:T.ink2, whiteSpace:'nowrap'}
+  const btnSec={fontSize:12, fontWeight:600, padding:'7px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer', whiteSpace:'nowrap'}
+  const seg=(val,cur,set,l)=><button key={val} onClick={()=>set(val)} style={{padding:'7px 12px', border:'none', borderLeft:`1px solid ${T.border}`, background:cur===val?T.ink:'transparent', color:cur===val?'#fff':T.ink2, fontSize:12.5, fontWeight:cur===val?600:500, cursor:'pointer'}}>{l}</button>
+  const grid=cel?'40px minmax(0,1fr)':'44px minmax(0,1fr) auto 118px 150px'
+
+  const Fila=i=>{ const ab=!!abiertos[i.id], vencido=!i.pagado && hoyDia!==null && i.dia!==null && i.dia<hoyDia && i.tipo!=='falta', cta=cuentaDeItem(i), ocupado=busy===i.id
+    let accion
+    if(i.pagado) accion=<span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{i.hoja==='GASTOS_FIJOS' && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
+    else if(i.tipo==='debito') accion=<span style={{display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}><span style={{fontSize:11.5, color:T.ink3}}>se debita solo</span><button disabled={ocupado} onClick={()=>pagar(i,true)} style={btnSec} title="Marcarlo cuando ya lo viste debitado en el banco. No resta de la cuenta: el débito ya está en el saldo que se copia del banco.">{ocupado?'Guardando…':'Ya se debitó'}</button></span>
+    else if(i.tipo==='socios') accion=<button onClick={()=>goTo&&goTo('egresos')} style={btnSec} title="El sueldo de los socios se anota con «Sacó plata» en la cuenta de socios (Egresos)">Cuenta de socios</button>
+    else if(i.tipo==='falta') accion=<button onClick={()=>goTo&&goTo('egresos')} style={btnSec}>Subir resumen</button>
+    else if(i.link) accion=<button onClick={()=>goTo&&goTo(i.link)} style={btnSec}>Ir a Pagos Staff</button>
+    else accion=<button disabled={ocupado} onClick={()=>pagar(i,true)} style={{fontSize:12, fontWeight:700, padding:'7px 16px', borderRadius:8, border:'none', background:T.brand, color:'#fff', cursor:ocupado?'default':'pointer', opacity:ocupado?0.6:1}}>{ocupado?'Guardando…':'Pagué'}</button>
+    let cuentaEl
+    if(i.tipo==='socios') cuentaEl=<span style={chip}>cuenta de socios</span>
+    else if(i.tipo==='mano' && i.hoja && !i.pagado) cuentaEl=<select value={cta} onChange={e=>setCuentaDe(o=>({...o,[i.id]:e.target.value}))} title="De qué cuenta sale. Queda guardada para el mes que viene." style={{fontSize:11.5, padding:'5px 8px', borderRadius:20, border:`1px ${cta?'solid':'dashed'} ${cta?T.border:T.warn}`, background:T.surface, color:cta?T.ink:T.warn, cursor:'pointer', maxWidth:170, outline:'none'}}>{!cta && <option value="">elegir cuenta</option>}{[...new Set([...cuentaOpts, ...(cta?[cta]:[])])].map(n=><option key={n} value={n}>{n}</option>)}</select>
+    else cuentaEl=cta?<span style={chip}>{cta}</span>:<span style={{...chip, background:'transparent', border:`1px dashed ${T.ink3}`, color:T.ink3}}>sin cuenta</span>
+    return <div key={i.id}>
+      <div style={{display:'grid', gridTemplateColumns:grid, gap:cel?9:12, alignItems:'center', padding:'11px 16px', borderTop:`1px solid ${T.border}`, opacity:i.pagado?0.6:1}}>
+        <div style={{textAlign:'center', lineHeight:1.1, alignSelf:cel?'start':'center'}}>{i.dia!==null ? <><div style={{fontFamily:MONO, fontSize:17, fontWeight:600, color:vencido?T.brand:T.ink}}>{i.dia}</div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.4, color:i.dia===hoyDia||vencido?T.brand:T.ink3, fontWeight:i.dia===hoyDia||vencido?700:400}}>{i.dia===hoyDia?'hoy':vencido?'venció':DIAS_SEM[new Date(anio,mesIdx-1,i.dia).getDay()]}</div></> : <div style={{fontFamily:MONO, color:T.ink3}}>·</div>}</div>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13.5, fontWeight:600, color:T.ink, textDecoration:i.pagado?'line-through':'none'}}>{i.nombre}{i.partes && <button onClick={()=>setAbiertos(o=>({...o,[i.id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver los ${i.partes.length}`}</button>}</div>
+          <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}><span style={{fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>{i.fuente}</span>{i.det && <span style={{color:i.tipo==='falta'?T.warn:T.ink2, fontWeight:i.tipo==='falta'?600:400}}> · {i.det}</span>}</div>
+          {cel && <div style={{display:'flex', gap:9, alignItems:'center', flexWrap:'wrap', marginTop:8}}>{cuentaEl}<span style={{fontFamily:MONO, fontSize:13.5, fontWeight:600}}>{i.tipo==='falta'?'—':fmt(i.monto)}</span>{accion}</div>}
+        </div>
+        {!cel && <div style={{justifySelf:'end'}}>{cuentaEl}</div>}
+        {!cel && <div style={{fontFamily:MONO, fontSize:13.5, fontWeight:500, textAlign:'right', textDecoration:i.pagado?'line-through':'none'}}>{i.tipo==='falta'?'—':fmt(i.monto)}</div>}
+        {!cel && <div style={{justifySelf:'end', textAlign:'right'}}>{accion}</div>}
+      </div>
+      {i.partes && ab && <div style={{padding:cel?'2px 16px 10px':'2px 16px 10px 72px', borderTop:`1px dashed ${T.border}`}}>{i.partes.map((p,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:12.5, padding:'5px 0', color:T.ink}}><span style={{minWidth:0}}>{p.n}</span><span style={{fontFamily:MONO, color:T.ink2}}>{fmt(p.m)}</span></div>)}</div>}
+    </div> }
+
+  const FilaEntra=(b)=>{ const id='in:'+b.key, ab=!!abiertos[id], tot=b.cobros.reduce((s,x)=>s+x.saldo,0), dud=b.cobros.filter(x=>!x.segura), totDud=dud.reduce((s,x)=>s+x.saldo,0)
+    return <div key={id}>
+      <div style={{display:'grid', gridTemplateColumns:grid, gap:cel?9:12, alignItems:'center', padding:'11px 16px', borderTop:`1px solid ${T.border}`, background:T.posSoft+'55'}}>
+        <div style={{textAlign:'center'}}><span style={{display:'inline-block', width:9, height:9, borderRadius:9, background:T.pos}}/></div>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>Cobros que entran<button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver ${b.cobros.length===1?'la factura':`las ${b.cobros.length}`}`}</button></div>
+          <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}><span style={{fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>Facturación</span> · {b.cobros.length} {b.cobros.length===1?'factura':'facturas'}{dud.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {fmt(totDud)} es de agencias que hoy vienen atrasadas</span>}</div>
+          {cel && <div style={{display:'flex', gap:9, alignItems:'center', flexWrap:'wrap', marginTop:8}}><span style={{fontFamily:MONO, fontSize:13.5, fontWeight:600, color:T.pos}}>+{fmt(tot)}</span><button onClick={()=>goTo&&goTo('facturacion')} style={btnSec}>Ir a cobrar</button></div>}
+        </div>
+        {!cel && <div style={{justifySelf:'end'}}><span style={{...chip, background:'transparent', border:`1px dashed ${T.ink3}`, color:T.ink3}}>se elige al cobrar</span></div>}
+        {!cel && <div style={{fontFamily:MONO, fontSize:13.5, fontWeight:600, textAlign:'right', color:T.pos}}>+{fmt(tot)}</div>}
+        {!cel && <div style={{justifySelf:'end'}}><button onClick={()=>goTo&&goTo('facturacion')} style={btnSec}>Ir a cobrar</button></div>}
+      </div>
+      {ab && <div style={{padding:cel?'2px 16px 10px':'2px 16px 10px 72px', borderTop:`1px dashed ${T.border}`}}>{b.cobros.map((x,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:12.5, padding:'5px 0', color:T.ink}}><span style={{minWidth:0}}>{x.dia}/{mesIdx} · {x.agencia}{x.cliente&&x.cliente!==x.agencia?` · ${x.cliente}`:''} · #{x.nro}{x.promesa?<span style={{color:T.pos, fontWeight:600}}> · prometió pagar</span>:null}{!x.segura?<span style={{color:T.warn, fontWeight:600}}> · viene atrasada</span>:null}</span><span style={{fontFamily:MONO, color:T.ink2}}>{fmt(x.saldo)}</span></div>)}</div>}
+    </div> }
+
+  const entra=seguro?t.entraSeguro:t.entra, termina=seguro?t.terminaSeguro:t.termina
+  const limite7=new Date(c.hoy0.getTime()+7*864e5)
+  return <>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap', marginBottom:18}}>
+      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Caja</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>Lo que entra y lo que sale, semana a semana</div></div>
+      <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+        <button onClick={()=>mover(-1)} style={navBtn}>←</button>
+        <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:118, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
+        <button onClick={()=>mover(1)} style={navBtn}>→</button>
+        <button onClick={()=>goTo&&goTo('egresos')} style={{...btnSec, padding:'9px 14px'}} title="Agregar un gasto, subir un resumen de tarjeta, la cuenta de socios">Cargar gastos y resúmenes</button>
+      </div>
+    </div>
+
+    <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':'repeat(4,minmax(0,1fr))', background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, marginBottom:18}}>
+      {[
+        {l:'Hoy en las cuentas', v:fm(t.cajaHoy), col:t.cajaHoy<0?T.brand:T.ink, s:`${c.cuentas.filter(x=>x.activa&&!x.usd).length} cuentas activas, en pesos`},
+        {l:'Entra en el mes', v:'+'+fmt(entra), col:T.pos, s:seguro?`${t.nEntraSeguro} facturas. Afuera quedan ${fmt(t.entra-t.entraSeguro)} de agencias atrasadas.`:`${t.nEntra} facturas, si todos pagan en fecha.`},
+        {l:'Falta que salga', v:fmt(t.sale), col:T.ink, s:`a mano ${fmtM(t.mano)} · débito ${fmtM(t.debito)}${t.socios>0?` · socios ${fmtM(t.socios)}`:''} · ya salió ${fmtM(t.yaSalio)}`},
+        {l:'Así termina el mes', v:fm(termina), col:termina<0?T.brand:T.ink, s:t.tarjetasFaltan>0?`Sin ${t.tarjetasFaltan===1?'la tarjeta que falta':`las ${t.tarjetasFaltan} tarjetas que faltan`} cargar (las últimas: ${fmtM(t.tarjetasReferencia)}).`:'Con todo lo que está cargado.'},
+      ].map((k,i)=><div key={i} style={{padding:'16px 18px', minWidth:0, borderLeft:!cel&&i>0?`1px solid ${T.border}`:'none', borderTop:cel&&i>0?`1px solid ${T.border}`:'none'}}>
+        <div style={{fontSize:11, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>{k.l}</div>
+        <div style={{fontFamily:MONO, fontSize:22, fontWeight:600, letterSpacing:-0.5, marginTop:6, color:k.col}}>{k.v}</div>
+        <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>{k.s}</div>
+      </div>)}
+    </div>
+
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:9}}>
+      <span style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>Semana a semana</span>
+      <div style={{display:'flex', border:`1px solid ${T.border}`, borderRadius:9, overflow:'hidden', background:T.surface, marginLeft:-1}}>{seg('seguro',modo,setModo,'Sin los que hoy vienen atrasados')}{seg('fecha',modo,setModo,'Si todos pagan en fecha')}</div>
+    </div>
+    <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':`repeat(${c.semanas.length},minmax(0,1fr))`, background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden'}}>
+      {c.semanas.map((s,i)=>{ const q=seguro?s.quedaSeguro:s.queda; return <div key={i} style={{padding:'13px 15px', minWidth:0, background:s.esActual?T.surfaceAlt:'transparent', opacity:s.pasada?0.5:1, borderLeft:!cel&&i>0?`1px solid ${T.border}`:'none', borderTop:cel&&i>0?`1px solid ${T.border}`:'none'}}>
+        <div style={{fontSize:11.5, fontWeight:600, color:T.ink2}}>{s.esActual?'Esta semana':`Del ${s.desde} al ${s.hasta}`}</div>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12, marginTop:6, color:T.ink2}}><span>Entra</span><b style={{fontFamily:MONO, fontWeight:500, color:T.pos}}>+{fmt(seguro?s.entraSeguro:s.entra)}</b></div>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12, marginTop:6, color:T.ink2}}><span>Sale</span><b style={{fontFamily:MONO, fontWeight:500, color:T.ink}}>−{fmt(s.sale)}</b></div>
+        <div style={{marginTop:9, paddingTop:9, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.ink2}}>{s.pasada?'Ya pasó':'Queda al cierre'}<div style={{fontFamily:MONO, fontSize:16, fontWeight:600, color:q!==null&&q<0?T.brand:T.ink, marginTop:2}}>{q===null?'—':fm(q)}</div></div>
+      </div> })}
+    </div>
+    <div style={{fontSize:12, color:T.ink2, margin:'8px 0 18px'}}>Arranca de lo que hay hoy en las cuentas.{seguro && c.atrasadas.length>0?` No cuenta lo que vence de ${c.atrasadas.join(', ')}, porque hoy tienen facturas vencidas (salvo las que tienen fecha prometida).`:''}{t.nSinDia>0?` Falta restar ${fmt(t.sinDia)} de ${t.nSinDia} gastos sin día de pago.`:''}</div>
+
+    {(t.nVencidoSinFecha>0 || t.atrasadosN>0 || t.nDespues>0) && <div style={{background:T.warnSoft, borderRadius:10, padding:'11px 14px', fontSize:12.5, color:T.ink, display:'flex', flexDirection:'column', gap:6, marginBottom:18}}>
+      {t.nVencidoSinFecha>0 && <div><b style={{color:T.warn}}>{t.nVencidoSinFecha} facturas vencidas sin fecha de pago: {fmt(t.vencidoSinFecha)}.</b> No están contadas en lo que entra. Reclamalas y anotá la fecha que prometan: desde ahí se cuentan. <button onClick={()=>goTo&&goTo('facturacion')} style={{border:'none', background:'none', textDecoration:'underline', cursor:'pointer', fontSize:12.5, fontWeight:600, padding:0, color:T.ink}}>Ver por agencia</button></div>}
+      {t.nDespues>0 && <div>{t.nDespues} facturas por {fmt(t.despues)} entran después de este mes.</div>}
+      {t.atrasadosN>0 && <div><b style={{color:T.warn}}>{t.atrasadosN} cuotas y resúmenes de meses anteriores sin marcar como pagados: {fmt(t.atrasadosMonto)}.</b> Si ya salieron, se marcan en el mes que corresponde.</div>}
+    </div>}
+
+    <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':'minmax(0,1.75fr) minmax(0,1fr)', gap:22, alignItems:'start'}}>
+      <div>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:12}}>
+          <div style={{display:'flex', flexWrap:'wrap', border:`1px solid ${T.border}`, borderRadius:9, overflow:'hidden', background:T.surface, marginLeft:-1}}>{seg('todo',filtro,setFiltro,'Todo')}{seg('entra',filtro,setFiltro,'Entra')}{seg('mano',filtro,setFiltro,'Sale a mano')}{seg('debito',filtro,setFiltro,'Sale por débito')}</div>
+          {cuentaSel && <button onClick={()=>setCuentaSel('')} style={{fontSize:12, border:`1px solid ${T.ink}`, borderRadius:20, padding:'5px 11px', background:T.surface, cursor:'pointer', color:T.ink}}>Cuenta: {cuentaSel} ✕</button>}
+        </div>
+        {bloques.map(b=>{ const its=filtro==='entra'?[]:b.items.filter(pasa).sort((x,y)=>(x.dia??99)-(y.dia??99)), conEntra=(filtro==='todo'||filtro==='entra') && !cuentaSel && b.cobros.length>0
+          if(!its.length && !conEntra) return null
+          const pend=its.filter(i=>!i.pagado && i.tipo!=='falta')
+          return <div key={b.key} style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, marginBottom:14, overflow:'hidden'}}>
+            <div style={{display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', padding:'11px 16px', background:T.surfaceAlt, fontSize:12.5}}>
+              <b style={{fontWeight:600, color:T.ink}}>{b.titulo}</b>
+              <span style={{color:T.ink2}}>{conEntra && <>entra <b style={{fontFamily:MONO, color:T.pos}}>+{fmt(b.cobros.reduce((s,x)=>s+x.saldo,0))}</b> · </>}falta que salga <b style={{fontFamily:MONO, color:T.ink}}>{fmt(pend.reduce((s,i)=>s+i.monto,0))}</b></span>
+            </div>
+            {conEntra && FilaEntra(b)}
+            {its.map(Fila)}
+          </div> })}
+      </div>
+      <div>
+        <div style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Cuentas · alcanza hasta el {limite7.getDate()}/{limite7.getMonth()+1}</div>
+        <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:18}}>
+          {c.cuentas.map((x,i)=>{ const est=x.usd?null:!x.activa?<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.warnSoft, color:T.warn}}>inactiva · saldo del {x.actualizada.split('/').slice(0,2).join('/')||'?'}</span>:x.resto>=0?<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.posSoft, color:T.pos}}>alcanza</span>:<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.brandSoft, color:T.brand}}>faltan {fmt(-x.resto)}</span>
+            return <div key={x.nombre} onClick={()=>!x.usd&&setCuentaSel(cuentaSel===x.nombre?'':x.nombre)} style={{padding:'12px 15px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:x.usd?'default':'pointer', boxShadow:cuentaSel===x.nombre?`inset 3px 0 0 ${T.ink}`:'none'}} title={x.usd?'':'Ver solo lo que sale de esta cuenta'}>
+              <div style={{display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline'}}><span style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{x.nombre}</span><span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:x.saldo<0?T.brand:T.ink}}>{x.usd?`US$ ${fmt(x.saldoUsd).replace('$','')}`:fm(x.saldo)}</span></div>
+              {!x.usd && <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:6, fontSize:11.5, color:T.ink2}}><span>Sale de acá: <b style={{fontFamily:MONO}}>{fmt(x.sale7)}</b></span>{est}</div>}
+            </div> })}
+        </div>
+        {c.revisar.length>0 && <>
+          <div style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Para revisar · datos que ensucian el número</div>
+          <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'4px 15px 10px', marginBottom:18}}>
+            {c.revisar.map((r,i)=><div key={i} style={{padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}`, fontSize:12.5}}><b style={{fontWeight:600, color:T.ink}}>{r.t}</b><div style={{color:T.ink2, fontSize:11.5, marginTop:2}}>{r.d}</div></div>)}
+            <div style={{fontSize:11.5, color:T.ink3, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Se corrigen en Egresos (el lápiz de cada gasto) o en la solapa GASTOS_FIJOS.</div>
+          </div>
+        </>}
+      </div>
+    </div>
+  </>
 }
 
 function Egresos({data, onRefresh, showToast}){
