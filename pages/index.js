@@ -97,9 +97,10 @@ const NAV = [
   {id:'facturacion',label:'Facturación'},
   {id:'pagos',label:'Pagos Staff'},
   {id:'freelancers',label:'Freelancers'},
-  // Caja = mirar y pagar (lo que entra, lo que sale, si alcanza). Egresos = cargar (gastos, resúmenes, cuenta de socios).
-  {id:'caja',label:'Caja'},
-  {id:'egresos',label:'Egresos'},
+  // Caja reemplaza a Egresos: una sola entrada en el menú. Adentro, la pestaña "Caja" (lo que entra, lo que
+  // sale, si alcanza) y la pestaña "Cargar y detalle" (lo que era Egresos). El id sigue siendo 'egresos'
+  // para no tocar permisos ni links.
+  {id:'egresos',label:'Caja'},
   {id:'agencias',label:'Agencias'},
   {id:'clientes',label:'Clientes'},
   {id:'contactos',label:'Contactos'},
@@ -287,8 +288,7 @@ export default function V2() {
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast}/>
-            : mod==='caja' ? <Caja data={data} onRefresh={()=>load(true)} showToast={showToast} goTo={goTo}/>
-            : mod==='egresos' ? <Egresos data={data} onRefresh={()=>load(true)} showToast={showToast}/>
+            : (mod==='egresos'||mod==='caja') ? <Caja data={data} onRefresh={()=>load(true)} showToast={showToast} goTo={goTo}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
             : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -4956,14 +4956,30 @@ function MovimientoSocio({socio, tipo, onClose, onHecho, showToast}){
 
 // CAJA: lo que entra y lo que sale en el mes, semana a semana, contra el saldo de las cuentas.
 // Junta en una pantalla lo que antes había que mirar en cuatro (Egresos, Facturación, Pagos Staff
-// y las cuentas). Acá se MIRA y se PAGA; la carga (un gasto nuevo, un resumen de tarjeta, la cuenta
-// de socios) sigue en Egresos. El cálculo vive en lib/caja.mjs para que todos den el mismo número.
+// y las cuentas). Es la ÚNICA entrada de plata del menú. Tiene dos pestañas: "Caja" (mirar y pagar) y
+// "Cargar y detalle", que es lo que antes era el módulo Egresos (gastos uno por uno, tarjetas, cuotas,
+// cuenta de socios). El cálculo vive en lib/caja.mjs para que todos den el mismo número.
 function Caja({data, onRefresh, showToast, goTo}){
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
   // Cómo contar lo que entra: 'seguro' deja afuera lo que vence de agencias que hoy ya deben algo vencido.
   const [modo,setModo]=useState('seguro')
   const [filtro,setFiltro]=useState('todo'), [cuentaSel,setCuentaSel]=useState(''), [abiertos,setAbiertos]=useState({}), [cuentaDe,setCuentaDe]=useState({}), [busy,setBusy]=useState('')
+  // Una sola pantalla de plata: 'caja' para mirar y pagar; 'detalle' es lo que era Egresos (cuenta de socios,
+  // cuotas a futuro, el detalle de cada tarjeta, editar un gasto). Agregar un gasto y subir un resumen se hacen
+  // desde las dos, sin cambiar de pestaña.
+  const [tab,setTab]=useState('caja'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false)
+  // CARGA RÁPIDA: lo que se pagó hoy y no pasa por ningún resumen (efectivo, una transferencia suelta).
+  // Tres datos y listo: qué, cuánto y de dónde salió. La fecha es hoy y el rubro se aprende de la vez anterior.
+  // Lo que sale por débito o con tarjeta NO se carga acá: entra cuando se sube el resumen.
+  const hoyISO=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+  const [qa,setQa]=useState({concepto:'', monto:'', cuenta:'', rubro:'', fecha:hoyISO}), [qaBusy,setQaBusy]=useState(false)
+  // Traba contra el Enter repetido: el estado tarda un render en avisar que ya se está guardando, y en ese
+  // rato un segundo Enter cargaría el pago dos veces (y restaría dos veces de la cuenta).
+  const qaLock=useRef(false)
+  // Lo que ya se pagó así alguna vez: sirve para sugerir el nombre y traer el monto, la cuenta y el rubro de la última vez.
+  const previos={}; (data.gastosFijos||[]).forEach(g=>{ if(!/[uú]nico/i.test(String(g['Frecuencia']||''))) return; const k=normTxt(g['Concepto']); if(k) previos[k]={concepto:String(g['Concepto']).trim(), monto:parseMonto(g['Monto']), cuenta:String(g['Cuenta pago']||'').trim(), rubro:String(g['Categoria']||'').trim()} })
+  const rubros=[...new Set([...(data.gastosFijos||[]).map(g=>String(g['Categoria']||'').trim()).filter(Boolean), 'Otros'])]
   const cel=useEsCelular()
   const c=calcularCaja(data,{mes:mesIdx, anio, hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
   const t=c.totales, seguro=modo==='seguro'
@@ -4972,6 +4988,24 @@ function Caja({data, onRefresh, showToast, goTo}){
   const hoyDia=c.esMesActual?c.hoy0.getDate():null
   const cuentaOpts=c.cuentas.filter(x=>x.activa&&!x.usd).map(x=>x.nombre)
   const cuentaDeItem=i=>cuentaDe[i.id]??i.cuenta
+  const qaCuenta=qa.cuenta || cuentaOpts.find(n=>/efectivo/i.test(n)) || cuentaOpts[0] || ''
+  const qaRubro=qa.rubro || previos[normTxt(qa.concepto)]?.rubro || (rubros.includes('Operativos')?'Operativos':rubros[0]||'Otros')
+  // Al escribir algo que ya se pagó antes, trae el monto y la cuenta de esa vez (si todavía no se tipeó un monto).
+  const qaConcepto=v=>setQa(q=>{ const p=previos[normTxt(v)]; return p && !q.monto ? {...q, concepto:v, monto:numAMontoAR(p.monto), cuenta:cuentaOpts.includes(p.cuenta)?p.cuenta:q.cuenta, rubro:p.rubro||q.rubro} : {...q, concepto:v} })
+  async function anotarPago(){
+    if(qaLock.current) return
+    const concepto=qa.concepto.trim(), monto=parseMontoAR(qa.monto)
+    if(!concepto){ showToast('Escribí qué pagaste','err'); return }
+    if(monto<=0){ showToast('Poné cuánto pagaste','err'); return }
+    if(!qaCuenta){ showToast('Elegí de dónde salió la plata','err'); return }
+    const [Y,M,D]=(qa.fecha||hoyISO).split('-').map(Number)
+    qaLock.current=true; setQaBusy(true)
+    try{ const r=await fetch('/api/gasto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categoria:qaRubro, concepto, monto, moneda:'ARS', recurrencia:'unico', diaPago:D, mes:M, anio:Y, pagado:true, cuentaPago:qaCuenta, fechaPago:`${D}/${M}/${Y}`, medio:/efectivo/i.test(qaCuenta)?'Efectivo':'Transferencia', tipo:'gasto'})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); qaLock.current=false; setQaBusy(false); return }
+      showToast(`Anotado ✓ · ${concepto} · ${fmt(monto)} desde ${qaCuenta}`); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', fecha:hoyISO}); if(onRefresh) await onRefresh()
+    }catch(e){ showToast('Error de conexión','err') }
+    qaLock.current=false; setQaBusy(false)
+  }
   const mover=d=>{ let m=mesIdx+d, a=anio; if(m<1){m=12;a--} if(m>12){m=1;a++} setMesIdx(m); setAnio(a); setAbiertos({}) }
 
   // Un clic: marca pagado en el mes que se está mirando, con la cuenta elegida, y la cuenta queda guardada para el mes que viene.
@@ -5002,8 +5036,8 @@ function Caja({data, onRefresh, showToast, goTo}){
     let accion
     if(i.pagado) accion=<span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{i.hoja==='GASTOS_FIJOS' && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
     else if(i.tipo==='debito') accion=<span style={{display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}><span style={{fontSize:11.5, color:T.ink3}}>se debita solo</span><button disabled={ocupado} onClick={()=>pagar(i,true)} style={btnSec} title="Marcarlo cuando ya lo viste debitado en el banco. No resta de la cuenta: el débito ya está en el saldo que se copia del banco.">{ocupado?'Guardando…':'Ya se debitó'}</button></span>
-    else if(i.tipo==='socios') accion=<button onClick={()=>goTo&&goTo('egresos')} style={btnSec} title="El sueldo de los socios se anota con «Sacó plata» en la cuenta de socios (Egresos)">Cuenta de socios</button>
-    else if(i.tipo==='falta') accion=<button onClick={()=>goTo&&goTo('egresos')} style={btnSec}>Subir resumen</button>
+    else if(i.tipo==='socios') accion=<button onClick={()=>{ setTab('detalle'); window.scrollTo&&window.scrollTo(0,0) }} style={btnSec} title="El sueldo de los socios se anota con «Sacó plata» en la cuenta de socios (pestaña Cargar y detalle)">Cuenta de socios</button>
+    else if(i.tipo==='falta') accion=<button onClick={()=>setSubir(true)} style={btnSec}>Subir resumen</button>
     else if(i.link) accion=<button onClick={()=>goTo&&goTo(i.link)} style={btnSec}>Ir a Pagos Staff</button>
     else accion=<button disabled={ocupado} onClick={()=>pagar(i,true)} style={{fontSize:12, fontWeight:700, padding:'7px 16px', borderRadius:8, border:'none', background:T.brand, color:'#fff', cursor:ocupado?'default':'pointer', opacity:ocupado?0.6:1}}>{ocupado?'Guardando…':'Pagué'}</button>
     let cuentaEl
@@ -5045,12 +5079,35 @@ function Caja({data, onRefresh, showToast, goTo}){
   const limite7=new Date(c.hoy0.getTime()+7*864e5)
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap', marginBottom:18}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Caja</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>Lo que entra y lo que sale, semana a semana</div></div>
-      <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Caja</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>Toda la plata en un solo lugar</div></div>
+      <div style={{display:tab==='caja'?'flex':'none', gap:10, alignItems:'center', flexWrap:'wrap'}}>
         <button onClick={()=>mover(-1)} style={navBtn}>←</button>
         <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:118, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
         <button onClick={()=>mover(1)} style={navBtn}>→</button>
-        <button onClick={()=>goTo&&goTo('egresos')} style={{...btnSec, padding:'9px 14px'}} title="Agregar un gasto, subir un resumen de tarjeta, la cuenta de socios">Cargar gastos y resúmenes</button>
+        <button onClick={()=>setSubir(true)} style={{...btnSec, padding:'9px 14px'}}>⬆ Subir resumen de tarjeta</button>
+        <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
+      </div>
+    </div>
+    <div style={{display:'flex', marginBottom:18, borderBottom:`1px solid ${T.border}`}}>
+      {[['caja','Caja','lo que entra, lo que sale y si alcanza'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
+        <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tab===k?700:500, color:tab===k?T.ink:T.ink2, borderBottom:`2px solid ${tab===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{sub}</span>}</button>)}
+    </div>
+    {tab==='detalle' && <Egresos data={data} onRefresh={onRefresh} showToast={showToast} embebido/>}
+    {tab==='caja' && <>
+    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'13px 16px', marginBottom:18}}>
+      <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+        <span style={{fontSize:13, fontWeight:700, color:T.ink, whiteSpace:'nowrap'}}>¿Pagaste algo?</span>
+        <input list="caja-previos" value={qa.concepto} onChange={e=>qaConcepto(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="Qué pagaste (ej: limpieza Vanesa)" style={{...inpV2, flex:'2 1 220px', minWidth:170, width:'auto'}}/>
+        <datalist id="caja-previos">{Object.values(previos).map(p=><option key={p.concepto} value={p.concepto}/>)}</datalist>
+        <MontoInput value={qa.monto} onChange={v=>setQa(q=>({...q,monto:v}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="Cuánto" style={{...inpV2, flex:'1 1 120px', minWidth:110, width:'auto', textAlign:'right', fontFamily:MONO}}/>
+        <select value={qaCuenta} onChange={e=>setQa(q=>({...q,cuenta:e.target.value}))} title="De dónde salió la plata" style={{...inpV2, flex:'1 1 150px', minWidth:140, width:'auto', cursor:'pointer'}}>{cuentaOpts.map(n=><option key={n} value={n}>{n}</option>)}</select>
+        <button disabled={qaBusy} onClick={anotarPago} style={{fontSize:13, fontWeight:700, padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':'Anotar'}</button>
+      </div>
+      <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:11.5, color:T.ink3}}>
+        <span>Para lo que pagás en efectivo o con una transferencia suelta. Lo que sale por débito o con tarjeta entra solo al subir el resumen.</span>
+        <span style={{flex:1}}/>
+        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>{rubros.map(r=><option key={r} value={r}>{r}</option>)}</select></label>
+        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
       </div>
     </div>
 
@@ -5118,15 +5175,18 @@ function Caja({data, onRefresh, showToast, goTo}){
           <div style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Para revisar · datos que ensucian el número</div>
           <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'4px 15px 10px', marginBottom:18}}>
             {c.revisar.map((r,i)=><div key={i} style={{padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}`, fontSize:12.5}}><b style={{fontWeight:600, color:T.ink}}>{r.t}</b><div style={{color:T.ink2, fontSize:11.5, marginTop:2}}>{r.d}</div></div>)}
-            <div style={{fontSize:11.5, color:T.ink3, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Se corrigen en Egresos (el lápiz de cada gasto) o en la solapa GASTOS_FIJOS.</div>
+            <div style={{fontSize:11.5, color:T.ink3, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Se corrigen en la pestaña «Cargar y detalle» (el lápiz de cada gasto) o en la solapa GASTOS_FIJOS.</div>
           </div>
         </>}
       </div>
     </div>
+    </>}
+    {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {agregar && <AgregarEgreso cuentaOpts={c.cuentas.filter(x=>x.activa).map(x=>x.nombre)} cuentas={data.cuentas||[]} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
-function Egresos({data, onRefresh, showToast}){
+function Egresos({data, onRefresh, showToast, embebido=false}){
   const gf=data.gastosFijos||[], tarj=data.tarjetas||[], prest=data.prestamos||[], cuentas=data.cuentas||[], movTarj=data.movimientosTarjeta||[], cuot=data.cuotas||[], movim=data.movimientos||[]
   const now=new Date()
   const [mesIdx,setMesIdx]=useState(now.getMonth()+1), [anio,setAnio]=useState(now.getFullYear())
@@ -5298,7 +5358,7 @@ function Egresos({data, onRefresh, showToast}){
   }
 
   return <>
-    <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>
+    {!embebido && <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>}
     <div style={{display:'flex', gap:14, marginBottom:18}}>
       <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGFOper)}${totalFin>0?` · Financieros ${fmtM(totalFin)}`:''} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
     </div>

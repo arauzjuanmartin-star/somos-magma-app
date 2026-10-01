@@ -15,7 +15,9 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago } = req.body
+  // medio = CÓMO se pagó (Efectivo, Transferencia…): va a la columna "Medio de pago". Antes este endpoint no la
+  // escribía y había que completarla a mano en el sheet.
+  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago, medio } = req.body
   monto = numv(monto)
   moneda = String(moneda || 'ARS').toUpperCase()
   const esUnico = recurrencia === 'unico'
@@ -45,6 +47,7 @@ export default async function handler(req, res) {
     set('Mes carga', gMes)
     set('Año carga', gAnio)
     set('Tipo', tipo || (esUnico ? 'impuesto' : 'gasto'))
+    if (medio) set('Medio de pago', String(medio).trim())
     // Marcar pagado de una (opcional)
     if (pagado) {
       set('Pagado', 'SI')
@@ -56,7 +59,7 @@ export default async function handler(req, res) {
       set('Cuenta pago', '')
     }
 
-    const ap = await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!A:Q', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
+    const ap = await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'GASTOS_FIJOS!A:T', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: [fila] } })
     const filaNum = (() => { const m = String(ap.data.updates?.updatedRange || '').match(/![A-Z]+(\d+)/); return m ? parseInt(m[1]) : null })()
 
     // "Mes carga" se reescribe como TEXTO con RAW. Si va como número y la celda quedó con
