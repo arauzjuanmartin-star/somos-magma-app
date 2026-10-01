@@ -189,7 +189,7 @@ export default function V2() {
     setErr('')
     // __soloLoSuyo: el nombre del usuario de acceso parcial (Dani). Edición lo usa
     // para que las horas extra se carguen a su nombre y nada más.
-    try { const r=await fetch('/api/data?fresh=1'); const j=await r.json(); if(j.ok) setData({...j.data, __soloLoSuyo:j.soloLoSuyo||null}); else setErr(j.error||'Error') }
+    try { const r=await fetch('/api/data?fresh=1'); const j=await r.json(); if(j.ok) setData(atarGastosATrabajos({...j.data, __soloLoSuyo:j.soloLoSuyo||null})); else setErr(j.error||'Error') }
     catch(e){ setErr('Error de conexión') }
     setLoading(false); setRefreshing(false)
   }
@@ -441,7 +441,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   // Pagos staff: lo que voy gastando en staff por los eventos del mes.
   // NO cuenta "Somos Magma" (esa línea es ganancia de la empresa, no un gasto).
   const pagosStaffMes = proyMesEvento.reduce((s,p)=>{ let t=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr2=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); if(st&&st!=='Somos Magma'&&pr2>0) t+=pr2 } return s+t },0)
-  // Ganancia Magma del mes = precio − staff de afuera, de los eventos del mes (ver gananciaProyecto).
+  // Ganancia Magma del mes = precio − staff de afuera − gastos de cada trabajo, de los eventos del mes (ver gananciaProyecto).
   const ganMagmaMes = proyMesEvento.reduce((s,p)=>s+gananciaProyecto(p),0)
   const rentabilidadMes = ganMagmaMes
 
@@ -615,7 +615,7 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
       {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`pagadas dentro de 30 días (objetivo). Hoy tardan ${diasPromCobro} días en promedio · ${facMedibles.length} fact.`}/>}
       <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
       <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
-      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="precio − staff de afuera (impuestos y Somos Magma adentro)"/>
+      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="precio − staff de afuera − gastos del trabajo (impuestos y Somos Magma adentro)"/>
       <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
       <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub={`${eventosMes} ${eventosMes===1?'evento aprobado':'eventos aprobados'} este mes`}/>
     </div>
@@ -1596,7 +1596,21 @@ const readPedidosOrig = p => {
 // + Somos Magma + Diferencia (sin impuestos y sin el ahorro de staff) y Trabajos restaba
 // el staff pagado. Caso #1729 Santander: $1.540.000 vs $2.700.000 para el mismo trabajo.
 const costoStaffProyecto = p => { let c=0; for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(st==='Somos Magma') continue; c+=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')) } return c }
-const gananciaProyecto = p => parseMonto(p['Total ']||p['Total']) - costoStaffProyecto(p)
+// Desde el 01/10/2026 también se restan los GASTOS DEL TRABAJO: lo que se pagó para ese trabajo fuera de las
+// líneas de staff (el alquiler de equipos, el auto, la nafta). La línea "Rental" o "Viáticos" del presupuesto
+// suele ir a nombre de "Somos Magma" (es lo que se le cobra al cliente) y el gasto real salía por otro lado sin
+// decir de qué trabajo era: el trabajo mostraba una ganancia que no había tenido. Ahora cada gasto lleva el N°
+// del trabajo (GASTOS_FIJOS, columna "N° trabajo") y atarGastosATrabajos se lo cuelga al proyecto al cargar.
+const gananciaProyecto = p => parseMonto(p['Total ']||p['Total']) - costoStaffProyecto(p) - (p.__gastoTotal||0)
+// Le cuelga a cada proyecto sus gastos (p.__gastos, p.__gastoTotal). Se llama una vez, cuando llegan los datos.
+function atarGastosATrabajos(data){
+  const porNro={}
+  ;(data.gastosFijos||[]).forEach(g=>{ const n=String(g['N° trabajo']||'').trim(); if(!n) return
+    const act=String(g['Activo']||'').trim(); if(act && !/^(s[ií]|true)$/i.test(act)) return
+    ;(porNro[n]=porNro[n]||[]).push({concepto:String(g['Concepto']||'').trim(), monto:parseMonto(g['Monto']), fecha:String(g['Fecha pago']||'').trim(), cuenta:String(g['Cuenta pago']||'').trim(), rubro:[g['Rubro'],g['Subrubro']].map(x=>String(x||'').trim()).filter(Boolean).join(' · ')}) })
+  ;(data.proyectos||[]).forEach(p=>{ const n=String(p['N° presupuesto']||'').trim(); p.__gastos=(n&&porNro[n])||[]; p.__gastoTotal=p.__gastos.reduce((t,x)=>t+x.monto,0) })
+  return data
+}
 // Un presupuesto que todavía no es proyecto: el precio menos lo que se presupuestó de staff.
 const gananciaPresu = p => parseMonto(p['Precio Final']) - parseMonto(p['Subtotal'])
 // Semáforo recalibrado a la definición nueva. Con la vieja el corte era 50/35 y la mediana
@@ -2692,14 +2706,24 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
 
-    {(()=>{ const ganancia=fee+mg; const margenPct=total>0?Math.round((ganancia/total)*100):0; const sem=semaforo(margenPct); return (
+    {/* Gastos de este trabajo: lo que se pagó aparte del staff (alquiler de equipos, auto, nafta). Se anotan desde
+        Caja → "¿Pagaste algo?", eligiendo el trabajo. Acá se ven y se restan de la ganancia. */}
+    {(p.__gastos||[]).length>0 && <div style={{marginTop:14, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
+      <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, marginBottom:4}}>Gastos de este trabajo · {fmt(p.__gastoTotal)}</div>
+      {p.__gastos.map((g,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:12, padding:'6px 0', borderTop:k===0?'none':`1px solid ${T.border}`, fontSize:12.5}}>
+        <span style={{minWidth:0}}><span style={{color:T.ink}}>{g.concepto}</span><span style={{color:T.ink3}}>{[g.rubro, g.fecha, g.cuenta].filter(Boolean).map(x=>` · ${x}`).join('')}</span></span>
+        <span style={{fontFamily:MONO, color:T.brand, whiteSpace:'nowrap'}}>−{fmt(g.monto)}</span>
+      </div>)}
+    </div>}
+    {(()=>{ const gastosT=p.__gastoTotal||0, ganancia=fee+mg-gastosT; const margenPct=total>0?Math.round((ganancia/total)*100):0; const sem=semaforo(margenPct); return (
     <div style={{display:'flex', gap:24, marginTop:14, paddingTop:14, borderTop:`1px solid ${T.border}`, flexWrap:'wrap', alignItems:'center'}}>
       <Mini label="Presupuestado" val={fmt(total)}/>
       <Mini label="Freelance" val={fmt(fl)}/>
       <Mini label="Somos Magma" val={fmt(mg)} color={T.pos}/>
       <Mini label="Fee Magma" val={fmt(fee)} color={fee<0?T.brand:T.ink}/>
-      <Mini label="Ganancia Magma" val={fmt(ganancia)} color={T.pos}/>
-      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div><div style={{fontSize:9, color:T.ink3, marginTop:1}}>fee + Somos Magma</div></div>
+      {gastosT>0 && <Mini label="Gastos del trabajo" val={'−'+fmt(gastosT)} color={T.brand}/>}
+      <Mini label="Ganancia Magma" val={(ganancia<0?'−':'')+fmt(ganancia)} color={ganancia<0?T.brand:T.pos}/>
+      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div><div style={{fontSize:9, color:T.ink3, marginTop:1}}>{gastosT>0?'fee + Somos Magma − gastos':'fee + Somos Magma'}</div></div>
       <div style={{flex:1}}/>
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
