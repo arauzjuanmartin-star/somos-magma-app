@@ -174,6 +174,16 @@ export default async function handler(req, res) {
               nroAnterior = cmp.antes
             }
           }
+          // Una factura que cubre varios trabajos es UN solo PDF: el mismo link (y el N° leído del
+          // PDF, si se completó o corrigió) va a la fila de cada trabajo. `hermanas` = las otras filas.
+          let hermanas = []
+          try { hermanas = JSON.parse(fields.hermanas || '[]') } catch (e) { hermanas = [] }
+          for (const h of (Array.isArray(hermanas) ? hermanas : []).slice(0, 40)) {
+            const u2 = ubicarFilaFactura({ rows, fila: h.fila, presupuestoNum: h.presupuestoNum })
+            if (u2.error || u2.fila === ubic.fila) { if (u2.error) avisoLink = `El PDF quedó en el primer trabajo, pero no en todos: ${u2.error}`; continue }
+            upd.push({ range: `FACTURACION!${colLetra(idxFactura)}${u2.fila}`, values: [[fileRes.data.webViewLink]] })
+            if (nroDetectado && (accionNro === 'completar' || accionNro === 'corregir') && idxNroF !== -1) upd.push({ range: `FACTURACION!${colLetra(idxNroF)}${u2.fila}`, values: [[nroDetectado]] })
+          }
           // OJO: subir el PDF NO es enviarlo. Administración carga la factura y a veces
           // espera el OK para mandarla. "Fecha enviada"/"Fc Enviada" las estampa solo
           // factura-enviar, cuando el mail sale de verdad.

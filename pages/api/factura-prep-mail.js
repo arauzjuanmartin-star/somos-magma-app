@@ -4,6 +4,7 @@
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { ubicarFilaFactura } from '../../lib/factura-fila'
+import { esNroDeFactura } from '../../lib/factura-numero'
 
 const num = v => parseFloat(String(v||'0').replace(/[^\d.-]/g,''))||0
 const fmt = n => Math.round(n).toLocaleString('es-AR')
@@ -122,9 +123,23 @@ export default async function handler(req, res) {
       adicionales: cuentaRow[cuHeaders.indexOf('Datos transferencia adicionales')] || '',
     } : null
 
+    // Una factura puede cubrir VARIOS trabajos (Austral: una orden de compra, una factura). En el sheet
+    // son varias filas con el mismo N° de factura y la misma agencia. El mail es UNO: lista todos los
+    // trabajos y lleva el total de la factura, no el de un solo trabajo.
+    const iNroF = F('Nro de Factura'), iAgF = F('Agencia'), iPresuF = F('N° Presupuesto')
+    const nroLimpio = String(factura[iNroF] || '').trim()
+    const hermanas = esNroDeFactura(nroLimpio)
+      ? factR.data.values.map((row, i) => ({ row, fila: i + 1 })).filter(o => o.fila > 1 && o.fila !== ubicF.fila && String(o.row[iNroF] || '').trim() === nroLimpio && norm(o.row[iAgF]) === norm(agencia))
+      : []
+    const trabajos = [{ presu: String(presupuestoNum).trim(), proyecto, total }, ...hermanas.map(o => ({ presu: String(o.row[iPresuF] || '').trim(), proyecto: o.row[F('Proyecto')] || o.row[F('Cliente')] || '', total: num(o.row[F('Precio FINAL')]) }))]
+    const varios = trabajos.length > 1
+    const totalFactura = trabajos.reduce((s, t) => s + t.total, 0)
+
     // Armar asunto y cuerpo
     const nombreEmisor = NOMBRE_USER[mail] || mail.split('@')[0]
-    const asunto = `Factura ${nroFactura} - Somos Magma${proyecto?' - '+proyecto:''}`
+    const asunto = varios
+      ? `Factura ${nroFactura} - Somos Magma - ${agencia || cliente} (${trabajos.length} trabajos)`
+      : `Factura ${nroFactura} - Somos Magma${proyecto?' - '+proyecto:''}`
 
     const lineasTransfer = []
     if (datosTransfer) {
@@ -149,14 +164,16 @@ export default async function handler(req, res) {
         : `Te paso el detalle de la factura y los datos de transferencia por los trabajos realizados.`,
       ``,
       `Detalle:`,
-      `• Cliente: ${cliente || agencia || '—'}`,
-      proyecto ? `• Proyecto: ${proyecto}` : null,
-      presupuestoNum ? `• N° de presupuesto: ${presupuestoNum}` : null,
+      `• Cliente: ${varios ? (agencia || cliente || '—') : (cliente || agencia || '—')}`,
+      !varios && proyecto ? `• Proyecto: ${proyecto}` : null,
+      !varios && presupuestoNum ? `• N° de presupuesto: ${presupuestoNum}` : null,
+      varios ? `• Trabajos incluidos (${trabajos.length}):` : null,
+      ...(varios ? trabajos.map(t => `     - ${t.proyecto || 'Trabajo'} (presupuesto ${t.presu}): $${fmt(t.total)}`) : []),
       nroFactura !== 's/n' ? `• N° de factura: ${nroFactura}` : null,
       tipoFactura ? `• Tipo de factura: ${tipoFactura}` : null,
       fechaEmision ? `• Fecha de emisión: ${fechaEmision}` : null,
       vencimiento ? `• Vencimiento del pago: ${vencimiento}` : null,
-      `• Total: $${fmt(total)}${iva > 0 ? ' (IVA incluido)' : ' + IVA'}`,
+      `• Total${varios ? ' de la factura' : ''}: $${fmt(varios ? totalFactura : total)}${iva > 0 ? ' (IVA incluido)' : ' + IVA'}`,
       ``,
       `Datos para transferir:`,
       ...lineasTransfer,
@@ -173,6 +190,9 @@ export default async function handler(req, res) {
     res.json({
       ok: true,
       adjuntarPDF: tienePDF,   // el front lo reenvía a factura-enviar para que pegue el PDF al mail
+      // Las otras filas de la misma factura: factura-enviar las marca como enviadas junto con esta.
+      hermanas: hermanas.map(o => ({ fila: o.fila, presupuestoNum: String(o.row[iPresuF] || '').trim() })),
+      trabajos: trabajos.length, totalFactura,
       // Para poder ofrecer "guardar este mail como el de facturación de la agencia":
       // solo 7 de 82 agencias lo tienen cargado, así que la sugerencia se aprende sobre la marcha.
       agenciaNombre: agencia || cliente,

@@ -70,7 +70,9 @@ export default async function handler(req, res) {
   // adjuntarPDF: lo manda el front cuando la factura tiene PDF cargado (lo dice factura-prep-mail).
   // `fila` = __row de FACTURACION. Con adelanto + saldo, sin la fila se adjuntaba el PDF
   // de la primera factura y "Fc Enviada" se marcaba en la fila equivocada.
-  const { to = [], cc = [], asunto, cuerpo, presupuestoNum, accion, detalle, adjuntarPDF = false, fila } = req.body || {}
+  // hermanas: las otras filas de la MISMA factura cuando cubre varios trabajos ([{fila, presupuestoNum}]).
+  // El mail es uno solo, así que al salir se marcan todas como enviadas.
+  const { to = [], cc = [], asunto, cuerpo, presupuestoNum, accion, detalle, adjuntarPDF = false, fila, hermanas = [] } = req.body || {}
   const dest = (Array.isArray(to) ? to : [to]).map(s => String(s||'').trim()).filter(Boolean)
   if (!dest.length) return res.status(400).json({ error: 'No hay destinatarios' })
   if (!asunto || !cuerpo) return res.status(400).json({ error: 'Falta asunto o cuerpo' })
@@ -124,20 +126,19 @@ export default async function handler(req, res) {
         const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:AG' })
         const rows = r.data.values || [], h = rows[0] || []
         const iEnv = h.indexOf('Fc Enviada'), iFecha = h.indexOf('Fecha enviada')
-        const ubic = ubicarFilaFactura({ rows, fila, presupuestoNum })
-        if (iEnv >= 0 && !ubic.error) {
-          const nFila = ubic.fila
-          {
-            const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)} return s }
-            const upd = [{ range: `FACTURACION!${colLetra(iEnv)}${nFila}`, values: [[true]] }]
-            // Fecha enviada: se estampa la 1ra vez que se manda por mail (si no estaba ya cargada por el upload).
-            if (iFecha >= 0 && !String(ubic.row[iFecha]||'').trim()) {
-              const d = new Date(); const hoy = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()
-              upd.push({ range: `FACTURACION!${colLetra(iFecha)}${nFila}`, values: [[hoy]] })
-            }
-            await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: upd } })
-          }
+        const colLetra = c => { let s='',n=c+1; while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)} return s }
+        const d = new Date(); const hoy = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()
+        const upd = []
+        // La fila de la factura y, si cubre varios trabajos, las de los demás.
+        const destinos = [{ fila, presupuestoNum }, ...(Array.isArray(hermanas) ? hermanas : []).slice(0, 40)]
+        for (const dst of destinos) {
+          const ubic = ubicarFilaFactura({ rows, fila: dst.fila, presupuestoNum: dst.presupuestoNum })
+          if (iEnv < 0 || ubic.error) continue
+          upd.push({ range: `FACTURACION!${colLetra(iEnv)}${ubic.fila}`, values: [[true]] })
+          // Fecha enviada: se estampa la 1ra vez que se manda por mail (si no estaba ya cargada por el upload).
+          if (iFecha >= 0 && !String(ubic.row[iFecha]||'').trim()) upd.push({ range: `FACTURACION!${colLetra(iFecha)}${ubic.fila}`, values: [[hoy]] })
         }
+        if (upd.length) await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: upd } })
 
       }
       await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), mail, accion || 'factura-mail-enviado', 'FACTURACION', String(presupuestoNum || detalle || ''), `a: ${dest.join(', ')}${adjunto ? ` · adjunto: ${adjunto.filename}` : ''}`]] } })

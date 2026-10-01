@@ -8,7 +8,7 @@ import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
-import { nroDeNombreArchivo, emisorDelArchivo, avisoPdfAjeno } from '../lib/factura-numero'
+import { nroDeNombreArchivo, emisorDelArchivo, avisoPdfAjeno, esNroDeFactura } from '../lib/factura-numero'
 import Edicion from '../components/Edicion'
 import { quienSoy } from '../lib/quien-soy'
 import FotosProyecto from '../components/FotosProyecto'
@@ -2812,6 +2812,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Seguimiento de cobranza por agencia: lo que se está tipeando (fecha prometida + nota) antes de guardar,
   // y qué acción de a varias facturas está en curso (para no mandarla dos veces).
   const [promDraft,setPromDraft]=useState({}), [loteBusy,setLoteBusy]=useState('')
+  // Al abrir "Nueva factura" desde una agencia con varios trabajos tildados: los que van en la misma factura.
+  const [nuevaFextras,setNuevaFextras]=useState([])
   // Las columnas "Prometió pagar" y "Nota cobranza" pueden no estar todavía en el sheet: sin ellas el control no aparece.
   const hayPromesa=fc.length>0 && Object.prototype.hasOwnProperty.call(fc[0],'Prometió pagar')
   const aISO=s=>{ const d=parseD(s); return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'' }
@@ -2946,6 +2948,8 @@ function msgUpload(j, base='PDF subido ✓'){
   // Cómo paga cada una: días entre el vencimiento y el cobro de lo que ya pagó (la mediana, para
   // que una factura que se colgó seis meses no tape cómo paga normalmente).
   fcReal.forEach(f=>{ if(!isCobrada(f)) return; const v=parseD(f['Vencimiento']), c=parseD(f['Fecha cobro']); if(!v||!c) return; const a=agMap[grupoDe(claveAg(f))||'(sin agencia)']; if(a) a.atrasos.push(Math.round((c-v)/864e5)) })
+  // Las otras filas sin cobrar de la MISMA factura (mismo N°, misma agencia): una factura que cubre varios trabajos.
+  const hermanasDe=f=>{ const n=String(f['Nro de Factura']||'').trim(); if(!esNroDeFactura(n)) return []; return noCobradas.filter(g=>g!==f && g.__row!==f.__row && String(g['Nro de Factura']||'').trim()===n && claveAg(g)===claveAg(f) && saldoF(g)>0) }
   const mediana=a=>{ if(!a.length) return null; const b=[...a].sort((x,y)=>x-y), m=Math.floor(b.length/2); return b.length%2?b[m]:Math.round((b[m-1]+b[m])/2) }
   const agLista=Object.values(agMap).map(a=>{
     const venc=a.deben.filter(f=>(diffVenc(f)??99)<0)
@@ -3082,7 +3086,14 @@ function msgUpload(j, base='PDF subido ✓'){
                   {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>}
                 </span>
               </div> })}
-            {a.sinFact.length>0 && <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, margin:'16px 0 2px'}}>Falta facturar · {fmt(a.sinFactMonto)} sin IVA</div>}
+            {a.sinFact.length>0 && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', margin:'16px 0 4px'}}>
+              <span style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Falta facturar · {fmt(a.sinFactMonto)} sin IVA</span>
+              {/* Una factura para varios trabajos (caso Austral: una orden de compra, una factura). Los de
+                  Comunicación van en otra orden de compra, así que se ofrecen aparte. Se juntan por razón social. */}
+              {(()=>{ const esCom=x=>/comunicaci/i.test(String(x.p['Cliente']||'')), orden=[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias)
+                const tandas={}; orden.forEach(x=>{ const k=claveAg(x.p)+(esCom(x)?'|com':''); (tandas[k]=tandas[k]||[]).push(x) })
+                return Object.values(tandas).filter(g=>g.length>1).map((g,k)=><button key={k} onClick={()=>{ setNuevaFsel(g[0]); setNuevaFextras(g.slice(1).map(x=>String(x.p['Columna 1']||'').trim())); setNuevaF(true) }} style={{...miniBtn, background:T.ink, color:'#fff', border:'none', padding:'6px 12px', fontWeight:600}} title="Una sola factura que cubre todos estos trabajos. En el formulario podés destildar los que no van.">Facturar juntos {esCom(g[0])?'los de Comunicación':''} · {g.length} trabajos · {fmt(g.reduce((t,x)=>t+x.pendiente,0))}</button>) })()}
+            </div>}
             {[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias).map((x,j)=>{ const fi=semEvento(x.p['Fecha Evento'])
               return <div key={'s'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
                 <span style={{fontSize:11.5, fontWeight:fi.dias>30?700:500, color:fi.c, gridColumn:cel?'1 / -1':'auto'}}>{fi.fecha==='s/f'?'sin fecha':`evento ${fi.fecha}`}{fi.dias>0?` · hace ${fi.dias}d`:''}</span>
@@ -3236,18 +3247,21 @@ function msgUpload(j, base='PDF subido ✓'){
     </div>
     </>)}
     </>)}
-    {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
+    {cobrando && <CobroModal f={cobrando} hermanas={hermanasDe(cobrando)} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
-    {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} onClose={()=>{setNuevaF(false); setNuevaFsel(null)}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} initialExtras={nuevaFextras} onClose={()=>{setNuevaF(false); setNuevaFsel(null); setNuevaFextras([])}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); setNuevaFextras([]); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }
 
-function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, onClose, onCreada, showToast}){
+function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, initialExtras=[], onClose, onCreada, showToast}){
   const hoy=new Date()
   const [sel,setSel]=useState(initialSel), [q,setQ]=useState('')
+  // Otros trabajos que cubre ESTA MISMA factura (N° de presupuesto). Caso Austral: una orden de
+  // compra junta varios trabajos y contra esa orden sale una sola factura.
+  const [extras,setExtras]=useState(initialExtras)
   // Datos fiscales de a quién se le factura (la agencia que paga, o el cliente si es directo)
   const facturarA = sel ? ((sel.p['Agencia']&&!/sin agencia|directo/i.test(sel.p['Agencia']))?sel.p['Agencia']:sel.p['Cliente']) : ''
   const agRow = sel ? agencias.find(a=>normTxt(a['Nombre'])===normTxt(facturarA)) : null
@@ -3258,18 +3272,31 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
   const [nroAuto,setNroAuto]=useState('')   // de dónde salió el N°: lo puso el PDF, no Flor
   const her0 = heredarDeFactura(initialSel)   // 2ª factura del trabajo: mismo plazo e IVA que la 1ª
   const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState(her0?.plazo||'30'), [conIVA,setConIVA]=useState(her0?her0.conIVA:true), [montoNeto,setMontoNeto]=useState(initialSel?String(Math.round(initialSel.pendiente)):''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
-  const neto = sel ? (parseFloat(montoNeto)||sel.pendiente) : 0
-  const iva = conIVA?Math.round(neto*0.21):0
+  // A quién se le factura cada trabajo: solo se pueden juntar trabajos de la misma agencia (o cliente directo).
+  const aQuien = p => (p['Agencia']&&!/sin agencia|directo/i.test(p['Agencia']))?p['Agencia']:p['Cliente']
+  const nroDe = x => String(x.p['Columna 1']||'').trim()
+  const candidatos = sel ? pendientes.filter(x=>nroDe(x)!==nroDe(sel) && normTxt(aQuien(x.p))===normTxt(facturarA) && !semEvento(x.p['Fecha Evento']).futuro).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias) : []
+  const elegidos = candidatos.filter(x=>extras.includes(nroDe(x)))
+  const varios = elegidos.length>0
+  // Con varios trabajos cada uno entra por lo que le falta facturar; el monto no se edita a mano.
+  const neto = sel ? (varios ? Math.round(sel.pendiente)+elegidos.reduce((s,x)=>s+Math.round(x.pendiente),0) : (parseFloat(montoNeto)||sel.pendiente)) : 0
+  const iva = !conIVA ? 0 : varios ? [sel,...elegidos].reduce((s,x)=>s+Math.round(Math.round(x.pendiente)*0.21),0) : Math.round(neto*0.21)
   const total = neto+iva
   const lista = pendientes.filter(x=>!q||[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente'],x.p['Agencia']].some(v=>normTxt(v).includes(normTxt(q)))).sort((a,b)=>semEvento(b.p['Fecha Evento']).dias-semEvento(a.p['Fecha Evento']).dias)
 
   async function crear(forzar=false, conMail=true){
     if(!sel) return
     const presuNum=sel.p['Columna 1']
+    // El N° es lo que une las filas de una factura de varios trabajos: sin N° ni PDF quedarían sueltas.
+    if(varios && !nro.trim() && !pdfFile){ showToast('Para una factura de varios trabajos poné el N° o adjuntá el PDF (el N° sale del archivo)','err'); return }
     setSaving(true)
     const fechaEmision=`${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`
     const venc=new Date(hoy.getTime()+parseInt(plazo)*864e5); const fechaVenc=`${venc.getDate()}/${venc.getMonth()+1}/${venc.getFullYear()}`
-    const body={ entidad, tipo, nroFactura:nro, fechaEmision, fechaVenc, plazo: plazo==='0'?'Contado':plazo+' días', conIVA, neto:Math.round(neto), iva:Math.round(iva), total:Math.round(total), presupuestoNum:presuNum, proyecto:sel.p['Proyecto'], agencia:sel.p['Agencia'], cliente:sel.p['Cliente'], forzar }
+    // Cada trabajo va en su fila con SU monto; todos comparten N° de factura, fechas y PDF.
+    const parte = x => { const n=Math.round(x.pendiente), i=conIVA?Math.round(n*0.21):0; return { presupuestoNum:x.p['Columna 1'], proyecto:x.p['Proyecto'], agencia:x.p['Agencia'], cliente:x.p['Cliente'], neto:n, iva:i, total:n+i } }
+    const body = varios
+      ? { entidad, tipo, nroFactura:nro, fechaEmision, fechaVenc, plazo: plazo==='0'?'Contado':plazo+' días', conIVA, ...parte(sel), otros:elegidos.map(parte), forzar }
+      : { entidad, tipo, nroFactura:nro, fechaEmision, fechaVenc, plazo: plazo==='0'?'Contado':plazo+' días', conIVA, neto:Math.round(neto), iva:Math.round(iva), total:Math.round(total), presupuestoNum:presuNum, proyecto:sel.p['Proyecto'], agencia:sel.p['Agencia'], cliente:sel.p['Cliente'], forzar }
     try{
       const r=await fetch('/api/factura-nueva',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const j=await r.json()
@@ -3278,10 +3305,14 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       // Fila donde quedó ESTA factura. Con adelanto + saldo hay varias del mismo proyecto:
       // el PDF y el mail tienen que ir contra esta fila, no contra "la factura del #X".
       const filaNueva = j.filaVerificada || j.fila || ''
+      // Las filas de los otros trabajos de esta misma factura (el PDF y el mail van para todas)
+      const hermanasNuevas = (j.filas||[]).filter(h=>String(h.fila)!==String(filaNueva))
       // 1) Subir PDF si se adjuntó (antes del mail, para que el mail lo lleve adjunto)
       if(pdfFile){
         try{ const fd=new FormData(); fd.append('file',pdfFile,pdfFile.name); fd.append('entidad',entidad); fd.append('nroFactura',nro); fd.append('presupuestoNum',presuNum); fd.append('fila',String(filaNueva)); fd.append('mes',String(hoy.getMonth()+1)); fd.append('anio',String(hoy.getFullYear()))
+          if(hermanasNuevas.length) fd.append('hermanas', JSON.stringify(hermanasNuevas))
           showToast('Subiendo PDF…'); const ru=await fetch('/api/factura-upload',{method:'POST',body:fd}); const ju=await ru.json(); if(!ju.ok) showToast('Factura creada, pero el PDF falló: '+(ju.error||''),'err')
+          if(varios && !nro.trim() && !(ju.ok && ju.nroDetectado)) window.alert(`Los ${elegidos.length+1} trabajos quedaron cargados, pero SIN N° de factura: no pude leerlo del PDF.\n\nEl N° es lo que los une como una sola factura (para el mail y para el cobro). Completalo en cada fila desde la pestaña Lista.`)
         }catch(e){ showToast('Factura creada, el PDF falló','err') }
       }
       // 2) El mail NO sale solo. Se abre el modal de envío (el mismo del botón ✉) con los
@@ -3291,7 +3322,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
       const fMail = conMail ? { 'N° Presupuesto':String(presuNum), __row:filaNueva, 'Proyecto':sel.p['Proyecto']||'', 'Cliente':sel.p['Cliente']||'', 'Agencia':sel.p['Agencia']||'', 'Nro de Factura':nro||'', 'Fecha emision':fechaEmision } : null
       // Si fue una parte, decir dónde queda el resto: la fila de esta factura lo muestra y lo deja cargar.
       const resta=Math.max(0, Math.round(sel.pendiente)-Math.round(neto))
-      showToast(`Factura #${presuNum} creada ✓${resta>sel.neto*0.05?` · quedan ${fmt(resta)} por facturar (botón "+ Facturar saldo" en su fila)`:''}${conMail?' · elegí a quién mandarla':''}`); onCreada(fMail)
+      showToast(varios ? `Factura creada ✓ · ${elegidos.length+1} trabajos · ${fmt(total)}${conMail?' · elegí a quién mandarla (sale un solo mail)':''}` : `Factura #${presuNum} creada ✓${resta>sel.neto*0.05?` · quedan ${fmt(resta)} por facturar (botón "+ Facturar saldo" en su fila)`:''}${conMail?' · elegí a quién mandarla':''}`); onCreada(fMail)
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -3324,7 +3355,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
             <div style={{minWidth:0}}><div style={{fontSize:13, color:T.ink, fontWeight:600}}>{sel.p['Proyecto']||'—'}</div><div style={{fontSize:11.5, color:T.ink3}}>#{sel.p['Columna 1']} · {[sel.p['Cliente'],sel.p['Agencia']].filter(Boolean).join(' · ')} · pendiente {fmt(sel.pendiente)}</div>
               {(()=>{ const fi=fechaInfo(sel.p); return <div style={{display:'flex', alignItems:'center', gap:6, marginTop:5}}><span style={{width:7,height:7,borderRadius:7,background:fi.c}}/><span style={{fontSize:11.5, color:fi.c, fontWeight:600}}>Evento {sel.p['Fecha Evento']||'s/f'} · {fi.futuro?'todavía no pasó':fi.l}</span></div> })()}
             </div>
-            <button onClick={()=>setSel(null)} style={miniBtn}>cambiar</button>
+            <button onClick={()=>{setSel(null); setExtras([])}} style={miniBtn}>cambiar</button>
           </div>
           {/* Trabajo facturado en partes: qué se facturó ya y cuánto queda. Así la segunda
               carga no arranca de cero ni hay que ir a mirar la otra factura para sacar la cuenta. */}
@@ -3354,6 +3385,25 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
                 </div>
               : <div style={{fontSize:11.5, color:T.brand, marginTop:5, fontWeight:500}}>⚠ Sin CUIT cargado para «{facturarA}». Cargalo en Agencias.</div>}
           </div>
+          {/* Una factura para varios trabajos: se tildan los otros de la misma agencia y entran todos con el mismo N°. */}
+          {candidatos.length>0 && <div style={{border:`1px solid ${varios?T.ink:T.border}`, borderRadius:10, padding:'10px 14px', marginBottom:16}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+              <div style={{fontSize:12.5, color:T.ink, fontWeight:600}}>¿Esta factura cubre más trabajos de {facturarA}?<span style={{fontWeight:400, color:T.ink3}}> · {candidatos.length} sin facturar</span></div>
+              <span style={{display:'flex', gap:6}}>
+                <button onClick={()=>setExtras(candidatos.map(nroDe))} style={miniBtn}>Todos</button>
+                {varios && <button onClick={()=>setExtras([])} style={miniBtn}>Ninguno</button>}
+              </span>
+            </div>
+            <div style={{maxHeight:190, overflowY:'auto', marginTop:8}}>
+              {candidatos.map(x=>{ const n=nroDe(x), on=extras.includes(n), fi=fechaInfo(x.p); return (
+                <label key={n} style={{display:'flex', gap:9, alignItems:'center', padding:'6px 0', borderTop:`1px solid ${T.border}`, cursor:'pointer', fontSize:12.5}}>
+                  <input type="checkbox" checked={on} onChange={()=>setExtras(e=>on?e.filter(v=>v!==n):[...e,n])}/>
+                  <span style={{flex:1, minWidth:0}}><span style={{display:'block', color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||'—'}</span><span style={{display:'block', fontSize:11, color:T.ink3}}>#{n} · {x.p['Cliente']||''} · {fi.fecha}</span></span>
+                  <span style={{fontFamily:MONO, fontSize:12, color:on?T.ink:T.ink3}}>{fmt(x.pendiente)}</span>
+                </label> )})}
+            </div>
+            {varios && <div style={{fontSize:11.5, color:T.ink2, marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Una sola factura por <b>{elegidos.length+1} trabajos</b>: se guarda una fila por trabajo con el mismo N°, un solo PDF y un solo mail.</div>}
+          </div>}
           <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
             <div style={{flex:1, minWidth:120}}><label style={lblV2}>Entidad</label><select value={entidad} onChange={e=>setEntidad(e.target.value)} style={inpV2}>{['SRL','Sofia','Lulu','Efectivo'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
             <div style={{width:90}}><label style={lblV2}>Tipo</label><select value={tipo} onChange={e=>setTipo(e.target.value)} style={inpV2}>{['A','B','C'].map(x=><option key={x} value={x}>{x}</option>)}</select></div>
@@ -3363,11 +3413,14 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, o
             </div>
           </div>
           <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:8}}>
-            <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label><input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/></div>
+            <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label>{varios
+              ? <div title="Con varios trabajos, cada uno entra por lo que le falta facturar" style={{...inpV2, textAlign:'right', fontFamily:MONO, background:T.surfaceAlt, color:T.ink2}}>{Math.round(neto).toLocaleString('es-AR')}</div>
+              : <input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>}</div>
             <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', paddingBottom:9}}><input type="checkbox" checked={conIVA} onChange={e=>setConIVA(e.target.checked)}/> Con IVA 21%</label>
           </div>
-          <div style={{display:'flex', gap:7, alignItems:'center', marginBottom:12, flexWrap:'wrap'}}>
+          {/* Los porcentajes son para facturar UN trabajo en partes; con varios trabajos en la factura no aplican. */}
+          <div style={{display:varios?'none':'flex', gap:7, alignItems:'center', marginBottom:12, flexWrap:'wrap'}}>
             <span style={{fontSize:11.5, color:T.ink3}}>Facturar:</span>
             {/* Los % son SIEMPRE del trabajo entero. En la 2ª factura antes eran del saldo
                 ("30%" daba el 30% de lo que faltaba, un número que no es de nada). */}
@@ -3578,6 +3631,8 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
   const [agencia,setAgencia]=useState('')      // para aprender el mail de facturación de la agencia
   const [mailFactAg,setMailFactAg]=useState('')
   const [recordar,setRecordar]=useState(false)
+  // Si la factura cubre varios trabajos: las otras filas del mismo N° (las marca como enviadas el mismo mail)
+  const [hermanas,setHermanas]=useState([])
   useEffect(()=>{ let vivo=true; (async()=>{
     try{ const r=await fetch('/api/factura-prep-mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:num, fila:f.__row})}); const j=await r.json()
       if(!vivo) return
@@ -3585,7 +3640,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
       // Solo vienen tildados los sugeridos (contacto del presu + facturación de la agencia).
       // El resto de la agencia queda desmarcado: la factura no va en copia a todo el mundo.
       setDests((j.destinatarios||[]).map(d=>({...d, sel:!!d.sugerido})))
-      setAdjPDF(!!j.adjuntarPDF)
+      setAdjPDF(!!j.adjuntarPDF); setHermanas(j.hermanas||[])
       setAgencia(j.agenciaNombre||''); setMailFactAg(j.mailFacturacionAgencia||'')
       setAsunto(j.asunto||''); setCuerpo(j.cuerpo||''); setLoading(false)
     }catch(e){ if(vivo){ showToast('Error de conexión','err'); onClose() } }
@@ -3609,6 +3664,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
       const fd=new FormData()
       fd.append('file', file, file.name); fd.append('entidad', entidad); fd.append('nroFactura', nro)
       fd.append('presupuestoNum', num||''); fd.append('fila', String(f.__row||'')); fd.append('mes', String(fe.getMonth()+1)); fd.append('anio', String(fe.getFullYear()))
+      if(hermanas.length) fd.append('hermanas', JSON.stringify(hermanas))
       setSubiendo(true)
       try{ const r=await fetch('/api/factura-upload',{method:'POST',body:fd}); const j=await r.json()
         if(!j.ok){ showToast(j.error||'Error subiendo el PDF','err'); setSubiendo(false); return }
@@ -3624,7 +3680,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
   async function enviar(){
     if(!seleccionados.length){ showToast('Elegí al menos un destinatario','err'); return }
     setSaving(true)
-    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num, fila:f.__row, adjuntarPDF:adjPDF})}); const j=await r.json()
+    try{ const r=await fetch('/api/factura-enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:seleccionados, asunto, cuerpo, presupuestoNum:num, fila:f.__row, adjuntarPDF:adjPDF, hermanas})}); const j=await r.json()
       if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
       // Aprender el mail de facturación de la agencia (queda en la solapa AGENCIAS)
       if(recordar && candidatoFact){
@@ -3781,7 +3837,7 @@ function EditarFechasModal({f, onClose, onRefresh, showToast}){
   </div>
 }
 
-function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
+function CobroModal({f, hermanas=[], cuentas, onClose, onRefresh, showToast}){
   const total=parseMonto(f['Precio FINAL'])
   const netoF=parseMonto(f['Precio SIN IVA']), ivaF=parseMonto(f['IVA'])   // el total ya es CON IVA; el desglose es para cruzar con el banco
   const cuentaOpts=[...new Set((cuentas||[]).map(c=>c['Nombre']).filter(Boolean))]
@@ -3795,8 +3851,30 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
   const num=f['N° Presupuesto']
   const real=Math.round(parseFloat(montoCobrado)||0)
   const dif=real-Math.round(total)
+  // Factura que cubre varios trabajos (mismo N°): el cliente la paga con UNA transferencia, así que
+  // se cobra entera de una vez. Cada trabajo queda cobrado por su saldo, en la misma cuenta y fecha.
+  const [entera,setEntera]=useState(hermanas.length>0)
+  const saldoDe=x=>Math.max(0, Math.round(parseMonto(x['Precio FINAL'])-parseMonto(x['Monto cobrado'])))
+  const todas=[f,...hermanas], totalEntera=todas.reduce((a,x)=>a+saldoDe(x),0)
+  async function cobrarEntera(){
+    if(!historico && !cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
+    if(!window.confirm(`Marcar como COBRADA la factura ${f['Nro de Factura']||''} entera: ${todas.length} trabajos por ${fmt(totalEntera)}${historico?' (cobro histórico, no suma a ninguna cuenta)':` en ${cuenta}`}. ¿Confirmás?`)) return
+    setSaving(true)
+    const fecha=`${new Date().getDate()}/${new Date().getMonth()+1}/${new Date().getFullYear()}`
+    let hechas=0
+    for(const x of todas){
+      try{ const r=await fetch('/api/factura-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ nroPresupuesto:String(x['N° Presupuesto']), tipoCobro:'total', monto:saldoDe(x), cuentaDestino:historico?'':cuenta, formaPago:historico?'Histórico':forma, retGanancias:0, retIIBB:0, retIVA:0, comision:0, fechaCobro:fecha, reservarIVA:historico?false:reservarIVA, historico })})
+        const j=await r.json()
+        // 409 = ese trabajo ya quedó cobrado (un intento anterior que se cortó a la mitad): se saltea y sigue con los demás.
+        if(j&&j.error&&r.status!==409){ showToast(`Se cobraron ${hechas} de ${todas.length} trabajos. Frenó en #${x['N° Presupuesto']}: ${j.error}. Volvé a tocar Confirmar: los ya cobrados se saltean.`,'err'); setSaving(false); if(onRefresh) onRefresh(); return }
+        hechas++
+      }catch(e){ showToast(`Se cobraron ${hechas} de ${todas.length} trabajos. Error de conexión en #${x['N° Presupuesto']}: volvé a intentar con los que faltan`,'err'); setSaving(false); if(onRefresh) onRefresh(); return }
+    }
+    showToast(`Factura ${f['Nro de Factura']||''} cobrada ✓ · ${todas.length} trabajos · ${fmt(totalEntera)}`); onClose(); if(onRefresh) onRefresh()
+  }
 
   async function cobrar(){
+    if(entera && hermanas.length) return cobrarEntera()
     if(!historico && !cuenta){ showToast('Elegí en qué cuenta entra','err'); return }
     if(real<=0){ showToast('Poné el monto cobrado','err'); return }
     const msg = parcial
@@ -3816,12 +3894,16 @@ function CobroModal({f, cuentas, onClose, onRefresh, showToast}){
     <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:440, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
       <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Registrar cobro</div><div style={{fontSize:12, color:T.ink3, marginTop:2, fontFamily:MONO}}>#{num} · {f['Proyecto']||f['Cliente']||''}</div></div>
       <div style={{padding:'20px 22px'}}>
+        {hermanas.length>0 && <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:entera?T.posSoft:T.surfaceAlt, border:`1px solid ${entera?T.pos:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
+          <input type="checkbox" checked={entera} onChange={e=>setEntera(e.target.checked)} style={{marginTop:2}}/>
+          <span><strong style={{color:T.ink}}>Cobrar la factura entera</strong> — la {f['Nro de Factura']} cubre <strong>{todas.length} trabajos</strong> sin cobrar por {fmt(totalEntera)}. Destildá para cobrar solo este trabajo.</span>
+        </label>}
         <div style={{textAlign:'center', marginBottom:18}}>
           <div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6}}>Monto cobrado (lo que realmente entró)</div>
-          <input type="number" value={montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
-          <div style={{fontSize:11, color:T.ink3, marginTop:5}}>Facturado: <b style={{color:T.ink}}>{fmt(total)}</b>{ivaF>0?` (neto ${fmt(netoF)} + IVA ${fmt(ivaF)})`:' (sin IVA)'}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
+          <input type="number" disabled={entera&&hermanas.length>0} value={entera&&hermanas.length>0?String(totalEntera):montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
+          <div style={{fontSize:11, color:T.ink3, marginTop:5, display:(entera&&hermanas.length>0)?'none':'block'}}>Facturado: <b style={{color:T.ink}}>{fmt(total)}</b>{ivaF>0?` (neto ${fmt(netoF)} + IVA ${fmt(ivaF)})`:' (sin IVA)'}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
         </div>
-        <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:parcial?T.brandSoft:T.surfaceAlt, border:`1px solid ${parcial?T.brand:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
+        <label style={{display:(entera&&hermanas.length>0)?'none':'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:parcial?T.brandSoft:T.surfaceAlt, border:`1px solid ${parcial?T.brand:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
           <input type="checkbox" checked={parcial} onChange={e=>setParcial(e.target.checked)} style={{marginTop:2}}/>
           <span><strong style={{color:T.ink}}>Cobro parcial (adelanto)</strong> — cobraste solo una parte. La factura <strong>queda pendiente</strong> por el resto (no la da por cobrada del todo).{parcial && real>0 && real<Math.round(total) && <span style={{display:'block', marginTop:3, color:T.brand, fontWeight:600}}>Queda pendiente: {fmt(Math.round(total)-real)}</span>}</span>
         </label>
