@@ -62,7 +62,7 @@ if(c.entreSocios.length) console.log(`\n  (${c.entreSocios.length} movimientos e
 
 const t=c.tarjetasCargadas
 console.log(`\n  ⚠ TARJETAS: resúmenes cargados hasta ${t.hasta.toUpperCase()}.`)
-t.lista.forEach(x=>console.log(`     ${x.tarjeta.padEnd(18)} hasta ${x.texto}`))
+t.lista.forEach(x=>console.log(`     ${x.tarjeta.padEnd(18)} hasta ${x.texto}${x.deBaja?'   (ya no se usa, no cuenta)':''}`))
 const faltan=[]; for(let m=t.hastaMes+1; m<=hoy.getMonth()+1; m++) faltan.push(nombreMes(m))
 if(faltan.length) console.log(`     Faltan ${faltan.join(', ')}: cada mes sin resumen infla el saldo a favor del socio (sus gastos personales de ese mes no están restados).`)
 console.log()

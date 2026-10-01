@@ -17,6 +17,7 @@ import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
 import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
+import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -5070,7 +5071,7 @@ function SubirResumen({onClose, onDone, showToast}){
   const [saving,setSaving]=useState(false)
   const [override,setOverride]=useState({})  // "ti:j" -> 'Empresa' | 'Personal' (marca final del usuario, pisa la de la IA)
   const [expand,setExpand]=useState('')       // 'juan' | 'sofi' | ''
-  const TARJS=['BBVA Visa','Master Galicia','Santander Visa','Santander Amex']
+  const TARJS=TARJETAS_ACTIVAS   // Master Galicia y Santander Amex ya no se usan (01/10/2026): la lista vive en lib/socios.mjs
   async function procesar(){
     if(!file){ showToast('Elegí el PDF','err'); return }
     setLoading(true)

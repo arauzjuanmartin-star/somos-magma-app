@@ -16,7 +16,7 @@
  * Sin --escribir solo muestra el preview y cómo quedaría la cuenta de socios.
  */
 import { google } from 'googleapis'
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { RANGOS_SOCIOS, calcularCuentaSocios, fraseSaldo } from '../lib/socios.mjs'
 const env=Object.fromEntries(readFileSync('/Users/dronjuan/somos-magma-app/.env.local','utf8').split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');let v=l.slice(i+1).trim();if(v.startsWith('"')&&v.endsWith('"'))v=v.slice(1,-1);return [l.slice(0,i).trim(),v]}))
 const auth=new google.auth.GoogleAuth({credentials:{client_email:env.GOOGLE_CLIENT_EMAIL,private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n')},scopes:['https://www.googleapis.com/auth/spreadsheets']})
@@ -172,7 +172,8 @@ console.log(`\n   Total del resumen: ${M(TOTAL)} + USD ${TOTAL_USD} · vencía 0
 console.log(`   Queda financiado: ${M(r2(TOTAL-PAGADO_0409))} + USD ${TOTAL_USD} · próximo cierre 01/10, vence 09/10`)
 
 // ── cómo quedaría la cuenta de socios con esto cargado (misma función que la app, sin escribir) ──
-const filas=MOVS.map(m=>[TARJETA,MES,ANIO,m[0],m[4],m[1],m[3],m[2],m[5],m[6],'juan@somosmagma.com',
+const conAnio=f=>f+'/'+(f.endsWith('/12')?2025:2026)   // 'DD/MM' sin año lo toma Sheets como del año en curso: la cuota de AILES es de dic 2025
+const filas=MOVS.map(m=>[TARJETA,MES,ANIO,conAnio(m[0]),m[4],m[1],m[3],m[2],m[5],m[6],'juan@somosmagma.com',
   m[1].includes('08/09')?'figura en la tarjeta de Sofi pero es gasto de Juan':(m[8]?`revisar: ${m[8]}`:(m[5]===E?`gastó ${m[4]}`:''))])
 const RS=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:RANGOS_SOCIOS,valueRenderOption:'FORMATTED_VALUE'})
 const [SM,MT,PRE,PRO]=RS.data.valueRanges.map(v=>v.values||[])
@@ -180,7 +181,7 @@ const MTsin=[MT[0],...MT.slice(1).filter(r=>!(String(r[0]).trim().toLowerCase()=
 const antes=calcularCuentaSocios([SM,MTsin,PRE,PRO]), despues=calcularCuentaSocios([SM,[...MTsin,...filas],PRE,PRO])
 console.log(`\n\x1b[1m════════ CUENTA DE SOCIOS · antes → después de cargar agosto (tarjetas hasta ${despues.tarjetasCargadas.hasta}) ════════\x1b[0m`)
 antes.socios.forEach((s,i)=>console.log(`   ${s.nombre.padEnd(6)} ${M(s.saldo).padStart(15)}  →  ${M(despues.socios[i].saldo).padStart(15)}   ${fraseSaldo(despues.socios[i])}`))
-console.log(`   \x1b[2m(sigue faltando septiembre de las 4 tarjetas y agosto de BBVA Visa, Master Galicia y Santander Amex)\x1b[0m`)
+console.log(`   \x1b[2m(BBVA Visa de agosto va con scripts/tarjeta-bbva-agosto-2026.mjs; Master Galicia y Amex ya no se usan)\x1b[0m`)
 
 if(!ESCRIBIR){ console.log('\n\x1b[33mPREVIEW — no escribí nada.\x1b[0m\n'); process.exit(0) }
 
@@ -191,6 +192,11 @@ const meta=await sheets.spreadsheets.get({spreadsheetId:ID,fields:'sheets(proper
 const sid=t=>meta.data.sheets.find(x=>x.properties.title===t)?.properties.sheetId
 const hoyISO=new Date().toISOString(), QUIEN='juan@somosmagma.com'
 const log=[]
+// copia de lo que se va a tocar, por si hay que volver atrás (scripts/.rollback-tarjeta-santander-agosto-2026.json)
+{ const RB=['MOVIMIENTOS_TARJETA','CUOTAS','TARJETAS','PRESTAMOS']
+  const rb=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:RB,valueRenderOption:'FORMULA'})
+  writeFileSync(new URL('./.rollback-tarjeta-santander-agosto-2026.json',import.meta.url),JSON.stringify({cuando:hoyISO,solapas:Object.fromEntries(rb.data.valueRanges.map((v,i)=>[RB[i],v.values||[]]))}))
+  console.log(`\n   ✓ copia previa guardada en scripts/.rollback-tarjeta-santander-agosto-2026.json`) }
 
 // 1) MOVIMIENTOS_TARJETA: reemplaza lo que haya de Santander Visa mes 8
 const cur=(await sheets.spreadsheets.values.get({spreadsheetId:ID,range:'MOVIMIENTOS_TARJETA!A:C'})).data.values||[]
@@ -242,8 +248,9 @@ const ph=pr[0], PH=n=>ph.indexOf(n)
 const filaP=(nombre,cuota)=>pr.findIndex((row,i)=>i>0&&String(row[PH('Prestamo')]).includes(nombre)&&String(row[PH('Cuota nro')]).includes(cuota))
 const upsP=[]; const setP=(fila,n,v)=>{if(PH(n)!==-1)upsP.push({range:`PRESTAMOS!${colLetra(PH(n))}${fila+1}`,values:[[v]]})}
 const p11=filaP('8128/6','11/18'), p12=filaP('8035/1','12/12')
-if(p11>0){ setP(p11,'Pagado','SI'); setP(p11,'Fecha pago','6/8/2026'); setP(p11,'Cuenta pago','Santander Sofi'); setP(p11,'Notas','Pagada en dos partes: 05/08 $377.312,94 + 06/08 $320.835,87 = $698.148,81 (cronograma $695.812,24). Del resumen de cuenta Santander de Sofi.') }
-if(p12>0){ setP(p12,'Pagado','SI'); setP(p12,'Fecha pago','13/8/2026'); setP(p12,'Cuenta pago','Santander Sofi'); setP(p12,'Notas','ÚLTIMA CUOTA: $291.239,10 el 13/08 (cronograma $289.050,90). Préstamo cancelado, saldo $0 según el banco.') }
+const notaP=f=>{const n=String(pr[f][PH('Notas')]||'').trim(); return n&&!/Pagada en dos partes|ÚLTIMA CUOTA/.test(n)?n+' · ':''}   // conserva la nota que ya tenía
+if(p11>0){ setP(p11,'Pagado','SI'); setP(p11,'Fecha pago','6/8/2026'); setP(p11,'Cuenta pago','Santander Sofi'); setP(p11,'Notas',notaP(p11)+'Pagada en dos partes: 05/08 $377.312,94 + 06/08 $320.835,87 = $698.148,81 (cronograma $695.812,24). Del resumen de cuenta Santander de Sofi.') }
+if(p12>0){ setP(p12,'Pagado','SI'); setP(p12,'Fecha pago','13/8/2026'); setP(p12,'Cuenta pago','Santander Sofi'); setP(p12,'Notas',notaP(p12)+'ÚLTIMA CUOTA: $291.239,10 el 13/08 (cronograma $289.050,90). Préstamo cancelado, saldo $0 según el banco.') }
 if(upsP.length) await sheets.spreadsheets.values.batchUpdate({spreadsheetId:ID,requestBody:{valueInputOption:'USER_ENTERED',data:upsP}})
 console.log(`   ✓ PRESTAMOS: 8128/6 cuota 11/18 pagada · 8035/1 cuota 12/12 pagada (préstamo terminado)`)
 log.push(['PRESTAMOS','Santander','8128/6 c.11 pagada 6/8 · 8035/1 c.12 pagada 13/8 (cancelado)'])
