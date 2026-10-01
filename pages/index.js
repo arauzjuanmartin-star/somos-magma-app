@@ -2809,6 +2809,21 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // y "Lista" (todas las facturas una por una, con sus filtros de siempre).
   const [vista,setVista]=useState('agencias'), [agF,setAgF]=useState('todas'), [agOpen,setAgOpen]=useState({})
   const cel=useEsCelular()
+  // Seguimiento de cobranza por agencia: lo que se está tipeando (fecha prometida + nota) antes de guardar,
+  // y qué acción de a varias facturas está en curso (para no mandarla dos veces).
+  const [promDraft,setPromDraft]=useState({}), [loteBusy,setLoteBusy]=useState('')
+  // Las columnas "Prometió pagar" y "Nota cobranza" pueden no estar todavía en el sheet: sin ellas el control no aparece.
+  const hayPromesa=fc.length>0 && Object.prototype.hasOwnProperty.call(fc[0],'Prometió pagar')
+  const aISO=s=>{ const d=parseD(s); return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'' }
+  const deISO=s=>{ const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?`${+m[3]}/${+m[2]}/${m[1]}`:'' }
+  // Cambia lo mismo en varias facturas de una (marcar enviadas, anotar la promesa de pago).
+  async function lote(filas, cambios, accion, okMsg, porFila){
+    if(loteBusy) return false
+    setLoteBusy(accion)
+    try{ const r=await fetch('/api/facturas-lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion, cambios, filas:filas.map(f=>({fila:f.__row, presupuestoNum:String(f['N° Presupuesto']||'').trim(), ...(porFila?{cambios:porFila(f)}:{})}))})})
+      const j=await r.json(); if(!j.ok){ showToast(j.error||'Error','err'); setLoteBusy(''); return false }
+      showToast(okMsg); if(onRefresh) await onRefresh(); setLoteBusy(''); return true
+    }catch(e){ showToast('Error de conexión','err'); setLoteBusy(''); return false } }
   // Cuando se llega desde otro módulo buscando una factura puntual, se abre la lista: ahí está la fila exacta.
   useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro||nav.q) setVista('lista'); if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
@@ -2935,7 +2950,9 @@ function msgUpload(j, base='PDF subido ✓'){
   const agLista=Object.values(agMap).map(a=>{
     const venc=a.deben.filter(f=>(diffVenc(f)??99)<0)
     const vencido=venc.reduce((s,f)=>s+saldoF(f),0), debe=a.deben.reduce((s,f)=>s+saldoF(f),0)
-    return {...a, razones:[...a.razones], venc, vencido, enPlazo:debe-vencido, sinFactMonto:a.sinFact.reduce((s,x)=>s+x.pendiente,0), sinEnviar:a.deben.filter(f=>!enviadaF(f)), atraso:mediana(a.atrasos)}
+    // Lo que prometió la agencia cuando se le reclamó: se anota una vez y queda en todas sus facturas reclamadas.
+    const dato=campo=>a.deben.map(f=>String(f[campo]||'').trim()).find(Boolean)||''
+    return {...a, razones:[...a.razones], venc, vencido, enPlazo:debe-vencido, sinFactMonto:a.sinFact.reduce((s,x)=>s+x.pendiente,0), sinEnviar:a.deben.filter(f=>!enviadaF(f)), atraso:mediana(a.atrasos), promesa:dato('Prometió pagar'), notaCob:dato('Nota cobranza')}
   }).sort((a,b)=>(b.vencido-a.vencido)||((b.enPlazo+b.sinFactMonto)-(a.enPlazo+a.sinFactMonto)))
   const ql=q.trim().toLowerCase(), tiene=v=>String(v||'').toLowerCase().includes(ql)
   const agFiltradas=agLista.filter(a=>{
@@ -3015,19 +3032,40 @@ function msgUpload(j, base='PDF subido ✓'){
         const Num=({l,v,c})=><span style={{textAlign:cel?'left':'right', minWidth:0}}>{cel && <span style={{display:'block', fontSize:9.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>{l}</span>}<span style={{fontFamily:MONO, fontSize:13, fontWeight:v>0?600:400, color:v>0?c:T.ink3}}>{v>0?fmt(v):'—'}</span></span>
         // El reclamo sale por razón social: si lo vencido es de varias, un botón por cada una.
         const razonesVenc=[...new Set(a.venc.map(claveAg))].filter(Boolean)
+        // La fecha que prometió: verde si todavía no llegó, roja si ya pasó y sigue debiendo.
+        const prom=parseD(a.promesa), promPaso=!!prom && prom<hoy0
         return <div key={a.nombre} style={{borderTop:i===0?'none':`1px solid ${T.border}`}}>
           <div onClick={()=>setAgOpen(o=>({...o,[a.nombre]:!ab}))} style={{display:'grid', gridTemplateColumns:cel?'repeat(3,minmax(0,1fr))':'minmax(0,1.6fr) 125px 125px 125px 22px', gap:10, padding:'13px 18px', alignItems:'center', cursor:'pointer', background:ab?T.surfaceAlt:'transparent'}}>
             <span style={{minWidth:0, gridColumn:cel?'1 / -1':'auto'}}>
               <span style={{display:'block', fontSize:14, fontWeight:600, color:T.ink}}>{a.nombre}{a.razones.length>1 && <span style={{fontSize:10.5, fontWeight:600, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, padding:'2px 8px', borderRadius:20, marginLeft:8}}>{a.razones.length} razones sociales</span>}</span>
-              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2}}>{[a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:'', a.sinFact.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:'', paga].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}</span>
+              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2}}>{[a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:'', a.sinFact.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:'', paga].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}{prom && <span style={{color:promPaso?T.brand:T.pos, fontWeight:600}}> · prometió pagar el {prom.getDate()}/{prom.getMonth()+1}{promPaso?' y no entró':''}</span>}</span>
             </span>
             <Num l="Vencido" v={a.vencido} c={T.brand}/><Num l="En plazo" v={a.enPlazo} c={T.ink}/><Num l="Falta facturar" v={a.sinFactMonto} c={T.warn}/>
             {!cel && <span style={{fontSize:10, color:T.ink3, textAlign:'right'}}>{ab?'▼':'▶'}</span>}
           </div>
           {ab && <div style={{padding:cel?'4px 14px 14px':'4px 18px 16px', background:T.bg, borderTop:`1px dashed ${T.border}`}}>
-            {razonesVenc.length>0 && <div style={{display:'flex', gap:8, flexWrap:'wrap', padding:'12px 0 2px'}}>
+            {(razonesVenc.length>0 || a.sinEnviar.length>0) && <div style={{display:'flex', gap:8, flexWrap:'wrap', padding:'12px 0 2px'}}>
               {razonesVenc.map(k=><button key={k} onClick={()=>setReclamo(k)} style={{padding:'8px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer'}} title="Un solo mail con todo lo vencido de esta razón social">✉ Reclamar lo vencido{razonesVenc.length>1?` · ${k.includes(' - (')?k.split(' - (')[1].replace(/\)\s*$/,''):k}`:''}</button>)}
+              {/* Facturas que salieron por fuera de la app (mail directo, WhatsApp): se marcan todas juntas en vez de entrar una por una. */}
+              {a.sinEnviar.length>0 && <button disabled={!!loteBusy} onClick={async()=>{ const n=a.sinEnviar.length, hoyStr=`${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`
+                if(!window.confirm(`¿Marcar como ENVIADAS ${n===1?'la factura':`las ${n} facturas`} de ${a.nombre} que ${n===1?'figura':'figuran'} sin enviar?\n\nUsalo solo si ya ${n===1?'salió':'salieron'} por fuera de la app (mail directo, WhatsApp). Como fecha de envío queda la de emisión de cada factura.`)) return
+                await lote(a.sinEnviar, {'Fc Enviada':true}, `enviadas ${a.nombre}`, `${a.nombre}: ${n} ${n===1?'factura marcada como enviada':'facturas marcadas como enviadas'} ✓`, f=>({'Fecha enviada':String(f['Fecha emision']||'').trim()||hoyStr})) }}
+                style={{padding:'8px 14px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12.5, fontWeight:600, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}} title="Si ya salieron por mail directo o WhatsApp, se marcan todas de una">Ya salieron: marcar {a.sinEnviar.length===1?'1 como enviada':`las ${a.sinEnviar.length} como enviadas`}</button>}
             </div>}
+            {/* Lo que prometió cuando se le reclamó. Se anota una vez y queda en lo vencido de la agencia
+                (o en todo lo que debe, si no tiene nada vencido). Caja va a contar esa plata en esa fecha. */}
+            {hayPromesa && a.deben.length>0 && (()=>{ const dr=promDraft[a.nombre]||{}, fechaV=dr.fecha!==undefined?dr.fecha:aISO(a.promesa), notaV=dr.nota!==undefined?dr.nota:a.notaCob
+              const cambio=fechaV!==aISO(a.promesa) || notaV.trim()!==a.notaCob
+              const conDato=a.deben.filter(f=>String(f['Prometió pagar']||'').trim()||String(f['Nota cobranza']||'').trim())
+              const destino=[...new Set([...(a.venc.length?a.venc:a.deben), ...conDato])]
+              const escribir=v=>setPromDraft(o=>({...o,[a.nombre]:{...(o[a.nombre]||{}), ...v}}))
+              const guardar=async()=>{ const ok=await lote(destino, {'Prometió pagar':deISO(fechaV), 'Nota cobranza':notaV.trim()}, `promesa ${a.nombre}`, fechaV?`${a.nombre}: prometió pagar el ${deISO(fechaV)} ✓`:`${a.nombre}: seguimiento guardado ✓`); if(ok) setPromDraft(o=>{ const n={...o}; delete n[a.nombre]; return n }) }
+              return <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'12px 0 2px'}}>
+                <span style={{fontSize:12, color:T.ink2, fontWeight:600}}>Prometió pagar el</span>
+                <input type="date" value={fechaV} onChange={e=>escribir({fecha:e.target.value})} style={{padding:'6px 9px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
+                <input value={notaV} onChange={e=>escribir({nota:e.target.value})} onKeyDown={e=>{ if(e.key==='Enter'&&cambio) guardar() }} placeholder="Con quién hablaste y qué dijo" style={{flex:'1 1 220px', minWidth:160, padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
+                {cambio && <button disabled={!!loteBusy} onClick={guardar} style={{padding:'7px 14px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:700, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}}>{loteBusy?'Guardando…':'Guardar'}</button>}
+              </div> })()}
             {a.deben.length>0 && <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, margin:'14px 0 2px'}}>Te debe · {fmt(a.vencido+a.enPlazo)}</div>}
             {[...a.deben].sort((x,y)=>(diffVenc(x)??99)-(diffVenc(y)??99)).map((f,j)=>{ const d=diffVenc(f), r=fechaRef(f), dd=r?`${r.d.getDate()}/${r.d.getMonth()+1}`:'', lbl=!r?'sin fecha':r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida', tot=parseMonto(f['Precio FINAL']), k=claveAg(f)
               return <div key={'d'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
