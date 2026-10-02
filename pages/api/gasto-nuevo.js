@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
   // medio = CÓMO se pagó (Efectivo, Transferencia…): va a la columna "Medio de pago". Antes este endpoint no la
   // escribía y había que completarla a mano en el sheet.
-  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago, medio, rubro, subrubro, nroTrabajo } = req.body
+  let { categoria, concepto, monto, moneda, recurrencia, diaPago, cuenta, mes, anio, notas, tipo, pagado, cuentaPago, fechaPago, medio, rubro, subrubro, nroTrabajo, sinTocarSaldo } = req.body
   monto = numv(monto)
   moneda = String(moneda || 'ARS').toUpperCase()
   const esUnico = recurrencia === 'unico'
@@ -82,8 +82,9 @@ export default async function handler(req, res) {
     // PERO si el pago es de un día ANTERIOR al último saldo cargado desde el banco (o contado en la caja), no se
     // resta: ese saldo ya lo tiene descontado. Ej: el 1/10 se actualiza Efectivo y después se anota un pago del
     // 30/9. Restarlo otra vez dejaría la caja $315.000 abajo de lo que hay.
+    // sinTocarSaldo: el gasto sale de un movimiento del extracto del banco, que ya trae el saldo con ese pago descontado.
     let aviso = ''
-    if (pagado && cuentaPago) {
+    if (pagado && cuentaPago && !sinTocarSaldo) {
       try {
         const rC = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:N' })
         const rows = rC.data.values || [], ch = rows[0] || []

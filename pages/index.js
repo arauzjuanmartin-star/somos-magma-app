@@ -20,7 +20,7 @@ import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
-import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe } from '../lib/extracto.mjs'
+import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe, facturasCandidatas } from '../lib/extracto.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -5028,6 +5028,7 @@ function Caja({data, onRefresh, showToast, goTo}){
   const c=calcularCaja(data,{mes:mesIdx, anio, hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
   // "Hoy" mira siempre el mes en curso, aunque en la pestaña Caja se esté mirando otro mes.
   const cHoy=(mesIdx===now.getMonth()+1 && anio===now.getFullYear()) ? c : calcularCaja(data,{hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
+  const nBanco=(data.movimientosBanco||[]).filter(r=>String(r['Estado']||'').trim()==='Para revisar').length
   const t=c.totales, seguro=modo==='seguro'
   const fm=n=>(n<0?'−':'')+fmt(n)
   const DIAS_SEM=['dom','lun','mar','mié','jue','vie','sáb']
@@ -5138,14 +5139,14 @@ function Caja({data, onRefresh, showToast, goTo}){
       </div>
     </div>
     <div style={{display:'flex', marginBottom:18, borderBottom:`1px solid ${T.border}`}}>
-      {[['hoy','Hoy','qué hay que hacer'],['caja','Caja','lo que entra, lo que sale y si alcanza'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
+      {[['hoy','Hoy','qué hay que hacer'],['caja','Caja','lo que entra, lo que sale y si alcanza'],['banco',`Banco${nBanco?` (${nBanco})`:''}`,'lo que el extracto dejó para revisar'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
         <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tab===k?700:500, color:tab===k?T.ink:T.ink2, borderBottom:`2px solid ${tab===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{sub}</span>}</button>)}
     </div>
     {tab==='hoy' && (()=>{
       // HOY: la lista de tareas de administración. Se arma sola (lib/hoy.mjs) y cada tarea lleva a donde se resuelve.
       const h=tareasDeHoy(data,cHoy)
       const TONO={entra:{c:T.pos,bg:T.posSoft,l:'Trae plata'}, sale:{c:T.ink,bg:T.surfaceAlt,l:'Hay que pagar'}, alerta:{c:T.brand,bg:T.brandSoft,l:'No alcanza'}, falta:{c:T.warn,bg:T.warnSoft,l:'Falta cargar'}}
-      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
+      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='banco') setTab('banco'); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
       const DIAS_L=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
       const montoDe=x=>x.monto>0?`${x.tono==='entra'?'+':''}${x.montoAprox?'≈ ':''}${fmt(x.monto)}`:''
       const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:T.ink
@@ -5174,6 +5175,7 @@ function Caja({data, onRefresh, showToast, goTo}){
         </div>}
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10, lineHeight:1.5}}>La lista se arma sola con lo que hay cargado: cuando una tarea queda hecha, desaparece. Primero va lo que trae plata, después lo que hay que pagar y al final lo que falta cargar.</div>
       </> })()}
+    {tab==='banco' && <RevisarBanco data={data} onRefresh={onRefresh} showToast={showToast}/>}
     {tab==='detalle' && <Egresos data={data} onRefresh={onRefresh} showToast={showToast} embebido/>}
     {tab==='caja' && <>
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'13px 16px', marginBottom:18}}>
@@ -5267,6 +5269,201 @@ function Caja({data, onRefresh, showToast, goTo}){
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {extracto && <SubirExtracto data={data} onClose={()=>setExtracto(false)} onDone={()=>{ setExtracto(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={c.cuentas.filter(x=>x.activa).map(x=>x.nombre)} cuentas={data.cuentas||[]} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+  </>
+}
+
+// BANCO · PARA REVISAR: lo que el extracto no reconoció solo. Una persona dice qué es cada movimiento, caso por caso.
+// Un cobro puede pagar varias facturas juntas, o una en partes, o venir con una retención: por eso se eligen las
+// facturas a mano y se dice qué es la diferencia. Nada se duplica: una factura que ya figuraba cobrada solo queda
+// unida al movimiento; una sin cobrar se cobra una vez (con la fecha del banco y sin tocar el saldo de la cuenta).
+const DIFS_COBRO=[['retGanancias','Retención de Ganancias'],['retIIBB','Retención de Ingresos Brutos'],['retIVA','Retención de IVA'],['comision','Comisión del banco'],['parcial','Falta pagar esa parte']]
+const NOTAS_ENTRO=['Pase entre cuentas','Aporte de un socio','Devolución','Préstamo','Otro'], NOTAS_SALIO=['Sueldos','Pago a un freelancer','Pase entre cuentas','Retiro de un socio','Inversión','Otro']
+function RevisarBanco({data, onRefresh, showToast}){
+  const cel=useEsCelular()
+  const esPagado=esActiva   // "SI" / "SÍ" / TRUE, igual que en las cuentas
+  const todos=(data.movimientosBanco||[]).map(r=>{ const entro=parseMonto(r['Entró']), salio=parseMonto(r['Salió']); return {fila:r.__row, clave:String(r['Clave']||'').trim(), cuenta:String(r['Cuenta']||'').trim(), fechaTxt:String(r['Fecha']||'').trim(), fecha:parseD(r['Fecha']), concepto:String(r['Concepto']||'').trim(), detalle:String(r['Detalle']||'').trim(), que:String(r['Qué es']||'').trim(), estado:String(r['Estado']||'').trim(), monto:entro-salio} }).filter(m=>m.fecha && m.monto)
+  const pend=todos.filter(m=>m.estado==='Para revisar'), hechos=todos.filter(m=>m.estado==='Clasificado a mano')
+  const cuentas=[...new Set(pend.map(m=>m.cuenta))]
+  const [fCuenta,setFCuenta]=useState(''), [fTipo,setFTipo]=useState('todo'), [abierto,setAbierto]=useState(''), [busy,setBusy]=useState(false), [verHechos,setVerHechos]=useState(false)
+  // Lo que se está armando para el movimiento abierto
+  const [sel,setSel]=useState({}), [dif,setDif]=useState(''), [q,setQ]=useState(''), [modo,setModo]=useState(''), [gSel,setGSel]=useState(''), [nuevo,setNuevo]=useState({concepto:'', rubro:'', trabajo:''}), [nota,setNota]=useState({chip:'', texto:''})
+  const lista=pend.filter(m=>(!fCuenta||m.cuenta===fCuenta) && (fTipo==='todo'||(fTipo==='entro'?m.monto>0:m.monto<0))).sort((a,b)=>Math.abs(b.monto)-Math.abs(a.monto))
+  const rubros=(data.rubros||[]).filter(r=>!/^personal/i.test(r.rubro)).map(r=>({key:`${r.rubro}|${r.subrubro}`, label:r.subrubro?`${r.rubro} · ${r.subrubro}`:r.rubro, rubro:r.rubro, subrubro:r.subrubro}))
+  const categoriaDe=rubro=>/sueldo/i.test(rubro)?'Sueldos':/impuesto/i.test(rubro)?'Impuestos':/bancari|financ/i.test(rubro)?'Financieros':'Operativos'
+  const facturasReales=(data.facturacion||[]).filter(f=>esFacturaReal(f) && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA') && parseMonto(f['Precio FINAL'])>0)
+  const aCand=f=>{ const final=parseMonto(f['Precio FINAL']), cobrada=isCobrada(f), cobrado=parseMonto(f['Monto cobrado']), pendiente=cobrada?0:Math.max(0,final-cobrado); return {fila:f.__row, nro:String(f['N° Presupuesto']||'').trim(), agencia:String(f['Agencia']||f['Cliente']||'').trim(), cliente:String(f['Cliente']||'').trim(), proyecto:String(f['Proyecto']||'').trim(), final, pendiente, vale:cobrada?(cobrado||final):pendiente, cobrada, fechaCobro:String(f['Fecha cobro']||'').trim(), vence:String(f['Vencimiento']||'').trim(), porque:[]} }
+  function abrir(m){
+    if(abierto===m.clave){ setAbierto(''); return }
+    setAbierto(m.clave); setDif(''); setQ(''); setGSel(''); setNota({chip:'', texto:''}); setNuevo({concepto:(m.detalle||m.concepto).replace(/\s*·\s*.*$/,'').slice(0,60), rubro:'', trabajo:''})
+    if(m.monto>0){ const c=facturasCandidatas(m, data, {filaMov:m.fila}); setSel(Object.fromEntries(c.candidatas.filter(x=>c.sumanJusto.includes(x.fila)).map(x=>[x.fila,x]))); setModo('factura') }
+    else { setSel({}); setModo('lista') }
+  }
+  const post=async (url,body)=>{ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json().catch(()=>({})); return {status:r.status, j} }
+  // PRIMERO se une el movimiento y DESPUÉS se cobra o se crea el gasto. Así, si algo falla a mitad de camino, el
+  // movimiento ya no está en la lista y no se puede mandar dos veces (un cobro parcial repetido sumaría de nuevo).
+  async function unir(m, body){ const {j}=await post('/api/extracto-clasificar',{fila:m.fila, clave:m.clave, ...body}); if(!j.ok){ showToast(j.error||'Error','err'); return null } return j }
+  async function cerrar(msg, err){ showToast(msg, err?'err':undefined); setAbierto(''); if(onRefresh) await onRefresh() }
+  async function clasificar(m, body, ok){ const j=await unir(m, body); if(!j) return false; await cerrar(ok+(j.marcado?` · marcado pagado: ${j.marcado}`:'')); return true }
+  // Un cobro → una o varias facturas. Las que ya figuraban cobradas no se tocan; las otras se cobran una sola vez.
+  async function guardarFacturas(m){
+    const elegidas=Object.values(sel); if(!elegidas.length||busy) return
+    const sinCobrar=elegidas.filter(c=>!c.cobrada), suma=elegidas.reduce((s,c)=>s+c.vale,0), D=Math.round((suma-m.monto)*100)/100
+    const base=sinCobrar.reduce((s,c)=>s+c.pendiente,0), ultima=sinCobrar[sinCobrar.length-1]
+    if(D>=1 && sinCobrar.length && !dif){ showToast('Elegí qué es la diferencia','err'); return }
+    if(D>=1 && sinCobrar.length && dif==='parcial' && D>=ultima.pendiente-1){ showToast(`La diferencia es más grande que la última factura (#${ultima.nro}): sacá una factura de la lista`,'err'); return }
+    if(D>=1 && sinCobrar.length && dif!=='parcial' && D>base*0.35){ showToast('Es demasiado para ser una retención o una comisión. Si no pagaron todo, elegí "Falta pagar esa parte"','err'); return }
+    setBusy(true)
+    try{
+      const nros=elegidas.map(c=>c.nro), agencias=[...new Set(elegidas.map(c=>c.agencia))]
+      const difTxt=D>=1?` · diferencia ${fmt(D)}${sinCobrar.length?`: ${(DIFS_COBRO.find(x=>x[0]===dif)||[])[1]||''}`:''}`:D<=-1?` · entraron ${fmt(-D)} de más`:''
+      if(!(await unir(m,{queEs:`${nros.length===1?'Factura':'Facturas'} ${nros.map(n=>'#'+n).join(', ')} · ${agencias.join(' / ')}${difTxt}`, hoja:'FACTURACION', ref:nros.join(', '), tipo:'Cobro'}))){ setBusy(false); return }
+      // La retención se reparte en proporción; la última se lleva el resto para que la suma dé exacta.
+      let repartido=0; const fallaron=[]
+      for(let k=0;k<sinCobrar.length;k++){ const c=sinCobrar[k], esUltima=k===sinCobrar.length-1
+        let body={nroPresupuesto:c.nro, cuentaDestino:m.cuenta, formaPago:'Transferencia', fechaCobro:m.fechaTxt, historico:true, notas:`Desde el extracto del banco (${m.fechaTxt})`, tipoCobro:'total', monto:c.pendiente}
+        if(D>=1 && dif==='parcial'){ if(esUltima) body={...body, tipoCobro:'parcial', monto:Math.round((c.pendiente-D)*100)/100} }
+        else if(D>=1 && base>0){ const parte=esUltima?Math.round((D-repartido)*100)/100:Math.round(D*c.pendiente/base*100)/100; repartido+=parte; if(parte>0) body={...body, [dif]:parte} }
+        const {status,j}=await post('/api/factura-cobro',body)
+        if(!j.ok && status!==409) fallaron.push(`#${c.nro}${j.error?` (${j.error})`:''}`)   // 409 = ya estaba cobrada: se sigue
+      }
+      if(fallaron.length) await cerrar(`El movimiento quedó unido, pero no pude cobrar ${fallaron.join(', ')}. Cobrala desde Facturación con fecha ${m.fechaTxt}.`, true)
+      else await cerrar(sinCobrar.length?`${sinCobrar.length} ${sinCobrar.length===1?'factura cobrada':'facturas cobradas'} ✓`:'Unido ✓')
+    }catch(e){ await cerrar('Se cortó la conexión a mitad de camino. Actualicé los datos: mirá cómo quedó antes de volver a intentar.', true) }
+    setBusy(false)
+  }
+  async function guardarGasto(m, op){
+    if(!op||busy) return; setBusy(true)
+    try{ const B=-m.monto; await clasificar(m,{queEs:`${op.label}${Math.abs(op.monto-B)>=1?` (previsto ${fmt(op.monto)}, el banco dice ${fmt(B)})`:''}`, hoja:op.hoja, ref:String(op.fila), marcar:{hoja:op.hoja, fila:op.fila, mesKey:op.mesKey}, tipo:op.hoja==='PRESTAMOS'?'Cuota de préstamo':op.hoja==='TARJETAS'?'Pago de tarjeta':'Transferencia'}, 'Unido ✓') }catch(e){ showToast('Error de conexión','err') }
+    setBusy(false)
+  }
+  async function guardarNuevo(m){
+    if(busy) return; const concepto=nuevo.concepto.trim(); if(!concepto){ showToast('Poné qué fue','err'); return }
+    const r=rubros.find(x=>x.key===nuevo.rubro); if(!r){ showToast('Elegí el rubro','err'); return }
+    const nroTrabajo=(nuevo.trabajo.match(/\d{3,}/)||[''])[0]
+    setBusy(true)
+    try{ if(!(await unir(m,{queEs:`${concepto} · ${r.label}${nroTrabajo?` · trabajo #${nroTrabajo}`:''}`, hoja:'GASTOS_FIJOS', ref:'', tipo:'Transferencia'}))){ setBusy(false); return }
+      const {j}=await post('/api/gasto-nuevo',{categoria:categoriaDe(r.rubro), rubro:r.rubro, subrubro:r.subrubro, nroTrabajo, concepto, monto:-m.monto, moneda:'ARS', recurrencia:'unico', diaPago:m.fecha.getDate(), mes:m.fecha.getMonth()+1, anio:m.fecha.getFullYear(), pagado:true, cuentaPago:m.cuenta, fechaPago:m.fechaTxt, medio:'Transferencia', tipo:'gasto', sinTocarSaldo:true})
+      if(!j.ok) await cerrar(`El movimiento quedó anotado, pero no se creó el gasto (${j.error||'error'}). Reabrilo desde "ya revisados" y volvé a intentar.`, true)
+      else await cerrar('Gasto anotado ✓')
+    }catch(e){ await cerrar('Se cortó la conexión a mitad de camino. Actualicé los datos: mirá cómo quedó antes de volver a intentar.', true) }
+    setBusy(false)
+  }
+  async function guardarNota(m){
+    if(busy) return; if(!nota.chip){ showToast('Elegí qué es','err'); return }
+    if(nota.chip==='Otro' && !nota.texto.trim()){ showToast('Escribí qué es','err'); return }
+    setBusy(true)
+    try{ await clasificar(m,{queEs:nota.chip==='Otro'?nota.texto.trim():`${nota.chip}${nota.texto.trim()?`: ${nota.texto.trim()}`:''}`, tipo:/pase/i.test(nota.chip)?'Pase entre cuentas':/sueldo/i.test(nota.chip)?'Sueldos':''}, 'Anotado ✓') }catch(e){ showToast('Error de conexión','err') }
+    setBusy(false)
+  }
+  async function reabrir(m){ if(busy) return; setBusy(true); try{ const {j}=await post('/api/extracto-clasificar',{fila:m.fila, clave:m.clave, accion:'reabrir'}); if(!j.ok) showToast(j.error||'Error','err'); else { showToast('Volvió a "para revisar"'); if(onRefresh) await onRefresh() } }catch(e){ showToast('Error de conexión','err') } setBusy(false) }
+
+  const chipF=on=>({fontSize:12, fontWeight:600, padding:'6px 12px', borderRadius:20, border:`1px solid ${on?T.ink:T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, cursor:'pointer', whiteSpace:'nowrap'})
+  const seg=on=>({fontSize:12.5, fontWeight:on?700:500, padding:'7px 12px', borderRadius:8, border:`1px solid ${on?T.brand:T.border}`, background:on?T.brandSoft:T.surface, color:on?T.brand:T.ink2, cursor:'pointer'})
+  const btnOk=dis=>({fontSize:13, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:dis?T.ink3:T.brand, color:'#fff', cursor:dis?'default':'pointer'})
+  const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
+  // El nombre de quien pagó o cobró, sin los números de cuenta que le pone el banco adelante. Si el banco no lo dice, el concepto.
+  const quienDe=m=>m.detalle.replace(/^CTE\s+\d+\s*/i,'').replace(/^CTA\.(ORIGEN|DESTINO):\s*/i,'').replace(/^[\d-]{6,}\s*/,'').replace(/^[-·\s]+/,'').trim() || m.concepto
+  const totEntro=pend.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0), totSalio=pend.filter(m=>m.monto<0).reduce((s,m)=>s-m.monto,0)
+
+  return <>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:12}}>
+      <div style={{fontSize:15, fontWeight:700, color:T.ink}}>{pend.length?`${pend.length} ${pend.length===1?'movimiento':'movimientos'} del banco para revisar`:'Nada para revisar'}</div>
+      {pend.length>0 && <div style={{fontSize:12.5, color:T.ink2}}>entró <b style={{fontFamily:MONO, color:T.pos}}>{fmt(totEntro)}</b> · salió <b style={{fontFamily:MONO, color:T.ink}}>{fmt(totSalio)}</b></div>}
+    </div>
+    <div style={{fontSize:12.5, color:T.ink2, marginBottom:14, lineHeight:1.5}}>Son los que el extracto no pudo unir solo. Abrí cada uno y decí qué es. Nada se duplica: una factura que ya figuraba cobrada solo queda unida al movimiento, y ningún saldo se toca.</div>
+    {pend.length>0 && <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:12}}>
+      {[['todo','Todo'],['entro','Entró'],['salio','Salió']].map(([k,l])=><button key={k} onClick={()=>setFTipo(k)} style={chipF(fTipo===k)}>{l}</button>)}
+      {cuentas.length>1 && <span style={{width:1, background:T.border, margin:'0 4px'}}/>}
+      {cuentas.length>1 && [['','Todas las cuentas'],...cuentas.map(c=>[c,c])].map(([k,l])=><button key={k} onClick={()=>setFCuenta(k)} style={chipF(fCuenta===k)}>{l}</button>)}
+    </div>}
+    {lista.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden'}}>
+      {lista.map((m,i)=>{ const ab=abierto===m.clave, entra=m.monto>0, B=Math.abs(m.monto)
+        const cand=ab&&entra?facturasCandidatas(m, data, {filaMov:m.fila}):null
+        const ql=q.trim().toLowerCase()
+        const buscadas=ab&&entra&&ql.length>=2?facturasReales.filter(f=>[f['Agencia'],f['Cliente'],f['Proyecto'],f['N° Presupuesto'],f['Nro de Factura'],String(Math.round(parseMonto(f['Precio FINAL'])))].some(v=>String(v||'').toLowerCase().includes(ql))).slice(0,25).map(aCand):null
+        const visibles=ab&&entra?[...Object.values(sel), ...(buscadas||cand.candidatas).filter(c=>!sel[c.fila])].slice(0,ql?30:12):[]
+        const elegidas=Object.values(sel), suma=elegidas.reduce((s,c)=>s+c.vale,0), D=suma-B, sinCobrar=elegidas.filter(c=>!c.cobrada)
+        // Para lo que salió: gastos fijos del mes, cuotas y resúmenes de tarjeta de esos días, los de monto más parecido primero
+        const ops=ab&&!entra?[
+          ...(data.gastosFijos||[]).filter(g=>String(g['Concepto']||'').trim() && parseMonto(g['Monto'])>0 && esActiva(g['Activo']||'SI') && !/^tarjeta$/i.test(String(g['Medio de pago']||'').trim())).map(g=>{ const unico=/[uú]nico/i.test(String(g['Frecuencia']||'')); if(unico && !(parseInt(g['Mes carga'])===m.fecha.getMonth()+1 && String(g['Año carga']).includes(String(m.fecha.getFullYear())))) return null
+            const mesKey=`${m.fecha.getMonth()+1}/${m.fecha.getFullYear()}`, pagado=unico?esPagado(g['Pagado']):String(g['Meses pagados']||'').split(',').map(s=>s.trim()).includes(mesKey)
+            return {id:`GASTOS_FIJOS:${g.__row}`, hoja:'GASTOS_FIJOS', fila:g.__row, mesKey:unico?'':mesKey, monto:parseMonto(g['Monto']), label:String(g['Concepto']).trim(), pagado} }).filter(Boolean),
+          ...(data.prestamos||[]).map(p=>{ const v=parseD(p['Vencimiento']); if(!v||Math.abs(v-m.fecha)/864e5>25) return null; return {id:`PRESTAMOS:${p.__row}`, hoja:'PRESTAMOS', fila:p.__row, mesKey:'', monto:parseMonto(p['Monto cuota']), label:`Préstamo ${p['Prestamo']} · ${p['Cuota nro']}`, pagado:esPagado(p['Pagado'])} }).filter(Boolean),
+          ...(data.tarjetas||[]).map(t=>{ const v=parseD(t['Vencimiento']); if(!v||Math.abs(v-m.fecha)/864e5>25) return null; return {id:`TARJETAS:${t.__row}`, hoja:'TARJETAS', fila:t.__row, mesKey:'', monto:parseMonto(t['Monto']), label:`${t['Tarjeta']} · resumen de ${t['Mes']}/${t['Año']}`, pagado:esPagado(t['Pagado'])} }).filter(Boolean),
+        ].sort((a,b)=>Math.abs(a.monto-B)-Math.abs(b.monto-B)):[]
+        const op=ops.find(o=>o.id===gSel)
+        return <div key={m.clave} style={{borderTop:i?`1px solid ${T.border}`:'none', background:ab?T.bg:'transparent'}}>
+          <div onClick={()=>abrir(m)} style={{display:'grid', gridTemplateColumns:cel?'44px minmax(0,1fr) auto':'52px minmax(0,1fr) auto 96px', gap:cel?9:14, alignItems:'center', padding:cel?'12px 14px':'12px 18px', cursor:'pointer'}}>
+            <span style={{fontFamily:MONO, fontSize:12, color:T.ink3}}>{dm(m.fecha)}</span>
+            <span style={{minWidth:0}}>
+              <span style={{display:'block', fontSize:13.5, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{quienDe(m)}</span>
+              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.concepto}{/^¿/.test(m.que)?` · ${m.que}`:''}</span>
+            </span>
+            <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:entra?T.pos:T.ink, whiteSpace:'nowrap'}}>{entra?'+':'−'}{fmt(B)}</span>
+            {!cel && <span style={{fontSize:12, fontWeight:600, color:ab?T.ink2:T.brand, textAlign:'right'}}>{ab?'cerrar':'¿Qué es?'}</span>}
+          </div>
+          {ab && <div style={{padding:cel?'2px 14px 16px':'2px 18px 18px 84px'}}>
+            <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:12}}>
+              {(entra?[['factura','Es el cobro de una factura'],['anotar','Es otra cosa']]:[['lista','Un gasto de la lista'],['nuevo','Un gasto nuevo'],['anotar','Solo anotar qué es']]).map(([k,l])=><button key={k} onClick={()=>setModo(k)} style={seg(modo===k)}>{l}</button>)}
+            </div>
+
+            {entra && modo==='factura' && <>
+              <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar otra factura: agencia, cliente, N° o monto" style={{...inpV2, marginBottom:8}}/>
+              {!ql && cand.sumanJusto.length>0 && <div style={{fontSize:12, color:T.pos, marginBottom:6}}>{cand.sumanJusto.length===1?'Esta factura es justo lo que entró':'Estas facturas suman justo lo que entró'}: ya {cand.sumanJusto.length===1?'está elegida':'están elegidas'}.</div>}
+              {visibles.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'8px 0'}}>{ql?'Ninguna factura con eso.':'No encontré facturas parecidas. Buscala arriba.'}</div>}
+              {visibles.map(c=><label key={c.fila} style={{display:'grid', gridTemplateColumns:'18px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'7px 0', borderTop:`1px solid ${T.border}`, cursor:'pointer', fontSize:12.5}}>
+                <input type="checkbox" checked={!!sel[c.fila]} onChange={e=>setSel(s=>{ const x={...s}; if(e.target.checked) x[c.fila]=c; else delete x[c.fila]; return x })} style={{width:16, height:16, accentColor:T.brand}}/>
+                <span style={{minWidth:0}}><b style={{color:T.ink}}>#{c.nro} · {c.agencia}</b><span style={{color:T.ink2}}>{c.cliente&&c.cliente!==c.agencia?` · ${c.cliente}`:''}{c.proyecto?` · ${c.proyecto}`:''}</span>
+                  <span style={{display:'block', fontSize:11.5, color:c.cobrada?T.ink3:T.warn, marginTop:1}}>{c.cobrada?`ya figura cobrada${c.fechaCobro?` el ${c.fechaCobro}`:''}: solo se une`:`sin cobrar${c.vence?` · vence ${c.vence}`:''}${c.pendiente<c.final-1?` · falta ${fmt(c.pendiente)} de ${fmt(c.final)}`:''}`}{c.porque&&c.porque.length?` · ${c.porque.join(' · ')}`:''}</span></span>
+                <span style={{fontFamily:MONO, fontWeight:600, color:T.ink, whiteSpace:'nowrap'}}>{fmt(c.vale)}</span>
+              </label>)}
+              {elegidas.length>0 && <div style={{marginTop:12, padding:'11px 13px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, fontSize:12.5, color:T.ink, lineHeight:1.6}}>
+                Entró <b style={{fontFamily:MONO}}>{fmt(B)}</b> · {elegidas.length===1?'la factura elegida es de':`las ${elegidas.length} elegidas suman`} <b style={{fontFamily:MONO}}>{fmt(suma)}</b>
+                {Math.abs(D)<1 ? <span style={{color:T.pos, fontWeight:600}}> · cierra justo</span>
+                  : D>0 ? <span style={{color:T.warn, fontWeight:600}}> · entraron {fmt(D)} menos</span>
+                  : <span style={{color:T.warn, fontWeight:600}}> · entraron {fmt(-D)} de más: elegí otra factura, o guardá así y queda anotado</span>}
+                {D>=1 && sinCobrar.length>0 && <div style={{marginTop:8}}><div style={{fontSize:11.5, color:T.ink2, marginBottom:5}}>¿Qué son esos {fmt(D)}?</div><div style={{display:'flex', gap:6, flexWrap:'wrap'}}>{DIFS_COBRO.map(([k,l])=><button key={k} onClick={()=>setDif(k)} style={seg(dif===k)}>{l}</button>)}</div>
+                  {dif==='parcial' && <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}>{sinCobrar.length>1?`Las primeras quedan cobradas enteras y la última (#${sinCobrar[sinCobrar.length-1].nro}) queda con ${fmt(D)} por cobrar.`:`La factura queda con ${fmt(D)} por cobrar.`}</div>}
+                  {dif && dif!=='parcial' && sinCobrar.length>1 && <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}>Se reparte entre las {sinCobrar.length} facturas sin cobrar, en proporción a su monto.</div>}</div>}
+                {D>=1 && sinCobrar.length===0 && <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>Las elegidas ya figuraban cobradas: no se cambia nada en ellas, la diferencia queda anotada en el movimiento.</div>}
+              </div>}
+              <div style={{marginTop:12}}><button disabled={busy||!elegidas.length} onClick={()=>guardarFacturas(m)} style={btnOk(busy||!elegidas.length)}>{busy?'Guardando…':sinCobrar.length?`Guardar y cobrar ${sinCobrar.length===1?'la factura':`las ${sinCobrar.length} facturas`}`:'Guardar: es esto'}</button></div>
+            </>}
+
+            {!entra && modo==='lista' && <>
+              <select value={gSel} onChange={e=>setGSel(e.target.value)} style={{...inpV2, marginBottom:8}}><option value="">Elegí el gasto, la cuota o la tarjeta</option>{ops.map(o=><option key={o.id} value={o.id}>{o.label} · {fmt(o.monto)}{o.pagado?' · ya figura pagado':' · pendiente'}</option>)}</select>
+              {op && <div style={{fontSize:12, color:T.ink2, marginBottom:10, lineHeight:1.5}}>{op.pagado?'Ya figuraba pagado: solo queda unido a este movimiento.':`Queda marcado como pagado el ${m.fechaTxt} desde ${m.cuenta}.`}{Math.abs(op.monto-B)>=1?` El monto previsto era ${fmt(op.monto)} y el banco dice ${fmt(B)}: queda anotada la diferencia.`:''}</div>}
+              <button disabled={busy||!op} onClick={()=>guardarGasto(m,op)} style={btnOk(busy||!op)}>{busy?'Guardando…':'Guardar: es esto'}</button>
+            </>}
+
+            {!entra && modo==='nuevo' && <>
+              <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:10}}>
+                <div style={{flex:'2 1 220px', minWidth:0}}><label style={lblV2}>Qué fue</label><input value={nuevo.concepto} onChange={e=>setNuevo(s=>({...s,concepto:e.target.value}))} style={inpV2}/></div>
+                <div style={{flex:'1 1 200px', minWidth:0}}><label style={lblV2}>Rubro</label><select value={nuevo.rubro} onChange={e=>setNuevo(s=>({...s,rubro:e.target.value}))} style={inpV2}><option value="">Elegir rubro</option>{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></div>
+                <div style={{flex:'0 1 150px', minWidth:0}}><label style={lblV2}>N° de trabajo</label><input value={nuevo.trabajo} onChange={e=>setNuevo(s=>({...s,trabajo:e.target.value}))} placeholder="si fue para uno" style={inpV2}/></div>
+              </div>
+              <div style={{fontSize:12, color:T.ink2, marginBottom:10}}>Se anota como un gasto de {fmt(B)} pagado el {m.fechaTxt} desde {m.cuenta}. No resta del saldo: el extracto ya lo trae descontado.</div>
+              <button disabled={busy} onClick={()=>guardarNuevo(m)} style={btnOk(busy)}>{busy?'Guardando…':'Anotar el gasto'}</button>
+            </>}
+
+            {modo==='anotar' && <>
+              <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:9}}>{(entra?NOTAS_ENTRO:NOTAS_SALIO).map(c=><button key={c} onClick={()=>setNota(s=>({...s,chip:c}))} style={seg(nota.chip===c)}>{c}</button>)}</div>
+              <input value={nota.texto} onChange={e=>setNota(s=>({...s,texto:e.target.value}))} placeholder={nota.chip==='Otro'?'Qué es':'Detalle (opcional): a quién, de qué mes…'} style={{...inpV2, marginBottom:10}}/>
+              <div style={{fontSize:12, color:T.ink2, marginBottom:10}}>Solo queda escrito en el movimiento, para que deje de estar "para revisar". No marca ni crea nada.</div>
+              <button disabled={busy||!nota.chip} onClick={()=>guardarNota(m)} style={btnOk(busy||!nota.chip)}>{busy?'Guardando…':'Guardar'}</button>
+            </>}
+          </div>}
+        </div> })}
+    </div>}
+    {hechos.length>0 && <div style={{marginTop:16}}>
+      <button onClick={()=>setVerHechos(v=>!v)} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit'}}>{verHechos?'Ocultar':'Ver'} los {hechos.length} ya revisados a mano</button>
+      {verHechos && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', marginTop:8}}>{hechos.slice().sort((a,b)=>b.fecha-a.fecha).slice(0,60).map((m,i)=><div key={m.clave} style={{display:'grid', gridTemplateColumns:cel?'44px minmax(0,1fr) auto':'52px minmax(0,1fr) auto 70px', gap:cel?9:14, alignItems:'center', padding:cel?'10px 14px':'10px 18px', borderTop:i?`1px solid ${T.border}`:'none', fontSize:12.5}}>
+        <span style={{fontFamily:MONO, fontSize:12, color:T.ink3}}>{dm(m.fecha)}</span>
+        <span style={{minWidth:0}}><b style={{color:T.ink}}>{m.que}</b><span style={{display:'block', fontSize:11.5, color:T.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.detalle||m.concepto}</span></span>
+        <span style={{fontFamily:MONO, fontWeight:600, color:m.monto>0?T.pos:T.ink, whiteSpace:'nowrap'}}>{m.monto>0?'+':'−'}{fmt(Math.abs(m.monto))}</span>
+        {!cel && <button disabled={busy} onClick={()=>reabrir(m)} style={{border:'none', background:'none', color:T.ink3, fontSize:11.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit', textAlign:'right'}}>reabrir</button>}
+      </div>)}</div>}
+    </div>}
   </>
 }
 
