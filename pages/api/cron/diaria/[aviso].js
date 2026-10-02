@@ -1,8 +1,11 @@
 import nodemailer from 'nodemailer'
-import { getSheets, withSheetsRetry } from '../../../../lib/sheets'
+import { getSheets, getAllData, withSheetsRetry } from '../../../../lib/sheets'
 import { calcularBrief } from '../../../../lib/brief.mjs'
 import { horaArgentina, recalcularDias, armarMail, asegurarSolapa, leerDiaria, yaEnviado, ultimoContador, filaDiaria, escribirFila } from '../../../../lib/diaria-mail.mjs'
 import { correrLunes } from '../../../../lib/lunes.mjs'
+import { resumenAdmin } from '../../../../lib/admin.mjs'
+import { canonStaff } from '../../../../lib/staff'
+import { MAX_SLOTS } from '../../../../lib/slots'
 
 // La diaria mandada desde Vercel: sale a las 8:10 y a las 15:10 aunque la Mac de Juan esté cerrada.
 // (El 18/09/2026 el mail de las 8 no llegó: la Mac dormía, corrió el script sin red y falló.)
@@ -71,7 +74,11 @@ export default async function handler(req, res) {
     const ult = ultimoContador(filas)
     const contador = ult ? recalcularDias(ult.contador, ahoraAR) : null
     const link = `${APP}/diaria`
-    const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '' })
+    // La parte de administración: la caja del mes y la lista "Hoy", con el MISMO cálculo que la pantalla Caja.
+    // Si falla, el mail sale igual y lo dice.
+    let admin = null
+    try { admin = resumenAdmin(await getAllData(), { hoy: ahoraAR, canonStaff, maxSlots: MAX_SLOTS }) } catch (e) { admin = { error: e.message } }
+    const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '', admin, linkAdmin: `${APP}/?caja=1` })
 
     if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, lunes, html })
 

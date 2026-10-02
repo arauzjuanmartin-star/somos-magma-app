@@ -70,7 +70,10 @@ const json = cmd => { try { return JSON.parse(correr(cmd)) } catch(e) { return {
 const brief = json('node scripts/morning-brief.mjs --json')
 const contador = json(`node scripts/contador-radar.mjs --json${MAIL ? ' --refrescar' : ''}`)
 
-const { subject, texto, html } = armarMail({ brief, contador, tarde: TARDE, ahoraAR: hoy, link: LINK, origen: 'scripts/diaria.mjs' })
+// La parte de administración: la caja del mes y la lista "Hoy", con el mismo cálculo que la pantalla Caja (lib/admin.mjs)
+const admin = json('node scripts/caja-hoy.mjs --json')
+
+const { subject, texto, html } = armarMail({ brief, contador, tarde: TARDE, ahoraAR: hoy, link: LINK, origen: 'scripts/diaria.mjs', admin, linkAdmin: `${APP}/?caja=1` })
 console.log(texto)
 if (HTML) { writeFileSync('scripts/.diaria.html', html); console.error('[HTML escrito en scripts/.diaria.html]') }
 

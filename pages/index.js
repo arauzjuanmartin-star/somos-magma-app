@@ -145,10 +145,12 @@ export default function V2() {
   useEffect(()=>{
     if(typeof window==='undefined') return
     const params = new URLSearchParams(window.location.search)
-    const id = params.get('e'), t = params.get('t')
-    if(!id && !t) return
+    // Y ?caja=1 (desde la diaria, "administración: N cosas para hoy") abre Caja, que arranca en la lista de tareas.
+    const id = params.get('e'), t = params.get('t'), caja = params.get('caja')
+    if(!id && !t && !caja) return
     if(id){ setMod('edicion'); setNav({mod:'edicion', abrir:id}) }
-    else { setMod('presupuestos'); setNav({mod:'presupuestos', q:t}) }
+    else if(t){ setMod('presupuestos'); setNav({mod:'presupuestos', q:t}) }
+    else setMod('egresos')
     window.history.replaceState({}, '', window.location.pathname)
   },[])
   // 'proyectos' ya no es una solapa: es una vista de Trabajos. Los links de antes (dashboard,
