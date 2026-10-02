@@ -9,7 +9,8 @@
 // de la cuenta se pisa con el que trae el extracto (y queda anotado en "Hist saldos", como al cargarlo a mano).
 import { getSheets, getAllData, withSheetsRetry } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { cruzarExtracto, conClave } from '../../lib/extracto.mjs'
+import { cruzarExtracto, conClave, yaCargadasDe } from '../../lib/extracto.mjs'
+import { canonStaff } from '../../lib/staff'
 
 const HOJA = 'MOVIMIENTOS_BANCO'
 const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
@@ -18,7 +19,7 @@ const txt = v => String(v ?? '').trim()
 // Un texto que empieza con = + - @ el sheet lo toma como fórmula y deja #ERROR!.
 const texto = v => { const s = txt(v); return /^[=+\-@]/.test(s) ? `'${s}` : s }
 const dmy = d => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
-const TIPOS = { cobro: 'Cobro', transferencia: 'Transferencia', afip: 'AFIP', prestamo: 'Cuota de préstamo', tarjeta: 'Pago de tarjeta', sueldos: 'Sueldos', inversion: 'Inversión' }
+const TIPOS = { propia: 'Pase entre cuentas', cobro: 'Cobro', transferencia: 'Transferencia', afip: 'AFIP', prestamo: 'Cuota de préstamo', tarjeta: 'Pago de tarjeta', sueldos: 'Sueldos', inversion: 'Inversión' }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
   for (const m of movs) {
     const f = txt(m.f).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/), monto = Number(m.m)
     if (!f || !txt(m.c) || !Number.isFinite(monto) || monto === 0) return res.status(400).json({ error: 'Hay un renglón del extracto que no se pudo leer. No guardé nada.' })
-    leidos.push({ fecha: new Date(+f[1], +f[2] - 1, +f[3]), concepto: txt(m.c), codigo: txt(m.k), detalle: txt(m.d), monto })
+    leidos.push({ fecha: new Date(+f[1], +f[2] - 1, +f[3]), concepto: txt(m.c), codigo: txt(m.k), detalle: txt(m.d), monto, ...(m.p ? { propia: true } : {}) })
   }
 
   try {
@@ -52,8 +53,8 @@ export default async function handler(req, res) {
     const faltan = ['Cuenta', 'Fecha', 'Concepto', 'Entró', 'Salió', 'Estado', 'Clave'].filter(c => !headers.includes(c))
     if (faltan.length) return res.status(400).json({ error: `Falta la solapa ${HOJA} (o sus columnas ${faltan.join(', ')}). Hay que crearla con scripts/movimientos-banco-setup.mjs antes de subir extractos.` })
 
-    const yaCargadas = new Set((data.movimientosBanco || []).filter(r => txt(r['Cuenta']) === nombreCuenta).map(r => txt(r['Clave'])))
-    const { filas } = cruzarExtracto(conClave(leidos), data, { cuenta: nombreCuenta, yaCargadas })
+    const yaCargadas = yaCargadasDe(data.movimientosBanco, nombreCuenta)
+    const { filas } = cruzarExtracto(conClave(leidos), data, { cuenta: nombreCuenta, yaCargadas, canonStaff })
     const destildadas = new Set((Array.isArray(noMarcar) ? noMarcar : []).map(txt))
     const aMarcar = filas.filter(x => x.estado === 'marcar' && x.ref && !destildadas.has(x.clave))
 
@@ -88,8 +89,10 @@ export default async function handler(req, res) {
     }
 
     // ---------- 2. El saldo de la cuenta pasa a ser el del extracto (misma forma que cuenta-saldo-update)
+    // El saldo del archivo solo vale si el archivo trae algo nuevo: uno viejo (o repetido) pisaría el saldo con uno atrasado.
+    const traeNuevos = filas.some(x => !x.yaCargada)
     let saldoNuevo = null
-    if (usarSaldo && Number.isFinite(Number(saldo))) {
+    if (usarSaldo && traeNuevos && Number.isFinite(Number(saldo))) {
       const rows = (await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'CUENTAS!A:N' }))).data.values || []
       const ch = (rows[0] || []).map(txt), i = rows.findIndex((r, k) => k > 0 && txt(r[ch.indexOf('Nombre')]) === nombreCuenta)
       if (i > 0) {
@@ -109,7 +112,7 @@ export default async function handler(req, res) {
     const fueMarcado = new Set(marcados.map(m => m.clave))
     const nuevas = filas.filter(x => !x.yaCargada)
     const filaSheet = x => {
-      const estado = x.estado === 'banco' ? 'Cargo del banco' : x.estado === 'ok' ? 'Coincide' : fueMarcado.has(x.clave) ? 'Marcado desde el extracto' : 'Para revisar'
+      const estado = x.estado === 'banco' ? 'Cargo del banco' : x.estado === 'pase' ? 'Pase entre cuentas' : x.estado === 'ok' ? 'Coincide' : fueMarcado.has(x.clave) ? 'Marcado desde el extracto' : 'Para revisar'
       const queEs = x.estado === 'revisar' && x.candidatos.length ? `¿${x.candidatos.join(' o ')}?` : x.estado === 'banco' ? x.clase : x.que
       const dato = {
         'Cuenta': nombreCuenta, 'Fecha': dmy(x.fecha), 'Mes': `${x.fecha.getFullYear()}-${String(x.fecha.getMonth() + 1).padStart(2, '0')}`,
@@ -124,6 +127,9 @@ export default async function handler(req, res) {
     if (nuevas.length) {
       try {
         await withSheetsRetry(() => sheets.spreadsheets.values.append({
+          // Con INSERT_ROWS, como el resto de la app: sin eso Google escribe ENCIMA de lo que haya debajo de la tabla.
+          // (Ojo en una solapa vacía: las primeras filas insertadas heredan el formato del título. Pasó el 02/10/2026 y
+          // hubo que copiarles el formato a mano. Con filas de datos ya cargadas, heredan el de la fila de arriba.)
           spreadsheetId: SHEET_ID, range: `${HOJA}!A:${colLetra(headers.length - 1)}`, valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS',
           requestBody: { values: nuevas.slice().sort((a, b) => a.fecha - b.fecha).map(filaSheet) },
         }))

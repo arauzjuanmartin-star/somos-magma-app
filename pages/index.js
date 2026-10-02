@@ -20,7 +20,7 @@ import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
-import { leerExtracto, unirExtractos, cruzarExtracto } from '../lib/extracto.mjs'
+import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe } from '../lib/extracto.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -5289,20 +5289,21 @@ function SubirExtracto({data, onClose, onDone, showToast}){
       setExt(e); setCuentaSel(adivinar(e)); setNoMarcar({})
     }catch(e){ setErr(e.message||'No pude leer el archivo.') } }
   const cuenta=cuentaSel
-  const yaCargadas=new Set((data.movimientosBanco||[]).filter(r=>String(r['Cuenta']||'').trim()===cuenta).map(r=>String(r['Clave']||'').trim()))
-  const cruce=ext?cruzarExtracto(ext.movs, data, {cuenta, yaCargadas}):null
+  const yaCargadas=yaCargadasDe(data.movimientosBanco, cuenta)
+  const cruce=ext?cruzarExtracto(ext.movs, data, {cuenta, yaCargadas, canonStaff}):null
   const r=cruce?.resumen
   const aMarcar=cruce?cruce.filas.filter(x=>x.estado==='marcar'):[], revisar=cruce?cruce.filas.filter(x=>x.estado==='revisar'):[]
   const marcadas=aMarcar.filter(x=>!noMarcar[x.clave])
   const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
   // El saldo del extracto solo sirve si el archivo llega hasta estos días.
-  const reciente=!!r?.hasta && (new Date()-r.hasta)/864e5<4
+  // Y solo si trae algo nuevo: un archivo que ya estaba cargado pisaría el saldo con uno atrasado.
+  const reciente=!!r?.hasta && r.nuevas>0 && (new Date()-(ext.hastaArchivo||r.hasta))/864e5<4
   const cuentaObj=cuentas.find(c=>c['Nombre']===cuenta)
   async function confirmar(){
     if(busy||!cruce) return
     if(!cuenta){ showToast('Elegí a qué cuenta corresponde','err'); return }
     setBusy(true)
-    try{ const res=await fetch('/api/extracto-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta, saldo:ext.saldo, usarSaldo:usarSaldo&&reciente&&ext.saldo>0, noMarcar:Object.keys(noMarcar).filter(k=>noMarcar[k]), movs:ext.movs.map(m=>({f:`${m.fecha.getFullYear()}-${m.fecha.getMonth()+1}-${m.fecha.getDate()}`, c:m.concepto, k:m.codigo, d:m.detalle, m:m.monto}))})})
+    try{ const res=await fetch('/api/extracto-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta, saldo:ext.saldo, usarSaldo:usarSaldo&&reciente&&ext.saldo>0, noMarcar:Object.keys(noMarcar).filter(k=>noMarcar[k]), movs:ext.movs.map(m=>({f:`${m.fecha.getFullYear()}-${m.fecha.getMonth()+1}-${m.fecha.getDate()}`, c:m.concepto, k:m.codigo, d:m.detalle, m:m.monto, ...(m.propia?{p:1}:{})}))})})
       const j=await res.json(); if(!j.ok){ showToast(j.error||'Error','err'); setBusy(false); return }
       setHecho(j); setBusy(false); showToast(j.aviso||'Extracto guardado ✓', j.aviso?'err':undefined)
     }catch(e){ showToast('Error de conexión','err'); setBusy(false) } }
@@ -5318,7 +5319,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
   return <div onClick={busy?undefined:onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:210, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', overflowY:'auto'}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:780, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12}}>
-        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Hoy lee los movimientos de la cuenta de BBVA, en CSV.</div></div>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Lee los movimientos de la cuenta de BBVA y de Santander, en CSV.</div></div>
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'16px 22px 20px'}}>
@@ -5348,6 +5349,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
               <div style={caja}><div style={lblK}>Los cobró el banco</div><div style={numK}>{r.banco}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{fmt(Math.abs(r.montoBanco))} en cargos e impuestos</div></div>
               <div style={{...caja, background:revisar.length?T.warnSoft:T.surfaceAlt}}><div style={{...lblK, color:revisar.length?T.warn:T.ink2}}>Para revisar</div><div style={numK}>{revisar.length}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>no se reconocen solos</div></div>
             </div>
+            {r.pases>0 && <div style={{fontSize:12, color:T.ink2, marginTop:10}}>{r.pases} {r.pases===1?"es un movimiento":"son movimientos"} entre cuentas de la misma persona: no hay nada que marcar.</div>}
             {r.nuevas<r.total && <div style={{fontSize:12, color:T.ink2, marginTop:10}}>{r.total-r.nuevas} de estos movimientos ya estaban cargados de un extracto anterior: no se repiten.</div>}
 
             {aMarcar.length>0 && <div style={{marginTop:16}}>
@@ -5371,7 +5373,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
 
             {ext.saldo>0 && (reciente
               ? <label style={{display:'flex', gap:9, alignItems:'flex-start', marginTop:14, fontSize:12.5, color:T.ink, cursor:'pointer'}}><input type="checkbox" checked={usarSaldo} onChange={e=>setUsarSaldo(e.target.checked)} style={{width:16, height:16, accentColor:T.brand, marginTop:1}}/><span>Poner como saldo de {cuenta||'la cuenta'} el del extracto: <b style={{fontFamily:MONO}}>{fmt(ext.saldo)}</b>{cuentaObj?<span style={{color:T.ink3}}> (hoy la app dice {fmt(parseMonto(cuentaObj['Saldo actual']))})</span>:null}</span></label>
-              : <div style={{fontSize:12, color:T.ink3, marginTop:14}}>El extracto llega hasta el {dm(r.hasta)}: es viejo para usar su saldo, así que el saldo de la cuenta no se toca.</div>)}
+              : <div style={{fontSize:12, color:T.ink3, marginTop:14}}>{r.nuevas===0?'Este archivo no trae ningún movimiento nuevo':`El extracto llega hasta el ${dm(r.hasta)}: es viejo para usar su saldo`}, así que el saldo de la cuenta no se toca.</div>)}
 
             <button disabled={busy||!cuenta} onClick={confirmar} style={{...btnAgregar(busy||!cuenta), marginTop:16}}>{busy?'Guardando…':`Confirmar y guardar${marcadas.length?` · marca ${marcadas.length}`:''}`}</button>
           </>}
