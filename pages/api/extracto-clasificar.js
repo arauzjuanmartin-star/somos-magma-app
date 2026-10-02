@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { fila, clave, accion = 'clasificar', queEs, tipo, hoja = '', ref = '', marcar = null } = req.body || {}
+  const { fila, clave, accion = 'clasificar', queEs, tipo, hoja = '', ref = '', marcar = null, staff = null } = req.body || {}
   if (!Number.isInteger(fila) || fila < 2) return res.status(400).json({ error: 'Falta la fila del movimiento' })
   if (!txt(clave)) return res.status(400).json({ error: 'Falta la clave del movimiento' })
   if (accion !== 'reabrir' && !txt(queEs)) return res.status(400).json({ error: 'Falta decir qué es' })
@@ -51,9 +51,33 @@ export default async function handler(req, res) {
     if (accion === 'reabrir') {
       poner(HOJA, fila, H, 'Estado', 'Para revisar'); poner(HOJA, fila, H, 'Hoja', ''); poner(HOJA, fila, H, 'Ref', '')
     } else {
+      const cuenta = val('Cuenta'), fecha = val('Fecha'), monto = num(val('Salió')) || num(val('Entró'))
+      // ---- Un pago a un freelancer: sus líneas de PAGOS_STAFF que estaban pendientes quedan pagadas, con la fecha y la
+      //      cuenta del movimiento. Antes de escribir se comprueba que cada fila siga siendo de esa persona.
+      if (staff && Array.isArray(staff.filas) && staff.filas.length) {
+        const rowsS = (await leer('PAGOS_STAFF!A:P')).data.values || [], cabS = (rowsS[0] || []).map(txt)
+        const iP = cabS.indexOf('Freelancer'), iE = cabS.indexOf('Estado'), iA = cabS.indexOf('Monto Adeudado'), iV = cabS.indexOf('Viáticos')
+        if (iP < 0 || iE < 0 || iA < 0 || cabS.indexOf('Fecha Pago') < 0 || cabS.indexOf('Monto Pagado') < 0) return res.status(400).json({ error: 'PAGOS_STAFF no tiene las columnas esperadas' })
+        // "Somos Magma" no es una persona: es la línea del fee, y no se paga (misma regla que lib/staff.js).
+        if (/somos magma|^magma$/i.test(txt(staff.persona))) return res.status(400).json({ error: 'La línea de Somos Magma no es un pago a un freelancer' })
+        // Mismo nombre aunque cambien las mayúsculas, las tildes o un espacio de más
+        const igualNombre = s => txt(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ')
+        const iN = cabS.indexOf('Notas')
+        const hechas = []
+        for (const f of staff.filas) {
+          const row = Number.isInteger(f) && f > 1 ? rowsS[f - 1] : null
+          if (!row || igualNombre(row[iP]) !== igualNombre(staff.persona)) return res.status(409).json({ error: 'Las líneas de Pagos Staff cambiaron de lugar en el sheet. Actualizá la página y volvé a intentar.' })
+          if (/^(pagado|s[ií]|true)$/i.test(txt(row[iE]))) continue   // ya figuraba pagada: solo queda unida
+          poner('PAGOS_STAFF', f, cabS, 'Fecha Pago', fecha); poner('PAGOS_STAFF', f, cabS, 'Monto Pagado', Math.round((num(row[iA]) * (staff.conIVA ? 1.21 : 1) + (iV >= 0 ? num(row[iV]) : 0)) * 100) / 100)
+          // Pagado con IVA (el banco muestra el honorario + 21%): queda dicho en Notas, como cuando se tilda en Pagos Staff
+          if (staff.conIVA && iN >= 0 && !/IVA 21%/i.test(txt(row[iN]))) poner('PAGOS_STAFF', f, cabS, 'Notas', texto([txt(row[iN]), 'Pago con IVA 21% (según el extracto del banco)'].filter(Boolean).join(' · ')))
+          poner('PAGOS_STAFF', f, cabS, 'Cuenta', cuenta); poner('PAGOS_STAFF', f, cabS, 'Estado', 'Pagado')
+          hechas.push(f)
+        }
+        if (hechas.length) marcado = `${hechas.length} ${hechas.length === 1 ? 'línea' : 'líneas'} de ${txt(staff.persona)} en Pagos Staff`
+      }
       // ---- Marcar pagado lo que se unió (si todavía no lo estaba), con la fecha y la cuenta del movimiento
       if (marcar) {
-        const cuenta = val('Cuenta'), fecha = val('Fecha'), monto = num(val('Salió')) || num(val('Entró'))
         const [rH2, rD] = await Promise.all([leer(`${marcar.hoja}!1:1`), leer(`${marcar.hoja}!A${marcar.fila}:Z${marcar.fila}`)])
         const cab = (rH2.data.values?.[0] || []).map(txt), dest = rD.data.values?.[0] || []
         const d = n => txt(dest[cab.indexOf(n)])

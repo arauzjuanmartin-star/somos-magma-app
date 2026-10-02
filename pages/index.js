@@ -5281,22 +5281,67 @@ const NOTAS_ENTRO=['Pase entre cuentas','Aporte de un socio','Devolución','Pré
 function RevisarBanco({data, onRefresh, showToast}){
   const cel=useEsCelular()
   const esPagado=esActiva   // "SI" / "SÍ" / TRUE, igual que en las cuentas
-  const todos=(data.movimientosBanco||[]).map(r=>{ const entro=parseMonto(r['Entró']), salio=parseMonto(r['Salió']); return {fila:r.__row, clave:String(r['Clave']||'').trim(), cuenta:String(r['Cuenta']||'').trim(), fechaTxt:String(r['Fecha']||'').trim(), fecha:parseD(r['Fecha']), concepto:String(r['Concepto']||'').trim(), detalle:String(r['Detalle']||'').trim(), que:String(r['Qué es']||'').trim(), estado:String(r['Estado']||'').trim(), monto:entro-salio} }).filter(m=>m.fecha && m.monto)
+  const todos=(data.movimientosBanco||[]).map(r=>{ const entro=parseMonto(r['Entró']), salio=parseMonto(r['Salió']); return {fila:r.__row, clave:String(r['Clave']||'').trim(), cuenta:String(r['Cuenta']||'').trim(), fechaTxt:String(r['Fecha']||'').trim(), fecha:parseD(r['Fecha']), concepto:String(r['Concepto']||'').trim(), detalle:String(r['Detalle']||'').trim(), que:String(r['Qué es']||'').trim(), estado:String(r['Estado']||'').trim(), hoja:String(r['Hoja']||'').trim(), ref:String(r['Ref']||'').trim(), tipo:String(r['Tipo']||'').trim(), monto:entro-salio} }).filter(m=>m.fecha && m.monto)
   const pend=todos.filter(m=>m.estado==='Para revisar'), hechos=todos.filter(m=>m.estado==='Clasificado a mano')
   const cuentas=[...new Set(pend.map(m=>m.cuenta))]
   const [fCuenta,setFCuenta]=useState(''), [fTipo,setFTipo]=useState('todo'), [abierto,setAbierto]=useState(''), [busy,setBusy]=useState(false), [verHechos,setVerHechos]=useState(false)
   // Lo que se está armando para el movimiento abierto
-  const [sel,setSel]=useState({}), [dif,setDif]=useState(''), [q,setQ]=useState(''), [modo,setModo]=useState(''), [gSel,setGSel]=useState(''), [nuevo,setNuevo]=useState({concepto:'', rubro:'', trabajo:''}), [nota,setNota]=useState({chip:'', texto:''})
+  const [sel,setSel]=useState({}), [dif,setDif]=useState(''), [q,setQ]=useState(''), [modo,setModo]=useState(''), [gSel,setGSel]=useState(''), [nuevo,setNuevo]=useState({concepto:'', rubro:'', trabajo:''}), [nota,setNota]=useState({chip:'', texto:''}), [per,setPer]=useState(''), [selS,setSelS]=useState({})
   const lista=pend.filter(m=>(!fCuenta||m.cuenta===fCuenta) && (fTipo==='todo'||(fTipo==='entro'?m.monto>0:m.monto<0))).sort((a,b)=>Math.abs(b.monto)-Math.abs(a.monto))
   const rubros=(data.rubros||[]).filter(r=>!/^personal/i.test(r.rubro)).map(r=>({key:`${r.rubro}|${r.subrubro}`, label:r.subrubro?`${r.rubro} · ${r.subrubro}`:r.rubro, rubro:r.rubro, subrubro:r.subrubro}))
   const categoriaDe=rubro=>/sueldo/i.test(rubro)?'Sueldos':/impuesto/i.test(rubro)?'Impuestos':/bancari|financ/i.test(rubro)?'Financieros':'Operativos'
   const facturasReales=(data.facturacion||[]).filter(f=>esFacturaReal(f) && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA') && parseMonto(f['Precio FINAL'])>0)
   const aCand=f=>{ const final=parseMonto(f['Precio FINAL']), cobrada=isCobrada(f), cobrado=parseMonto(f['Monto cobrado']), pendiente=cobrada?0:Math.max(0,final-cobrado); return {fila:f.__row, nro:String(f['N° Presupuesto']||'').trim(), agencia:String(f['Agencia']||f['Cliente']||'').trim(), cliente:String(f['Cliente']||'').trim(), proyecto:String(f['Proyecto']||'').trim(), final, pendiente, vale:cobrada?(cobrado||final):pendiente, cobrada, fechaCobro:String(f['Fecha cobro']||'').trim(), vence:String(f['Vencimiento']||'').trim(), porque:[]} }
-  function abrir(m){
-    if(abierto===m.clave){ setAbierto(''); return }
+  // ---- PAGOS A FREELANCERS: las líneas de PAGOS_STAFF de cada persona (la línea "Somos Magma" no es un pago a nadie)
+  const lineasStaff=(data.pagosStaff||[]).map(p=>{ const debe=parseMonto(p['Monto Adeudado'])+parseMonto(p['Viáticos']), pagada=/^(pagado|s[ií]|true)$/i.test(String(p['Estado']||'').trim()); return {hon:parseMonto(p['Monto Adeudado']), viat:parseMonto(p['Viáticos']), fila:p.__row, persona:String(p['Freelancer']||'').trim(), mes:String(p['Mes Referencia']||'').trim(), nro:String(p['N° Presupuesto']||'').trim(), proyecto:String(p['Proyecto']||'').trim(), servicio:String(p['Servicio']||'').trim(), pagada, vale:pagada?(parseMonto(p['Monto Pagado'])||debe):debe, fPago:parseD(p['Fecha Pago'])} }).filter(x=>x.persona && x.vale>0 && !esMagma(x.persona))
+  const personasStaff=[...new Set(lineasStaff.map(x=>x.persona))].sort()
+  // Las líneas de una persona que pueden ser este pago: lo que se le debe, y lo que figura pagado por esos días
+  const lineasDe=(persona,m)=>lineasStaff.filter(x=>normTxt(x.persona)===normTxt(persona) && (!x.pagada || (x.fPago && Math.abs(x.fPago-m.fecha)/864e5<=12))).sort((a,b)=>Number(a.pagada)-Number(b.pagada) || b.fila-a.fila)
+  // A quién puede ser: el dueño del CUIT (RRHH), o alguien a quien se le debe (o se le pagó por esos días) justo ese monto
+  const cuitPersona={}; (data.rrhh||[]).forEach(r=>{ const c=String(r['CUIT/CUIL']||'').replace(/\D/g,''); if(c.length===11) cuitPersona[c]=String(r['Nombre Apellido']||'').trim() })
+  const quizasStaff=m=>{ const B=-m.monto, out=[], c=(`${m.concepto} ${m.detalle}`.match(/\b((?:20|23|24|27)\d{9})\b/)||[])[1]
+    if(c && cuitPersona[c]) out.push({persona:canonStaff(cuitPersona[c]), por:'es su CUIT', filas:[]})
+    const g={}; lineasStaff.forEach(x=>{ if(x.pagada && !(x.fPago && Math.abs(x.fPago-m.fecha)/864e5<=6)) return; const k=`${x.persona}|${x.pagada?'p'+x.fPago.getTime():x.mes}`; g[k]=g[k]||{persona:x.persona, pagada:x.pagada, mes:x.mes, total:0, filas:[]}; g[k].total+=x.vale; g[k].filas.push(x.fila) })
+    Object.values(g).filter(x=>Math.abs(x.total-B)<1).forEach(x=>{ const ya=out.find(o=>normTxt(o.persona)===normTxt(x.persona)); if(ya){ if(!ya.filas.length){ ya.filas=x.filas; ya.por=x.pagada?'figura pagado ese monto por esos días':`se le debe justo eso de ${x.mes}` } } else out.push({persona:x.persona, por:x.pagada?'figura pagado ese monto por esos días':`se le debe justo eso de ${x.mes}`, filas:x.filas}) })
+    // Si se sabe quién es por el CUIT y no hay un grupo que dé justo, el que queda a menos de medio por ciento
+    // (una comisión o un redondeo): se propone elegido igual, y la pantalla muestra la diferencia.
+    const suyo=out.find(o=>o.por==='es su CUIT')
+    if(suyo){ const cerca=Object.values(g).filter(x=>normTxt(x.persona)===normTxt(suyo.persona) && Math.abs(x.total-B)<=B*0.005).sort((p,q)=>Math.abs(p.total-B)-Math.abs(q.total-B))[0]; if(cerca){ suyo.filas=cerca.filas; suyo.por=cerca.pagada?'es su CUIT y figura pagado casi ese monto por esos días':`es su CUIT y se le debe casi eso de ${cerca.mes}` } }
+    return out }
+  // ---- LO QUE YA SE CONTESTÓ UNA VEZ: si un movimiento va a la misma cuenta que otro que ya se revisó (mismo CUIT), o es
+  // el mismo concepto por el mismo monto, se propone la misma respuesta y queda un clic. Los CUIT propios (el de la
+  // empresa, que BBVA pone en todas sus transferencias) no identifican a nadie.
+  const propios=new Set(); (data.cuentas||[]).forEach(c=>{ for(const x of `${c['Datos transferencia adicionales']||''} ${c['Notas']||''}`.matchAll(/\b(\d{2})-?(\d{8})-?(\d)\b/g)) propios.add(x[1]+x[2]+x[3]) })
+  // …y el del titular de cada cuenta: "Santander Lucia" está a nombre de Lulu, y su CUIT aparece en sus pases y en sus impuestos.
+  const palabrasNombre=t=>normTxt(t).split(/[^a-z0-9ñ]+/).filter(w=>w.length>=3).sort().join(' ')
+  ;(data.cuentas||[]).forEach(c=>{ const tit=palabrasNombre(c['Titular']); if(!tit) return; (data.rrhh||[]).forEach(r=>{ const cu=String(r['CUIT/CUIL']||'').replace(/\D/g,''); if(cu.length===11 && palabrasNombre(r['Nombre Apellido'])===tit) propios.add(cu) }) })
+  const cuitDe=m=>{ const c=(`${m.concepto} ${m.detalle}`.match(/\b((?:20|23|24|27|30|33|34)\d{9})\b/)||[])[1]||''; return c&&!propios.has(c)?c:'' }
+  const raizDe=m=>`${m.concepto.replace(/\d+/g,'').replace(/\s+/g,' ').trim()}|${Math.abs(m.monto).toFixed(2)}`
+  const recuerdoDe=m=>{ const c=cuitDe(m), r=raizDe(m)
+    const h=hechos.filter(x=>(x.monto>0)===(m.monto>0) && !['FACTURACION','PRESTAMOS','TARJETAS'].includes(x.hoja)).sort((a,b)=>b.fecha-a.fecha).find(x=>c?cuitDe(x)===c:(!cuitDe(x)&&raizDe(x)===r))
+    if(!h) return null
+    // Por CUIT: solo si todo lo que se revisó de esa cuenta se contestó igual. Si hubo respuestas distintas, no se propone nada.
+    if(c && new Set(hechos.filter(x=>cuitDe(x)===c).map(x=>x.que.replace(/\s*[·(].*$/,''))).size>1) return null
+    // Por concepto y monto no se identifica a una persona: un "Pago a…" no se repite (dos pagos de $220.000 son de dos personas).
+    if(!c && /^pago a/i.test(h.que)) return null
+    const por=c?(m.monto>0?'vino de la misma cuenta':'fue a la misma cuenta'):'mismo concepto y mismo monto', persona=((h.que.match(/^Pago a ([^·:(]+)/)||[])[1]||'').trim()
+    if(h.hoja==='PAGOS_STAFF' && persona) return {h, por, tipo:'staff', persona, texto:`Pago a ${persona}`}
+    if(h.hoja==='GASTOS_FIJOS' && h.ref){ const g=(data.gastosFijos||[]).find(x=>String(x.__row)===h.ref); if(!g) return null
+      if(/[uú]nico/i.test(String(g['Frecuencia']||''))){ const key=`${String(g['Rubro']||'').trim()}|${String(g['Subrubro']||'').trim()}`; return rubros.some(x=>x.key===key)?{h, por, tipo:'nuevo', concepto:String(g['Concepto']||'').trim(), rubro:key, texto:h.que}:null }
+      // Un gasto de todos los meses: solo si sigue activo y el monto es parecido al previsto
+      const previsto=parseMonto(g['Monto']); if(!esActiva(g['Activo']||'SI') || !(previsto>0) || Math.abs(previsto-Math.abs(m.monto))>previsto*0.15) return null
+      return {h, por, tipo:'gasto', filaGasto:g.__row, texto:String(g['Concepto']||'').trim()} }
+    if(!h.hoja) return {h, por, tipo:'anotar', texto:h.que}
+    return null }
+  function abrir(m, forzar, persona){
+    if(abierto===m.clave && !forzar){ setAbierto(''); return }
     setAbierto(m.clave); setDif(''); setQ(''); setGSel(''); setNota({chip:'', texto:''}); setNuevo({concepto:(m.detalle||m.concepto).replace(/\s*·\s*.*$/,'').slice(0,60), rubro:'', trabajo:''})
     if(m.monto>0){ const c=facturasCandidatas(m, data, {filaMov:m.fila}); setSel(Object.fromEntries(c.candidatas.filter(x=>c.sumanJusto.includes(x.fila)).map(x=>[x.fila,x]))); setModo('factura') }
-    else { setSel({}); setModo('lista') }
+    else { setSel({})
+      // Si parece un pago a un freelancer (es su CUIT, o se le debe justo ese monto), se abre por ahí con sus líneas elegidas
+      const qs=quizasStaff(m), sug=persona?qs.find(x=>normTxt(x.persona)===normTxt(persona)):qs[0]
+      if(forzar==='staff' || qs.length){ setModo('staff'); setPer(persona||sug.persona); setSelS(Object.fromEntries(((sug&&sug.filas)||[]).map(f=>[f,true]))) }
+      else { setModo('lista'); setPer(''); setSelS({}) } }
   }
   const post=async (url,body)=>{ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json().catch(()=>({})); return {status:r.status, j} }
   // PRIMERO se une el movimiento y DESPUÉS se cobra o se crea el gasto. Así, si algo falla a mitad de camino, el
@@ -5336,16 +5381,44 @@ function RevisarBanco({data, onRefresh, showToast}){
     try{ const B=-m.monto; await clasificar(m,{queEs:`${op.label}${Math.abs(op.monto-B)>=1?` (previsto ${fmt(op.monto)}, el banco dice ${fmt(B)})`:''}`, hoja:op.hoja, ref:String(op.fila), marcar:{hoja:op.hoja, fila:op.fila, mesKey:op.mesKey}, tipo:op.hoja==='PRESTAMOS'?'Cuota de préstamo':op.hoja==='TARJETAS'?'Pago de tarjeta':'Transferencia'}, 'Unido ✓') }catch(e){ showToast('Error de conexión','err') }
     setBusy(false)
   }
+  async function crearGasto(m, concepto, r, nroTrabajo){
+    const base={queEs:`${concepto} · ${r.label}${nroTrabajo?` · trabajo #${nroTrabajo}`:''}`, hoja:'GASTOS_FIJOS', tipo:'Transferencia'}
+    try{ if(!(await unir(m,{...base, ref:''}))) return
+      const {j}=await post('/api/gasto-nuevo',{categoria:categoriaDe(r.rubro), rubro:r.rubro, subrubro:r.subrubro, nroTrabajo, concepto, monto:-m.monto, moneda:'ARS', recurrencia:'unico', diaPago:m.fecha.getDate(), mes:m.fecha.getMonth()+1, anio:m.fecha.getFullYear(), pagado:true, cuentaPago:m.cuenta, fechaPago:m.fechaTxt, medio:'Transferencia', tipo:'gasto', sinTocarSaldo:true})
+      if(!j.ok){ await cerrar(`El movimiento quedó anotado, pero no se creó el gasto (${j.error||'error'}). Reabrilo desde "ya revisados" y volvé a intentar.`, true); return }
+      // La fila del gasto recién creado queda en el movimiento: con eso la próxima vez se propone el mismo rubro
+      if(j.fila){ try{ await post('/api/extracto-clasificar',{fila:m.fila, clave:m.clave, ...base, ref:String(j.fila)}) }catch(e){ /* el gasto y el movimiento ya quedaron: solo se pierde el recuerdo */ } }
+      await cerrar('Gasto anotado ✓')
+    }catch(e){ await cerrar('Se cortó la conexión a mitad de camino. Actualicé los datos: mirá cómo quedó antes de volver a intentar.', true) }
+  }
   async function guardarNuevo(m){
     if(busy) return; const concepto=nuevo.concepto.trim(); if(!concepto){ showToast('Poné qué fue','err'); return }
     const r=rubros.find(x=>x.key===nuevo.rubro); if(!r){ showToast('Elegí el rubro','err'); return }
-    const nroTrabajo=(nuevo.trabajo.match(/\d{3,}/)||[''])[0]
+    setBusy(true); await crearGasto(m, concepto, r, (nuevo.trabajo.match(/\d{3,}/)||[''])[0]); setBusy(false)
+  }
+  // Un pago a un freelancer: las líneas que estaban pendientes quedan pagadas con la fecha del banco; las que ya
+  // figuraban pagadas solo quedan unidas. Va todo en un solo pedido al servidor.
+  async function guardarStaff(m, persona, elegidas){
+    if(busy||!elegidas.length) return; setBusy(true)
+    try{ const B=-m.monto, S=elegidas.reduce((t,x)=>t+x.vale,0), aMarcar=elegidas.filter(x=>!x.pagada), nros=[...new Set(elegidas.map(x=>x.nro).filter(Boolean))]
+      persona=elegidas[0].persona   // como está escrita en Pagos Staff, no como se tipeó
+      // Si lo que salió es justo el honorario con 21% de IVA (más viáticos), se guarda así, como cuando se paga con IVA desde Pagos Staff
+      const conIVA=aMarcar.length===elegidas.length && aMarcar.length>0 && Math.abs(aMarcar.reduce((t,x)=>t+x.hon*1.21+x.viat,0)-B)<2
+      if(conIVA){ await clasificar(m,{queEs:`Pago a ${persona} · ${elegidas.length} ${elegidas.length===1?'trabajo':'trabajos'}${nros.length?` (${nros.map(n=>'#'+n).join(', ')})`:''} · con IVA`, hoja:'PAGOS_STAFF', ref:elegidas.map(x=>x.fila).join(', '), tipo:'Pago a freelancer', staff:{persona, filas:aMarcar.map(x=>x.fila), conIVA:true}}, `${aMarcar.length} ${aMarcar.length===1?'trabajo marcado pagado':'trabajos marcados pagados'} con IVA ✓`); setBusy(false); return }
+      await clasificar(m,{queEs:`Pago a ${persona} · ${elegidas.length} ${elegidas.length===1?'trabajo':'trabajos'}${nros.length?` (${nros.map(n=>'#'+n).join(', ')})`:''}${Math.abs(S-B)>=1?` · las líneas suman ${fmt(S)} y el banco dice ${fmt(B)}`:''}`, hoja:'PAGOS_STAFF', ref:elegidas.map(x=>x.fila).join(', '), tipo:'Pago a freelancer', staff:{persona, filas:aMarcar.map(x=>x.fila)}}, aMarcar.length?`${aMarcar.length} ${aMarcar.length===1?'trabajo marcado pagado':'trabajos marcados pagados'} ✓`:'Unido ✓')
+    }catch(e){ showToast('Error de conexión','err') }
+    setBusy(false)
+  }
+  // "Es lo mismo que la vez pasada": un clic. Un pago a un freelancer no se repite solo: se abre con la persona elegida.
+  async function repetir(m, rec){
+    if(busy) return
+    if(rec.tipo==='staff'){ abrir(m,'staff',rec.persona); return }
     setBusy(true)
-    try{ if(!(await unir(m,{queEs:`${concepto} · ${r.label}${nroTrabajo?` · trabajo #${nroTrabajo}`:''}`, hoja:'GASTOS_FIJOS', ref:'', tipo:'Transferencia'}))){ setBusy(false); return }
-      const {j}=await post('/api/gasto-nuevo',{categoria:categoriaDe(r.rubro), rubro:r.rubro, subrubro:r.subrubro, nroTrabajo, concepto, monto:-m.monto, moneda:'ARS', recurrencia:'unico', diaPago:m.fecha.getDate(), mes:m.fecha.getMonth()+1, anio:m.fecha.getFullYear(), pagado:true, cuentaPago:m.cuenta, fechaPago:m.fechaTxt, medio:'Transferencia', tipo:'gasto', sinTocarSaldo:true})
-      if(!j.ok) await cerrar(`El movimiento quedó anotado, pero no se creó el gasto (${j.error||'error'}). Reabrilo desde "ya revisados" y volvé a intentar.`, true)
-      else await cerrar('Gasto anotado ✓')
-    }catch(e){ await cerrar('Se cortó la conexión a mitad de camino. Actualicé los datos: mirá cómo quedó antes de volver a intentar.', true) }
+    try{
+      if(rec.tipo==='anotar') await clasificar(m,{queEs:rec.h.que, tipo:rec.h.tipo}, 'Anotado ✓')
+      else if(rec.tipo==='gasto') await clasificar(m,{queEs:rec.texto, hoja:'GASTOS_FIJOS', ref:String(rec.filaGasto), marcar:{hoja:'GASTOS_FIJOS', fila:rec.filaGasto, mesKey:`${m.fecha.getMonth()+1}/${m.fecha.getFullYear()}`}, tipo:'Transferencia'}, 'Unido ✓')
+      else if(rec.tipo==='nuevo') await crearGasto(m, rec.concepto, rubros.find(x=>x.key===rec.rubro), '')
+    }catch(e){ showToast('Error de conexión','err') }
     setBusy(false)
   }
   async function guardarNota(m){
@@ -5392,19 +5465,21 @@ function RevisarBanco({data, onRefresh, showToast}){
           ...(data.tarjetas||[]).map(t=>{ const v=parseD(t['Vencimiento']); if(!v||Math.abs(v-m.fecha)/864e5>25) return null; return {id:`TARJETAS:${t.__row}`, hoja:'TARJETAS', fila:t.__row, mesKey:'', monto:parseMonto(t['Monto']), label:`${t['Tarjeta']} · resumen de ${t['Mes']}/${t['Año']}`, pagado:esPagado(t['Pagado'])} }).filter(Boolean),
         ].sort((a,b)=>Math.abs(a.monto-B)-Math.abs(b.monto-B)):[]
         const op=ops.find(o=>o.id===gSel)
+        const rec=ab?null:recuerdoDe(m)
         return <div key={m.clave} style={{borderTop:i?`1px solid ${T.border}`:'none', background:ab?T.bg:'transparent'}}>
           <div onClick={()=>abrir(m)} style={{display:'grid', gridTemplateColumns:cel?'44px minmax(0,1fr) auto':'52px minmax(0,1fr) auto 96px', gap:cel?9:14, alignItems:'center', padding:cel?'12px 14px':'12px 18px', cursor:'pointer'}}>
             <span style={{fontFamily:MONO, fontSize:12, color:T.ink3}}>{dm(m.fecha)}</span>
             <span style={{minWidth:0}}>
               <span style={{display:'block', fontSize:13.5, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{quienDe(m)}</span>
               <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.concepto}{/^¿/.test(m.que)?` · ${m.que}`:''}</span>
+              {rec && <span style={{display:'block', fontSize:11.5, color:T.pos, marginTop:2}}>Como el {dm(rec.h.fecha)} ({rec.por}): <b>{rec.texto}</b>{cel && <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{marginLeft:8, fontSize:11.5, fontWeight:700, padding:'3px 9px', borderRadius:7, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button>}</span>}
             </span>
             <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:entra?T.pos:T.ink, whiteSpace:'nowrap'}}>{entra?'+':'−'}{fmt(B)}</span>
-            {!cel && <span style={{fontSize:12, fontWeight:600, color:ab?T.ink2:T.brand, textAlign:'right'}}>{ab?'cerrar':'¿Qué es?'}</span>}
+            {!cel && (rec ? <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{fontSize:12, fontWeight:700, padding:'6px 8px', borderRadius:8, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer', whiteSpace:'nowrap'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button> : <span style={{fontSize:12, fontWeight:600, color:ab?T.ink2:T.brand, textAlign:'right'}}>{ab?'cerrar':'¿Qué es?'}</span>)}
           </div>
           {ab && <div style={{padding:cel?'2px 14px 16px':'2px 18px 18px 84px'}}>
             <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:12}}>
-              {(entra?[['factura','Es el cobro de una factura'],['anotar','Es otra cosa']]:[['lista','Un gasto de la lista'],['nuevo','Un gasto nuevo'],['anotar','Solo anotar qué es']]).map(([k,l])=><button key={k} onClick={()=>setModo(k)} style={seg(modo===k)}>{l}</button>)}
+              {(entra?[['factura','Es el cobro de una factura'],['anotar','Es otra cosa']]:[['staff','Un pago a un freelancer'],['lista','Un gasto de la lista'],['nuevo','Un gasto nuevo'],['anotar','Solo anotar qué es']]).map(([k,l])=><button key={k} onClick={()=>setModo(k)} style={seg(modo===k)}>{l}</button>)}
             </div>
 
             {entra && modo==='factura' && <>
@@ -5429,6 +5504,28 @@ function RevisarBanco({data, onRefresh, showToast}){
               </div>}
               <div style={{marginTop:12}}><button disabled={busy||!elegidas.length} onClick={()=>guardarFacturas(m)} style={btnOk(busy||!elegidas.length)}>{busy?'Guardando…':sinCobrar.length?`Guardar y cobrar ${sinCobrar.length===1?'la factura':`las ${sinCobrar.length} facturas`}`:'Guardar: es esto'}</button></div>
             </>}
+
+            {!entra && modo==='staff' && (()=>{ const sugeridos=quizasStaff(m), lineas=per?lineasDe(per,m):[], elegidasS=lineas.filter(x=>selS[x.fila]), S=elegidasS.reduce((t,x)=>t+x.vale,0), aMarcar=elegidasS.filter(x=>!x.pagada)
+              return <>
+                {sugeridos.length>0 && <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:9}}><span style={{fontSize:12, color:T.ink2}}>Puede ser:</span>{sugeridos.map(x=><button key={x.persona+x.por} onClick={()=>{ setPer(x.persona); setSelS(Object.fromEntries(x.filas.map(f=>[f,true]))) }} style={seg(normTxt(per)===normTxt(x.persona))}>{x.persona} · {x.por}</button>)}</div>}
+                <input list="banco-freelancers" value={per} onChange={e=>{ setPer(e.target.value); setSelS({}) }} placeholder="A quién se le pagó" style={{...inpV2, marginBottom:8}}/>
+                <datalist id="banco-freelancers">{personasStaff.map(p=><option key={p} value={p}/>)}</datalist>
+                {per && lineas.length===0 && <div style={{fontSize:12.5, color:T.ink2, padding:'6px 0 10px', lineHeight:1.5}}>No encuentro trabajos de {per} pendientes ni pagados por esos días en Pagos Staff. Si igual fue un pago a esa persona, guardalo con "Solo anotar qué es".</div>}
+                {lineas.map(x=><label key={x.fila} style={{display:'grid', gridTemplateColumns:'18px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'7px 0', borderTop:`1px solid ${T.border}`, cursor:'pointer', fontSize:12.5}}>
+                  <input type="checkbox" checked={!!selS[x.fila]} onChange={e=>setSelS(o=>({...o,[x.fila]:e.target.checked}))} style={{width:16, height:16, accentColor:T.brand}}/>
+                  <span style={{minWidth:0}}><b style={{color:T.ink}}>{x.nro?`#${x.nro} · `:''}{x.proyecto||x.servicio}</b><span style={{color:T.ink2}}>{x.proyecto&&x.servicio?` · ${x.servicio}`:''} · {x.mes}</span>
+                    <span style={{display:'block', fontSize:11.5, color:x.pagada?T.ink3:T.warn, marginTop:1}}>{x.pagada?`ya figura pagado el ${dm(x.fPago)}: solo se une`:'pendiente'}</span></span>
+                  <span style={{fontFamily:MONO, fontWeight:600, color:T.ink, whiteSpace:'nowrap'}}>{fmt(x.vale)}</span>
+                </label>)}
+                {elegidasS.length>0 && <div style={{marginTop:12, padding:'11px 13px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, fontSize:12.5, color:T.ink, lineHeight:1.6}}>
+                  Salió <b style={{fontFamily:MONO}}>{fmt(B)}</b> · {elegidasS.length===1?'el trabajo elegido es de':`los ${elegidasS.length} elegidos suman`} <b style={{fontFamily:MONO}}>{fmt(S)}</b>
+                  {Math.abs(S-B)<1 ? <span style={{color:T.pos, fontWeight:600}}> · cierra justo</span> : <span style={{color:T.warn, fontWeight:600}}> · hay {fmt(Math.abs(S-B))} de diferencia</span>}
+                  {Math.abs(S-B)>=1 && (aMarcar.length===elegidasS.length && Math.abs(aMarcar.reduce((t,x)=>t+x.hon*1.21+x.viat,0)-B)<2
+                    ? <div style={{fontSize:11.5, color:T.pos, marginTop:3}}>La diferencia es justo el 21% de IVA de su factura: se guarda como pagado con IVA.</div>
+                    : <div style={{fontSize:11.5, color:T.ink2, marginTop:3}}>Puede ser el IVA de su factura, un viático o que falte elegir un trabajo. Si guardás así, la diferencia queda anotada en el movimiento.</div>)}
+                </div>}
+                <div style={{marginTop:12}}><button disabled={busy||!elegidasS.length} onClick={()=>guardarStaff(m, per, elegidasS)} style={btnOk(busy||!elegidasS.length)}>{busy?'Guardando…':aMarcar.length?`Guardar y marcar ${aMarcar.length===1?'el trabajo pagado':`los ${aMarcar.length} trabajos pagados`}`:'Guardar: es esto'}</button></div>
+              </> })()}
 
             {!entra && modo==='lista' && <>
               <select value={gSel} onChange={e=>setGSel(e.target.value)} style={{...inpV2, marginBottom:8}}><option value="">Elegí el gasto, la cuota o la tarjeta</option>{ops.map(o=><option key={o.id} value={o.id}>{o.label} · {fmt(o.monto)}{o.pagado?' · ya figura pagado':' · pendiente'}</option>)}</select>
