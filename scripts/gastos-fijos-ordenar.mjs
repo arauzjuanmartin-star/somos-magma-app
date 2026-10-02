@@ -70,6 +70,10 @@ const CAMBIOS = [
   { fila:38, nombre:'Impuesto ley 25.413', set:{ 'Medio de pago':'Débito automático', 'Mes carga':'' }, por:'lo cobra el banco solo' },
   { fila:39, nombre:'Costo Mastercard Galicia', set:{ 'Mes carga':'' }, por:'tenía una fecha suelta en "Mes carga"' },
   { fila:26, nombre:'cargas sociales junio', set:{ 'Dia pago':13 }, por:'el día estaba cargado como fecha entera' },
+  // Respuestas de Juan del 01/10/2026 a lo que había quedado en "Para revisar"
+  { fila:13, nombre:'CM (María)', set:{ 'Activo':'NO', 'Observacion':sumarObs('María ya no está más (Juan, 01/10/2026)') }, por:'Juan: "CM María ya no está más"' },
+  { fila:17, nombre:'Monotributo Lulu', set:{ 'Persona/Cuenta':'Santander Lucia' }, por:'Juan: sale de la cuenta de Santander de Lulu' },
+  { fila:74, nombre:'AFIP plan de pago Sofi', set:{ 'Persona/Cuenta':'Galicia Sofi', 'Observacion':actual => String(actual||'').replace(' FALTA: de qué cuenta se debita.', ' Se debita de Galicia Sofi (Juan, 01/10/2026).') }, por:'Juan: se debita de Galicia Sofi' },
 ]
 
 // ---------- Filas que faltan (lo que sí sale en octubre y Caja no veía)

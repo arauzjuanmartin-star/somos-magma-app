@@ -19,6 +19,7 @@ import RepartoStaff from '../components/RepartoStaff'
 import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
+import { tareasDeHoy } from '../lib/hoy.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -2863,7 +2864,7 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
       showToast(okMsg); if(onRefresh) await onRefresh(); setLoteBusy(''); return true
     }catch(e){ showToast('Error de conexión','err'); setLoteBusy(''); return false } }
   // Cuando se llega desde otro módulo buscando una factura puntual, se abre la lista: ahí está la fila exacta.
-  useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.filtro||nav.q) setVista('lista'); if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  useEffect(()=>{ if(nav?.mod==='facturacion'){ if(nav.agF){ setVista('agencias'); setAgF(nav.agF) } if(nav.filtro||nav.q) setVista('lista'); if(nav.filtro)setFilt(['atrasadas','pendiente'].includes(nav.filtro)?'porcobrar':nav.filtro); if(nav.q){setQ(nav.q); setFilt('todas')} clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
 
   // presupuestos aprobados con saldo pendiente de facturar
   const pendTodos=presus.filter(isAprobado).map(p=>{
@@ -4996,7 +4997,8 @@ function Caja({data, onRefresh, showToast, goTo}){
   // Una sola pantalla de plata: 'caja' para mirar y pagar; 'detalle' es lo que era Egresos (cuenta de socios,
   // cuotas a futuro, el detalle de cada tarjeta, editar un gasto). Agregar un gasto y subir un resumen se hacen
   // desde las dos, sin cambiar de pestaña.
-  const [tab,setTab]=useState('caja'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false)
+  // Se entra por 'hoy': la lista de tareas de administración (qué facturar, mandar, reclamar, pagar y cargar).
+  const [tab,setTab]=useState('hoy'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false), [editSaldos,setEditSaldos]=useState(false)
   // CARGA RÁPIDA: lo que se pagó hoy y no pasa por ningún resumen (efectivo, una transferencia suelta).
   // Tres datos y listo: qué, cuánto y de dónde salió. La fecha es hoy y el rubro se aprende de la vez anterior.
   // Lo que sale por débito o con tarjeta NO se carga acá: entra cuando se sube el resumen.
@@ -5021,6 +5023,8 @@ function Caja({data, onRefresh, showToast, goTo}){
   const trabajosRec=(data.proyectos||[]).filter(p=>{ const d=parseD(p['Fecha Evento']); if(!d) return false; const dias=(now-d)/864e5; return dias>-20 && dias<75 }).sort((a,b)=>parseD(b['Fecha Evento'])-parseD(a['Fecha Evento'])).map(p=>`#${String(p['N° presupuesto']||'').trim()} · ${[p['Cliente'],p['Proyecto']].filter(Boolean).join(' · ')}`)
   const cel=useEsCelular()
   const c=calcularCaja(data,{mes:mesIdx, anio, hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
+  // "Hoy" mira siempre el mes en curso, aunque en la pestaña Caja se esté mirando otro mes.
+  const cHoy=(mesIdx===now.getMonth()+1 && anio===now.getFullYear()) ? c : calcularCaja(data,{hoy:now, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS})
   const t=c.totales, seguro=modo==='seguro'
   const fm=n=>(n<0?'−':'')+fmt(n)
   const DIAS_SEM=['dom','lun','mar','mié','jue','vie','sáb']
@@ -5130,9 +5134,42 @@ function Caja({data, onRefresh, showToast, goTo}){
       </div>
     </div>
     <div style={{display:'flex', marginBottom:18, borderBottom:`1px solid ${T.border}`}}>
-      {[['caja','Caja','lo que entra, lo que sale y si alcanza'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
+      {[['hoy','Hoy','qué hay que hacer'],['caja','Caja','lo que entra, lo que sale y si alcanza'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
         <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tab===k?700:500, color:tab===k?T.ink:T.ink2, borderBottom:`2px solid ${tab===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{sub}</span>}</button>)}
     </div>
+    {tab==='hoy' && (()=>{
+      // HOY: la lista de tareas de administración. Se arma sola (lib/hoy.mjs) y cada tarea lleva a donde se resuelve.
+      const h=tareasDeHoy(data,cHoy)
+      const TONO={entra:{c:T.pos,bg:T.posSoft,l:'Trae plata'}, sale:{c:T.ink,bg:T.surfaceAlt,l:'Hay que pagar'}, alerta:{c:T.brand,bg:T.brandSoft,l:'No alcanza'}, falta:{c:T.warn,bg:T.warnSoft,l:'Falta cargar'}}
+      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
+      const DIAS_L=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+      const montoDe=x=>x.monto>0?`${x.tono==='entra'?'+':''}${x.montoAprox?'≈ ':''}${fmt(x.monto)}`:''
+      const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:T.ink
+      return <>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:14}}>
+          <div style={{fontSize:15, fontWeight:700, color:T.ink}}>{DIAS_L[now.getDay()]} {now.getDate()} de {MESES_LARGO[now.getMonth()].toLowerCase()} · {h.tareas.length?`${h.tareas.length} ${h.tareas.length===1?'cosa':'cosas'} para hacer`:'todo al día'}</div>
+          {h.porDestrabar>0 && <div style={{fontSize:12.5, color:T.ink2}}>{h.nEntra===1?'La primera destraba':`Las ${h.nEntra} primeras destraban`} <b style={{fontFamily:MONO, color:T.pos}}>{fmt(h.porDestrabar)}</b></div>}
+        </div>
+        {!h.tareas.length && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'22px 18px', fontSize:13.5, color:T.ink2}}>No hay nada pendiente: todo facturado, enviado, reclamado y pagado.</div>}
+        {h.tareas.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden'}}>
+          {h.tareas.map((x,i)=>{ const tn=TONO[x.tono], id='hoy:'+x.id, ab=abiertos[id]??(x.tono==='entra'||x.tono==='alerta')
+            return <div key={x.id} style={{borderTop:i?`1px solid ${T.border}`:'none', padding:cel?'14px':'15px 18px'}}>
+              <div style={{display:'grid', gridTemplateColumns:cel?'30px minmax(0,1fr)':'34px minmax(0,1fr) auto 150px', gap:cel?10:14, alignItems:'center'}}>
+                <div style={{width:28, height:28, borderRadius:'50%', background:tn.bg, color:tn.c, fontSize:13, fontWeight:700, fontFamily:MONO, display:'flex', alignItems:'center', justifyContent:'center'}}>{i+1}</div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:14, fontWeight:700, color:T.ink}}>{x.titulo}</div>
+                  <div style={{fontSize:12, color:T.ink2, marginTop:3, lineHeight:1.45}}><span style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:tn.c}}>{tn.l}</span> · {x.sub}{x.lista.length>0 && <button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11.5, textDecoration:'underline', cursor:'pointer', marginLeft:6, padding:0, fontFamily:'inherit'}}>{ab?'ocultar detalle':'ver detalle'}</button>}</div>
+                  {cel && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:9}}>{x.monto>0 && <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:colorMonto(x)}}>{montoDe(x)}</span>}<button onClick={()=>irA(x.ir.donde)} style={{...btnSec, ...(i===0?{background:T.brand, borderColor:T.brand, color:'#fff'}:{})}}>{x.ir.label}</button></div>}
+                </div>
+                {!cel && <div style={{fontFamily:MONO, fontSize:15, fontWeight:600, textAlign:'right', color:colorMonto(x), whiteSpace:'nowrap'}}>{montoDe(x)}</div>}
+                {!cel && <button onClick={()=>irA(x.ir.donde)} style={{...btnSec, justifySelf:'stretch', textAlign:'center', ...(i===0?{background:T.brand, borderColor:T.brand, color:'#fff'}:{})}}>{x.ir.label}</button>}
+              </div>
+              {ab && x.lista.length>0 && <div style={{margin:cel?'10px 0 0':'10px 0 0 48px', borderTop:`1px dashed ${T.border}`, paddingTop:7}}>{x.lista.map((l,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:12, fontSize:12.5, padding:'4px 0'}}><span style={{minWidth:0, color:T.ink}}>{l.t}{l.d && <span style={{color:T.ink3}}> · {l.d}</span>}</span>{l.m>0 && <span style={{fontFamily:MONO, color:T.ink2, whiteSpace:'nowrap'}}>{fmt(l.m)}</span>}</div>)}</div>}
+              {x.id==='saldos' && editSaldos && <div style={{margin:cel?'12px 0 0':'12px 0 0 48px'}}><SaldosEditor cuentas={(data.cuentas||[]).filter(k=>esActiva(k['Activa']))} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/></div>}
+            </div> })}
+        </div>}
+        <div style={{fontSize:11.5, color:T.ink3, marginTop:10, lineHeight:1.5}}>La lista se arma sola con lo que hay cargado: cuando una tarea queda hecha, desaparece. Primero va lo que trae plata, después lo que hay que pagar y al final lo que falta cargar.</div>
+      </> })()}
     {tab==='detalle' && <Egresos data={data} onRefresh={onRefresh} showToast={showToast} embebido/>}
     {tab==='caja' && <>
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'13px 16px', marginBottom:18}}>
