@@ -5613,7 +5613,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
   return <div onClick={busy?undefined:onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:210, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', overflowY:'auto'}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:780, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12}}>
-        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Lee los movimientos de la cuenta de BBVA y de Santander, en CSV.</div></div>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Lee los movimientos de la cuenta de BBVA, de Santander y de Galicia, en CSV.</div></div>
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'16px 22px 20px'}}>
