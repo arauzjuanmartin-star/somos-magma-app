@@ -79,6 +79,9 @@ export default async function handler(req, res) {
         poner(hoja, fila, 'Pagado', 'SI'); poner(hoja, fila, 'Fecha pago', fecha); poner(hoja, fila, 'Cuenta pago', nombreCuenta)
       } else if (hoja === 'TARJETAS') {
         poner(hoja, fila, 'Pagado', 'SI'); poner(hoja, fila, 'Fecha pago', fecha); poner(hoja, fila, 'Cuenta pago', nombreCuenta); poner(hoja, fila, 'Monto pagado', Math.abs(x.monto))
+      } else if (hoja === 'IMPUESTOS') {
+        // Un VEP del contador: queda pagado con lo que salió de verdad (si se pagó tarde, el banco trae los intereses)
+        poner(hoja, fila, 'Pagado', 'SI'); poner(hoja, fila, 'Fecha pago', fecha); poner(hoja, fila, 'Cuenta pago', nombreCuenta); poner(hoja, fila, 'Monto pagado', Math.abs(x.monto)); poner(hoja, fila, 'Cómo se supo', 'Extracto del banco')
       } else if (hoja === 'FACTURACION') {
         const f = (data.facturacion || []).find(r => r.__row === fila); if (!f) continue
         const final = num(f['Precio FINAL']), previo = num(f['Monto cobrado'])

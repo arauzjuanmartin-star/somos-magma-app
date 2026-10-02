@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   const mail = auth.mail
 
   const { hoja, fila, pagado, fechaPago, cuentaPago, monto, montoParcial, notas, tipoPago, mesPagoKey } = req.body
-  if (!['GASTOS_FIJOS','TARJETAS','PRESTAMOS'].includes(hoja)) return res.status(400).json({ error: 'Hoja invalida' })
+  if (!['GASTOS_FIJOS','TARJETAS','PRESTAMOS','IMPUESTOS'].includes(hoja)) return res.status(400).json({ error: 'Hoja invalida' })
   if (!fila) return res.status(400).json({ error: 'Falta fila' })
 
   try {
@@ -61,6 +61,13 @@ export default async function handler(req, res) {
       if (montoTotal > 0 && nuevoMontoPagadoAcum >= montoTotal - 1) {
         nuevoPagadoFlag = true
       }
+    } else if (hoja === 'IMPUESTOS' && pagado === false) {
+      // Deshacer un VEP marcado: la plata vuelve a la cuenta solo si se había descontado al marcarlo a mano desde Caja.
+      // Si lo marcó el extracto del banco, el saldo ya venía del banco y no se toca.
+      const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${hoja}!A${fila}:Z${fila}` })
+      const row = rRow.data.values?.[0] || []
+      if (/^s[ií]$/i.test(String(row[H('Pagado')] || '').trim()) && /^Lo marcó/i.test(String(row[H('Cómo se supo')] || '').trim())) acumDescuento = -(num(row[H('Monto pagado')]) || num(row[H('Monto')]))
+      nuevoMontoPagadoAcum = ''
     } else if (pagado === true) {
       // Pago total: si hay monto pagado previo, descontar solo lo que falta
       const rRow = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${hoja}!A${fila}:Z${fila}` })
@@ -75,6 +82,8 @@ export default async function handler(req, res) {
     if (nuevoPagadoFlag !== undefined && H('Pagado') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Pagado'))}${fila}`, values: [[nuevoPagadoFlag ? 'SI' : 'NO']] })
     if (fechaPago !== undefined && H('Fecha pago') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Fecha pago'))}${fila}`, values: [[fechaPago]] })
     if (cuentaPago !== undefined && H('Cuenta pago') !== -1) updates.push({ range: `${hoja}!${colLetra(H('Cuenta pago'))}${fila}`, values: [[cuentaPago]] })
+    // Un VEP del contador marcado a mano: queda dicho quién lo marcó (el extracto del banco después lo confirma con su número)
+    if (hoja === 'IMPUESTOS' && H('Cómo se supo') !== -1 && nuevoPagadoFlag !== undefined) updates.push({ range: `${hoja}!${colLetra(H('Cómo se supo'))}${fila}`, values: [[nuevoPagadoFlag ? `Lo marcó ${mail} en Caja` : '']] })
     if (monto !== undefined && tipoPago !== 'parcial') {
       const idxM = H('Monto') !== -1 ? H('Monto') : H('Monto cuota')
       if (idxM !== -1) updates.push({ range: `${hoja}!${colLetra(idxM)}${fila}`, values: [[monto]] })

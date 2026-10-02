@@ -24,6 +24,7 @@ import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import { lookup } from 'dns/promises'
 import { horaArgentina, partesFecha, armarMail, asegurarSolapa, leerDiaria, yaEnviado, filaDiaria, escribirFila } from '../lib/diaria-mail.mjs'
+import { traerVepsNuevos } from '../lib/impuestos-sync.mjs'
 
 const args = process.argv.slice(2)
 const MAIL = args.includes('--mail')
@@ -69,6 +70,16 @@ const json = cmd => { try { return JSON.parse(correr(cmd)) } catch(e) { return {
 
 const brief = json('node scripts/morning-brief.mjs --json')
 const contador = json(`node scripts/contador-radar.mjs --json${MAIL ? ' --refrescar' : ''}`)
+
+// Los VEP nuevos que mandó Diego van a la solapa IMPUESTOS, así Caja y Hoy los muestran con su monto y su vencimiento.
+// Solo en la corrida programada (--mail): a mano este script no escribe nada en esa solapa. Si falla, la diaria sale igual.
+if (MAIL && !SIN_SHEET) {
+  try {
+    const authImp = new google.auth.GoogleAuth({ credentials:{ client_email:env.GOOGLE_CLIENT_EMAIL, private_key:env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g,'\n') }, scopes:['https://www.googleapis.com/auth/spreadsheets'] })
+    const imp = await traerVepsNuevos({ sheets: google.sheets({ version:'v4', auth: authImp }), SHEET_ID, user: env.MAIL_USER, pass: env.MAIL_APP_PASSWORD })
+    appendFileSync('scripts/.diaria-log.txt', `${new Date().toISOString()} impuestos: ${imp.ok ? (imp.nuevos.length ? 'VEP nuevos: ' + imp.nuevos.join(' | ') : 'sin VEP nuevos') : imp.motivo}${imp.errores ? ' · PDF sin leer: ' + imp.errores.join(' | ') : ''}\n`)
+  } catch (e) { appendFileSync('scripts/.diaria-log.txt', `${new Date().toISOString()} impuestos: falló la lectura de VEP: ${e.message}\n`) }
+}
 
 // La parte de administración: la caja del mes y la lista "Hoy", con el mismo cálculo que la pantalla Caja (lib/admin.mjs)
 const admin = json('node scripts/caja-hoy.mjs --json')

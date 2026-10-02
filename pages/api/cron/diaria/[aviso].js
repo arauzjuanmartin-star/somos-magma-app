@@ -6,6 +6,7 @@ import { correrLunes } from '../../../../lib/lunes.mjs'
 import { resumenAdmin } from '../../../../lib/admin.mjs'
 import { canonStaff } from '../../../../lib/staff'
 import { MAX_SLOTS } from '../../../../lib/slots'
+import { traerVepsNuevos } from '../../../../lib/impuestos-sync.mjs'
 
 // La diaria mandada desde Vercel: sale a las 8:10 y a las 15:10 aunque la Mac de Juan esté cerrada.
 // (El 18/09/2026 el mail de las 8 no llegó: la Mac dormía, corrió el script sin red y falló.)
@@ -26,7 +27,11 @@ import { MAX_SLOTS } from '../../../../lib/slots'
 // propia marca en la solapa SEMANAL para no repetirse, y se manda ANTES del corte "la diaria ya la mandó la Mac":
 // ese corte es de la diaria, no de este mail.   ?lunes=1 lo fuerza cualquier día (con ?dry=1 para probar).
 
-export const config = { maxDuration: 60 }
+// Además, cada corrida trae a la solapa IMPUESTOS los VEP nuevos que mandó el contador (lib/impuestos-sync.mjs): así
+// Caja y Hoy los muestran con su monto aunque la Mac esté cerrada. Va antes que todo y con su propia red: si falla la
+// lectura del mail, la diaria sale igual y el error queda en la respuesta y en el registro de Vercel.
+
+export const config = { maxDuration: 120 }
 
 export default async function handler(req, res) {
   const secreto = process.env.CRON_SECRET
@@ -47,6 +52,10 @@ export default async function handler(req, res) {
     const USER = process.env.MAIL_USER, PASS = process.env.MAIL_APP_PASSWORD
     const APP = process.env.DIARIA_APP_URL || 'https://somos-magma-app.vercel.app'
 
+    let impuestos = null
+    if (USER && PASS) { try { impuestos = await traerVepsNuevos({ sheets, SHEET_ID, user: USER, pass: PASS, dry, retry: withSheetsRetry }) } catch (e) { impuestos = { ok: false, error: e.message }; console.error('impuestos (VEP del mail):', e) } }
+    if (impuestos) console.log('impuestos:', JSON.stringify(impuestos).slice(0, 600))
+
     let lunes = null
     if (!tarde && (ahoraAR.getDay() === 1 || req.query.lunes === '1')) {
       try {
@@ -61,7 +70,7 @@ export default async function handler(req, res) {
     let filas = []
     try { filas = await withSheetsRetry(() => leerDiaria(sheets, SHEET_ID)) } catch (e) { /* sin columna N o sin solapa todavía: se toma como "nadie mandó nada" */ }
     const quien = yaEnviado(filas, ahoraAR, aviso)
-    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.`, lunes })
+    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.`, lunes, impuestos })
 
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
@@ -80,7 +89,7 @@ export default async function handler(req, res) {
     try { admin = resumenAdmin(await getAllData(), { hoy: ahoraAR, canonStaff, maxSlots: MAX_SLOTS }) } catch (e) { admin = { error: e.message } }
     const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '', admin, linkAdmin: `${APP}/?caja=1` })
 
-    if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, lunes, html })
+    if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, lunes, impuestos, html })
 
     if (!USER || !PASS) return res.status(503).json({ error: 'Faltan MAIL_USER / MAIL_APP_PASSWORD en Vercel.' })
     const t = nodemailer.createTransport({ service: 'gmail', auth: { user: USER, pass: PASS } })
@@ -91,7 +100,7 @@ export default async function handler(req, res) {
     // Regla de oro #1: quede enviado o no, queda anotado en el sheet
     await withSheetsRetry(() => escribirFila(sheets, SHEET_ID, filaDiaria({ brief, contador, contadorLeidoAhora: false, aviso, ahoraAR, mail })))
     if (fallo) return res.status(502).json({ error: `No se pudo mandar el mail: ${fallo}` })
-    res.json({ ok: true, enviado: true, aviso, para, subject, lunes })
+    res.json({ ok: true, enviado: true, aviso, para, subject, lunes, impuestos })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })

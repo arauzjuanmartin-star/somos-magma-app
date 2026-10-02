@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (!Number.isInteger(fila) || fila < 2) return res.status(400).json({ error: 'Falta la fila del movimiento' })
   if (!txt(clave)) return res.status(400).json({ error: 'Falta la clave del movimiento' })
   if (accion !== 'reabrir' && !txt(queEs)) return res.status(400).json({ error: 'Falta decir qué es' })
-  if (marcar && !['GASTOS_FIJOS', 'PRESTAMOS', 'TARJETAS'].includes(marcar.hoja)) return res.status(400).json({ error: 'No se puede marcar en esa solapa' })
+  if (marcar && !['GASTOS_FIJOS', 'PRESTAMOS', 'TARJETAS', 'IMPUESTOS'].includes(marcar.hoja)) return res.status(400).json({ error: 'No se puede marcar en esa solapa' })
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
@@ -96,8 +96,9 @@ export default async function handler(req, res) {
           }
         } else if (!si(d('Pagado'))) {
           poner(marcar.hoja, marcar.fila, cab, 'Pagado', 'SI'); poner(marcar.hoja, marcar.fila, cab, 'Fecha pago', fecha); poner(marcar.hoja, marcar.fila, cab, 'Cuenta pago', cuenta)
-          if (marcar.hoja === 'TARJETAS') poner(marcar.hoja, marcar.fila, cab, 'Monto pagado', monto)
-          marcado = marcar.hoja === 'PRESTAMOS' ? `Préstamo ${d('Prestamo')} ${d('Cuota nro')}` : `${d('Tarjeta')} ${d('Mes')}/${d('Año')}`
+          if (marcar.hoja === 'TARJETAS' || marcar.hoja === 'IMPUESTOS') poner(marcar.hoja, marcar.fila, cab, 'Monto pagado', monto)
+          if (marcar.hoja === 'IMPUESTOS') poner(marcar.hoja, marcar.fila, cab, 'Cómo se supo', 'Lo unió alguien a mano con el movimiento del banco')
+          marcado = marcar.hoja === 'PRESTAMOS' ? `Préstamo ${d('Prestamo')} ${d('Cuota nro')}` : marcar.hoja === 'IMPUESTOS' ? `${d('Impuesto')} ${d('Período')} ${d('Titular')}` : `${d('Tarjeta')} ${d('Mes')}/${d('Año')}`
         }
       }
       poner(HOJA, fila, H, 'Qué es', texto(queEs)); poner(HOJA, fila, H, 'Estado', 'Clasificado a mano')

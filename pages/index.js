@@ -5083,7 +5083,7 @@ function Caja({data, onRefresh, showToast, goTo}){
 
   const Fila=i=>{ const ab=!!abiertos[i.id], vencido=!i.pagado && hoyDia!==null && i.dia!==null && i.dia<hoyDia && i.tipo!=='falta', cta=cuentaDeItem(i), ocupado=busy===i.id
     let accion
-    if(i.pagado) accion=<span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{i.hoja==='GASTOS_FIJOS' && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
+    if(i.pagado) accion=<span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{(i.hoja==='GASTOS_FIJOS'||i.hoja==='IMPUESTOS') && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
     else if(i.tipo==='debito') accion=<span style={{display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}><span style={{fontSize:11.5, color:T.ink3}}>se debita solo</span><button disabled={ocupado} onClick={()=>pagar(i,true)} style={btnSec} title="Marcarlo cuando ya lo viste debitado en el banco. No resta de la cuenta: el débito ya está en el saldo que se copia del banco.">{ocupado?'Guardando…':'Ya se debitó'}</button></span>
     else if(i.tipo==='socios') accion=<button onClick={()=>{ setTab('detalle'); window.scrollTo&&window.scrollTo(0,0) }} style={btnSec} title="El sueldo de los socios se anota con «Sacó plata» en la cuenta de socios (pestaña Cargar y detalle)">Cuenta de socios</button>
     else if(i.tipo==='falta') accion=<button onClick={()=>setSubir(true)} style={btnSec}>Subir resumen</button>
@@ -5318,7 +5318,7 @@ function RevisarBanco({data, onRefresh, showToast}){
   const cuitDe=m=>{ const c=(`${m.concepto} ${m.detalle}`.match(/\b((?:20|23|24|27|30|33|34)\d{9})\b/)||[])[1]||''; return c&&!propios.has(c)?c:'' }
   const raizDe=m=>`${m.concepto.replace(/\d+/g,'').replace(/\s+/g,' ').trim()}|${Math.abs(m.monto).toFixed(2)}`
   const recuerdoDe=m=>{ const c=cuitDe(m), r=raizDe(m)
-    const h=hechos.filter(x=>(x.monto>0)===(m.monto>0) && !['FACTURACION','PRESTAMOS','TARJETAS'].includes(x.hoja)).sort((a,b)=>b.fecha-a.fecha).find(x=>c?cuitDe(x)===c:(!cuitDe(x)&&raizDe(x)===r))
+    const h=hechos.filter(x=>(x.monto>0)===(m.monto>0) && !['FACTURACION','PRESTAMOS','TARJETAS','IMPUESTOS'].includes(x.hoja)).sort((a,b)=>b.fecha-a.fecha).find(x=>c?cuitDe(x)===c:(!cuitDe(x)&&raizDe(x)===r))
     if(!h) return null
     // Por CUIT: solo si todo lo que se revisó de esa cuenta se contestó igual. Si hubo respuestas distintas, no se propone nada.
     if(c && new Set(hechos.filter(x=>cuitDe(x)===c).map(x=>x.que.replace(/\s*[·(].*$/,''))).size>1) return null
