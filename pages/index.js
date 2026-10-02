@@ -20,6 +20,7 @@ import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
+import TicketsRevisar from '../components/TicketsRevisar'
 import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe, facturasCandidatas } from '../lib/extracto.mjs'
 
 /* ============================================================
@@ -1616,6 +1617,10 @@ function atarGastosATrabajos(data){
   // no se restan: no hay con qué cotización pasarlos a pesos.
   ;(data.movimientosTarjeta||[]).forEach(m=>{ const n=String(m['N° trabajo']||'').trim(); if(!n || String(m['Moneda']||'').toUpperCase()==='USD') return
     ;(porNro[n]=porNro[n]||[]).push({concepto:String(m['Comercio']||m['Descripcion']||'').trim(), monto:parseMonto(m['Monto']), fecha:String(m['Fecha']||'').trim(), cuenta:String(m['Tarjeta']||'').trim(), rubro:String(m['Subcategoria']||'').trim()}) })
+  // Los viáticos que se le pagan a alguien por un trabajo (Pagos Staff, columna "Viáticos"): ahí caen los tickets que
+  // cargan los chicos desde Mi Magma cuando administración los aprueba. Llevan el N° del trabajo, así que son un gasto suyo.
+  ;(data.pagosStaff||[]).forEach(r=>{ const n=String(r['N° Presupuesto']||'').trim(), v=parseMonto(r['Viáticos']); if(!n || !(v>0)) return
+    ;(porNro[n]=porNro[n]||[]).push({concepto:`Viáticos de ${String(r['Freelancer']||'').trim()}`, monto:v, fecha:String(r['Fecha Pago']||'').trim(), cuenta:String(r['Cuenta']||'').trim(), rubro:'Producción · Viáticos'}) })
   ;(data.proyectos||[]).forEach(p=>{ const n=String(p['N° presupuesto']||'').trim(); p.__gastos=(n&&porNro[n])||[]; p.__gastoTotal=p.__gastos.reduce((t,x)=>t+x.monto,0) })
   return data
 }
@@ -5001,7 +5006,7 @@ function Caja({data, onRefresh, showToast, goTo}){
   // cuotas a futuro, el detalle de cada tarjeta, editar un gasto). Agregar un gasto y subir un resumen se hacen
   // desde las dos, sin cambiar de pestaña.
   // Se entra por 'hoy': la lista de tareas de administración (qué facturar, mandar, reclamar, pagar y cargar).
-  const [tab,setTab]=useState('hoy'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false), [editSaldos,setEditSaldos]=useState(false), [extracto,setExtracto]=useState(false)
+  const [tab,setTab]=useState('hoy'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false), [editSaldos,setEditSaldos]=useState(false), [extracto,setExtracto]=useState(false), [verTickets,setVerTickets]=useState(false)
   // CARGA RÁPIDA: lo que se pagó hoy y no pasa por ningún resumen (efectivo, una transferencia suelta).
   // Tres datos y listo: qué, cuánto y de dónde salió. La fecha es hoy y el rubro se aprende de la vez anterior.
   // Lo que sale por débito o con tarjeta NO se carga acá: entra cuando se sube el resumen.
@@ -5146,7 +5151,7 @@ function Caja({data, onRefresh, showToast, goTo}){
       // HOY: la lista de tareas de administración. Se arma sola (lib/hoy.mjs) y cada tarea lleva a donde se resuelve.
       const h=tareasDeHoy(data,cHoy)
       const TONO={entra:{c:T.pos,bg:T.posSoft,l:'Trae plata'}, sale:{c:T.ink,bg:T.surfaceAlt,l:'Hay que pagar'}, alerta:{c:T.brand,bg:T.brandSoft,l:'No alcanza'}, falta:{c:T.warn,bg:T.warnSoft,l:'Falta cargar'}}
-      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='banco') setTab('banco'); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
+      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='banco') setTab('banco'); else if(d==='saldos') setEditSaldos(true); else if(d==='tickets') setVerTickets(true); else setTab('detalle') }
       const DIAS_L=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
       const montoDe=x=>x.monto>0?`${x.tono==='entra'?'+':''}${x.montoAprox?'≈ ':''}${fmt(x.monto)}`:''
       const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:T.ink
@@ -5268,6 +5273,7 @@ function Caja({data, onRefresh, showToast, goTo}){
     </>}
     {subir && <SubirResumen datos={data} onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {extracto && <SubirExtracto data={data} onClose={()=>setExtracto(false)} onDone={()=>{ setExtracto(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {verTickets && <TicketsRevisar data={data} onClose={()=>setVerTickets(false)} onDone={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={c.cuentas.filter(x=>x.activa).map(x=>x.nombre)} cuentas={data.cuentas||[]} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
 }

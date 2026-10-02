@@ -3,8 +3,9 @@
 // facturar, cómo quedó lo que filmó y su ficha. Recibe `datos` ya recortados por
 // lib/mi-magma.js (la aduana): acá no hay nada que filtrar ni que esconder.
 //
-// Primera etapa: SOLO LECTURA. Confirmar / "no puedo", la nota al editor y las
-// referencias escriben al sheet y vienen en la etapa siguiente.
+// Casi todo es SOLO LECTURA. Lo único que escribe: cargar un gasto de un trabajo con la foto del
+// ticket (/api/mi/ticket → solapa TICKETS; lo aprueba administración). Confirmar / "no puedo",
+// la nota al editor y las referencias vienen en la etapa siguiente.
 //
 // Subcomponentes a nivel de módulo a propósito (si van adentro, React los remonta).
 
@@ -50,7 +51,7 @@ function Tarjeta({ j, onAbrir }) {
   </button>
 }
 
-function Trabajo({ j, onVolver }) {
+function Trabajo({ j, onVolver, onGasto }) {
   const falta = t => <span style={{ color: T.warn }}>tu PM todavía no cargó {t}</span>
   return <div>
     <button onClick={onVolver} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 13, padding: '0 0 12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Agenda</button>
@@ -80,7 +81,127 @@ function Trabajo({ j, onVolver }) {
         ? <><a href={j.driveCrudo} target="_blank" rel="noreferrer" style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff' }}>Subir el crudo a Drive</a><p style={{ ...sub, marginTop: 7 }}>Con tu mail. No te ocupa espacio en tu Drive.</p></>
         : <p style={{ ...sub, margin: 0 }}>La carpeta de este trabajo todavía no está creada.</p>}
     </div>
+    {onGasto && <div style={caja}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: T.ink }}>¿Pagaste algo vos?</div>
+      <button onClick={onGasto} style={boton}>Pasar un gasto de este trabajo</button>
+      <p style={{ ...sub, marginTop: 7 }}>Nafta, peaje, un taxi. Con la foto del ticket se suma a lo que cobrás.</p>
+    </div>}
   </div>
+}
+
+// La foto del celular pesa 3 a 8 MB y el servidor no acepta más de 4,5: se achica acá (lado mayor 1600 px, JPEG).
+// Un PDF (el comprobante de un peaje o de una app) viaja tal cual.
+function leerArchivo(file) {
+  return new Promise((ok, no) => {
+    if (file.type === 'application/pdf') {
+      if (file.size > 3.5 * 1024 * 1024) return no(new Error('El PDF pesa demasiado. Mandá una foto del ticket.'))
+      const r = new FileReader(); r.onload = () => ok({ base64: String(r.result).split(',')[1], tipo: 'application/pdf', vista: '' }); r.onerror = () => no(new Error('No se pudo leer el archivo')); r.readAsDataURL(file); return
+    }
+    const url = URL.createObjectURL(file), img = new Image()
+    img.onload = () => {
+      try {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas')
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k)
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+        const data = c.toDataURL('image/jpeg', 0.82)
+        URL.revokeObjectURL(url); ok({ base64: data.split(',')[1], tipo: 'image/jpeg', vista: data })
+      } catch (e) { URL.revokeObjectURL(url); no(new Error('No se pudo leer la foto. Probá sacarla de nuevo.')) }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); no(new Error('No se pudo leer la foto. Probá sacarla de nuevo.')) }
+    img.src = url
+  })
+}
+
+const ESTADO_GASTO = {
+  pendiente: g => <Pill tono="falta">lo está mirando administración</Pill>,
+  aprobado: g => <Pill tono="ok">aprobado{g.sePaga ? ` · se paga el ${g.sePaga.slice(0, 5)}` : ''}</Pill>,
+  aparte: g => <Pill tono="ok">ya te lo pagaron</Pill>,
+  rechazado: g => <Pill tono="rojo">no se aprobó</Pill>,
+}
+const campo = { width: '100%', padding: '12px 12px', borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, color: T.ink, fontSize: 15, outline: 'none' }
+const rotulo = { fontSize: 12, fontWeight: 600, color: T.ink2, margin: '16px 0 7px' }
+
+function CargarGasto({ datos, inicial, onListo, onVolver }) {
+  const trabajos = datos.paraGasto || []
+  const clave = j => j.num + '|' + j.slot
+  const [cual, setCual] = useState(inicial && trabajos.some(j => clave(j) === inicial) ? inicial : trabajos[0] ? clave(trabajos[0]) : '')
+  const [que, setQue] = useState(''), [monto, setMonto] = useState(''), [nota, setNota] = useState('')
+  const [foto, setFoto] = useState(null), [error, setError] = useState(''), [mandando, setMandando] = useState(false), [hecho, setHecho] = useState(null)
+  const j = trabajos.find(x => clave(x) === cual)
+  async function elegirFoto(e) {
+    const f = e.target.files && e.target.files[0]; if (!f) return
+    setError('')
+    try { setFoto({ ...(await leerArchivo(f)), nombre: f.name }) } catch (err) { setFoto(null); setError(err.message) }
+  }
+  async function mandar() {
+    const m = parseInt(String(monto).replace(/\D/g, ''), 10) || 0
+    if (!j) return setError('Elegí de qué trabajo fue')
+    if (!que) return setError('Elegí qué fue el gasto')
+    if (!(m > 0)) return setError('Poné cuánto gastaste')
+    if (!foto) return setError('Falta la foto del ticket')
+    setError(''); setMandando(true)
+    try {
+      const r = await fetch('/api/mi/ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num: j.num, slot: j.slot, que, monto: m, nota, foto: foto.base64, fotoTipo: foto.tipo }) })
+      const x = await r.json().catch(() => ({ error: r.status === 413 ? 'La foto pesa demasiado. Sacala de nuevo, más de lejos.' : 'No se pudo mandar. Probá de nuevo.' }))
+      if (!x.ok) { setError(x.error || 'No se pudo mandar. Probá de nuevo.'); setMandando(false); return }
+      setHecho({ ...x.ticket, sePaga: j.sePaga }); onListo && onListo({ ...x.ticket, sePaga: j.sePaga })
+    } catch (e) { setError('Sin conexión. Probá de nuevo.') }
+    setMandando(false)
+  }
+  if (hecho) return <div>
+    <p style={hola}>Listo, ya lo mandaste</p>
+    <p style={sub}>{hecho.que} · {$(hecho.monto)} · {j ? j.cliente : hecho.trabajo}</p>
+    <div style={{ ...caja, marginTop: 16, fontSize: 13.5, lineHeight: 1.55, color: T.ink }}>Administración lo mira y, si está bien, <b>se suma a lo que cobrás el {hecho.sePaga ? hecho.sePaga.slice(0, 5) : '15'}</b>, junto con ese trabajo. Lo vas a ver en Facturar.</div>
+    <button onClick={() => { setHecho(null); setQue(''); setMonto(''); setNota(''); setFoto(null) }} style={{ ...boton, marginTop: 6 }}>Cargar otro gasto</button>
+    <button onClick={onVolver} style={{ ...boton, marginTop: 8, background: T.ink, borderColor: T.ink, color: '#fff' }}>Volver</button>
+  </div>
+  return <div>
+    <button onClick={onVolver} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 13, padding: '0 0 12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Volver</button>
+    <p style={hola}>Pasar un gasto</p>
+    <p style={sub}>Algo que pagaste vos en un trabajo: nafta, peaje, un taxi. Con la foto del ticket.</p>
+    {!trabajos.length
+      ? <div style={{ ...caja, marginTop: 16, color: T.ink2, fontSize: 13, lineHeight: 1.55 }}>No tenés trabajos de los últimos 45 días para cargarles un gasto. Si es de uno más viejo, escribile a administración.</div>
+      : <>
+        <div style={rotulo}>¿De qué trabajo?</div>
+        <select value={cual} onChange={e => setCual(e.target.value)} style={campo}>
+          {trabajos.map(x => <option key={clave(x)} value={clave(x)}>{x.fecha.slice(0, 5)} · {x.cliente || x.proyecto} · {x.rol}</option>)}
+        </select>
+        <div style={rotulo}>¿Qué fue?</div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          {(datos.queFue || []).map(q => <button key={q} onClick={() => setQue(q)} style={{ border: `1px solid ${que === q ? T.ink : T.border}`, background: que === q ? T.ink : T.surface, color: que === q ? '#fff' : T.ink, borderRadius: 10, padding: '10px 13px', fontSize: 13.5, fontWeight: que === q ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit' }}>{q}</button>)}
+        </div>
+        <div style={rotulo}>¿Cuánto?</div>
+        <input inputMode="numeric" value={monto ? '$ ' + (parseInt(String(monto).replace(/\D/g, ''), 10) || 0).toLocaleString('es-AR') : ''} onChange={e => setMonto(e.target.value.replace(/\D/g, ''))} placeholder="$ 0" style={{ ...campo, fontFamily: MONO, fontSize: 18 }} />
+        <div style={rotulo}>La foto del ticket</div>
+        <label style={{ ...boton, cursor: 'pointer', ...(foto ? {} : { background: T.surfaceAlt }) }}>
+          {foto ? 'Cambiar la foto' : 'Sacar o elegir la foto'}
+          <input type="file" accept="image/*,application/pdf" onChange={elegirFoto} style={{ display: 'none' }} />
+        </label>
+        {foto && (foto.vista ? <img src={foto.vista} alt="El ticket" style={{ display: 'block', maxWidth: '100%', maxHeight: 260, borderRadius: 10, marginTop: 10, border: `1px solid ${T.border}` }} /> : <p style={{ ...sub, marginTop: 8 }}>{foto.nombre}</p>)}
+        <div style={rotulo}>Algo para aclarar (opcional)</div>
+        <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Ej: ida y vuelta a Pilar" style={campo} />
+        {error && <div style={{ marginTop: 14, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+        {datos.viendoComo
+          ? <p style={{ ...sub, marginTop: 16, lineHeight: 1.5 }}>Estás mirando como equipo: desde acá no se cargan gastos a nombre de otra persona.</p>
+          : <button onClick={mandar} disabled={mandando} style={{ ...boton, marginTop: 18, background: mandando ? T.ink3 : T.brand, borderColor: mandando ? T.ink3 : T.brand, color: '#fff', padding: '14px 12px', fontSize: 15 }}>{mandando ? 'Mandando…' : 'Mandar a administración'}</button>}
+      </>}
+  </div>
+}
+
+function MisGastos({ gastos, onCargar }) {
+  return <>
+    <div style={tit}>Gastos que pagaste vos</div>
+    <button onClick={onCargar} style={{ ...boton, marginBottom: 10 }}>＋ Pasar un gasto (nafta, peaje, taxi…)</button>
+    {gastos.map(g => <div key={g.id} style={{ ...caja, padding: '11px 14px', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: T.ink }}>{g.que}</span>
+        <b style={{ fontFamily: MONO, fontWeight: 600, fontSize: 13.5, color: T.ink }}>{$(g.monto)}</b>
+      </div>
+      <p style={{ ...sub, margin: '2px 0 8px', overflowWrap: 'anywhere' }}>{g.fecha ? g.fecha.slice(0, 5) + ' · ' : ''}{g.trabajo}</p>
+      {(ESTADO_GASTO[g.estado] || ESTADO_GASTO.pendiente)(g)}
+      {g.motivo && <p style={{ ...sub, margin: '8px 0 0', color: T.ink }}>{g.motivo}</p>}
+    </div>)}
+  </>
 }
 
 function Agenda({ datos, onAbrir }) {
@@ -94,10 +215,10 @@ function Agenda({ datos, onAbrir }) {
   </div>
 }
 
-function Facturar({ datos }) {
+function Facturar({ datos, gastos, onCargar }) {
   const [i, setI] = useState(0)
   const m = datos.meses[i]
-  if (!m) return <div><p style={hola}>Para facturar</p><p style={sub}>Todavía no hay trabajos cargados a tu nombre.</p></div>
+  if (!m) return <div><p style={hola}>Para facturar</p><p style={sub}>Todavía no hay trabajos cargados a tu nombre.</p><MisGastos gastos={gastos} onCargar={onCargar} /></div>
   const todoPago = m.lineas.length > 0 && m.pendiente === 0
   return <div>
     <p style={hola}>Para facturar</p>
@@ -121,6 +242,7 @@ function Facturar({ datos }) {
       {m.enCurso && m.faltanHacer > 0 && <Pill>faltan {m.faltanHacer} del mes</Pill>}
     </div>}
     {!todoPago && m.lineas.length > 0 && <p style={{ ...sub, marginTop: 10, lineHeight: 1.5 }}>Si algo no coincide con lo que hiciste, avisale a administración antes del 15: <a href="mailto:admin@somosmagma.com" style={{ color: T.ink }}>admin@somosmagma.com</a></p>}
+    <MisGastos gastos={gastos} onCargar={onCargar} />
   </div>
 }
 
@@ -167,18 +289,27 @@ const TABS = [['agenda', 'Agenda'], ['facturar', 'Facturar'], ['entregas', 'Cóm
 export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNum = null }) {
   const [tab, setTab] = useState(tabInicial)
   const [job, setJob] = useState(abrirNum ? datos.proximos.find(j => j.num === abrirNum) || null : null)
-  const ir = t => { setTab(t); setJob(null); if (typeof window !== 'undefined') window.scrollTo(0, 0) }
+  // Cargar un gasto: null = cerrado · '' = abierto sin trabajo elegido · "num|slot" = abierto con ese trabajo
+  const [gasto, setGasto] = useState(null)
+  // Los tickets que mandó recién: /api/mi guarda los datos un minuto, así que se suman acá para que los vea ya.
+  const [nuevos, setNuevos] = useState([])
+  const gastos = [...nuevos.filter(n => !(datos.gastos || []).some(g => g.id === n.id)), ...(datos.gastos || [])]
+  const arriba = () => { if (typeof window !== 'undefined') window.scrollTo(0, 0) }
+  const abrirGasto = cual => { setGasto(cual || ''); arriba() }
+  const sePuede = j => (datos.paraGasto || []).some(x => x.num === j.num && x.slot === j.slot)
+  const ir = t => { setTab(t); setJob(null); setGasto(null); arriba() }
   return <div style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
     <div style={{ flex: 1, padding: '18px 16px 96px' }}>
-      {job ? <Trabajo j={job} onVolver={() => setJob(null)} />
+      {gasto !== null ? <CargarGasto datos={datos} inicial={gasto} onListo={t => setNuevos(n => [t, ...n])} onVolver={() => { setGasto(null); arriba() }} />
+        : job ? <Trabajo j={job} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} />
         : tab === 'agenda' ? <Agenda datos={datos} onAbrir={j => { setJob(j); if (typeof window !== 'undefined') window.scrollTo(0, 0) }} />
-        : tab === 'facturar' ? <Facturar datos={datos} />
+        : tab === 'facturar' ? <Facturar datos={datos} gastos={gastos} onCargar={() => abrirGasto('')} />
         : tab === 'entregas' ? <Entregas datos={datos} />
         : <Ficha datos={datos} onSalir={onSalir} />}
     </div>
     <nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: T.surface, borderTop: `1px solid ${T.border}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div style={{ maxWidth: 520, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
-        {TABS.map(([k, l]) => { const on = !job ? tab === k : k === 'agenda'
+        {TABS.map(([k, l]) => { const on = gasto !== null ? k === 'facturar' : !job ? tab === k : k === 'agenda'
           return <button key={k} onClick={() => ir(k)} style={{ border: 0, background: 'transparent', padding: '10px 2px 12px', fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? T.ink : T.ink3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit' }}>
             <i style={{ width: 18, height: 3, borderRadius: 3, background: on ? T.brand : 'transparent' }} />{l}
           </button> })}
