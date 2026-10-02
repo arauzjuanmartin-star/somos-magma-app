@@ -20,7 +20,11 @@ export default function Mi() {
     if (status !== 'authenticated') return
     let vivo = true
     setError('')
-    fetch('/api/mi' + (como ? `?como=${encodeURIComponent(como)}` : ''))
+    // Si acaba de contestar o cargar algo (lo anota MiMagma en sessionStorage), se pide una lectura fresca del sheet.
+    let fresco = false
+    try { fresco = Number(sessionStorage.getItem('mi-escribi') || 0) > Date.now() - 2 * 60e3 } catch (e) { /* sin storage */ }
+    const q = [como && `como=${encodeURIComponent(como)}`, fresco && 'fresco=1'].filter(Boolean).join('&')
+    fetch('/api/mi' + (q ? '?' + q : ''))
       .then(x => x.json()).then(j => { if (vivo) { setR(j); if (!j.ok && !j.personas) setError(j.error || 'No pudimos cargar tus datos') } })
       .catch(() => { if (vivo) setError('Sin conexión. Probá de nuevo.') })
     return () => { vivo = false }

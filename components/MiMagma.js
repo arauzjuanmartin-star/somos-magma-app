@@ -3,9 +3,11 @@
 // facturar, cómo quedó lo que filmó y su ficha. Recibe `datos` ya recortados por
 // lib/mi-magma.js (la aduana): acá no hay nada que filtrar ni que esconder.
 //
-// Casi todo es SOLO LECTURA. Lo único que escribe: cargar un gasto de un trabajo con la foto del
-// ticket (/api/mi/ticket → solapa TICKETS; lo aprueba administración). Confirmar / "no puedo",
-// la nota al editor y las referencias vienen en la etapa siguiente.
+// Casi todo es SOLO LECTURA. Lo que escribe:
+//   · cargar un gasto de un trabajo con la foto del ticket (/api/mi/ticket → solapa TICKETS; lo aprueba administración)
+//   · "Confirmo" / "No puedo" en la ficha de un trabajo, y "este día no puedo" en el calendario de la agenda
+//     (/api/mi/disponibilidad → solapa DISPONIBILIDAD; un "no puedo" le llega por mail al PM, la app no lo saca sola)
+// La nota al editor y las referencias vienen en la etapa siguiente.
 //
 // Subcomponentes a nivel de módulo a propósito (si van adentro, React los remonta).
 
@@ -43,21 +45,72 @@ function Tarjeta({ j, onAbrir }) {
     <span style={{ minWidth: 0 }}>
       <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, lineHeight: 1.25, color: T.ink }}>{j.cliente || j.proyecto}</span>
       <span style={{ display: 'block', margin: '2px 0 0', fontSize: 12.5, color: T.ink2, overflowWrap: 'anywhere' }}>{j.rol} · {j.horario || 'sin horario todavía'}{j.lugar ? ` · ${j.lugar}` : ''}</span>
-      {(j.falta.length > 0 || j.equipo.length > 0) && <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+      <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+        {j.respuesta?.que === 'confirmo' ? <Pill tono="ok">confirmaste</Pill> : j.respuesta?.que === 'nopuedo' ? <Pill tono="rojo">avisaste que no podés</Pill> : <Pill tono="falta">¿vas? confirmá</Pill>}
         {j.falta.length > 0 && <Pill tono="falta">falta {j.falta.join(' y ')}</Pill>}
         {j.equipo.length > 0 && <Pill>con {j.equipo.map(e => e.quien).join(', ')}</Pill>}
-      </span>}
+      </span>
     </span>
   </button>
 }
 
-function Trabajo({ j, onVolver, onGasto }) {
+// Contestar sobre un trabajo. "Confirmo" es un toque. "No puedo" pide (opcional) por qué, y avisa que el PM se entera
+// ya: la persona sigue cargada hasta que el PM ponga a otro, así nadie queda afuera por un toque de más.
+function Confirmar({ j, viendoComo, onContestar }) {
+  const [abierto, setAbierto] = useState(false), [motivo, setMotivo] = useState(''), [mandando, setMandando] = useState(false), [error, setError] = useState('')
+  const r = j.respuesta
+  async function mandar(accion) {
+    setError(''); setMandando(true)
+    try {
+      const x = await fetch('/api/mi/disponibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion, num: j.num, slot: j.slot, motivo }) }).then(r => r.json())
+      if (!x.ok) { setError(x.error || 'No se pudo guardar. Probá de nuevo.'); setMandando(false); return }
+      try { sessionStorage.setItem('mi-escribi', String(Date.now())) } catch (e) { /* sin storage */ }
+      onContestar(j, x.respuesta); setAbierto(false); setMotivo('')
+    } catch (e) { setError('Sin conexión. Probá de nuevo.') }
+    setMandando(false)
+  }
+  const pm = j.pm || 'tu PM'
+  if (viendoComo) return <div style={{ ...caja, color: T.ink2, fontSize: 13, lineHeight: 1.5 }}>{r?.que === 'confirmo' ? `Confirmó el ${r.cuando.slice(0, 5)}.` : r?.que === 'nopuedo' ? `Avisó que no puede${r.motivo ? `: ${r.motivo}` : ''}.` : 'Todavía no contestó.'} Estás mirando como equipo: desde acá no se contesta por otra persona.</div>
+  return <div style={{ ...caja, ...(r?.que === 'nopuedo' ? { borderColor: T.brand } : r?.que === 'confirmo' ? {} : { borderColor: T.warn }) }}>
+    {r?.que === 'confirmo' && !abierto && <>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.pos }}>✓ Confirmaste que vas</div>
+      <p style={{ ...sub, marginTop: 3 }}>El {r.cuando.slice(0, 5)}. Si te surge algo, <button onClick={() => setAbierto(true)} style={{ border: 0, background: 'transparent', color: T.ink, fontWeight: 600, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, textDecoration: 'underline' }}>avisá que no podés</button>.</p>
+    </>}
+    {r?.que === 'nopuedo' && <>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.brand }}>Avisaste que no podés</div>
+      <p style={{ ...sub, marginTop: 3, lineHeight: 1.5 }}>{pm} ya lo sabe y busca a otra persona.{r.motivo ? ` Dijiste: "${r.motivo}".` : ''} Si al final podés ir, avisá acá antes de que pongan a otro.</p>
+      <button onClick={() => mandar('confirmo')} disabled={mandando} style={{ ...boton, marginTop: 10 }}>{mandando ? 'Guardando…' : 'Al final puedo ir'}</button>
+    </>}
+    {!r && !abierto && <>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink }}>¿Vas a este trabajo?</div>
+      <p style={{ ...sub, marginTop: 3 }}>Con un toque {pm} sabe que cuenta con vos.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+        <button onClick={() => mandar('confirmo')} disabled={mandando} style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff', padding: '13px 12px', fontSize: 14 }}>{mandando ? 'Guardando…' : 'Confirmo'}</button>
+        <button onClick={() => setAbierto(true)} disabled={mandando} style={{ ...boton, padding: '13px 12px', fontSize: 14 }}>No puedo</button>
+      </div>
+    </>}
+    {abierto && <>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink }}>Avisar que no podés</div>
+      <p style={{ ...sub, marginTop: 3, lineHeight: 1.5 }}>Le llega un mail a {pm} ahora mismo. Vos seguís cargado hasta que ponga a otra persona.</p>
+      {j.urgente && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>Falta poco para este trabajo: además de avisar acá, llamá a {pm}.</div>}
+      <input value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} placeholder="Por qué (opcional)" style={{ ...campo, marginTop: 10 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+        <button onClick={() => { setAbierto(false); setMotivo(''); setError('') }} disabled={mandando} style={boton}>Cancelar</button>
+        <button onClick={() => mandar('nopuedo')} disabled={mandando} style={{ ...boton, background: T.brand, borderColor: T.brand, color: '#fff' }}>{mandando ? 'Avisando…' : 'Avisar que no puedo'}</button>
+      </div>
+    </>}
+    {error && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+  </div>
+}
+
+function Trabajo({ j, viendoComo, onVolver, onGasto, onContestar }) {
   const falta = t => <span style={{ color: T.warn }}>tu PM todavía no cargó {t}</span>
   return <div>
     <button onClick={onVolver} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 13, padding: '0 0 12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Agenda</button>
     <p style={hola}>{j.cliente || j.proyecto}</p>
     <p style={sub}>{j.proyecto}{j.num ? ` · #${j.num}` : ''}</p>
-    <div style={{ ...caja, marginTop: 14 }}><KV filas={[
+    <div style={{ marginTop: 14 }}><Confirmar j={j} viendoComo={viendoComo} onContestar={onContestar} /></div>
+    <div style={caja}><KV filas={[
       ['Cuándo', <>{diaSemana(j.fecha)} {j.fecha.slice(0, 5)} · {j.horario || falta('el horario')}</>],
       ['Dónde', j.lugar ? <>{j.lugar} · <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.lugar)}`} target="_blank" rel="noreferrer" style={{ color: T.ink }}>abrir en Maps</a></> : falta('el lugar')],
       ['Qué hacés', j.rol],
@@ -204,14 +257,66 @@ function MisGastos({ gastos, onCargar }) {
   </>
 }
 
-function Agenda({ datos, onAbrir }) {
+// El mes, para marcar los días que no puede. Un día con trabajo abre el trabajo (ahí se contesta); un día libre se
+// marca con un toque y se desmarca con otro. Todo lo que se marca va a la solapa DISPONIBILIDAD y lo ve el que convoca.
+const MESES_CORTO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const claveDMY = f => `${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`
+function DiasNoPuedo({ datos, dias, viendoComo, onAbrir, onCambio }) {
+  const hoy0 = aFecha(datos.hoy)
+  const [mes, setMes] = useState(() => new Date(hoy0.getFullYear(), hoy0.getMonth(), 1))
+  const [tocando, setTocando] = useState(''), [error, setError] = useState('')
+  const trabajos = {}; datos.proximos.forEach(j => { (trabajos[j.fecha] = trabajos[j.fecha] || []).push(j) })
+  const tope = new Date(hoy0.getTime() + (datos.diasAdelante || 120) * 864e5)
+  const primero = new Date(mes), ultimo = new Date(mes.getFullYear(), mes.getMonth() + 1, 0)
+  const celdas = []; for (let i = (primero.getDay() + 6) % 7; i > 0; i--) celdas.push(null)
+  for (let d = 1; d <= ultimo.getDate(); d++) celdas.push(new Date(mes.getFullYear(), mes.getMonth(), d))
+  async function tocar(f) {
+    const k = claveDMY(f)
+    if (trabajos[k]) return onAbrir(trabajos[k][0])
+    if (viendoComo || f < hoy0 || f > tope) return
+    const marcado = dias.includes(k)
+    setError(''); setTocando(k)
+    try {
+      const x = await fetch('/api/mi/disponibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: marcado ? 'dia-libre' : 'dia', fecha: k }) }).then(r => r.json())
+      if (!x.ok) setError(x.error || 'No se pudo guardar. Probá de nuevo.')
+      else { try { sessionStorage.setItem('mi-escribi', String(Date.now())) } catch (e) { /* sin storage */ } onCambio(k, !marcado) }
+    } catch (e) { setError('Sin conexión. Probá de nuevo.') }
+    setTocando('')
+  }
+  const flecha = (n, txt) => <button onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + n, 1))} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 18, padding: '0 8px', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}>{txt}</button>
+  const marcadosDelMes = dias.filter(k => { const f = aFecha(k); return f && f.getMonth() === mes.getMonth() && f.getFullYear() === mes.getFullYear() })
+  return <div style={caja}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {flecha(-1, '‹')}<b style={{ fontSize: 13.5, color: T.ink }}>{MESES_CORTO[mes.getMonth()]} {mes.getFullYear()}</b>{flecha(1, '›')}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginTop: 8 }}>
+      {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => <span key={i} style={{ textAlign: 'center', fontSize: 10, color: T.ink3, fontWeight: 600 }}>{d}</span>)}
+      {celdas.map((f, i) => {
+        if (!f) return <span key={i} />
+        const k = claveDMY(f), conTrabajo = !!trabajos[k], marcado = dias.includes(k), pasado = f < hoy0, lejos = f > tope, esHoy = f.getTime() === hoy0.getTime()
+        const st = conTrabajo ? { background: T.ink, color: '#fff', fontWeight: 700 } : marcado ? { background: T.brandSoft, color: T.brand, fontWeight: 700, textDecoration: 'line-through' } : { background: T.surfaceAlt, color: pasado || lejos ? T.ink3 : T.ink }
+        return <button key={i} onClick={() => tocar(f)} disabled={tocando === k} style={{ border: esHoy ? `1.5px solid ${T.ink}` : '1px solid transparent', borderRadius: 8, padding: '8px 0', fontSize: 13, fontFamily: MONO, cursor: pasado || lejos ? 'default' : 'pointer', opacity: pasado ? 0.45 : tocando === k ? 0.5 : 1, ...st }}>{f.getDate()}</button>
+      })}
+    </div>
+    <p style={{ ...sub, marginTop: 10, lineHeight: 1.5 }}>
+      {viendoComo ? 'Estás mirando como equipo: desde acá no se marcan días por otra persona.' : <>Negro: tus trabajos. <span style={{ color: T.brand, fontWeight: 600 }}>Tachado</span>: días que avisaste que no podés. Tocá un día libre para marcarlo, y de nuevo para sacarlo.</>}
+    </p>
+    {marcadosDelMes.length > 0 && <p style={{ ...sub, margin: '4px 0 0', color: T.ink }}>No podés: {marcadosDelMes.map(k => `${diaSemana(k)} ${k.slice(0, 5)}`).join(' · ')}</p>}
+    {error && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+  </div>
+}
+
+function Agenda({ datos, dias, viendoComo, onAbrir, onCambioDia }) {
   const hoy = datos.proximos.filter(j => j.esHoy), viene = datos.proximos.filter(j => !j.esHoy)
+  const sinConfirmar = datos.proximos.filter(j => !j.respuesta).length
   return <div>
     <p style={hola}>Hola, {datos.primerNombre}</p>
-    <p style={sub}>{hoy.length ? `Hoy: ${hoy.map(j => j.cliente).join(' y ')}` : viene.length ? `Tu próximo trabajo es el ${diaSemana(viene[0].fecha)} ${viene[0].fecha.slice(0, 5)}` : 'No tenés trabajos cargados de hoy en adelante'}</p>
+    <p style={sub}>{hoy.length ? `Hoy: ${hoy.map(j => j.cliente).join(' y ')}` : viene.length ? `Tu próximo trabajo es el ${diaSemana(viene[0].fecha)} ${viene[0].fecha.slice(0, 5)}` : 'No tenés trabajos cargados de hoy en adelante'}{sinConfirmar > 0 ? ` · ${sinConfirmar === 1 ? 'uno sin confirmar' : `${sinConfirmar} sin confirmar`}` : ''}</p>
     {hoy.length > 0 && <><div style={tit}>Hoy</div>{hoy.map(j => <Tarjeta key={j.num + '-' + j.slot} j={j} onAbrir={() => onAbrir(j)} />)}</>}
     {viene.length > 0 && <><div style={tit}>Lo que viene</div>{viene.map(j => <Tarjeta key={j.num + '-' + j.slot + j.fecha} j={j} onAbrir={() => onAbrir(j)} />)}</>}
     {!datos.proximos.length && <div style={{ ...caja, marginTop: 18, color: T.ink2, fontSize: 13, lineHeight: 1.55 }}>Cuando te convoquen para un trabajo va a aparecer acá, con el horario, el lugar y qué hay que grabar.</div>}
+    <div style={tit}>Días que no podés</div>
+    <DiasNoPuedo datos={datos} dias={dias} viendoComo={viendoComo} onAbrir={onAbrir} onCambio={onCambioDia} />
   </div>
 }
 
@@ -294,6 +399,12 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
   // Los tickets que mandó recién: /api/mi guarda los datos un minuto, así que se suman acá para que los vea ya.
   const [nuevos, setNuevos] = useState([])
   const gastos = [...nuevos.filter(n => !(datos.gastos || []).some(g => g.id === n.id)), ...(datos.gastos || [])]
+  // Lo que contestó recién (confirmo / no puedo / un día), para verlo ya sin esperar la lectura siguiente.
+  const [respuestas, setRespuestas] = useState({})
+  const [dias, setDias] = useState(datos.diasNoPuedo || [])
+  const conRespuesta = j => { const r = respuestas[j.num + '|' + j.slot]; return r === undefined ? j : { ...j, respuesta: r } }
+  const vista = { ...datos, proximos: (datos.proximos || []).map(conRespuesta) }
+  const contestar = (j, r) => setRespuestas(x => ({ ...x, [j.num + '|' + j.slot]: r }))
   const arriba = () => { if (typeof window !== 'undefined') window.scrollTo(0, 0) }
   const abrirGasto = cual => { setGasto(cual || ''); arriba() }
   const sePuede = j => (datos.paraGasto || []).some(x => x.num === j.num && x.slot === j.slot)
@@ -301,8 +412,8 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
   return <div style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
     <div style={{ flex: 1, padding: '18px 16px 96px' }}>
       {gasto !== null ? <CargarGasto datos={datos} inicial={gasto} onListo={t => setNuevos(n => [t, ...n])} onVolver={() => { setGasto(null); arriba() }} />
-        : job ? <Trabajo j={job} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} />
-        : tab === 'agenda' ? <Agenda datos={datos} onAbrir={j => { setJob(j); if (typeof window !== 'undefined') window.scrollTo(0, 0) }} />
+        : job ? <Trabajo j={conRespuesta(job)} viendoComo={!!datos.viendoComo} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} onContestar={contestar} />
+        : tab === 'agenda' ? <Agenda datos={vista} dias={dias} viendoComo={!!datos.viendoComo} onAbrir={j => { setJob(j); arriba() }} onCambioDia={(k, marcado) => setDias(d => marcado ? [...d.filter(x => x !== k), k] : d.filter(x => x !== k))} />
         : tab === 'facturar' ? <Facturar datos={datos} gastos={gastos} onCargar={() => abrirGasto('')} />
         : tab === 'entregas' ? <Entregas datos={datos} />
         : <Ficha datos={datos} onSalir={onSalir} />}

@@ -6,6 +6,7 @@ import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDe
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
 import { repartoDelMes } from '../lib/jornadas'
+import { leerDisponibilidad, noPuedenDe } from '../lib/disponibilidad.mjs'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
 import { nroDeNombreArchivo, emisorDelArchivo, avisoPdfAjeno, esNroDeFactura } from '../lib/factura-numero'
@@ -1086,6 +1087,11 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   // ---- un trabajo = el presupuesto + (si está aprobado) su fila de PROYECTOS
   const tieneStaff=p=>p['Carga Staff']===true||String(p['Carga Staff']||'').toUpperCase()==='TRUE'
+  // Alguien del staff avisó desde Mi Magma que no puede y sigue cargado: para la lista es un puesto sin cubrir,
+  // aunque "Carga Staff" diga que sí. Entra en la vista "Sin staff" y se ve en rojo en la fila.
+  const dispoTrab = useMemo(()=>leerDisponibilidad(data.disponibilidad), [data.disponibilidad])
+  const hoy0Trab = useMemo(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }, [])
+  const noPuedenDeTrab = p => noPuedenDe(p, dispoTrab, hoy0Trab)
   // Un proyecto puede tener varias facturas (adelanto + saldo): las juntamos todas.
   const facByNum={}; (data.facturacion||[]).forEach(f=>{ const n=String(f['N° Presupuesto']||'').trim(); if(n && !String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) (facByNum[n]||=[]).push(f) })
   const facsDe=num=>facByNum[String(num||'').trim()]||[]
@@ -1108,7 +1114,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   const enVista=(it,v)=> v==='esp' ? it.est==='EN ESPERA'
     : v==='prod' ? ['APROBADO','EN CURSO','ENTREGADO'].includes(it.est)
-    : v==='sinstaff' ? !!it.proy&&!tieneStaff(it.proy)
+    : v==='sinstaff' ? !!it.proy&&(!tieneStaff(it.proy)||noPuedenDeTrab(it.proy).length>0)
     : v==='sinfact' ? !!it.proy&&!facsDe(it.num).length
     : v==='des' ? it.est==='DESAPROBADO'
     : v==='rep' ? it.est==='REPRESUPUESTADO' : true
@@ -1190,7 +1196,8 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       {filtered.slice(0,200).map((it,i)=>{
         const {p, proy:y, num}=it
         const abierto = open===it.key
-        const ok = y&&tieneStaff(y)
+        const noPueden = y ? noPuedenDeTrab(y) : []
+        const ok = y&&tieneStaff(y)&&!noPueden.length
         // Con adelanto + saldo el proyecto tiene 2 facturas: mostramos cuántas se cobraron
         // ("1/2 cobr.") en vez de decir "Cobrada" porque entró la seña.
         const facs=y?facsDe(num):[], cobradas=facs.filter(isCobrada).length
@@ -1198,7 +1205,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
           : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
           : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
         const celdaStaff = y
-          ? <span style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:ok?T.pos:T.warn}}/><span style={{fontSize:11.5, color:T.ink2}}>{cel?(ok?'Staff OK':'Sin staff'):(ok?'OK':'Pend.')}</span></span>
+          ? <span title={noPueden.length?`Avisó que no puede: ${noPueden.map(l=>l.nombre).join(', ')}. Sigue cargado hasta que pongas a otra persona.`:undefined} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:noPueden.length?T.brand:ok?T.pos:T.warn}}/><span style={{fontSize:11.5, color:noPueden.length?T.brand:T.ink2, fontWeight:noPueden.length?600:400}}>{noPueden.length?`No puede: ${noPueden.map(l=>String(l.nombre).split(' ')[0]).join(', ')}`:cel?(ok?'Staff OK':'Sin staff'):(ok?'OK':'Pend.')}</span></span>
           : it.est==='APROBADO' ? <span title="Está aprobado pero todavía no tiene fila en PROYECTOS. Si recién lo aprobaste, aparece al actualizar." style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin proyecto</span> : (cel?null:<span/>)
         // Un presupuesto en espera no tiene factura: en esa celda va el seguimiento (📞 cuánto hace que no se habla).
         const enEspera = !!p && it.est==='EN ESPERA'
@@ -1245,7 +1252,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
             ))}
           </div>}
           {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null}/>}
-          {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
+          {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
     </div>
@@ -2514,7 +2521,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
           <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Cargar staff · #{staffModal.proy['N° presupuesto']}</div>
           <button onClick={()=>setStaffModal(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
+        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
       </div>
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
@@ -2528,7 +2535,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
 
 // ============================ PRODUCCIÓN DE UN TRABAJO ============================
 // (La lista de Proyectos ahora es una vista de Trabajos. Esto es el bloque "Producción".)
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], agencias=[], clientes=[], onRefresh, showToast, onClose, onEditarDatos}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], disponibilidad=[], agencias=[], clientes=[], onRefresh, showToast, onClose, onEditarDatos}){
   // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
   // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
   // matcheaban y TODO servicio ya existente salía marcado como "+ servicio nuevo".
@@ -2619,6 +2626,24 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     })
   }, [items, acDe, previasSheet, feEv])
 
+  // ── Qué contestó cada uno desde Mi Magma ────────────────────────────────────
+  // "Confirmó" en verde, "no puede" en rojo (sigue cargado a propósito: lo saca el PM poniendo a otro),
+  // y si la persona avisó que ESE día no puede, se ve antes de guardar. Ver lib/disponibilidad.mjs.
+  const dispo = useMemo(()=>leerDisponibilidad(disponibilidad), [disponibilidad])
+  const conAcceso = useMemo(()=>new Set(rrhh.filter(r=>/^(s[ií]|x|true|1|✓)$/i.test(String(r['Acceso Mi Magma']||'').trim())).map(r=>canonKey(canonStaff(r['Nombre Apellido']||r['Nombre'])))), [rrhh])
+  const hoy0Dispo = useMemo(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }, [])
+  const respuestas = useMemo(()=>items.map(it=>{
+    const nombre=canonStaff(it.quien); if(!nombre || esMagma(nombre) || !it.pedido) return null
+    const fecha = it.fecha || p['Fecha Evento']; if(!parseD(fecha)) return null
+    const r = dispo.respuesta(nombre, num, it.pedido, fecha)
+    if(r?.que==='confirmo') return {tono:T.pos, texto:`✓ confirmó el ${String(r.cuando).slice(0,5)}`}
+    if(r?.que==='nopuedo') return {tono:T.brand, texto:`✗ avisó que no puede${r.motivo?`: ${r.motivo}`:''} · poné a otra persona`}
+    const dia = dispo.diaBloqueado(nombre, fecha)
+    if(dia) return {tono:T.brand, texto:`⚠ avisó que ese día no puede${dia.motivo?`: ${dia.motivo}`:''}`}
+    if(conAcceso.has(canonKey(nombre)) && parseD(fecha)>=hoy0Dispo) return {tono:T.ink3, texto:'sin confirmar todavía'}
+    return null
+  }), [items, dispo, conAcceso, num, p, hoy0Dispo])
+
   // Al elegir a alguien con acuerdo, si el monto está vacío se completa con su tarifa.
   const setQuien=(i,val)=>setItems(it=>it.map((x,j)=>{
     if(j!==i) return x
@@ -2705,6 +2730,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
             : <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
                 {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
               </span>)}
+          {respuestas[i] && <span style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:respuestas[i].tono}}>{respuestas[i].texto}</span>}
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         {porFecha && <select value={s.fecha||''} onChange={e=>upd(i,'fecha',e.target.value)} style={{...inpV2, cursor:'pointer', borderColor:s.quien&&!s.fecha?T.warn:T.border}}>
@@ -4443,7 +4469,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
           <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar staff · #{staffModalPS.proy['N° presupuesto']}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Corregí montos o agregá líneas (horas extra, otro servicio…). Los viáticos van en el campo de cada trabajo.</div></div>
           <button onClick={()=>setStaffModalPS(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
+        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
       </div>
     </div>}
     {selList.length>0 && <div style={{position:'fixed', left:0, right:0, bottom:0, zIndex:850, padding:'0 16px 14px', pointerEvents:'none'}}>

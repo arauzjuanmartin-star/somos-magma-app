@@ -25,7 +25,10 @@ export default async function handler(req, res) {
   if (!mail) return res.status(401).json({ ok: false, error: 'No autorizado' })
 
   try {
-    if (!cache || Date.now() - cacheT > CACHE_MS) { cache = await getAllData(); cacheT = Date.now() }
+    // Recién escribió algo (un ticket, un "confirmo"): se lee de nuevo para que lo vea ya, y no la copia de hace un minuto.
+    // Con un piso de 5 segundos, para que un botón apretado diez veces no sean diez lecturas del sheet.
+    const fresco = req.query.fresco === '1' && Date.now() - cacheT > 5000
+    if (!cache || fresco || Date.now() - cacheT > CACHE_MS) { cache = await getAllData(); cacheT = Date.now() }
     const data = cache
     const esEquipo = ALLOWED_MAILS.includes(mail) && !modulosDe(mail) && !READONLY_MAILS.includes(mail)
 
