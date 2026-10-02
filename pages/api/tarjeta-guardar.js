@@ -62,16 +62,31 @@ export default async function handler(req, res) {
       if (Number(t.empresa_usd)>0) filas.push([tarjeta, mes, anio, '', quien, 'Software', 'USD', Number(t.empresa_usd), 'Empresa', 'Software', mail, ''])
     }
     // cada gasto personal, con la marca final: Personal o (si lo pasaste) Empresa
-    movs.forEach(m => filas.push([tarjeta, mes, anio, m.fecha||'', m.titular||'', m.comercio||'', m.moneda||'ARS', Number(m.monto)||0, m.categoria||'Personal', m.subcategoria||'', mail, '']))
+    // El trabajo al que fue cada consumo (columna "N° trabajo", por nombre: está al final de la solapa). Con apóstrofo: es un texto, no un monto.
+    const cabMT = ((await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!1:1' })).data.values?.[0] || []).map(h => String(h).trim())
+    const iTrab = cabMT.indexOf('N° trabajo')
+    movs.forEach(m => { const f = [tarjeta, mes, anio, m.fecha||'', m.titular||'', m.comercio||'', m.moneda||'ARS', Number(m.monto)||0, m.categoria||'Personal', m.subcategoria||'', mail, '']
+      const nro = String(m.nroTrabajo||'').trim()
+      if (iTrab >= 12 && nro) { while (f.length < iTrab) f.push(''); f[iTrab] = `'${nro}` }
+      filas.push(f) })
     if (filas.length) {
       try {
         const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties(title,sheetId))' })
         const sid = meta.data.sheets.find(s => s.properties.title === 'MOVIMIENTOS_TARJETA')?.properties.sheetId
-        const cur = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:C' })).data.values || []
+        const cur = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:P', valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' })).data.values || []
         const del = cur.map((r,i)=>({r,i})).filter(({r},i)=> i>0 && norm(r[0])===norm(tarjeta) && String(r[1]).trim()===String(mes).trim() && String(r[2]).includes(String(anio))).map(x=>x.i)
+        // Lo que se había marcado a mano en ese mes (revisado, de quién es, de qué trabajo fue) pasa al consumo nuevo que sea
+        // el mismo: mismo día y mes, mismo comercio, misma moneda y mismo monto. Si hay dos iguales, se reparten en orden.
+        const cab = (cur[0] || []).map(h => String(h).trim()), iR = cab.indexOf('Revisado'), iFR = cab.indexOf('Fecha revisado'), iPe = cab.indexOf('Persona'), iT = cab.indexOf('N° trabajo')
+        const diaMes = f => { const x = String(f||'').match(/^(\d{1,2})\/(\d{1,2})/); return x ? `${+x[1]}/${+x[2]}` : '' }
+        const llave = (fecha, comercio, moneda, monto) => `${diaMes(fecha)}|${norm(comercio)}|${norm(moneda)||'ars'}|${(Number(monto)||0).toFixed(2)}`
+        const guardado = {}
+        del.forEach(i => { const r = cur[i] || [], extra = [iR, iFR, iPe, iT].map(k => k >= 0 ? (r[k] ?? '') : ''); if (extra.some(x => String(x).trim())) (guardado[llave(r[3], r[5], r[6], r[7])] = guardado[llave(r[3], r[5], r[6], r[7])] || []).push(extra) })
+        filas.forEach(f => { const k = llave(f[3], f[5], f[6], f[7]), e = guardado[k] && guardado[k].shift(); if (!e) return
+          ;[iR, iFR, iPe, iT].forEach((col, n) => { if (col < 0 || !String(e[n]).trim()) return; while (f.length <= col) f.push(''); if (!String(f[col] ?? '').trim()) f[col] = col === iT ? `'${String(e[n]).trim()}` : e[n] }) })
         if (sid!=null && del.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: del.sort((a,b)=>b-a).map(i=>({ deleteDimension: { range: { sheetId: sid, dimension:'ROWS', startIndex:i, endIndex:i+1 } } })) } })
       } catch (e) { console.error('dedup movs', e.message) }
-      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:L', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filas } })
+      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'MOVIMIENTOS_TARJETA!A:P', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filas } })
     }
 
     // 2b) CUOTAS: cada resumen lista TODAS las cuotas activas de la tarjeta →

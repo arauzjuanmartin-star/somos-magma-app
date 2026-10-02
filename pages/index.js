@@ -5266,7 +5266,7 @@ function Caja({data, onRefresh, showToast, goTo}){
       </div>
     </div>
     </>}
-    {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {subir && <SubirResumen datos={data} onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {extracto && <SubirExtracto data={data} onClose={()=>setExtracto(false)} onDone={()=>{ setExtracto(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={c.cuentas.filter(x=>x.activa).map(x=>x.nombre)} cuentas={data.cuentas||[]} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
@@ -5920,7 +5920,7 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
         <span style={{fontSize:13, fontFamily:MONO, color:T.ink2}}>{m['Cuenta destino']&&parseMonto(m['Monto destino'])?showM(m['Monto destino'],md):showM(m['Monto origen'],mo)}</span>
       </div> })}
     </Sec>}
-    {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {subir && <SubirResumen datos={data} onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={cuentaOpts} cuentas={cuentas} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editGasto && <EditarGasto g={editGasto} cuentas={cuentas.map(c=>String(c['Nombre']||'').trim()).filter(Boolean)} onClose={()=>setEditGasto(null)} onDone={()=>{ setEditGasto(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {detalle && <DetalleTarjeta t={detalle} items={itemsDe(detalle)} cuotas={cuotasAll.filter(c=>normTxt(c['Tarjeta'])===normTxt(detalle['Tarjeta']))} onClose={()=>setDetalle(null)} onRefresh={onRefresh} showToast={showToast}/>}
@@ -6157,7 +6157,7 @@ function rubroTarjeta(m){
 }
 
 // Subir PDF de resumen de tarjeta → IA lo lee → preview agrupado → carga total + movimientos
-function SubirResumen({onClose, onDone, showToast}){
+function SubirResumen({datos={}, onClose, onDone, showToast}){
   const now=new Date()
   const [tarjeta,setTarjeta]=useState('BBVA Visa')
   const [mes,setMes]=useState(now.getMonth()+1)
@@ -6168,7 +6168,8 @@ function SubirResumen({onClose, onDone, showToast}){
   const [data,setData]=useState(null)
   const [saving,setSaving]=useState(false)
   const [override,setOverride]=useState({})  // "ti:j" -> 'Empresa' | 'Personal' (marca final del usuario, pisa la de la IA)
-  const [expand,setExpand]=useState('')       // 'juan' | 'sofi' | ''
+  const [rubroDe,setRubroDe]=useState({}), [trabajoDe,setTrabajoDe]=useState({})   // por consumo: el rubro corregido y el trabajo al que fue
+  const [expand,setExpand]=useState('')       // 'magma' | 'juan' | 'sofi' | ''
   const TARJS=TARJETAS_ACTIVAS   // Master Galicia y Santander Amex ya no se usan (01/10/2026): la lista vive en lib/socios.mjs
   async function procesar(){
     if(!file){ showToast('Elegí el PDF','err'); return }
@@ -6176,9 +6177,11 @@ function SubirResumen({onClose, onDone, showToast}){
     try{
       const b=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
       setB64(b)
-      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b,fileName:file.name})})
+      const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b,fileName:file.name,tarjeta})})
       const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
-      setData(j.data)
+      // El mes del resumen es el anterior al de su vencimiento (cierra a fin de agosto, vence en septiembre = resumen de agosto)
+      const v=String(j.data?.vencimiento||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(v){ const d=new Date(+v[3], +v[2]-2, 1); setMes(d.getMonth()+1); setAnio(d.getFullYear()) }
+      setData(j.data); setOverride({}); setRubroDe({}); setTrabajoDe({})
     }catch(e){ showToast('Error de conexión','err') }
     setLoading(false)
   }
@@ -6190,6 +6193,7 @@ function SubirResumen({onClose, onDone, showToast}){
   titulares.forEach((t,ti)=>{ const arr=Array.isArray(t.movimientos)?t.movimientos:(t.personales||[]).map(p=>({...p,categoria:'Personal'})); arr.forEach((it,j)=>movsAll.push({ ti, j, key:ti+':'+j, titular:t.nombre||it.titular||'', fecha:it.fecha||'', comercio:it.comercio||'', monto:Number(it.monto)||0, moneda:String(it.moneda||'ARS').toUpperCase(), rubro:it.rubro||it.subcategoria||'', cuota:it.cuota||'', catAI: String(it.categoria||'Personal').toLowerCase()==='empresa'?'Empresa':'Personal' })) })
   const catOf=m=>override[m.key]||m.catAI
   const isEmp=m=>catOf(m)==='Empresa'
+  const rubroOf=m=>rubroDe[m.key]??(m.rubro||'')   // el rubro que leyó la IA, o el que corrigió la persona
   const sumIf=pred=>movsAll.filter(pred).reduce((s,m)=>s+m.monto,0)
   const idxJuan=titulares.findIndex(t=>/juan/i.test(t.nombre||''))
   const idxSofi=titulares.findIndex(t=>/sof/i.test(t.nombre||''))
@@ -6201,17 +6205,33 @@ function SubirResumen({onClose, onDone, showToast}){
   const juanPers=idxJuan>=0?persTit(idxJuan):0
   const sofiPers=idxSofi>=0?persTit(idxSofi):0
   const otrosPers=Math.max(0,personalTot-juanPers-sofiPers)
-  const rubEmp={}; movsAll.filter(m=>m.moneda==='ARS'&&isEmp(m)).forEach(m=>{ const k=m.rubro||'Empresa'; rubEmp[k]=(rubEmp[k]||0)+m.monto })
+  const rubEmp={}; movsAll.filter(m=>m.moneda==='ARS'&&isEmp(m)).forEach(m=>{ const k=rubroOf(m)||'Empresa'; rubEmp[k]=(rubEmp[k]||0)+m.monto })
   const rubEmpArr=Object.entries(rubEmp).sort((a,b)=>b[1]-a[1])
   const lecturaOk=movsAll.length>0
   const expIdx=expand==='juan'?idxJuan:expand==='sofi'?idxSofi:-1
   const expList=movsAll.filter(m=>m.ti===expIdx)
   const toggleItem=m=>setOverride(o=>({...o,[m.key]: isEmp(m)?'Personal':'Empresa'}))
+  // ---- Lo de Magma, consumo por consumo: el rubro (de la lista única, solapa RUBROS) y, si es de Producción, de qué trabajo fue
+  const RUBROS_T=[...(datos.rubros||[]).filter(r=>!/^personal/i.test(r.rubro)).map(r=>r.subrubro?`${r.rubro} · ${r.subrubro}`:r.rubro), 'Percepciones a recuperar']
+  // La fecha completa del consumo: el resumen trae día y mes; el año es el del resumen (una cuota de diciembre en el resumen de enero es del año anterior)
+  const fechaDe=m=>{ const x=String(m.fecha||'').match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/); if(!x) return null; if(x[3]) return new Date(x[3].length===2?2000+ +x[3]:+x[3], +x[2]-1, +x[1])
+    // Nada del resumen puede ser posterior a su cierre (los primeros días del mes siguiente): si con el año del resumen queda
+    // después, es del año anterior (la cuota de una compra de septiembre pasado, en el resumen de agosto).
+    const d=new Date(anio, +x[2]-1, +x[1]); return d>new Date(anio, mes, 5) ? new Date(anio-1, +x[2]-1, +x[1]) : d }
+  const fechaTxt=m=>{ const d=fechaDe(m); return d?`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`:(m.fecha||'') }
+  // Los trabajos de esos días (de 6 días antes a 3 después: el auto se alquila antes del rodaje), el más cercano primero
+  const trabajosCerca=m=>{ const d=fechaDe(m); if(!d) return []; return (datos.proyectos||[]).map(p=>{ const f=parseD(p['Fecha Evento']); if(!f) return null; const dif=Math.round((f-d)/864e5); return dif>=-3&&dif<=6?{nro:String(p['N° presupuesto']||'').trim(), dif, label:`#${String(p['N° presupuesto']||'').trim()} · ${[p['Cliente'],p['Proyecto']].filter(Boolean).join(' · ').slice(0,44)} · ${f.getDate()}/${f.getMonth()+1}`}:null }).filter(x=>x&&x.nro).sort((a,b)=>Math.abs(a.dif)-Math.abs(b.dif)) }
+  const esProd=m=>/^producci/i.test(rubroOf(m))
+  // Se propone solo si ese día (o el anterior o el siguiente) hubo UN único trabajo; con dos o más, elige la persona
+  const trabajoSug=m=>{ const c=trabajosCerca(m).filter(x=>Math.abs(x.dif)<=1); return c.length===1?c[0].nro:'' }
+  const trabajoOf=m=>isEmp(m)&&esProd(m)&&m.moneda==='ARS'?(trabajoDe[m.key]??trabajoSug(m)):''
+  const magmaList=movsAll.filter(isEmp)
+  const yaCargados=(datos.movimientosTarjeta||[]).filter(x=>normTxt(x['Tarjeta'])===normTxt(tarjeta) && String(x['Mes']).trim()===String(mes) && String(x['Año']).includes(String(anio))).length
   async function confirmar(){
     setSaving(true)
     try{
       // cada movimiento con su marca final → se guarda ítem por ítem (después editable en el detalle de la tarjeta)
-      const movs=movsAll.map(m=>({ fecha:m.fecha, titular:m.titular, comercio:m.comercio, monto:m.monto, moneda:m.moneda, categoria:catOf(m), subcategoria: catOf(m)==='Empresa'?(m.rubro||'Empresa'):'Personal', cuota:m.cuota||'' }))
+      const movs=movsAll.map(m=>({ fecha:fechaTxt(m), titular:m.titular, comercio:m.comercio, monto:m.monto, moneda:m.moneda, categoria:catOf(m), subcategoria: catOf(m)==='Empresa'?(rubroOf(m)||'Empresa'):'Personal', cuota:m.cuota||'', nroTrabajo:trabajoOf(m) }))
       const nota=lecturaOk?`Magma ${Math.round(empresa).toLocaleString('es-AR')}${empresaUsd?` (+US$${empresaUsd.toFixed(0)})`:''} · Juan ${Math.round(juanPers).toLocaleString('es-AR')} · Sofi ${Math.round(sofiPers).toLocaleString('es-AR')}`:'Total cargado (clasificación pendiente)'
       const r=await fetch('/api/tarjeta-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tarjeta,mes,anio,movimientos:movs,movimientosCompletos:true,totalArs:totalPagar,totalUsd:totalPagarUsd,vencimiento:data.vencimiento,resumenNota:nota,pdfBase64:b64,fileName:file?.name})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); setSaving(false); return }
@@ -6220,7 +6240,7 @@ function SubirResumen({onClose, onDone, showToast}){
   }
   const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
   return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:22, width:500, maxWidth:'100%', maxHeight:'90vh', overflow:'auto', border:`1px solid ${T.border}`}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:22, width:data?680:500, maxWidth:'100%', maxHeight:'90vh', overflow:'auto', border:`1px solid ${T.border}`}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h3 style={{margin:0, fontSize:17, fontWeight:700, color:T.ink}}>Subir resumen de tarjeta</h3>
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
@@ -6236,17 +6256,31 @@ function SubirResumen({onClose, onDone, showToast}){
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
-          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen {MESES_LARGO[mes-1]} {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
+          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen de <select value={mes} onChange={e=>setMes(parseInt(e.target.value))} style={{...inp, padding:'2px 4px', fontSize:12}}>{MESES_LARGO.map((x,k)=><option key={k} value={k+1}>{x}</option>)}</select> {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
           <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
           <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''}</div>
         </div>
         {lecturaOk ? <>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:6, fontWeight:600}}>Tocá Juan o Sofi para ver sus consumos y marcar cada uno 🏢 Magma o 👤 personal.</div>
+        <div style={{fontSize:11.5, color:T.ink3, marginBottom:6, fontWeight:600}}>Tocá Magma para revisar el rubro y el trabajo de cada consumo; tocá Juan o Sofi para ver lo personal de cada uno.</div>
         <div style={{display:'flex', gap:8, marginBottom:10}}>
-          <div style={{flex:1, background:T.posSoft, borderRadius:10, padding:'10px 12px'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Magma</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}</div>{empresaUsd?<div style={{fontSize:10.5, color:T.ink3, fontFamily:MONO}}>+US${empresaUsd.toFixed(0)}</div>:null}</div>
+          <div onClick={()=>setExpand(e=>e==='magma'?'':'magma')} style={{flex:1, background:T.posSoft, borderRadius:10, padding:'10px 12px', cursor:'pointer', outline:expand==='magma'?`2px solid ${T.pos}`:'none'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Magma {expand==='magma'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}</div>{empresaUsd?<div style={{fontSize:10.5, color:T.ink3, fontFamily:MONO}}>+US${empresaUsd.toFixed(0)}</div>:null}</div>
           {idxJuan>=0 && <div onClick={()=>setExpand(e=>e==='juan'?'':'juan')} style={{flex:1, background:expand==='juan'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:11, color:T.ink3}}>👤 Juan {expand==='juan'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(juanPers)}</div></div>}
           {idxSofi>=0 && <div onClick={()=>setExpand(e=>e==='sofi'?'':'sofi')} style={{flex:1, background:expand==='sofi'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:11, color:T.ink3}}>👤 Sofi {expand==='sofi'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(sofiPers)}</div></div>}
         </div>
+        {expand==='magma' && magmaList.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', marginBottom:12, maxHeight:340, overflow:'auto'}}>
+          <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Lo de Magma, consumo por consumo. Cambiá el rubro si no corresponde y, en los de Producción, elegí de qué trabajo fue. El 👤 lo pasa a personal.</div>
+          {magmaList.map((m,i)=>{ const cerca=esProd(m)&&m.moneda==='ARS'?trabajosCerca(m):[], rb=rubroOf(m), tr=trabajoOf(m)
+            return <div key={m.key} style={{padding:'7px 2px', borderTop:i?`1px solid ${T.border}`:'none'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8}}>
+                <span style={{fontSize:12.5, color:T.ink, fontWeight:600, minWidth:0}}>{m.comercio} <span style={{color:T.ink3, fontSize:11, fontWeight:400}}>{m.fecha} · {m.titular}{m.cuota?` · cuota ${m.cuota}`:''}</span></span>
+                <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink, whiteSpace:'nowrap'}}>{m.moneda==='USD'?`US$${m.monto}`:fmt(m.monto)} <button onClick={()=>toggleItem(m)} title="Pasarlo a personal" style={{border:'none', background:'none', cursor:'pointer', fontSize:12, padding:'0 0 0 4px'}}>👤</button></span>
+              </div>
+              <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:4}}>
+                <select value={rb} onChange={e=>setRubroDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:11.5, flex:'1 1 220px', minWidth:0, borderColor:RUBROS_T.includes(rb)?T.border:T.warn}}>{!RUBROS_T.includes(rb) && <option value={rb}>{rb||'Elegir rubro'}</option>}{RUBROS_T.map(r=><option key={r} value={r}>{r}</option>)}</select>
+                {esProd(m) && m.moneda==='ARS' && <select value={tr} onChange={e=>setTrabajoDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:11.5, flex:'1 1 220px', minWidth:0, borderColor:tr?T.pos:T.border}}><option value="">Sin trabajo</option>{tr && !cerca.some(c=>c.nro===tr) && <option value={tr}>#{tr}</option>}{cerca.map(c=><option key={c.nro} value={c.nro}>{c.label}</option>)}</select>}
+              </div>
+            </div> })}
+        </div>}
         {expand && expList.length ? <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', marginBottom:12, maxHeight:260, overflow:'auto'}}>
           <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Consumos de {expand==='juan'?'Juan':'Sofi'} — tocá para cambiar 👤 personal ⇄ 🏢 Magma</div>
           {expList.map((m,i)=>{ const on=isEmp(m); return <div key={m.key} onClick={()=>toggleItem(m)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 2px', cursor:'pointer', borderTop:i?`1px solid ${T.border}`:'none'}}>
@@ -6258,6 +6292,7 @@ function SubirResumen({onClose, onDone, showToast}){
         {otrosPers>0?<div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Otros titulares (personal): {fmt(otrosPers)}</div>:null}
         <div style={{fontSize:10.5, color:T.ink3, marginBottom:12}}>Se guarda cada consumo con tu marca (después editable en el detalle de la tarjeta) + el total + el PDF en Drive.</div>
         </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ No pude clasificar bien este resumen. Igual cargo el <b>total a pagar</b> correcto — la división Empresa/Juan/Sofi la hacemos aparte.</div>}
+        {yaCargados>0 && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 13px', fontSize:12, marginBottom:12, fontWeight:500, lineHeight:1.5}}>⚠ {tarjeta} de {MESES_LARGO[mes-1]} {anio} ya está cargada ({yaCargados} consumos). Si confirmás, se REEMPLAZAN por los de este PDF. Lo que ya estaba marcado (revisado, de qué trabajo fue) se conserva en los consumos que sigan iguales; si acá un consumo de Magma quedó como personal, o al revés, vale lo de esta pantalla.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
