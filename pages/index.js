@@ -6178,7 +6178,9 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
       const b=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
       setB64(b)
       const r=await fetch('/api/tarjeta-procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfBase64:b,fileName:file.name,tarjeta})})
-      const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
+      // Si el servidor corta (tarda demasiado) no contesta JSON: se dice eso en vez de "error de conexión"
+      const j=await r.json().catch(()=>({error:r.status===504?'La lectura tardó demasiado y se cortó. Probá de nuevo; no se guardó nada.':`El servidor no pudo leer el PDF (error ${r.status}). No se guardó nada.`}))
+      if(!j.ok){ showToast(j.error||'No se pudo leer el PDF','err'); setLoading(false); return }
       // El mes del resumen es el anterior al de su vencimiento (cierra a fin de agosto, vence en septiembre = resumen de agosto)
       const v=String(j.data?.vencimiento||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(v){ const d=new Date(+v[3], +v[2]-2, 1); setMes(d.getMonth()+1); setAnio(d.getFullYear()) }
       setData(j.data); setOverride({}); setRubroDe({}); setTrabajoDe({})
@@ -6252,7 +6254,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
           <select value={anio} onChange={e=>setAnio(parseInt(e.target.value))} style={{...inp, width:90}}>{[2025,2026].map(a=><option key={a} value={a}>{a}</option>)}</select>
         </div>
         <input type="file" accept="application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)} style={{marginBottom:16, fontSize:13, color:T.ink2}}/>
-        <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.ink3:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA…':'Leer PDF'}</button>
+        <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.ink3:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA… puede tardar unos minutos':'Leer PDF'}</button>
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>

@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { requireAuth } from '../../lib/auth-helpers'
 import { getSheets } from '../../lib/sheets'
 
-// Leer un resumen largo (más de 100 consumos) le lleva a la IA cerca de un minuto: sin esto Vercel corta a los 10 segundos.
-export const config = { api: { bodyParser: { sizeLimit: '15mb' } }, maxDuration: 60 }
+// Leer un resumen largo (más de 100 consumos) le lleva a la IA entre uno y tres minutos (el modelo nuevo piensa antes de
+// contestar): se le da el máximo que deja Vercel en este proyecto (300 segundos).
+export const config = { api: { bodyParser: { sizeLimit: '15mb' } }, maxDuration: 300 }
 
 // Cómo se reparte cada tarjeta entre Magma y lo personal de los socios. Son reglas que dio Juan (03/08 y 01/10/2026);
 // si cambia el uso de una tarjeta, se cambia acá. La persona igual puede corregir consumo por consumo antes de guardar.
@@ -26,16 +27,17 @@ const armarPrompt = (tarjeta, rubrosTxt) => `Sos el asistente contable de SOMOS 
 El total del resumen puede NO estar en la primera hoja. Buscalo en este orden y usá el primero que tenga un número real:
 1. El recuadro final "SALDO ACTUAL $" (ojo: en muchos resúmenes ese recuadro está VACÍO en todas las hojas menos la última — usá el que tenga el número, que suele estar en la ÚLTIMA hoja / cuadro resumen).
 2. La línea "DEBITAREMOS DE SU C.C. ... LA SUMA DE $ X + U$S Y" (X = total_a_pagar_ars, Y = total_a_pagar_usd).
-3. "TOTAL A PAGAR".
-NUNCA uses como total: "SALDO ANTERIOR", "Su saldo financiado", "PAGO MINIMO", ni "SALDO ACTUAL" de una hoja donde el número esté vacío. Si dudás, el total a pagar es el más grande entre SALDO ACTUAL final y DEBITAREMOS.
+3. "TOTAL A PAGAR" / "Total a pagar". En el formato nuevo de Santander viene arriba de todo, partido en "En pesos" (total_a_pagar_ars) y "En dólares" (total_a_pagar_usd).
+NUNCA uses como total: "SALDO ANTERIOR", "Su saldo financiado", "PAGO MINIMO" / "Pago mínimo", ni "SALDO ACTUAL" de una hoja donde el número esté vacío. Si dudás, el total a pagar es el más grande entre SALDO ACTUAL final y DEBITAREMOS.
 - total_a_pagar_usd: los U$S de ese mismo recuadro/línea (0 si no hay).
 - vencimiento: la fecha de "VENCIMIENTO ACTUAL" / "VENCIMIENTO" (formato DD/MM/YYYY).
 
 === 2) MOVIMIENTOS (listá TODOS, uno por uno) ===
-El resumen separa consumos por titular ("Total Consumos de JUAN MARTIN ARAUZ", "Total Consumos de SOFIA MARIA GRENIER", etc.). Por CADA titular, listá TODOS sus consumos del período, uno por movimiento, con: fecha (DD/MM), comercio (el texto tal cual del resumen), monto (número), moneda ("ARS" o "USD"), categoria ("Empresa" o "Personal"), rubro y cuota.
-CUOTAS: si el movimiento es una cuota (el texto dice "C.NN/MM", "NN/MM" o "cuota NN/MM"), poné el campo cuota con "NN/MM" (ej: "C.03/09" → cuota "3/9"). Si NO es cuota, cuota "".
+El resumen separa consumos por titular ("Total Consumos de JUAN MARTIN ARAUZ", "Total Consumos de SOFIA MARIA GRENIER", o en el formato nuevo de Santander "Movimientos de Sofia Maria Grenier · Visa crédito terminada en 7665" con su "Subtotal de ..." al final). Por CADA titular, listá TODOS sus consumos del período, uno por movimiento, con: fecha (DD/MM), comercio (el texto tal cual del resumen), monto (número), moneda ("ARS" o "USD"), categoria ("Empresa" o "Personal"), rubro y cuota.
+CUOTAS: si el movimiento es una cuota (el texto dice "C.NN/MM", "NN/MM", "cuota NN/MM" o, en la columna Cuota, "NN de MM"), poné el campo cuota con "NN/MM" (ej: "C.03/09" → cuota "3/9"; "7 de 9" → cuota "7/9"). Si NO es cuota, cuota "".
+FECHAS: si la fecha viene con año ("14/07/26"), devolvé solo "DD/MM". Si una fila no trae fecha, es del mismo día que la fila de arriba DEL MISMO TITULAR: repetí esa fecha.
 CRÍTICO: cada consumo pertenece a UN SOLO titular (la sección donde figura). No repitas, no inventes, no muevas consumos de un titular a otro.
-NO incluyas: "SALDO ANTERIOR", los pagos del período ("SU PAGO EN PESOS/USD", "CR.RG..."), las cuotas FUTURAS a vencer, ni las "BONIF. CONSUMO" (ya vienen netas). SÍ incluí las cuotas que impactan este período (las que tienen monto en la columna del período).
+NO incluyas: "SALDO ANTERIOR", las líneas de "Subtotal de ..." / "Total Consumos de ..." (son sumas, no consumos), los pagos del período ("SU PAGO EN PESOS/USD", "CR.RG..."), las cuotas FUTURAS a vencer, ni las "BONIF. CONSUMO" (ya vienen netas). SÍ incluí las cuotas que impactan este período (las que tienen monto en la columna del período).
 
 ${reglaDe(tarjeta)}
 
@@ -80,11 +82,11 @@ export default async function handler(req, res) {
       rubrosTxt = rv.slice(ih + 1).filter(r => String(r[0] || '').trim() && !/^personal/i.test(String(r[0]))).map(r => { const sub = String(r[1] || '').trim(); return `"${String(r[0]).trim()}${sub && !/^[—-]$/.test(sub) ? ` · ${sub}` : ''}"${String(r[2] || '').trim() ? ` (${String(r[2]).trim()})` : ''}` }).join('\n')
     } catch (e) { console.error('rubros para el lector de tarjetas:', e.message) }
     if (!rubrosTxt) return res.status(500).json({ error: 'No pude leer la solapa RUBROS: sin la lista de rubros no clasifico el resumen.' })
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 270000, maxRetries: 0 })   // sin reintento solo: un intento colgado más su reintento pasaría los 300 s
     // El modelo más nuevo primero; si la cuenta todavía no lo tiene, el de antes.
     const pedir = model => client.messages.create({
       model,
-      max_tokens: 20000,
+      max_tokens: 32000,   // lo que piensa el modelo antes de contestar también cuenta acá
       system: armarPrompt(String(tarjeta || '').trim(), rubrosTxt),
       messages: [{
         role: 'user',
@@ -97,7 +99,18 @@ export default async function handler(req, res) {
     let resp
     // Solo si el modelo no existe para esta cuenta (404). Un error de cuota o de PDF se devuelve tal cual: reintentar duplicaría la espera.
     try { resp = await pedir('claude-sonnet-5-5') } catch (e) { if (e?.status === 404) resp = await pedir('claude-sonnet-4-5'); else throw e }
-    const txt = resp.content?.[0]?.text || ''
+    // El modelo nuevo manda primero un bloque de "pensamiento" (que llega vacío) y recién después el texto: se junta
+    // TODO lo que sea texto, esté en el bloque que esté. (Leer solo el primero daba "texto que no es JSON", 02/10/2026.)
+    const bloques = Array.isArray(resp.content) ? resp.content : []
+    const txt = bloques.filter(b => b?.type === 'text').map(b => b.text || '').join('')
+    const motivo = resp.stop_reason || ''
+    if (!txt.trim() || motivo === 'max_tokens' || motivo === 'refusal') {
+      console.error('Lectura de tarjeta sin respuesta útil:', JSON.stringify({ modelo: resp.model, motivo, bloques: bloques.map(b => b?.type), uso: resp.usage }))
+      const porque = motivo === 'max_tokens' ? 'el resumen es muy largo y la respuesta quedó cortada'
+        : motivo === 'refusal' ? 'la IA se negó a leer este archivo'
+        : `la IA no devolvió texto (motivo: ${motivo || 'desconocido'})`
+      return res.status(502).json({ error: `No se pudo leer el resumen: ${porque}. No se guardó nada. Avisale a Juan con este mensaje.` })
+    }
     let parsed
     try {
       let s = txt.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim()
@@ -107,7 +120,7 @@ export default async function handler(req, res) {
       parsed = JSON.parse(s)
     } catch (e) {
       console.error('Parse error:', e.message, '\nTexto:', txt.slice(0,800))
-      return res.status(500).json({ error: 'Claude devolvió texto que no es JSON', raw: txt.slice(0,800) })
+      return res.status(500).json({ error: 'La IA contestó, pero en un formato que no se pudo leer. Probá de nuevo; si vuelve a pasar, avisale a Juan.', raw: txt.slice(0,800) })
     }
 
     // Cada consumo viene como un array corto (así la respuesta pesa la mitad y entra en el tiempo de Vercel): se pasa a objeto, que es lo que usa la pantalla.
@@ -125,6 +138,9 @@ export default async function handler(req, res) {
     res.json({ ok: true, data: parsed })
   } catch (e) {
     console.error('Claude API error:', e.message)
+    // La IA saturada o cortada por tiempo: no es un problema del PDF, se vuelve a intentar a mano
+    if ([429, 529].includes(e?.status) || /overloaded/i.test(e?.message || '')) return res.status(503).json({ error: 'La IA está saturada en este momento. Esperá un minuto y volvé a tocar "Leer PDF". No se guardó nada.' })
+    if (/timed? ?out/i.test(e?.message || '')) return res.status(504).json({ error: 'La lectura tardó demasiado y se cortó. Probá de nuevo; no se guardó nada.' })
     res.status(500).json({ error: e.message })
   }
 }
