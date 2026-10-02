@@ -20,6 +20,7 @@ import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
+import { leerExtracto, unirExtractos, cruzarExtracto } from '../lib/extracto.mjs'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -4998,7 +4999,7 @@ function Caja({data, onRefresh, showToast, goTo}){
   // cuotas a futuro, el detalle de cada tarjeta, editar un gasto). Agregar un gasto y subir un resumen se hacen
   // desde las dos, sin cambiar de pestaña.
   // Se entra por 'hoy': la lista de tareas de administración (qué facturar, mandar, reclamar, pagar y cargar).
-  const [tab,setTab]=useState('hoy'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false), [editSaldos,setEditSaldos]=useState(false)
+  const [tab,setTab]=useState('hoy'), [agregar,setAgregar]=useState(false), [subir,setSubir]=useState(false), [editSaldos,setEditSaldos]=useState(false), [extracto,setExtracto]=useState(false)
   // CARGA RÁPIDA: lo que se pagó hoy y no pasa por ningún resumen (efectivo, una transferencia suelta).
   // Tres datos y listo: qué, cuánto y de dónde salió. La fecha es hoy y el rubro se aprende de la vez anterior.
   // Lo que sale por débito o con tarjeta NO se carga acá: entra cuando se sube el resumen.
@@ -5129,6 +5130,7 @@ function Caja({data, onRefresh, showToast, goTo}){
         <button onClick={()=>mover(-1)} style={navBtn}>←</button>
         <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:118, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
         <button onClick={()=>mover(1)} style={navBtn}>→</button>
+        <button onClick={()=>setExtracto(true)} style={{...btnSec, padding:'9px 14px'}}>⬆ Subir extracto del banco</button>
         <button onClick={()=>setSubir(true)} style={{...btnSec, padding:'9px 14px'}}>⬆ Subir resumen de tarjeta</button>
         <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
       </div>
@@ -5141,7 +5143,7 @@ function Caja({data, onRefresh, showToast, goTo}){
       // HOY: la lista de tareas de administración. Se arma sola (lib/hoy.mjs) y cada tarea lleva a donde se resuelve.
       const h=tareasDeHoy(data,cHoy)
       const TONO={entra:{c:T.pos,bg:T.posSoft,l:'Trae plata'}, sale:{c:T.ink,bg:T.surfaceAlt,l:'Hay que pagar'}, alerta:{c:T.brand,bg:T.brandSoft,l:'No alcanza'}, falta:{c:T.warn,bg:T.warnSoft,l:'Falta cargar'}}
-      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
+      const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='saldos') setEditSaldos(true); else setTab('detalle') }
       const DIAS_L=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
       const montoDe=x=>x.monto>0?`${x.tono==='entra'?'+':''}${x.montoAprox?'≈ ':''}${fmt(x.monto)}`:''
       const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:T.ink
@@ -5261,8 +5263,120 @@ function Caja({data, onRefresh, showToast, goTo}){
     </div>
     </>}
     {subir && <SubirResumen onClose={()=>setSubir(false)} onDone={()=>{ setSubir(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {extracto && <SubirExtracto data={data} onClose={()=>setExtracto(false)} onDone={()=>{ setExtracto(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {agregar && <AgregarEgreso cuentaOpts={c.cuentas.filter(x=>x.activa).map(x=>x.nombre)} cuentas={data.cuentas||[]} mesIdx={mesIdx} anio={anio} onClose={()=>setAgregar(false)} onDone={()=>{ setAgregar(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
+}
+
+// SUBIR EXTRACTO DEL BANCO: se elige el archivo de movimientos de la cuenta y la app cruza cada renglón con lo que
+// tiene cargado (lib/extracto.mjs). Lo que ya estaba bien no se toca; lo que coincide con algo sin pagar o sin cobrar
+// se marca al confirmar, con la fecha del banco; lo que cobra el banco queda anotado; y lo que no se reconoce queda
+// "para revisar". Todo va a la solapa MOVIMIENTOS_BANCO. Los saldos no se suman ni se restan: se pisa con el del extracto.
+function SubirExtracto({data, onClose, onDone, showToast}){
+  const [ext,setExt]=useState(null), [err,setErr]=useState(''), [cuentaSel,setCuentaSel]=useState(''), [noMarcar,setNoMarcar]=useState({}), [usarSaldo,setUsarSaldo]=useState(true), [busy,setBusy]=useState(false), [verRev,setVerRev]=useState(false), [hecho,setHecho]=useState(null)
+  const cuentas=(data.cuentas||[]).filter(c=>esActiva(c['Activa']) && !esCuentaUsd(c))
+  const soloDig=s=>String(s||'').replace(/\D/g,'')
+  // La cuenta de la app a la que pertenece el archivo: la que tiene ese número entre sus datos; si no, la del mismo banco.
+  const adivinar=e=>{ const n=soloDig(e.cuentaNro); const porNro=n.length>=6 && cuentas.find(c=>soloDig(`${c['Datos transferencia adicionales']||''} ${c['Notas']||''} ${c['CBU']||''}`).includes(n)); return String((porNro||cuentas.find(c=>normTxt(c['Banco']).includes(normTxt(e.banco))||normTxt(c['Nombre']).includes(normTxt(e.banco)))||{})['Nombre']||'') }
+  async function elegir(files){
+    setErr(''); setHecho(null)
+    const lista=[...(files||[])]; if(!lista.length) return
+    if(lista.some(f=>/\.xlsx?$/i.test(f.name))){ setErr('Ese archivo es el Excel del banco. Abrilo y guardalo como CSV (Archivo → Exportar → CSV), y subí el CSV.'); return }
+    try{ const leidos=[]; for(const f of lista) leidos.push(leerExtracto(await f.text()))
+      const e=unirExtractos(leidos); if(!e.movs.length){ setErr('El archivo no trae movimientos.'); return }
+      setExt(e); setCuentaSel(adivinar(e)); setNoMarcar({})
+    }catch(e){ setErr(e.message||'No pude leer el archivo.') } }
+  const cuenta=cuentaSel
+  const yaCargadas=new Set((data.movimientosBanco||[]).filter(r=>String(r['Cuenta']||'').trim()===cuenta).map(r=>String(r['Clave']||'').trim()))
+  const cruce=ext?cruzarExtracto(ext.movs, data, {cuenta, yaCargadas}):null
+  const r=cruce?.resumen
+  const aMarcar=cruce?cruce.filas.filter(x=>x.estado==='marcar'):[], revisar=cruce?cruce.filas.filter(x=>x.estado==='revisar'):[]
+  const marcadas=aMarcar.filter(x=>!noMarcar[x.clave])
+  const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
+  // El saldo del extracto solo sirve si el archivo llega hasta estos días.
+  const reciente=!!r?.hasta && (new Date()-r.hasta)/864e5<4
+  const cuentaObj=cuentas.find(c=>c['Nombre']===cuenta)
+  async function confirmar(){
+    if(busy||!cruce) return
+    if(!cuenta){ showToast('Elegí a qué cuenta corresponde','err'); return }
+    setBusy(true)
+    try{ const res=await fetch('/api/extracto-guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta, saldo:ext.saldo, usarSaldo:usarSaldo&&reciente&&ext.saldo>0, noMarcar:Object.keys(noMarcar).filter(k=>noMarcar[k]), movs:ext.movs.map(m=>({f:`${m.fecha.getFullYear()}-${m.fecha.getMonth()+1}-${m.fecha.getDate()}`, c:m.concepto, k:m.codigo, d:m.detalle, m:m.monto}))})})
+      const j=await res.json(); if(!j.ok){ showToast(j.error||'Error','err'); setBusy(false); return }
+      setHecho(j); setBusy(false); showToast(j.aviso||'Extracto guardado ✓', j.aviso?'err':undefined)
+    }catch(e){ showToast('Error de conexión','err'); setBusy(false) } }
+  const caja={background:T.surfaceAlt, borderRadius:10, padding:'11px 13px', minWidth:0}
+  const lblK={fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}
+  const numK={fontFamily:MONO, fontSize:19, fontWeight:600, color:T.ink, marginTop:3}
+  const renglon=(x,extra)=><div key={x.clave} style={{display:'grid', gridTemplateColumns:'auto 52px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'8px 0', borderTop:`1px solid ${T.border}`, fontSize:12.5}}>
+    {extra}
+    <span style={{color:T.ink3, fontFamily:MONO, fontSize:11.5}}>{dm(x.fecha)}</span>
+    <span style={{minWidth:0}}><span style={{color:T.ink, fontWeight:600}}>{x.estado==='revisar'?(x.quien||x.que):x.que}</span><span style={{color:T.ink3}}> · {x.concepto}{x.estado==='revisar'&&x.quien?` · ${x.que}`:''}</span>{x.candidatos.length>0 && <span style={{display:'block', color:T.warn, fontSize:11.5, marginTop:2}}>Puede ser: {x.candidatos.join(' · ')}</span>}</span>
+    <span style={{fontFamily:MONO, fontWeight:600, color:x.monto>0?T.pos:T.ink, whiteSpace:'nowrap'}}>{x.monto>0?'+':'−'}{fmt(Math.abs(x.monto))}</span>
+  </div>
+  return <div onClick={busy?undefined:onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:210, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:780, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Hoy lee los movimientos de la cuenta de BBVA, en CSV.</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px 20px'}}>
+        {hecho ? <>
+          <div style={{fontSize:14, fontWeight:700, color:T.pos, marginBottom:8}}>Extracto guardado ✓</div>
+          <div style={{fontSize:13, color:T.ink, lineHeight:1.6}}>
+            {hecho.nuevas} {hecho.nuevas===1?'movimiento nuevo anotado':'movimientos nuevos anotados'} en la solapa MOVIMIENTOS_BANCO{hecho.repetidas>0?` (${hecho.repetidas} ya estaban cargados y no se repitieron)`:''}.<br/>
+            {hecho.marcados.length>0 ? <>Se marcaron {hecho.marcados.length}: {hecho.marcados.map(m=>m.que).join(' · ')}.<br/></> : null}
+            {hecho.saldo!==null && hecho.saldo!==undefined ? <>El saldo de {cuenta} quedó en <b style={{fontFamily:MONO}}>{fmt(hecho.saldo)}</b>.</> : null}
+          </div>
+          <button onClick={onDone} style={{...btnAgregar(false), marginTop:16}}>Listo</button>
+        </> : <>
+          <label style={{display:'block', border:`1.5px dashed ${T.ink3}`, borderRadius:12, padding:ext?'11px 14px':'26px 14px', textAlign:'center', cursor:'pointer', background:T.bg}}>
+            <input type="file" accept=".csv,text/csv,text/plain" multiple onChange={e=>elegir(e.target.files)} style={{display:'none'}}/>
+            <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{ext?'Elegir otros archivos':'Elegir los archivos del banco'}</div>
+            {!ext && <div style={{fontSize:12, color:T.ink3, marginTop:4}}>Podés elegir juntos el de movimientos históricos y el de movimientos del día.</div>}
+          </label>
+          {err && <div style={{fontSize:12.5, color:T.brand, background:T.brandSoft, padding:'9px 12px', borderRadius:9, marginTop:10}}>{err}</div>}
+          {cruce && <>
+            <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', margin:'14px 0 12px'}}>
+              <div style={{fontSize:13, color:T.ink, flex:'1 1 260px', minWidth:0}}><b>{ext.banco} · {ext.cuentaNro}</b> · {r.total} movimientos del {dm(r.desde)} al {dm(r.hasta)}</div>
+              <select value={cuenta} onChange={e=>setCuentaSel(e.target.value)} style={{...inpV2, width:'auto', flex:'0 1 220px'}}><option value="">¿De qué cuenta es?</option>{cuentas.map(c=><option key={c['Nombre']} value={c['Nombre']}>{c['Nombre']}</option>)}</select>
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:9}}>
+              <div style={caja}><div style={lblK}>Ya estaban bien</div><div style={numK}>{r.ok}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>la app ya los tenía igual</div></div>
+              <div style={{...caja, background:T.posSoft}}><div style={{...lblK, color:T.pos}}>Se marcan ahora</div><div style={numK}>{marcadas.length}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{fmt(marcadas.reduce((s,x)=>s+Math.abs(x.monto),0))} que figuraban pendientes</div></div>
+              <div style={caja}><div style={lblK}>Los cobró el banco</div><div style={numK}>{r.banco}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{fmt(Math.abs(r.montoBanco))} en cargos e impuestos</div></div>
+              <div style={{...caja, background:revisar.length?T.warnSoft:T.surfaceAlt}}><div style={{...lblK, color:revisar.length?T.warn:T.ink2}}>Para revisar</div><div style={numK}>{revisar.length}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>no se reconocen solos</div></div>
+            </div>
+            {r.nuevas<r.total && <div style={{fontSize:12, color:T.ink2, marginTop:10}}>{r.total-r.nuevas} de estos movimientos ya estaban cargados de un extracto anterior: no se repiten.</div>}
+
+            {aMarcar.length>0 && <div style={{marginTop:16}}>
+              <div style={{fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2, marginBottom:4}}>Se marcan al confirmar · con la fecha del banco</div>
+              {aMarcar.map(x=>renglon(x, <input type="checkbox" checked={!noMarcar[x.clave]} onChange={e=>setNoMarcar(o=>({...o,[x.clave]:!e.target.checked}))} style={{width:16, height:16, accentColor:T.brand, cursor:'pointer'}}/>))}
+              <div style={{fontSize:11.5, color:T.ink3, marginTop:6}}>Si alguno no corresponde, destildalo: queda anotado como "para revisar" y no se marca nada.</div>
+            </div>}
+
+            {revisar.length>0 && <div style={{marginTop:16}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:10, marginBottom:4}}>
+                <div style={{fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}}>Para revisar · {fmt(r.montoRevisar)}</div>
+                <button onClick={()=>setVerRev(v=>!v)} style={{border:'none', background:'none', color:T.ink2, fontSize:12, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit'}}>{verRev?'mostrar menos':`ver los ${revisar.length}`}</button>
+              </div>
+              {(verRev?revisar:revisar.slice(0,5)).map(x=>renglon(x, <span style={{width:16}}/>))}
+              <div style={{fontSize:11.5, color:T.ink3, marginTop:6}}>No se marca nada con estos. Quedan en la solapa MOVIMIENTOS_BANCO como "Para revisar", resaltados, para identificarlos después.</div>
+            </div>}
+
+            <div style={{marginTop:16, fontSize:12.5, color:T.ink2, lineHeight:1.6}}>
+              <b style={{color:T.ink}}>Lo que cobró el banco:</b> {Object.entries(r.bancoPorClase).sort((a,b)=>a[1]-b[1]).map(([k,v])=>`${k} ${fmt(Math.abs(v))}`).join(' · ')}
+            </div>
+
+            {ext.saldo>0 && (reciente
+              ? <label style={{display:'flex', gap:9, alignItems:'flex-start', marginTop:14, fontSize:12.5, color:T.ink, cursor:'pointer'}}><input type="checkbox" checked={usarSaldo} onChange={e=>setUsarSaldo(e.target.checked)} style={{width:16, height:16, accentColor:T.brand, marginTop:1}}/><span>Poner como saldo de {cuenta||'la cuenta'} el del extracto: <b style={{fontFamily:MONO}}>{fmt(ext.saldo)}</b>{cuentaObj?<span style={{color:T.ink3}}> (hoy la app dice {fmt(parseMonto(cuentaObj['Saldo actual']))})</span>:null}</span></label>
+              : <div style={{fontSize:12, color:T.ink3, marginTop:14}}>El extracto llega hasta el {dm(r.hasta)}: es viejo para usar su saldo, así que el saldo de la cuenta no se toca.</div>)}
+
+            <button disabled={busy||!cuenta} onClick={confirmar} style={{...btnAgregar(busy||!cuenta), marginTop:16}}>{busy?'Guardando…':`Confirmar y guardar${marcadas.length?` · marca ${marcadas.length}`:''}`}</button>
+          </>}
+        </>}
+      </div>
+    </div>
+  </div>
 }
 
 function Egresos({data, onRefresh, showToast, embebido=false}){
