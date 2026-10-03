@@ -211,7 +211,7 @@ function Confirmar({ j, viendoComo, onContestar }) {
   </div>
 }
 
-function Trabajo({ j, notas, viendoComo, onVolver, onGasto, onContestar, onNota }) {
+function Trabajo({ j, notas, viendoComo, conAcuerdo, onVolver, onGasto, onContestar, onNota }) {
   const falta = t => <span style={{ color: T.warn }}>tu PM todavía no cargó {t}</span>
   return <div>
     <button onClick={onVolver} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 13, padding: '0 0 12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Agenda</button>
@@ -224,7 +224,7 @@ function Trabajo({ j, notas, viendoComo, onVolver, onGasto, onContestar, onNota 
       ['Qué hacés', j.rol],
       ['Con quién', j.equipo.length ? j.equipo.map(e => `${e.quien} (${e.rol})`).join(', ') : 'Vas solo'],
       j.pm && ['Tu PM', j.pm],
-      ['Cobrás', <><b style={{ fontFamily: MONO }}>{$(j.monto)}</b> · se paga el {j.sePaga}</>],
+      ['Cobrás', <><b style={{ fontFamily: MONO }}>{$(j.monto)}</b> · {conAcuerdo ? 'según tu acuerdo' : `se paga el ${j.sePaga}`}</>],
     ]} /></div>
     <div style={caja}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: T.ink }}>Qué vas a grabar</div>
@@ -350,6 +350,36 @@ function CargarGasto({ datos, inicial, onListo, onVolver }) {
   </div>
 }
 
+// La factura del mes: PDF o foto. Va a la misma carpeta de Drive donde administración guarda las que llegan por mail,
+// y queda linkeada en Pagos Staff. Si ya hay una, se ve y se puede cambiar.
+function SubirFactura({ m, viendoComo, cuandoCobra }) {
+  const [link, setLink] = useState(m.factura || ''), [subiendo, setSubiendo] = useState(false), [error, setError] = useState('')
+  async function elegir(e) {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return
+    setError(''); setSubiendo(true)
+    try {
+      const a = await leerArchivo(f)
+      const r = await fetch('/api/mi/factura', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mes: m.clave, archivo: a.base64, tipo: a.tipo }) })
+      const x = await r.json().catch(() => ({ error: r.status === 413 ? 'El archivo pesa demasiado. Subila en PDF.' : 'No se pudo subir. Probá de nuevo.' }))
+      if (!x.ok) setError(x.error || 'No se pudo subir. Probá de nuevo.')
+      else { setLink(x.link); try { sessionStorage.setItem('mi-escribi', String(Date.now())) } catch (err) { /* sin storage */ } }
+    } catch (err) { setError(err.message || 'Sin conexión. Probá de nuevo.') }
+    setSubiendo(false)
+  }
+  return <div style={{ ...caja, marginTop: 12 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: link ? T.pos : T.ink }}>{link ? `✓ Tu factura de ${m.nombre.toLowerCase()} está subida` : `Tu factura de ${m.nombre.toLowerCase()}`}</div>
+    <p style={{ ...sub, margin: 0, lineHeight: 1.5 }}>Tus trabajos: <b style={{ fontFamily: MONO, color: T.ink }}>{$(m.honorarios)}</b>{m.viaticos > 0 ? <> · viáticos: <b style={{ fontFamily: MONO, color: T.ink }}>{$(m.viaticos)}</b></> : null}. {cuandoCobra ? `Se sube del 10 al 15. Cobrás según tu acuerdo: ${cuandoCobra}` : `Se sube del 10 al 15 y se paga el ${m.sePaga.slice(0, 5)}.`}</p>
+    {link && <a href={link} target="_blank" rel="noreferrer" style={{ ...boton, marginTop: 10 }}>Ver la factura que subiste</a>}
+    {viendoComo
+      ? <p style={{ ...sub, marginTop: 8 }}>Estás mirando como equipo: desde acá no se suben facturas por otra persona.</p>
+      : <label style={{ ...boton, marginTop: 8, cursor: subiendo ? 'default' : 'pointer', ...(link ? { color: T.ink2, fontWeight: 500 } : { background: T.ink, borderColor: T.ink, color: '#fff' }) }}>
+          {subiendo ? 'Subiendo…' : link ? 'Cambiarla por otra' : 'Subir mi factura (PDF o foto)'}
+          <input type="file" accept="application/pdf,image/*" onChange={elegir} disabled={subiendo} style={{ display: 'none' }} />
+        </label>}
+    {error && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+  </div>
+}
+
 function MisGastos({ gastos, onCargar }) {
   return <>
     <div style={tit}>Gastos que pagaste vos</div>
@@ -453,9 +483,10 @@ function Facturar({ datos, gastos, onCargar }) {
       </div>}
     </div>
     {m.lineas.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      {todoPago ? <Pill tono="ok">Pagado</Pill> : m.pagado > 0 ? <><Pill tono="ok">pagado {$(m.pagado)}</Pill><Pill tono="falta">falta {$(m.pendiente)}</Pill></> : <Pill>se paga el {m.sePaga}, todo junto</Pill>}
+      {todoPago ? <Pill tono="ok">Pagado</Pill> : m.pagado > 0 ? <><Pill tono="ok">pagado {$(m.pagado)}</Pill><Pill tono="falta">falta {$(m.pendiente)}</Pill></> : <Pill>{datos.ficha?.acuerdo?.cuandoCobra ? 'se paga según tu acuerdo' : `se paga el ${m.sePaga}, todo junto`}</Pill>}
       {m.enCurso && m.faltanHacer > 0 && <Pill>faltan {m.faltanHacer} del mes</Pill>}
     </div>}
+    {m.lineas.length > 0 && !m.enCurso && <SubirFactura key={m.clave} m={m} viendoComo={!!datos.viendoComo} cuandoCobra={datos.ficha?.acuerdo?.cuandoCobra} />}
     {!todoPago && m.lineas.length > 0 && <p style={{ ...sub, marginTop: 10, lineHeight: 1.5 }}>Si algo no coincide con lo que hiciste, avisale a administración antes del 15: <a href="mailto:admin@somosmagma.com" style={{ color: T.ink }}>admin@somosmagma.com</a></p>}
     <MisGastos gastos={gastos} onCargar={onCargar} />
   </div>
@@ -510,9 +541,29 @@ function Ficha({ datos, onSalir }) {
     <div style={tit}>Tu trabajo</div>
     <div style={caja}><KV filas={[
       ['Hacés', f.rubro || '—'], f.zona && ['Zona', f.zona],
-      f.acuerdo && ['Acuerdo', <>{f.acuerdo.alcance}{f.acuerdo.minimo ? <><br /><span style={{ color: T.ink2 }}>{f.acuerdo.minimo} jornadas por mes · {$(f.acuerdo.precio)} cada una</span></> : null}</>],
       ['Con Magma', `${f.trabajos} trabajos${f.desde ? ` desde ${f.desde.slice(3)}` : ''}`],
     ]} /></div>
+    {f.acuerdo && <>
+      <div style={tit}>Tu acuerdo con Magma</div>
+      <div style={caja}><KV filas={[
+        f.acuerdo.alcance && ['Alcance', f.acuerdo.alcance],
+        f.acuerdo.modalidad && ['Modalidad', f.acuerdo.modalidad],
+        f.acuerdo.minimo > 0 && ['Mínimo', <>{f.acuerdo.minimo} por mes{f.acuerdo.montoMinimo > 0 ? <> · <b style={{ fontFamily: MONO }}>{$(f.acuerdo.montoMinimo)}</b></> : null}</>],
+        f.acuerdo.unidad && ['Qué cuenta', f.acuerdo.unidad],
+        f.acuerdo.precio > 0 && ['Cada una', <><b style={{ fontFamily: MONO }}>{$(f.acuerdo.precio)}</b>{f.acuerdo.duracion ? ` · ${f.acuerdo.duracion}` : ''}</>],
+        f.acuerdo.precioExtra > 0 && ['Las extra', <><b style={{ fontFamily: MONO }}>{$(f.acuerdo.precioExtra)}</b> cada una, pasado el mínimo</>],
+        f.acuerdo.horaAdicional && ['Hora adicional', f.acuerdo.horaAdicional],
+        f.acuerdo.viaticos && ['Viáticos', f.acuerdo.viaticos],
+        f.acuerdo.cancelacion && ['Cancelación', f.acuerdo.cancelacion],
+        f.acuerdo.entrega && ['Entrega', f.acuerdo.entrega],
+        f.acuerdo.equipos && ['Equipos', f.acuerdo.equipos],
+        f.acuerdo.cuandoCobra && ['Cuándo cobrás', f.acuerdo.cuandoCobra],
+        f.acuerdo.monotributo && ['Monotributo', f.acuerdo.monotributo],
+        (f.acuerdo.desde || f.acuerdo.hasta) && ['Vigencia', [f.acuerdo.desde && `desde ${f.acuerdo.desde}`, f.acuerdo.hasta && `hasta ${f.acuerdo.hasta}`].filter(Boolean).join(' ')],
+      ]} />
+      {f.acuerdo.doc && !/claude\.ai\/code\//.test(f.acuerdo.doc) && <a href={f.acuerdo.doc} target="_blank" rel="noreferrer" style={{ ...boton, marginTop: 12 }}>Ver el acuerdo completo</a>}
+      </div>
+    </>}
     <Historial datos={datos} />
     <div style={tit}>Para pagarte</div>
     <div style={caja}><KV filas={[
@@ -554,7 +605,7 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
   return <div style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
     <div style={{ flex: 1, padding: '18px 16px 96px' }}>
       {gasto !== null ? <CargarGasto datos={datos} inicial={gasto} onListo={t => setNuevos(n => [t, ...n])} onVolver={() => { setGasto(null); arriba() }} />
-        : job ? <Trabajo j={conRespuesta(job)} notas={notasDe(job)} viendoComo={!!datos.viendoComo} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} onContestar={contestar} onNota={sumarNota} />
+        : job ? <Trabajo j={conRespuesta(job)} notas={notasDe(job)} viendoComo={!!datos.viendoComo} conAcuerdo={!!datos.ficha?.acuerdo?.cuandoCobra} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} onContestar={contestar} onNota={sumarNota} />
         : tab === 'agenda' ? <Agenda datos={vista} dias={dias} viendoComo={!!datos.viendoComo} onAbrir={j => { setJob(j); arriba() }} onCambioDia={(k, marcado) => setDias(d => marcado ? [...d.filter(x => x !== k), k] : d.filter(x => x !== k))} />
         : tab === 'facturar' ? <Facturar datos={datos} gastos={gastos} onCargar={() => abrirGasto('')} />
         : tab === 'entregas' ? <Entregas datos={datos} notasDe={notasDe} viendoComo={!!datos.viendoComo} onNota={sumarNota} />
