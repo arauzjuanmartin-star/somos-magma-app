@@ -480,6 +480,28 @@ function Entregas({ datos, notasDe, viendoComo, onNota }) {
   </div>
 }
 
+// Cuánto laburó con Magma: por año y, abriendo el año, mes a mes. Jornadas y lo que cobró por ellas.
+function Historial({ datos }) {
+  const anios = datos.anios || [], hist = datos.historial || []
+  const [abierto, setAbierto] = useState(() => anios[0]?.anio || null)
+  if (!anios.length) return null
+  return <>
+    <div style={tit}>Tu historial</div>
+    {anios.map(a => <div key={a.anio} style={{ ...caja, padding: '11px 14px' }}>
+      <button onClick={() => setAbierto(abierto === a.anio ? null : a.anio)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', width: '100%', border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: T.ink }}>
+        <span><b style={{ fontSize: 15 }}>{a.anio}</b><span style={{ ...sub, display: 'inline', marginLeft: 8 }}>{a.jornadas} {a.jornadas === 1 ? 'jornada' : 'jornadas'} en {a.meses} {a.meses === 1 ? 'mes' : 'meses'}</span></span>
+        <b style={{ fontFamily: MONO, fontWeight: 600, fontSize: 14 }}>{$(a.monto)}</b>
+      </button>
+      {abierto === a.anio && <div style={{ marginTop: 8 }}>
+        {hist.filter(h => h.anio === a.anio).map(h => <div key={h.clave} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, padding: '7px 0', borderTop: `1px solid ${T.border}`, fontSize: 13, alignItems: 'baseline' }}>
+          <span style={{ color: T.ink }}>{h.mes}<span style={{ display: 'block', color: T.ink2, fontSize: 12 }}>{h.jornadas} {h.jornadas === 1 ? 'jornada' : 'jornadas'}{h.rodajes !== h.jornadas ? ` (${h.rodajes} de rodaje)` : ''} · {h.clientes} {h.clientes === 1 ? 'cliente' : 'clientes'}</span></span>
+          <b style={{ fontFamily: MONO, fontWeight: 600, fontSize: 13, color: T.ink }}>{$(h.monto)}</b>
+        </div>)}
+      </div>}
+    </div>)}
+  </>
+}
+
 function Ficha({ datos, onSalir }) {
   const f = datos.ficha
   return <div>
@@ -489,8 +511,9 @@ function Ficha({ datos, onSalir }) {
     <div style={caja}><KV filas={[
       ['Hacés', f.rubro || '—'], f.zona && ['Zona', f.zona],
       f.acuerdo && ['Acuerdo', <>{f.acuerdo.alcance}{f.acuerdo.minimo ? <><br /><span style={{ color: T.ink2 }}>{f.acuerdo.minimo} jornadas por mes · {$(f.acuerdo.precio)} cada una</span></> : null}</>],
-      ['Con Magma', `${f.trabajos} trabajos cargados`],
+      ['Con Magma', `${f.trabajos} trabajos${f.desde ? ` desde ${f.desde.slice(3)}` : ''}`],
     ]} /></div>
+    <Historial datos={datos} />
     <div style={tit}>Para pagarte</div>
     <div style={caja}><KV filas={[
       ['Banco', f.banco || '—'], ['Alias', <span style={{ fontFamily: MONO }}>{f.alias || 'sin cargar'}</span>],
