@@ -4,8 +4,8 @@ import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
-import { acuerdosVigentes, avisoJornada, esJornada } from '../lib/acuerdos'
-import { repartoDelMes } from '../lib/jornadas'
+import { acuerdosVigentes, avisoJornada, esJornada, acuerdoAplica } from '../lib/acuerdos'
+import { repartoDelMes, previasDelAcuerdo } from '../lib/jornadas'
 import { leerDisponibilidad, noPuedenDe } from '../lib/disponibilidad.mjs'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
 import { T, MONO, useEsCelular } from '../lib/ui'
@@ -2650,11 +2650,22 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     return Object.fromEntries(repartoDelMes(otros, feEv.getMonth()+1, feEv.getFullYear()).map(r=>[r.key, r.jornadas]))
   }, [proyectos, feEv, num])
   const keyDe = nombre => canonKey(canonStaff(nombre))
+  const otrosProy = useMemo(()=>proyectos.filter(x=>String(x['N° presupuesto']||'').trim()!==String(num||'').trim()), [proyectos, num])
+  // Con acuerdo, el número que importa es cuántas jornadas DEL ACUERDO van antes de esta, en orden de fecha: las
+  // primeras 10 de Lucho valen $190.000 y de la 11 en adelante $180.000. Solo cuentan los trabajos donde el acuerdo
+  // vale (el suyo es "sin Austral": antes las de Austral le gastaban el mínimo y le marcaba extra antes de tiempo).
+  const previasAcuerdo = useCallback((a, lista, i, quien) => {
+    const fL = parseD(lista[i].fecha) || feEv, k = keyDe(quien)
+    const enEsteForm = lista.filter((y,z)=>{ if(z===i || keyDe(y.quien)!==k || !esJornada(y.pedido)) return false
+      const fy = parseD(y.fecha) || feEv; return fy < fL || (fy.getTime()===fL.getTime() && z<i) }).length
+    return previasDelAcuerdo(otrosProy, a, fL, num) + enEsteForm
+  // eslint-disable-next-line
+  }, [otrosProy, feEv, num])
   // Por línea: cuántas lleva esa persona contando las de arriba en este mismo formulario.
   const avisos = useMemo(()=>{
     if(!feEv) return []
     const corridas={}
-    return items.map(it=>{
+    return items.map((it,i)=>{
       const nombre=canonStaff(it.quien)
       if(!nombre || esMagma(nombre) || !esJornada(it.pedido)) return null
       const k=canonKey(nombre)
@@ -2662,9 +2673,12 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       corridas[k]=(corridas[k]||0)+1
       const a=acDe(it.quien)
       // Sin acuerdo no hay mínimo ni tarifa pactada: solo el contador.
-      return a ? avisoJornada(a, previas) : {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true}
+      if(!a) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true}
+      // Con acuerdo pero en un trabajo que el acuerdo no cubre: no gasta jornadas del mínimo ni lleva su tarifa.
+      if(!acuerdoAplica(a, p)) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true, fuera:true}
+      return avisoJornada(a, previasAcuerdo(a, items, i, it.quien))
     })
-  }, [items, acDe, previasSheet, feEv])
+  }, [items, acDe, previasSheet, feEv, previasAcuerdo, p])
 
   // ── Qué contestó cada uno desde Mi Magma ────────────────────────────────────
   // "Confirmó" en verde, "no puede" en rojo (sigue cargado a propósito: lo saca el PM poniendo a otro),
@@ -2688,10 +2702,8 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const setQuien=(i,val)=>setItems(it=>it.map((x,j)=>{
     if(j!==i) return x
     const a=acDe(val)
-    if(!a || Number(x.precio)>0 || !esJornada(x.pedido)) return {...x, quien:val}
-    const k=keyDe(val)
-    const previas=(previasSheet[k]||0)+it.filter((y,z)=>z<j && keyDe(y.quien)===k && esJornada(y.pedido)).length
-    return {...x, quien:val, precio:avisoJornada(a, previas).precio}
+    if(!a || Number(x.precio)>0 || !esJornada(x.pedido) || !acuerdoAplica(a, p)) return {...x, quien:val}
+    return {...x, quien:val, precio:avisoJornada(a, previasAcuerdo(a, it, j, val)).precio}
   }))
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
   const hOrig=parseHorarioStr(presu?.['Horario'])
@@ -2767,7 +2779,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         <div>
           <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>setQuien(i,e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
           {avisos[i] && (avisos[i].soloContador
-            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}</span>
+            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · este trabajo queda fuera de su acuerdo':''}</span>
             : <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
                 {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
               </span>)}

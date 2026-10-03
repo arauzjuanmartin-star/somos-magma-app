@@ -20,7 +20,7 @@ const objProy=v=>{const h=v[0]||[];return v.slice(1).filter(r=>r.some(c=>c!=='')
   h.forEach((k,i)=>{ if(k==='Staff'){st++;o['Staff '+st]=r[i]||''} else if(k==='Precio'){pc++;o['Precio '+pc]=r[i]||''} else o[k]=r[i]||'' })
   return o })}
 
-const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['ACUERDOS!A:U','PROYECTOS!A:EV']})
+const R=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['ACUERDOS!A:W','PROYECTOS!A:EV']})
 const acuerdos=obj(R.data.valueRanges[0].values||[])
 const proyectos=objProy(R.data.valueRanges[1].values||[])
 

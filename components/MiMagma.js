@@ -545,6 +545,14 @@ function Ficha({ datos, onSalir }) {
     ]} /></div>
     {f.acuerdo && <>
       <div style={tit}>Tu acuerdo con Magma</div>
+      {f.acuerdo.contador && f.acuerdo.minimo > 0 && <div style={caja}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>{f.acuerdo.contador.mes}</span>
+          <b style={{ fontFamily: MONO, fontWeight: 600, fontSize: 19, color: T.ink }}>{f.acuerdo.contador.van} de {f.acuerdo.minimo}</b>
+        </div>
+        <div style={{ height: 8, borderRadius: 8, background: T.surfaceAlt, marginTop: 8, overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.round(f.acuerdo.contador.van / f.acuerdo.minimo * 100))}%`, background: f.acuerdo.contador.van >= f.acuerdo.minimo ? T.pos : T.ink }} /></div>
+        <p style={{ ...sub, marginTop: 8, lineHeight: 1.5 }}>Jornadas de tu acuerdo cargadas este mes ({f.acuerdo.contador.hechas} ya hechas).{f.acuerdo.contador.extras > 0 ? ` ${f.acuerdo.contador.extras} ${f.acuerdo.contador.extras === 1 ? 'es extra' : 'son extra'}, a ${$(f.acuerdo.precioExtra)} cada una.` : f.acuerdo.contador.van < f.acuerdo.minimo ? ` Te faltan ${f.acuerdo.minimo - f.acuerdo.contador.van} para llegar al mínimo.` : ' Llegaste al mínimo.'}</p>
+      </div>}
       <div style={caja}><KV filas={[
         f.acuerdo.alcance && ['Alcance', f.acuerdo.alcance],
         f.acuerdo.modalidad && ['Modalidad', f.acuerdo.modalidad],
