@@ -12,7 +12,7 @@
 //
 // Subcomponentes a nivel de módulo a propósito (si van adentro, React los remonta).
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { T, MONO } from '../lib/ui'
 
 const $ = n => '$' + Math.round(n || 0).toLocaleString('es-AR')
@@ -53,6 +53,67 @@ function Tarjeta({ j, onAbrir }) {
       </span>
     </span>
   </button>
+}
+
+// Avisos al celular (push). Tres estados: no se puede en este navegador (iPhone sin "agregar a pantalla de inicio",
+// o navegador viejo) · se puede y no está activado · activado. La suscripción vive en el navegador; en el sheet queda
+// una copia por celular (solapa PUSH) para poder mandarle.
+const b64aBytes = b64 => { const s = (b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(s); return Uint8Array.from([...raw].map(c => c.charCodeAt(0))) }
+function usarPush(push) {
+  const [estado, setEstado] = useState('viendo')   // viendo · nohay · ios · apagado · prendido · bloqueado
+  const [sub, setSub] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      try {
+        if (!push?.disponible || typeof window === 'undefined') return vivo && setEstado('nohay')
+        const iphone = /iPhone|iPad/.test(navigator.userAgent), instalada = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return vivo && setEstado(iphone && !instalada ? 'ios' : 'nohay')
+        if (Notification.permission === 'denied') return vivo && setEstado('bloqueado')
+        const reg = await navigator.serviceWorker.ready
+        const s = await reg.pushManager.getSubscription()
+        if (!vivo) return
+        setSub(s); setEstado(s ? 'prendido' : 'apagado')
+      } catch (e) { vivo && setEstado('nohay') }
+    })()
+    return () => { vivo = false }
+  }, [push?.disponible])
+  async function prender() {
+    setEstado('viendo')
+    try {
+      const p = await Notification.requestPermission()
+      if (p !== 'granted') return setEstado(p === 'denied' ? 'bloqueado' : 'apagado')
+      const reg = await navigator.serviceWorker.ready
+      const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(push.clave) })
+      const r = await fetch('/api/mi/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'alta', suscripcion: s.toJSON(), navegador: navigator.userAgent }) }).then(x => x.json())
+      if (!r.ok) { await s.unsubscribe().catch(() => {}); setEstado('apagado'); return r.error || 'No se pudo activar' }
+      setSub(s); setEstado('prendido'); return ''
+    } catch (e) { setEstado('apagado'); return 'No se pudo activar en este navegador.' }
+  }
+  async function apagar() {
+    try { const ep = sub?.endpoint; await sub?.unsubscribe(); await fetch('/api/mi/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', endpoint: ep }) }) } catch (e) { /* nada */ }
+    setSub(null); setEstado('apagado')
+  }
+  return { estado, prender, apagar }
+}
+function AvisosCelular({ push, compacto, viendoComo }) {
+  const { estado, prender, apagar } = usarPush(push)
+  const [error, setError] = useState('')
+  if (viendoComo || estado === 'nohay' || estado === 'viendo') return null
+  if (compacto && estado === 'prendido') return null
+  const texto = {
+    ios: <>Para recibir avisos en el iPhone, primero agregá Mi Magma a la pantalla de inicio: tocá <b>Compartir</b> (el cuadrado con la flecha) → <b>Agregar a pantalla de inicio</b>. Después entrá desde el ícono y activalos acá.</>,
+    apagado: 'Cuando te sumen a un trabajo o se entregue algo que filmaste, te llega un aviso al celular aunque la app esté cerrada.',
+    prendido: 'Activados en este celular. Te avisamos cuando te sumen a un trabajo o se entregue algo que filmaste.',
+    bloqueado: 'Este navegador tiene los avisos bloqueados para Mi Magma. Se destraban desde la configuración del sitio (el candado al lado de la dirección).',
+  }[estado]
+  return <div style={{ ...caja, ...(compacto ? { borderColor: T.ink } : {}) }}>
+    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: T.ink }}>{estado === 'prendido' ? '✓ Avisos en este celular' : 'Avisos en este celular'}</div>
+    <p style={{ ...sub, margin: 0, lineHeight: 1.5 }}>{texto}</p>
+    {estado === 'apagado' && <button onClick={async () => setError(await prender())} style={{ ...boton, marginTop: 10, background: T.ink, borderColor: T.ink, color: '#fff' }}>Activar avisos</button>}
+    {estado === 'prendido' && !compacto && <button onClick={apagar} style={{ ...boton, marginTop: 10, color: T.ink2, fontWeight: 500 }}>Apagar en este celular</button>}
+    {error && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+  </div>
 }
 
 // Una nota para la editora: lo que le dijeron en el lugar, lo que tiene que estar sí o sí, qué cubrió. Va a la bitácora de
@@ -365,6 +426,7 @@ function Agenda({ datos, dias, viendoComo, onAbrir, onCambioDia }) {
     {!datos.proximos.length && <div style={{ ...caja, marginTop: 18, color: T.ink2, fontSize: 13, lineHeight: 1.55 }}>Cuando te convoquen para un trabajo va a aparecer acá, con el horario, el lugar y qué hay que grabar.</div>}
     <div style={tit}>Días que no podés</div>
     <DiasNoPuedo datos={datos} dias={dias} viendoComo={viendoComo} onAbrir={onAbrir} onCambio={onCambioDia} />
+    <AvisosCelular push={datos.push} viendoComo={viendoComo} compacto />
   </div>
 }
 
@@ -409,8 +471,10 @@ function Entregas({ datos, notasDe, viendoComo, onNota }) {
     {datos.entregas.map(e => <div key={e.num} style={caja}>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink }}>{e.cliente}</div>
       <p style={{ ...sub, margin: '1px 0 0' }}>{e.proyecto} · {e.fecha.slice(0, 5)}{e.piezas > 1 ? ` · ${e.listas} de ${e.piezas} piezas listas` : ''}</p>
-      <div style={{ marginTop: 8 }}><Pill tono={tono[e.etapa]}>{e.texto}</Pill></div>
+      <div style={{ marginTop: 8 }}><Pill tono={tono[e.etapa]}>{e.texto}</Pill>{e.etapa !== 'entregado' && e.entregadas.length > 0 && <span style={{ fontSize: 12, color: T.ink2, marginLeft: 8 }}>ya salió: {e.entregadas.join(', ')}</span>}</div>
       {e.link && <a href={e.link} target="_blank" rel="noreferrer" style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff', marginTop: 10 }}>Ver cómo quedó</a>}
+      {e.links.filter(x => x.link !== e.link).map((x, k) => <a key={k} href={x.link} target="_blank" rel="noreferrer" style={{ ...boton, marginTop: 8 }}>Ver {x.pieza}</a>)}
+      {e.etapa === 'entregado' && !e.link && !e.links.length && <p style={{ ...sub, marginTop: 8 }}>Entregado, pero el link todavía no está cargado. Pedíselo a tu PM.</p>}
       {(e.puedeNota || notasDe(e).length > 0) && <NotaEditora j={e} notas={notasDe(e)} viendoComo={viendoComo} onNota={onNota} compacto />}
     </div>)}
   </div>
@@ -433,6 +497,8 @@ function Ficha({ datos, onSalir }) {
       ['CBU', <span style={{ fontFamily: MONO }}>{f.cbu || 'sin cargar'}</span>], ['CUIT', <span style={{ fontFamily: MONO }}>{f.cuit || 'sin cargar'}</span>],
       ['Mail', f.mail], f.celular && ['Celular', <span style={{ fontFamily: MONO }}>{f.celular}</span>],
     ]} /></div>
+    <div style={tit}>Avisos</div>
+    <AvisosCelular push={datos.push} viendoComo={!!datos.viendoComo} />
     <p style={{ ...sub, lineHeight: 1.5 }}>Se ve solo el final de cada dato, para que confirmes que es el tuyo. Si algo está mal o cambió, escribile a <a href="mailto:admin@somosmagma.com" style={{ color: T.ink }}>admin@somosmagma.com</a>: los datos bancarios no se cambian desde acá.</p>
     {onSalir && <button onClick={onSalir} style={{ ...boton, marginTop: 18, color: T.ink2, fontWeight: 500 }}>Cerrar sesión</button>}
   </div>

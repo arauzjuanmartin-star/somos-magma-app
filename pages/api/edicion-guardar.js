@@ -6,6 +6,9 @@ import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
+import { darFinalesAlStaff } from '../../lib/finales'
+import { mailsDelStaff } from '../../lib/finales'
+import { mandarPush } from '../../lib/push'
 import { ultimaVersion } from '../../lib/edicion-version'
 import { canonStaff } from '../../lib/staff'
 
@@ -162,7 +165,30 @@ export default async function handler(req, res) {
       } catch (e) { console.error('aviso:', e.message) }
     }
 
-    res.json({ ok: true, cambios, aviso })
+    // La pieza se cerró: el que la filmó tiene que poder ver cómo quedó. Lectura sobre la carpeta Finales del
+    // proyecto para todo su staff (Mi Magma → "Cómo quedó" muestra el link). Nunca frena el guardado.
+    let finales = null
+    if (cambioEstado && estaCerrado(campos.Estado) && !estaCerrado(actual[cE('Estado')])) {
+      try {
+        const nro = String(actual[cE('N° presupuesto')] || '').trim()
+        const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['PROYECTOS!A:EW', 'RRHH!A:Z'] })
+        const [pv, rv] = b.data.valueRanges.map(x => x.values || [])
+        const obj = (h, r) => Object.fromEntries(h.map((k, i) => [k, r[i] ?? '']))
+        const proyecto = pv.slice(1).map(r => obj(pv[0], r)).find(p => String(p['N° presupuesto'] || '').trim() === nro)
+        const rrhhObj = rv.slice(1).map(r => obj(rv[0], r))
+        if (proyecto) {
+          finales = await darFinalesAlStaff({ proyecto, rrhh: rrhhObj })
+          // Y el aviso al celular de los que filmaron: "ya se entregó, mirá cómo quedó".
+          try {
+            const quienes = mailsDelStaff(proyecto, rrhhObj).con.map(x => x.nombre)
+            const titulo = [String(proyecto.Cliente || proyecto.Agencia || '').trim(), String(proyecto.Proyecto || '').trim()].filter(Boolean).join(' · ')
+            if (quienes.length) finales.alCelular = (await mandarPush({ sheets, SHEET_ID, personas: quienes, titulo: `Se entregó: ${titulo}`, cuerpo: `${String(actual[cE('Entregable')] || '').replace(/^[^\p{L}\p{N}]+/u, '').trim()} ya está en manos del cliente. Mirá cómo quedó.`, url: '/mi?tab=entregas', tag: `entrega-${nro}` })).mandados
+          } catch (e) { console.error('push entrega:', e.message) }
+        }
+      } catch (e) { console.error('finales:', e.message); finales = { error: e.message } }
+    }
+
+    res.json({ ok: true, cambios, aviso, finales })
   } catch (e) {
     console.error('edicion-guardar:', e)
     res.status(500).json({ error: e.message })

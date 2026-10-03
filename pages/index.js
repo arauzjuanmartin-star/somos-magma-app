@@ -2722,7 +2722,8 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       // Decir a quién le llegó el mail: el aviso sale solo y si no se ve, nadie
       // sabe si el freelancer se enteró o hay que escribirle igual.
       const avis = (j?.avisados||[]).length ? ` · avisados por mail: ${j.avisados.join(', ')}` : ''
-      showToast(`#${num} · staff guardado${avis}`)
+      const cel = (j?.alCelular||[]).length ? ` · al celular: ${j.alCelular.map(n=>String(n).split(' ')[0]).join(', ')}` : ''
+      showToast(`#${num} · staff guardado${avis}${cel}`)
       if(j?.sinMail?.length) showToast(`Sin mail en RRHH, avisales vos: ${j.sinMail.join(', ')}`,'err')
       setSaving(false)
       if(onRefresh) onRefresh()

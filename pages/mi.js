@@ -16,8 +16,10 @@ export default function Mi() {
   const [como, setComo] = useState('')   // solo equipo: a quién está mirando
   const [error, setError] = useState('')
   // /mi?t=2341 (desde el mail "te sumamos"): abre ese trabajo directo, para confirmar con un toque.
-  const [abrir, setAbrir] = useState(null)
-  useEffect(() => { try { const t = new URLSearchParams(window.location.search).get('t'); if (t) { setAbrir(t); window.history.replaceState({}, '', '/mi') } } catch (e) { /* nada */ } }, [])
+  const [abrir, setAbrir] = useState(null), [tab, setTab] = useState('agenda')
+  useEffect(() => { try { const q = new URLSearchParams(window.location.search), t = q.get('t'), tb = q.get('tab'); if (t) setAbrir(t); if (tb) setTab(tb); if (t || tb) window.history.replaceState({}, '', '/mi') } catch (e) { /* nada */ } }, [])
+  // El service worker de los avisos push (public/sw.js). Si el navegador no lo soporta, no pasa nada.
+  useEffect(() => { try { if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {}) } catch (e) { /* nada */ } }, [])
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -38,6 +40,12 @@ export default function Mi() {
       <title>Mi Magma</title>
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       <meta name="theme-color" content={T.bg} />
+      {/* "Agregar a pantalla de inicio": ícono Magma, pantalla completa, y en iPhone es lo que habilita los avisos. */}
+      <link rel="manifest" href="/manifest.json" />
+      <link rel="apple-touch-icon" href="/icons/icono-180.png" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+      <meta name="apple-mobile-web-app-title" content="Mi Magma" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Azeret+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -61,7 +69,7 @@ export default function Mi() {
     {status === 'loading' || (status === 'authenticated' && !r && !error)
       ? <Centro>Cargando…</Centro>
       : error ? <Centro>{error}<br /><button onClick={() => signOut({ callbackUrl: '/login' })} style={{ marginTop: 16, padding: '9px 16px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer' }}>Entrar con otra cuenta</button></Centro>
-      : r?.ok ? <MiMagma key={r.quien} datos={r} abrirNum={abrir} onSalir={r.viendoComo ? null : () => signOut({ callbackUrl: '/login' })} />
+      : r?.ok ? <MiMagma key={r.quien} datos={r} abrirNum={abrir} tabInicial={tab} onSalir={r.viendoComo ? null : () => signOut({ callbackUrl: '/login' })} />
       : <Centro>{r?.error || 'Elegí a quién querés ver'}</Centro>}
   </>
 }

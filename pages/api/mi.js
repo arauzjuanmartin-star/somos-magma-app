@@ -3,6 +3,7 @@ import { authOptions, ALLOWED_MAILS, READONLY_MAILS } from './auth/[...nextauth]
 import { getAllData } from '../../lib/sheets'
 import { modulosDe } from '../../lib/roles'
 import { misDatos, personaPorMail } from '../../lib/mi-magma'
+import { hayPush, clavePublica } from '../../lib/push'
 
 // "Mi Magma": lo de UNA persona, y nada más. No usa requireAuth a propósito: ese helper
 // es la puerta del equipo y rechaza a cualquiera que no esté en la lista fija — que es
@@ -44,7 +45,8 @@ export default async function handler(req, res) {
 
     const mio = misDatos(data, fila['Nombre Apellido'])
     if (!mio) return res.status(403).json({ ok: false, error: 'No hay nada para mostrar' })
-    res.status(200).json({ ok: true, ...mio, viendoComo: como && esEquipo ? fila['Nombre Apellido'] : undefined, personas })
+    // Para activar los avisos en el celular hace falta la clave pública (no es secreta: identifica a Magma ante Google/Apple).
+    res.status(200).json({ ok: true, ...mio, push: { disponible: hayPush(), clave: clavePublica() }, viendoComo: como && esEquipo ? fila['Nombre Apellido'] : undefined, personas })
   } catch (err) {
     console.error(err)
     res.status(500).json({ ok: false, error: 'No pudimos leer los datos. Probá de nuevo en un minuto.' })

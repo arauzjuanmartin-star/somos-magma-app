@@ -1,6 +1,8 @@
 import { google } from 'googleapis'
 import { requireAuth } from '../../lib/auth-helpers'
 import { armarAvisoStaff, mandarAviso } from '../../lib/staff-avisos'
+import { mandarPush } from '../../lib/push'
+import { fechaLarga } from '../../lib/staff-avisos'
 
 const SHEET_ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 
@@ -222,7 +224,7 @@ export default async function handler(req, res) {
     // 5. Avisarle a cada uno: qué hace, cuándo, dónde, cuánto cobra y cuándo.
     // Va DESPUÉS de escribir el sheet y nunca frena la respuesta: si un mail falla,
     // la asignación ya quedó guardada igual.
-    const avisados = [], sinMail = []
+    const avisados = [], alCelular = [], sinMail = []
     if (aAvisar.length) {
       try {
         // RRHH entera (no solo A:D): "Acceso Mi Magma" vive en la col R y decide si el mail lleva el botón de confirmar.
@@ -261,6 +263,15 @@ export default async function handler(req, res) {
           if (!aviso) { sinMail.push(a.freelancer); continue }
           const env = await mandarAviso(aviso)
           if (env.ok) avisados.push(a.freelancer); else sinMail.push(a.freelancer)
+          // Y al celular, si lo activó desde Mi Magma: un toque y confirma. Solo para trabajos que todavía no pasaron.
+          const fechaDe = a.fecha || fechaEvento, pasado = (() => { const m = String(fechaDe||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (!m) return false; let y=+m[3]; if (y<100) y+=2000; return new Date(y, +m[2]-1, +m[1]) < new Date(new Date().setHours(0,0,0,0)) })()
+          if (!pasado && tieneMiMagma(a.freelancer)) {
+            try {
+              const r = await mandarPush({ sheets, SHEET_ID, personas: [a.freelancer], titulo: a.motivo === 'cambio' ? `Cambió lo acordado: #${num}` : `Te sumamos: ${[trabajo.cliente || trabajo.agencia, trabajo.proyecto].filter(Boolean).join(' · ')}`,
+                cuerpo: `${String(a.servicio||'').replace(/^[^\p{L}\p{N}]+/u, '').trim()} · ${fechaLarga(fechaDe)}${trabajo.horario ? ' · ' + trabajo.horario : ''}. ¿Vas? Confirmalo con un toque.`, url: `/mi?t=${encodeURIComponent(String(num))}`, tag: `trabajo-${num}` })
+              if (r.mandados.length) alCelular.push(a.freelancer)
+            } catch (e) { console.error('push staff:', e.message) }
+          }
         }
       } catch (e) { console.error('aviso staff:', e.message) }
     }
@@ -275,7 +286,7 @@ export default async function handler(req, res) {
       })
     } catch (e) {}
 
-    res.json({ ok: true, pagosNuevos: psNuevas.length, pagosActualizados: psUpdates.length, pagosBorrados: filasABorrar.length, avisados, sinMail })
+    res.json({ ok: true, pagosNuevos: psNuevas.length, pagosActualizados: psUpdates.length, pagosBorrados: filasABorrar.length, avisados, sinMail, alCelular })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })

@@ -334,6 +334,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       if (!j.ok) return showToast(j.error || 'No se pudo guardar', 'err')
       if (j.aviso?.avisado) showToast(`Le llegó el mail a ${nombreDe(j.aviso.avisado)} ✓`)
       else if (extra?.nota) showToast('Anotado, pero no salió mail: nadie asignado o sin mail en RRHH', 'err')
+      // Al cerrar la pieza, el staff del trabajo pasa a ver la carpeta Finales desde Mi Magma.
+      if (j.finales?.sinCarpeta) showToast('Terminado, pero el proyecto no tiene carpeta Finales: el que filmó no va a poder ver la entrega', 'err')
+      else if (j.finales?.ok?.length) showToast(`Ya pueden ver la entrega: ${j.finales.ok.map(nombreDe).join(', ')} ✓`)
+      if (j.finales?.sinMail?.length) showToast(`Sin mail en RRHH, no ven la entrega: ${j.finales.sinMail.join(', ')}`, 'err')
     } catch (e) { showToast('Error de conexión', 'err') }
   }
 
