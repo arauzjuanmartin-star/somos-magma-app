@@ -7,7 +7,8 @@
 //   · cargar un gasto de un trabajo con la foto del ticket (/api/mi/ticket → solapa TICKETS; lo aprueba administración)
 //   · "Confirmo" / "No puedo" en la ficha de un trabajo, y "este día no puedo" en el calendario de la agenda
 //     (/api/mi/disponibilidad → solapa DISPONIBILIDAD; un "no puedo" le llega por mail al PM, la app no lo saca sola)
-// La nota al editor y las referencias vienen en la etapa siguiente.
+//   · una nota para la editora desde la ficha del trabajo o desde "Cómo quedó" (/api/mi/nota → bitácora de EDICION + mail)
+// Las referencias ("para el que filma") vienen después.
 //
 // Subcomponentes a nivel de módulo a propósito (si van adentro, React los remonta).
 
@@ -54,12 +55,58 @@ function Tarjeta({ j, onAbrir }) {
   </button>
 }
 
+// Una nota para la editora: lo que le dijeron en el lugar, lo que tiene que estar sí o sí, qué cubrió. Va a la bitácora de
+// edición del trabajo y le llega por mail a la editora (o al PM si todavía no hay). Se le muestran las notas que ya dejó.
+function NotaEditora({ j, notas, viendoComo, onNota, compacto }) {
+  const [abierto, setAbierto] = useState(false), [texto, setTexto] = useState(''), [mandando, setMandando] = useState(false), [error, setError] = useState(''), [listo, setListo] = useState('')
+  async function mandar() {
+    if (texto.trim().length < 3) return setError('Escribí la nota')
+    setError(''); setMandando(true)
+    try {
+      const x = await fetch('/api/mi/nota', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num: j.num, slot: j.slot, texto }) }).then(r => r.json())
+      if (!x.ok) { setError(x.error || 'No se pudo guardar. Probá de nuevo.'); setMandando(false); return }
+      try { sessionStorage.setItem('mi-escribi', String(Date.now())) } catch (e) { /* sin storage */ }
+      onNota(j.num, x.nota); setTexto(''); setAbierto(false); setListo(x.aQuien === 'pm' ? 'Quedó en el tablero. Todavía no hay editora: le llegó a tu PM.' : 'Quedó en el tablero y le llegó a la editora.')
+    } catch (e) { setError('Sin conexión. Probá de nuevo.') }
+    setMandando(false)
+  }
+  return <div style={compacto ? { marginTop: 10 } : caja}>
+    {!compacto && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: T.ink }}>Para la editora</div>}
+    {notas.length > 0 && <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
+      {notas.map((n, k) => <div key={k} style={{ fontSize: 13, lineHeight: 1.45, color: T.ink, background: T.surfaceAlt, borderRadius: 8, padding: '8px 10px' }}><span style={{ fontFamily: MONO, fontSize: 11, color: T.ink3 }}>{n.cuando}</span> · {n.texto}</div>)}
+    </div>}
+    {!j.puedeNota
+      ? <p style={{ ...sub, margin: 0 }}>Cuando este trabajo tenga su edición armada vas a poder dejarle una nota a la editora acá.</p>
+      : viendoComo ? <p style={{ ...sub, margin: 0 }}>Estás mirando como equipo: desde acá no se escriben notas por otra persona.</p>
+      : !abierto
+        ? compacto
+          // En "Cómo quedó" hay muchos trabajos: acá es un link chico, no una caja entera por cada uno.
+          ? <p style={{ ...sub, margin: 0 }}>{listo ? listo + ' ' : ''}<button onClick={() => { setAbierto(true); setListo('') }} style={{ border: 0, background: 'transparent', color: T.ink, fontWeight: 600, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, textDecoration: 'underline' }}>{notas.length ? 'Dejar otra nota' : '＋ Nota para la editora'}</button></p>
+          : <>
+            <button onClick={() => { setAbierto(true); setListo('') }} style={boton}>{notas.length ? 'Dejar otra nota' : 'Dejar una nota para la editora'}</button>
+            <p style={{ ...sub, marginTop: 7 }}>{listo || 'Algo que te dijeron en el lugar, lo que tiene que estar sí o sí, qué cubriste y qué no.'}</p>
+          </>
+        : <>
+          <textarea value={texto} onChange={e => setTexto(e.target.value)} maxLength={500} rows={3} placeholder="Ej: la marca pidió que el logo del stand se vea entero. No pude grabar el cierre, se cortó antes." style={{ ...campo, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            <button onClick={() => { setAbierto(false); setTexto(''); setError('') }} disabled={mandando} style={boton}>Cancelar</button>
+            <button onClick={mandar} disabled={mandando} style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff' }}>{mandando ? 'Mandando…' : 'Mandar'}</button>
+          </div>
+          <p style={{ ...sub, marginTop: 7 }}>Queda en la bitácora del trabajo y le llega por mail a la editora.</p>
+        </>}
+    {error && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
+  </div>
+}
+
 // Contestar sobre un trabajo. "Confirmo" es un toque. "No puedo" pide (opcional) por qué, y avisa que el PM se entera
 // ya: la persona sigue cargada hasta que el PM ponga a otro, así nadie queda afuera por un toque de más.
 function Confirmar({ j, viendoComo, onContestar }) {
   const [abierto, setAbierto] = useState(false), [motivo, setMotivo] = useState(''), [mandando, setMandando] = useState(false), [error, setError] = useState('')
   const r = j.respuesta
+  const yaConfirmo = r?.que === 'confirmo'
   async function mandar(accion) {
+    // Bajarse después de confirmar es otra cosa: el PM ya cuenta con esa persona. Sin motivo no se manda.
+    if (accion === 'nopuedo' && yaConfirmo && motivo.trim().length < 3) return setError('Ya habías confirmado: escribí qué pasó, el PM lo va a leer.')
     setError(''); setMandando(true)
     try {
       const x = await fetch('/api/mi/disponibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion, num: j.num, slot: j.slot, motivo }) }).then(r => r.json())
@@ -74,7 +121,7 @@ function Confirmar({ j, viendoComo, onContestar }) {
   return <div style={{ ...caja, ...(r?.que === 'nopuedo' ? { borderColor: T.brand } : r?.que === 'confirmo' ? {} : { borderColor: T.warn }) }}>
     {r?.que === 'confirmo' && !abierto && <>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.pos }}>✓ Confirmaste que vas</div>
-      <p style={{ ...sub, marginTop: 3 }}>El {r.cuando.slice(0, 5)}. Si te surge algo, <button onClick={() => setAbierto(true)} style={{ border: 0, background: 'transparent', color: T.ink, fontWeight: 600, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, textDecoration: 'underline' }}>avisá que no podés</button>.</p>
+      <p style={{ ...sub, marginTop: 3, lineHeight: 1.5 }}>El {r.cuando.slice(0, 5)}. Ya cuentan con vos. Si pasa algo grave y no vas a poder, <button onClick={() => setAbierto(true)} style={{ border: 0, background: 'transparent', color: T.ink, fontWeight: 600, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, textDecoration: 'underline' }}>avisá acá</button>.</p>
     </>}
     {r?.que === 'nopuedo' && <>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.brand }}>Avisaste que no podés</div>
@@ -90,10 +137,10 @@ function Confirmar({ j, viendoComo, onContestar }) {
       </div>
     </>}
     {abierto && <>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink }}>Avisar que no podés</div>
-      <p style={{ ...sub, marginTop: 3, lineHeight: 1.5 }}>Le llega un mail a {pm} ahora mismo. Vos seguís cargado hasta que ponga a otra persona.</p>
-      {j.urgente && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>Falta poco para este trabajo: además de avisar acá, llamá a {pm}.</div>}
-      <input value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} placeholder="Por qué (opcional)" style={{ ...campo, marginTop: 10 }} />
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink }}>{yaConfirmo ? 'Bajarte después de confirmar' : 'Avisar que no podés'}</div>
+      <p style={{ ...sub, marginTop: 3, lineHeight: 1.5 }}>{yaConfirmo ? `Ya habías confirmado y ${pm} cuenta con vos: tiene que ser algo grave. Contá qué pasó y, además de avisar acá, llamalo.` : `Le llega un mail a ${pm} ahora mismo. Vos seguís cargado hasta que ponga a otra persona.`}</p>
+      {j.urgente && !yaConfirmo && <div style={{ marginTop: 10, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>Falta poco para este trabajo: además de avisar acá, llamá a {pm}.</div>}
+      <input value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} placeholder={yaConfirmo ? 'Qué pasó' : 'Por qué (opcional)'} style={{ ...campo, marginTop: 10 }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
         <button onClick={() => { setAbierto(false); setMotivo(''); setError('') }} disabled={mandando} style={boton}>Cancelar</button>
         <button onClick={() => mandar('nopuedo')} disabled={mandando} style={{ ...boton, background: T.brand, borderColor: T.brand, color: '#fff' }}>{mandando ? 'Avisando…' : 'Avisar que no puedo'}</button>
@@ -103,7 +150,7 @@ function Confirmar({ j, viendoComo, onContestar }) {
   </div>
 }
 
-function Trabajo({ j, viendoComo, onVolver, onGasto, onContestar }) {
+function Trabajo({ j, notas, viendoComo, onVolver, onGasto, onContestar, onNota }) {
   const falta = t => <span style={{ color: T.warn }}>tu PM todavía no cargó {t}</span>
   return <div>
     <button onClick={onVolver} style={{ border: 0, background: 'transparent', color: T.ink2, fontSize: 13, padding: '0 0 12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Agenda</button>
@@ -134,6 +181,7 @@ function Trabajo({ j, viendoComo, onVolver, onGasto, onContestar }) {
         ? <><a href={j.driveCrudo} target="_blank" rel="noreferrer" style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff' }}>Subir el crudo a Drive</a><p style={{ ...sub, marginTop: 7 }}>Con tu mail. No te ocupa espacio en tu Drive.</p></>
         : <p style={{ ...sub, margin: 0 }}>La carpeta de este trabajo todavía no está creada.</p>}
     </div>
+    <NotaEditora j={j} notas={notas} viendoComo={viendoComo} onNota={onNota} />
     {onGasto && <div style={caja}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: T.ink }}>¿Pagaste algo vos?</div>
       <button onClick={onGasto} style={boton}>Pasar un gasto de este trabajo</button>
@@ -351,11 +399,11 @@ function Facturar({ datos, gastos, onCargar }) {
   </div>
 }
 
-function Entregas({ datos }) {
+function Entregas({ datos, notasDe, viendoComo, onNota }) {
   const tono = { entregado: 'ok', cliente: 'ok', espera: 'falta' }
   return <div>
     <p style={hola}>Cómo quedó lo que filmaste</p>
-    <p style={sub}>En qué anda cada trabajo, y el link cuando se entrega</p>
+    <p style={sub}>En qué anda cada trabajo, el link cuando se entrega, y tus notas para la editora</p>
     <div style={tit}>Últimos 3 meses</div>
     {!datos.entregas.length && <div style={{ ...caja, color: T.ink2, fontSize: 13 }}>Todavía no hay ediciones de trabajos tuyos.</div>}
     {datos.entregas.map(e => <div key={e.num} style={caja}>
@@ -363,6 +411,7 @@ function Entregas({ datos }) {
       <p style={{ ...sub, margin: '1px 0 0' }}>{e.proyecto} · {e.fecha.slice(0, 5)}{e.piezas > 1 ? ` · ${e.listas} de ${e.piezas} piezas listas` : ''}</p>
       <div style={{ marginTop: 8 }}><Pill tono={tono[e.etapa]}>{e.texto}</Pill></div>
       {e.link && <a href={e.link} target="_blank" rel="noreferrer" style={{ ...boton, background: T.ink, borderColor: T.ink, color: '#fff', marginTop: 10 }}>Ver cómo quedó</a>}
+      {(e.puedeNota || notasDe(e).length > 0) && <NotaEditora j={e} notas={notasDe(e)} viendoComo={viendoComo} onNota={onNota} compacto />}
     </div>)}
   </div>
 }
@@ -405,6 +454,10 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
   const conRespuesta = j => { const r = respuestas[j.num + '|' + j.slot]; return r === undefined ? j : { ...j, respuesta: r } }
   const vista = { ...datos, proximos: (datos.proximos || []).map(conRespuesta) }
   const contestar = (j, r) => setRespuestas(x => ({ ...x, [j.num + '|' + j.slot]: r }))
+  // Las notas que dejó recién para la editora, por trabajo: se suman a las que ya venían del sheet.
+  const [notasNuevas, setNotasNuevas] = useState({})
+  const notasDe = j => [...(notasNuevas[j.num] || []), ...(j.notas || [])]
+  const sumarNota = (num, n) => setNotasNuevas(x => ({ ...x, [num]: [n, ...(x[num] || [])] }))
   const arriba = () => { if (typeof window !== 'undefined') window.scrollTo(0, 0) }
   const abrirGasto = cual => { setGasto(cual || ''); arriba() }
   const sePuede = j => (datos.paraGasto || []).some(x => x.num === j.num && x.slot === j.slot)
@@ -412,10 +465,10 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
   return <div style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
     <div style={{ flex: 1, padding: '18px 16px 96px' }}>
       {gasto !== null ? <CargarGasto datos={datos} inicial={gasto} onListo={t => setNuevos(n => [t, ...n])} onVolver={() => { setGasto(null); arriba() }} />
-        : job ? <Trabajo j={conRespuesta(job)} viendoComo={!!datos.viendoComo} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} onContestar={contestar} />
+        : job ? <Trabajo j={conRespuesta(job)} notas={notasDe(job)} viendoComo={!!datos.viendoComo} onVolver={() => setJob(null)} onGasto={sePuede(job) ? () => abrirGasto(job.num + '|' + job.slot) : null} onContestar={contestar} onNota={sumarNota} />
         : tab === 'agenda' ? <Agenda datos={vista} dias={dias} viendoComo={!!datos.viendoComo} onAbrir={j => { setJob(j); arriba() }} onCambioDia={(k, marcado) => setDias(d => marcado ? [...d.filter(x => x !== k), k] : d.filter(x => x !== k))} />
         : tab === 'facturar' ? <Facturar datos={datos} gastos={gastos} onCargar={() => abrirGasto('')} />
-        : tab === 'entregas' ? <Entregas datos={datos} />
+        : tab === 'entregas' ? <Entregas datos={datos} notasDe={notasDe} viendoComo={!!datos.viendoComo} onNota={sumarNota} />
         : <Ficha datos={datos} onSalir={onSalir} />}
     </div>
     <nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: T.surface, borderTop: `1px solid ${T.border}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>

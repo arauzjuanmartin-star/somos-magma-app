@@ -14,6 +14,7 @@ import Edicion from '../components/Edicion'
 import { quienSoy } from '../lib/quien-soy'
 import FotosProyecto from '../components/FotosProyecto'
 import Novedades from '../components/Novedades'
+import AvisosChicos from '../components/AvisosChicos'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
@@ -190,6 +191,7 @@ export default function V2() {
   // eslint-disable-next-line
   },[readOnly])
 
+  const ultimaCarga = useRef(0)
   async function load(silencioso=false){
     if(silencioso) setRefreshing(true); else setLoading(true)
     setErr('')
@@ -197,8 +199,45 @@ export default function V2() {
     // para que las horas extra se carguen a su nombre y nada más.
     try { const r=await fetch('/api/data?fresh=1'); const j=await r.json(); if(j.ok) setData(atarGastosATrabajos({...j.data, __soloLoSuyo:j.soloLoSuyo||null})); else setErr(j.error||'Error') }
     catch(e){ setErr('Error de conexión') }
+    ultimaCarga.current = Date.now()
     setLoading(false); setRefreshing(false)
   }
+
+  // Refresco solo (Juan, 03/10/2026: "¿se puede refrescar la app sola cada tanto?"): cada 5 minutos con la pestaña
+  // a la vista, y al volver a la pestaña si pasaron más de 2. Nunca mientras alguien escribe en un campo: un re-render
+  // en el medio es lo que hace perder el foco. Cambiar de solapa NO relee el sheet (es instantáneo porque usa lo cargado).
+  useEffect(()=>{
+    if(!data || typeof document==='undefined') return
+    const escribiendo = () => { const a=document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) }
+    const refrescar = min => { if(document.visibilityState==='visible' && !escribiendo() && Date.now()-ultimaCarga.current > min*60e3) load(true) }
+    const tick = setInterval(()=>refrescar(5), 30e3)
+    const vis = () => refrescar(2)
+    document.addEventListener('visibilitychange', vis)
+    return ()=>{ clearInterval(tick); document.removeEventListener('visibilitychange', vis) }
+  // eslint-disable-next-line
+  },[!!data])
+
+  // Avisos en la compu: cuando entra un "no puedo" o una nota del rodaje nuevos desde Mi Magma, un toast y (si dio
+  // permiso) una notificación del navegador. Se comparan los IDs de DISPONIBILIDAD y la primera línea de cada bitácora.
+  const vistos = useRef(null)
+  useEffect(()=>{
+    if(!data) return
+    const ahora = new Set([
+      ...(data.disponibilidad||[]).filter(r=>String(r['ID']||'').trim()).map(r=>'d|'+String(r['ID']).trim()),
+      ...(data.edicion||[]).map(f=>{ const l1=String(f.Notas||'').split('\n')[0].trim(); return l1.includes('🎬') ? 'n|'+String(f['N° presupuesto']||'')+'|'+l1 : '' }).filter(Boolean),
+    ])
+    if(vistos.current){
+      const avisar = (titulo, cuerpo) => { showToast(`${titulo} · ${cuerpo}`,'err'); try{ if(typeof Notification!=='undefined' && Notification.permission==='granted') new Notification(titulo, { body: cuerpo }) }catch(e){} }
+      ;(data.disponibilidad||[]).forEach(r=>{ const id='d|'+String(r['ID']||'').trim(); if(id==='d|' || vistos.current.has(id)) return
+        if(/^no puede/i.test(String(r['Qué']||'')) && !/^anulad/i.test(String(r['Estado']||''))) avisar(`${String(r['Persona']||'').split(' ')[0]} no puede`, `#${r['N° trabajo']} ${r['Trabajo']} · ${r['Fecha']}${r['Motivo']?` · "${r['Motivo']}"`:''}`) })
+      const notasVistas = new Set()
+      ;(data.edicion||[]).forEach(f=>{ const l1=String(f.Notas||'').split('\n')[0].trim(); const k='n|'+String(f['N° presupuesto']||'')+'|'+l1
+        if(!l1.includes('🎬') || vistos.current.has(k) || notasVistas.has(k)) return
+        notasVistas.add(k); const m=l1.match(/^\[[^\]]*\s([^\]]+)\]\s*🎬\s*(.*)$/); avisar(`${m?m[1]:'Alguien'} dejó una nota del rodaje`, `#${f['N° presupuesto']} ${f.Cliente||f.Agencia||''} · ${m?m[2]:l1}`) })
+    }
+    vistos.current = ahora
+  // eslint-disable-next-line
+  },[data])
 
   if(status==='loading') return <Shell><Center>Verificando sesión…</Center></Shell>
   if(status==='unauthenticated'||!mail) return <Shell><Center><button onClick={()=>signIn('google',{callbackUrl:'/'})} style={btnPrimary}>Ingresar con Google</button></Center></Shell>
@@ -283,6 +322,7 @@ export default function V2() {
         </div>
         <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'12px 14px 60px':'14px 36px 80px'}}>
           {err && <div style={{background:T.brandSoft, color:T.brand, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 16px', fontSize:13, marginBottom:18}}>{err}</div>}
+          {data && puede('presupuestos') && <AvisosChicos data={data} goTo={goTo} cel={cel}/>}
           {data && puede('edicion') && <Novedades data={data} mail={mail} persona={USER_NAME[mail]} goTo={goTo} cel={cel}/>}
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>

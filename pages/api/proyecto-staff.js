@@ -225,14 +225,13 @@ export default async function handler(req, res) {
     const avisados = [], sinMail = []
     if (aAvisar.length) {
       try {
-        const extra = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['RRHH!A:D', 'PRESUPUESTOS!A:DP'] })
+        // RRHH entera (no solo A:D): "Acceso Mi Magma" vive en la col R y decide si el mail lleva el botón de confirmar.
+        const extra = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['RRHH!A:Z', 'PRESUPUESTOS!A:DP'] })
         const rr = extra.data.valueRanges[0].values || []
         const hRR = rr[0] || []
-        const mailDe = nombre => {
-          const n = String(nombre||'').trim().toLowerCase()
-          const f = rr.slice(1).find(r => String(r[hRR.indexOf('Nombre Apellido')]||'').trim().toLowerCase() === n)
-          return String(f?.[hRR.indexOf('Mail')] || '').trim()
-        }
+        const filaRR = nombre => { const n = String(nombre||'').trim().toLowerCase(); return rr.slice(1).find(r => String(r[hRR.indexOf('Nombre Apellido')]||'').trim().toLowerCase() === n) }
+        const mailDe = nombre => String(filaRR(nombre)?.[hRR.indexOf('Mail')] || '').trim()
+        const tieneMiMagma = nombre => /^(s[ií]|x|true|1|✓)$/i.test(String(filaRR(nombre)?.[hRR.indexOf('Acceso Mi Magma')] || '').trim())
         // El horario, la dirección y el contacto en el lugar viven en PRESUPUESTOS:
         // PROYECTOS no tiene esas columnas.
         const pre = extra.data.valueRanges[1].values || []
@@ -253,7 +252,7 @@ export default async function handler(req, res) {
         }
         for (const a of aAvisar) {
           const aviso = armarAvisoStaff({
-            persona: { nombre: a.freelancer, mail: mailDe(a.freelancer), servicio: a.servicio, monto: a.monto },
+            persona: { nombre: a.freelancer, mail: mailDe(a.freelancer), servicio: a.servicio, monto: a.monto, miMagma: tieneMiMagma(a.freelancer) },
             // Si tiene día asignado, el mail habla de ESE día y no de las 30 fechas
             // del proyecto: al que va el 8 no le sirve la lista entera.
             trabajo: a.fecha ? { ...trabajo, fechaEvento: a.fecha, fechasAdic: '' } : trabajo,

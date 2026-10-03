@@ -15,6 +15,9 @@ export default function Mi() {
   const [r, setR] = useState(null)       // respuesta de /api/mi
   const [como, setComo] = useState('')   // solo equipo: a quién está mirando
   const [error, setError] = useState('')
+  // /mi?t=2341 (desde el mail "te sumamos"): abre ese trabajo directo, para confirmar con un toque.
+  const [abrir, setAbrir] = useState(null)
+  useEffect(() => { try { const t = new URLSearchParams(window.location.search).get('t'); if (t) { setAbrir(t); window.history.replaceState({}, '', '/mi') } } catch (e) { /* nada */ } }, [])
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -58,7 +61,7 @@ export default function Mi() {
     {status === 'loading' || (status === 'authenticated' && !r && !error)
       ? <Centro>Cargando…</Centro>
       : error ? <Centro>{error}<br /><button onClick={() => signOut({ callbackUrl: '/login' })} style={{ marginTop: 16, padding: '9px 16px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer' }}>Entrar con otra cuenta</button></Centro>
-      : r?.ok ? <MiMagma key={r.quien} datos={r} onSalir={r.viendoComo ? null : () => signOut({ callbackUrl: '/login' })} />
+      : r?.ok ? <MiMagma key={r.quien} datos={r} abrirNum={abrir} onSalir={r.viendoComo ? null : () => signOut({ callbackUrl: '/login' })} />
       : <Centro>{r?.error || 'Elegí a quién querés ver'}</Centro>}
   </>
 }
