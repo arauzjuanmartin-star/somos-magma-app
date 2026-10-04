@@ -96,7 +96,8 @@ if (!tocables.length) { console.log('\nNada para corregir.\n'); process.exit(0) 
 
 // Antes de tocar, la foto de lo que había (para volver atrás) y el chequeo de que la celda dice lo que creemos.
 const rollback = tocables.map(c => ({ ...c }))
-writeFileSync(`scripts/.rollback-acuerdo-precios-${hoy.getFullYear()}-${dd(hoy.getMonth() + 1)}-${dd(hoy.getDate())}.json`, JSON.stringify(rollback, null, 1))
+// (con la hora en el nombre: dos corridas el mismo día no se pisan)
+writeFileSync(`scripts/.rollback-acuerdo-precios-${hoy.getFullYear()}-${dd(hoy.getMonth() + 1)}-${dd(hoy.getDate())}-${dd(hoy.getHours())}${dd(hoy.getMinutes())}.json`, JSON.stringify(rollback, null, 1))
 const updates = []
 for (const c of tocables) {
   if (c.celdaProy) { const fp = filaProy(c.nro), quien = canonKey(canonStaff(txt(pRows[fp][colsStaff[c.slot - 1]])))
