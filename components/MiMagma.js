@@ -571,6 +571,12 @@ function Ficha({ datos, onSalir }) {
       ]} />
       {f.acuerdo.doc && !/claude\.ai\/code\//.test(f.acuerdo.doc) && <a href={f.acuerdo.doc} target="_blank" rel="noreferrer" style={{ ...boton, marginTop: 12 }}>Ver el acuerdo completo</a>}
       </div>
+      {(f.acuerdo.otros || []).map((o, k) => <div key={k} style={caja}><KV filas={[
+        ['También', o.alcance],
+        o.modalidad && ['Modalidad', o.modalidad],
+        o.precio > 0 && ['Cada una', <><b style={{ fontFamily: MONO }}>{$(o.precio)}</b>{o.unidad ? ` · ${o.unidad}` : ''}</>],
+        o.cuandoCobra && ['Cuándo cobrás', o.cuandoCobra],
+      ]} /></div>)}
     </>}
     <Historial datos={datos} />
     <div style={tit}>Para pagarte</div>

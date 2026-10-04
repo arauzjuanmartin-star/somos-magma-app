@@ -12,7 +12,11 @@
  * Uso:  node scripts/acuerdo-precios.mjs                       (preview, todos los acuerdos)
  *       node scripts/acuerdo-precios.mjs --persona chavez
  *       node scripts/acuerdo-precios.mjs --desde 10/2026        (solo de ese mes en adelante)
+ *       node scripts/acuerdo-precios.mjs --nro 2240,2259        (solo esos trabajos; el resto se lista pero no se toca)
  *       node scripts/acuerdo-precios.mjs --escribir
+ *
+ * OJO con los arreglos "por cobertura (media jornada)": una jornada ENTERA no vale lo mismo y el script no lo sabe.
+ * Mirar el preview y usar --nro para corregir solo las que corresponde.
  */
 import { readFileSync, writeFileSync } from 'fs'
 
@@ -26,6 +30,7 @@ const { SLOT_PROY } = await import('../lib/slots.js')
 
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : '' }
 const ESCRIBIR = process.argv.includes('--escribir'), SOLO = arg('--persona').toLowerCase(), DESDE = arg('--desde')
+const NROS = arg('--nro') ? new Set(arg('--nro').split(',').map(x => x.trim())) : null
 const txt = v => String(v ?? '').trim()
 const norm = s => txt(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const num = v => { if (typeof v === 'number') return v; const n = parseFloat(txt(v).replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n }
@@ -82,7 +87,8 @@ for (const ac of acuerdosVigentes(data.acuerdos, hoy)) {
   console.log('')
 }
 
-const tocables = cambios.filter(c => !c.pagado), pagadas = cambios.filter(c => c.pagado)
+const tocables = cambios.filter(c => !c.pagado && (!NROS || NROS.has(c.nro))), pagadas = cambios.filter(c => c.pagado)
+if (NROS) console.log(`(Solo se tocan los N° ${[...NROS].join(', ')}; el resto de las diferencias queda como está.)`)
 console.log(`A corregir: ${tocables.length} ${tocables.length === 1 ? 'línea' : 'líneas'} (${tocables.reduce((s, c) => s + (c.a - c.de), 0) >= 0 ? '+' : '−'}${$(Math.abs(tocables.reduce((s, c) => s + (c.a - c.de), 0)))} en total).${pagadas.length ? ` Ya pagadas con otro monto, NO se tocan: ${pagadas.length}.` : ''}`)
 tocables.forEach(c => console.log(`  #${c.nro} ${c.cliente} · ${$(c.de)} → ${$(c.a)}${c.celdaProy ? ` · ${c.celdaProy}` : ''}${c.celdaPago ? ` · ${c.celdaPago}` : ''}`))
 if (!ESCRIBIR) { console.log('\n--- PREVIEW. Nada escrito. Correr con --escribir para aplicar. ---\n'); process.exit(0) }

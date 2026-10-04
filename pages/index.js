@@ -4,7 +4,7 @@ import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
-import { acuerdosVigentes, avisoJornada, esJornada, acuerdoAplica } from '../lib/acuerdos'
+import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara } from '../lib/acuerdos'
 import { repartoDelMes, previasDelAcuerdo } from '../lib/jornadas'
 import { leerDisponibilidad, noPuedenDe } from '../lib/disponibilidad.mjs'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
@@ -2640,7 +2640,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   // Con acuerdo además dice el precio de ESA jornada (dentro del mínimo o extra)
   // y, si el monto está vacío, lo completa solo.
   const acVig = useMemo(()=>acuerdosVigentes(acuerdos, parseD(p['Fecha Evento'])||new Date()), [acuerdos, p])
-  const acDe = useCallback(nombre=>{ const k=normTxt(nombre); return acVig.find(a=>a.keys.includes(k))||null }, [acVig])
+  // El arreglo que corresponde a ESTE trabajo (una persona puede tener más de uno: Lucho tiene el banco y, para
+  // Austral, lo de antes). `conArreglo` = tiene alguno, aunque ninguno cubra este trabajo.
+  const acDe = useCallback(nombre=>acuerdoPara(acVig, normTxt(nombre), p), [acVig, p])
+  const conArreglo = useCallback(nombre=>{ const k=normTxt(nombre); return acVig.some(a=>a.keys.includes(k)) }, [acVig])
   const feEv = parseD(p['Fecha Evento'])
   // El mes entero de una pasada, SIN este proyecto: sus líneas se cuentan abajo
   // desde el formulario, así el número se mueve mientras se escribe.
@@ -2672,13 +2675,12 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       const previas=(previasSheet[k]||0)+(corridas[k]||0)
       corridas[k]=(corridas[k]||0)+1
       const a=acDe(it.quien)
-      // Sin acuerdo no hay mínimo ni tarifa pactada: solo el contador.
-      if(!a) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true}
-      // Con acuerdo pero en un trabajo que el acuerdo no cubre: no gasta jornadas del mínimo ni lleva su tarifa.
-      if(!acuerdoAplica(a, p)) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true, fuera:true}
+      // Sin arreglo para este trabajo no hay mínimo ni tarifa pactada: solo el contador. Si la persona tiene arreglos
+      // pero ninguno cubre este trabajo, se avisa (la tarifa se pone a mano).
+      if(!a) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true, fuera:conArreglo(it.quien)}
       return avisoJornada(a, previasAcuerdo(a, items, i, it.quien))
     })
-  }, [items, acDe, previasSheet, feEv, previasAcuerdo, p])
+  }, [items, acDe, conArreglo, previasSheet, feEv, previasAcuerdo])
 
   // ── Qué contestó cada uno desde Mi Magma ────────────────────────────────────
   // "Confirmó" en verde, "no puede" en rojo (sigue cargado a propósito: lo saca el PM poniendo a otro),
@@ -2702,7 +2704,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const setQuien=(i,val)=>setItems(it=>it.map((x,j)=>{
     if(j!==i) return x
     const a=acDe(val)
-    if(!a || Number(x.precio)>0 || !esJornada(x.pedido) || !acuerdoAplica(a, p)) return {...x, quien:val}
+    if(!a || Number(x.precio)>0 || !esJornada(x.pedido)) return {...x, quien:val}
     return {...x, quien:val, precio:avisoJornada(a, previasAcuerdo(a, it, j, val)).precio}
   }))
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
@@ -2779,7 +2781,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         <div>
           <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>setQuien(i,e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
           {avisos[i] && (avisos[i].soloContador
-            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · este trabajo queda fuera de su acuerdo':''}</span>
+            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · ninguno de sus arreglos cubre este trabajo: el monto va a mano':''}</span>
             : <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
                 {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
               </span>)}
