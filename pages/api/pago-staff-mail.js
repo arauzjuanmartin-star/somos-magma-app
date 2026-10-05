@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const iFre = H.indexOf('Freelancer') !== -1 ? H.indexOf('Freelancer') : 1
     const iNro = H.indexOf('N° Presupuesto') !== -1 ? H.indexOf('N° Presupuesto') : 3
     const iMail = H.indexOf('Mail Enviado') !== -1 ? H.indexOf('Mail Enviado') : 12
-    const setNros = new Set((nros||[]).map(n => String(n).trim()))
+    const setNros = new Set((nros||[]).map(n => String(n).trim()).filter(Boolean))   // sin los vacíos: el monotributo y alguna hora extra no tienen N°
     const now = new Date(); const hoy = `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`
     const updates = []
     for (let i = 1; i < rows.length; i++) {

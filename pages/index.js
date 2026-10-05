@@ -4,7 +4,7 @@ import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, nombrePieza as nombrePiezaEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
-import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara } from '../lib/acuerdos'
+import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara, monotributosDelMes } from '../lib/acuerdos'
 import { repartoDelMes, previasDelAcuerdo } from '../lib/jornadas'
 import { leerDisponibilidad, noPuedenDe } from '../lib/disponibilidad.mjs'
 import { canonStaff, canonKey, esMagma } from '../lib/staff'
@@ -4271,6 +4271,15 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       precio, key:'hx|'+nro+'|'+(h.Fecha||'')+'|'+(h.__row||''), horasExtra:horas })
     personas[gk].total+=precio
   })
+  // Monotributo que Magma paga por acuerdo (solapa ACUERDOS, columna "Monotributo"): una línea por mes mientras el
+  // acuerdo rige, para pagarlo junto con el mínimo y que quede en Pagos Staff. No tiene N° de trabajo: la llave
+  // del pago es persona + mes + servicio "🧾 Monotributo" (Juan, 5/10/2026: "poné el monotributo en Pagos Staff").
+  monotributosDelMes(data.acuerdos, mesIdx, anio).forEach(m=>{
+    const staff=canonStaff(m.persona), gk=canonKey(staff)
+    if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
+    personas[gk].trabajos.push({ nro:'', proyecto:`Monotributo ${MESES_LARGO[mesIdx-1].toLowerCase()} (acuerdo)`, cliente:'', agencia:'', fechaEvento:'', pedido:'🧾 Monotributo', precio:m.monto, key:'mono|'+gk+'|'+mesHX, monotributo:true })
+    personas[gk].total+=m.monto
+  })
   // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
   const esPagRow=r=>{ const e=String(r['Estado']||r['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
@@ -4491,11 +4500,11 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
                 {/* Viáticos: un campo en cada trabajo. Si se carga se suma al pago; vacío = 0. Pagado: solo se muestra. */}
                 {t.pagado
                   ? (t.viaticos>0 ? <span style={{fontSize:11, color:T.ink3, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
-                  : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>viáticos
+                  : t.monotributo ? null : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>viáticos
                       <input value={viatDraft[t.key]!==undefined?viatDraft[t.key]:(t.viaticos?String(t.viaticos):'')} onChange={e=>setViatDraft(d=>({...d,[t.key]:e.target.value}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" inputMode="numeric" style={{width:76, padding:'4px 7px', borderRadius:6, border:`1px solid ${t.viaticos>0?T.warn:T.border}`, background:T.surface, color:T.ink, fontSize:12, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
                     </label>}
                 <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmt(t.precio)}{t.viaticos>0&&<span style={{fontSize:11, color:T.warn}}> +{fmt(t.viaticos)}</span>}</span>
-                <button onClick={()=>{ const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Corregir montos o agregar líneas en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
+                <button onClick={()=>{ if(t.monotributo){ showToast('El monto del monotributo se cambia en la solapa ACUERDOS'); return } const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Corregir montos o agregar líneas en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
               </div>
             )})}
             {persona.totalPendiente>0 && <div style={{marginTop:10, padding:'9px 11px', borderRadius:8, background:conIvaDe(persona)?T.brandSoft:T.surface, border:`1px solid ${conIvaDe(persona)?T.brand+'40':T.border}`}}>
