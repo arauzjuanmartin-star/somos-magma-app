@@ -5,6 +5,9 @@
 //   1. mueve el archivo de "Pre-entregas" a "Finales"
 //   2. le da acceso al cliente a la carpeta Finales (nunca a la del proyecto:
 //      en Drive el acceso se hereda hacia abajo y vería los cortes rebotados)
+//      y la deja abierta para cualquiera que tenga el link (Juan, 05/10/2026:
+//      "así no me piden permiso para verlas"). Los mails ya no hacen falta para
+//      que el cliente la vea; sirven para que le aparezca en su Drive.
 //   3. deja la fila "Con el cliente" con la fecha de entrega real
 //
 // NO la cierra: el trabajo termina cuando el cliente da el OK, y eso se marca
@@ -18,6 +21,7 @@ import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HEADERS_EDICION, IDX_EDICION, aAR, SUB_PRE, SUB_FIN } from '../../lib/edicion'
+import { abrirParaTodos } from '../../lib/drive'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
 const ULT = colLetra(HEADERS_EDICION.length - 1)
@@ -87,6 +91,7 @@ export default async function handler(req, res) {
         sinCarpeta: !carpetaEntrega,
         finales: finales?.webViewLink || null,
         compartirCon: mailsCliente.filter(m => /@/.test(m)),
+        abrir: carpetaEntrega ? 'carpeta' : fileId ? 'archivo' : '',
       })
     }
 
@@ -115,6 +120,25 @@ export default async function handler(req, res) {
       }
     }
 
+    // 2b. y queda abierto para el que tenga el link. Finales si el proyecto tiene carpeta;
+    // y si la pieza no llegó a Finales (no hay carpeta, o vive en otra unidad y no se pudo
+    // mover), la pieza sola. Nunca una carpeta suelta: adentro puede haber cortes rebotados.
+    let abierta = ''
+    if (finales) {
+      const a = await abrirParaTodos(finales.id, drive)
+      if (a.ok) abierta = 'carpeta'
+      else aviso.push(`no se pudo abrir Finales para el que tenga el link: ${a.error}`)
+    }
+    if (fileId && !movido) {
+      let esArchivo = false
+      try { esArchivo = (await drive.files.get({ fileId, fields: 'mimeType', supportsAllDrives: true })).data.mimeType !== 'application/vnd.google-apps.folder' } catch (e) { /* el link no es de Drive, o no lo vemos */ }
+      if (esArchivo) {
+        const a = await abrirParaTodos(fileId, drive)
+        if (a.ok) abierta = abierta || 'archivo'
+        else aviso.push(`no se pudo abrir el archivo para el que tenga el link: ${a.error}`)
+      }
+    }
+
     // 3. dejarlo con el cliente, con la fecha en que le llegó
     const data = [
       { range: `EDICION!${colLetra(cE('Estado'))}${sheetRow}`, values: [['Con el cliente']] },
@@ -132,11 +156,11 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-aprobar', 'EDICION', String(id), `con el cliente${movido ? ' · archivo movido' : ''}${dados.length ? ` · compartido con ${dados.length}` : ''}`]] },
+        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-aprobar', 'EDICION', String(id), `con el cliente${movido ? ' · archivo movido' : ''}${dados.length ? ` · compartido con ${dados.length}` : ''}${abierta ? ` · ${abierta === 'carpeta' ? 'Finales abierta' : 'archivo abierto'} para cualquiera con el link` : ''}`]] },
       })
     } catch (e) {}
 
-    res.json({ ok: true, movido, compartido: dados, link: finales?.webViewLink || null, aviso })
+    res.json({ ok: true, movido, compartido: dados, abierta, link: finales?.webViewLink || null, aviso })
   } catch (e) {
     console.error('edicion-aprobar:', e)
     res.status(500).json({ error: e.message })

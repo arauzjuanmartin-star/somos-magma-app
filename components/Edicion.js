@@ -742,7 +742,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
         body: JSON.stringify({ id: f.ID, mailsCliente: mails.split(/[,;\s]+/).filter(x => /@/.test(x)), confirmar: true }) })
       const j = await r.json()
       if (!j.ok) { showToast(j.error || 'No se pudo', 'err'); setYendo(false); return }
-      showToast(j.movido ? 'Con el cliente ✓ el archivo pasó a Finales' : 'Quedó con el cliente ✓')
+      showToast((j.movido ? 'Con el cliente ✓ el archivo pasó a Finales' : 'Quedó con el cliente ✓') + (j.abierta ? ' y el link abre sin pedir permiso' : ''))
       guardar(f.ID, { Estado: 'Con el cliente' })
       setModo(null); setPlan(null)
     } catch (e) { showToast('Error de conexión', 'err') }
@@ -793,7 +793,8 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
         style={{ ...inp, width: '100%', marginBottom: 9, fontSize: 12.5 }} />
       {plan && <div style={{ fontSize: 12, color: T.ink2, marginBottom: 10, lineHeight: 1.6 }}>
         {plan.moverArchivo ? '· El archivo pasa a la carpeta Finales' : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
-        {plan.compartirCon?.length ? `· Se le da acceso a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo a Finales, no al resto` : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
+        {plan.abrir === 'carpeta' ? <>· Finales queda abierta: el que tenga el link la ve sin pedir permiso<br /></> : plan.abrir === 'archivo' ? <>· El archivo queda abierto: el que tenga el link lo ve sin pedir permiso<br /></> : null}
+        {plan.compartirCon?.length ? `· Además le aparece en su Drive a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo Finales, no el resto` : plan.abrir ? '· Sin mails cargados: no pasa nada, con el link alcanza' : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
         · Queda "Con el cliente" con la fecha de entrega de hoy. Se cierra como Terminado cuando él dé el OK.
       </div>}
       <div style={{ display: 'flex', gap: 8 }}>

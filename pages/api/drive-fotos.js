@@ -70,12 +70,12 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), auth.mail, 'drive-fotos', 'DRIVE', String(num), `${hecho.hechas} fotos a ${estado.destino} y firmadas${hecho.faltan ? ` (faltan ${hecho.faltan})` : ''}${hecho.fallos.length ? ` · ${hecho.fallos.length} con error` : ''}`]] },
+        requestBody: { values: [[new Date().toISOString(), auth.mail, 'drive-fotos', 'DRIVE', String(num), `${hecho.hechas} fotos a ${estado.destino} y firmadas${hecho.faltan ? ` (faltan ${hecho.faltan})` : ''}${hecho.fallos.length ? ` · ${hecho.fallos.length} con error` : ''}${hecho.abierta ? (hecho.abierta.ok ? ' · abierta para cualquiera con el link' : ` · NO se pudo abrir: ${hecho.abierta.error}`) : ''}`]] },
       })
     } catch (e) {}
 
     // El front vuelve a llamar mientras faltan > 0 (y corta si una tanda no hizo nada).
-    res.json({ ok: true, preview: false, hechas: hecho.hechas, faltan: hecho.faltan, fallos: hecho.fallos.slice(0, 10), finalesNueva: hecho.finalesNueva, total: estado.total })
+    res.json({ ok: true, preview: false, hechas: hecho.hechas, faltan: hecho.faltan, fallos: hecho.fallos.slice(0, 10), finalesNueva: hecho.finalesNueva, abierta: hecho.abierta, total: estado.total })
   } catch (e) {
     console.error('drive-fotos:', e)
     res.status(500).json({ error: e.message })

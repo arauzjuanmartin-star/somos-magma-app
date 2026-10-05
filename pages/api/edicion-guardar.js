@@ -8,6 +8,7 @@ import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PI
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { darFinalesAlStaff } from '../../lib/finales'
 import { mailsDelStaff } from '../../lib/finales'
+import { abrirParaTodos } from '../../lib/drive'
 import { mandarPush } from '../../lib/push'
 import { ultimaVersion } from '../../lib/edicion-version'
 import { canonStaff } from '../../lib/staff'
@@ -183,6 +184,9 @@ export default async function handler(req, res) {
         const rrhhObj = rv.slice(1).map(r => obj(rv[0], r))
         if (proyecto) {
           finales = await darFinalesAlStaff({ proyecto, rrhh: rrhhObj })
+          // Y abierta para el que tenga el link, por si se cerró sin pasar por "Aprobar y mandar"
+          // (las fotos, por ejemplo, que se marcan Terminado a mano): que nadie tenga que pedir permiso.
+          if (finales.carpeta) finales.abierta = (await abrirParaTodos(finales.carpeta)).ok
           // Y el aviso al celular de los que filmaron: "ya se entregó, mirá cómo quedó".
           try {
             const quienes = mailsDelStaff(proyecto, rrhhObj).con.map(x => x.nombre)

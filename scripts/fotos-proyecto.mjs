@@ -47,18 +47,20 @@ for (const num of nums) {
   ;[...plan.slice(0, 3), ...(plan.length > 4 ? [null] : []), ...plan.slice(-1)].forEach(p => console.log(p ? `    ${p.de} / ${p.antes}  →  ${p.mover ? `${estado.destino}${p.sub ? '/' + p.sub : ''} / ` : ''}${p.despues}` : '    …'))
 
   if (!ESCRIBIR) continue
-  let total = 0
+  let total = 0, abierta = null
   while (plan.length) {
     const hecho = await acomodarFotos({ drive, plan, ctx, hasta: Date.now() + 5 * 60000 })
     total += hecho.hechas
+    if (hecho.abierta) abierta = hecho.abierta
     if (hecho.fallos.length) console.log(`  ${hecho.fallos.length} con error:`, hecho.fallos.slice(0, 3))
     if (!hecho.hechas) break
     ;({ estado, plan, ctx } = await mirarFotos({ drive, h, fila, num }))
   }
   console.log(`  ✓ ${total} fotos acomodadas · quedan ${estado.faltan} · link: ${estado.linkFotos}`)
+  if (abierta) console.log(abierta.ok ? '  ✓ abierta para cualquiera con el link' : `  ✗ NO se pudo abrir para el cliente: ${abierta.error}`)
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[new Date().toISOString(), 'script', 'fotos-proyecto', 'DRIVE', num, `${total} fotos a ${estado.destino} y firmadas`]] },
+    requestBody: { values: [[new Date().toISOString(), 'script', 'fotos-proyecto', 'DRIVE', num, `${total} fotos a ${estado.destino} y firmadas${abierta?.ok ? ' · abierta para cualquiera con el link' : ''}`]] },
   })
 }
 if (!ESCRIBIR) console.log('\n(preview — no se tocó nada. Con --escribir las mueve y las firma.)')

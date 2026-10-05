@@ -57,7 +57,8 @@ export default function FotosProyecto({ num, showToast, onListo }) {
     }
     const j = await mirar()
     setYendo(false); setProgreso(null)
-    if (j && !j.faltan && hechas) { showToast && showToast(`${j.total} fotos listas para el cliente ✓`); onListo && onListo(ultimo) }
+    if (j && !j.faltan && hechas) { showToast && showToast(`${j.total} fotos listas para el cliente ✓${ultimo?.abierta?.ok ? ' el link abre sin pedir permiso' : ''}`); onListo && onListo(ultimo) }
+    if (ultimo?.abierta && !ultimo.abierta.ok) setError('Las fotos quedaron listas, pero no pude abrir la carpeta para el cliente. Abrila a mano en Drive: Compartir → “Cualquier persona con el enlace”.')
   }
 
   const copiar = async () => { try { await navigator.clipboard.writeText(est.linkFotos); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch (e) {} }
