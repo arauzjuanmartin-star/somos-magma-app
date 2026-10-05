@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer'
 import { getSheets, getAllData, withSheetsRetry } from '../../../../lib/sheets'
 import { calcularBrief } from '../../../../lib/brief.mjs'
-import { horaArgentina, recalcularDias, armarMail, asegurarSolapa, leerDiaria, yaEnviado, ultimoContador, filaDiaria, escribirFila } from '../../../../lib/diaria-mail.mjs'
+import { horaArgentina, recalcularDias, armarMail, asegurarSolapa, leerDiaria, yaEnviado, ultimoContador, filaDiaria, escribirFila, avisoBackup } from '../../../../lib/diaria-mail.mjs'
 import { correrLunes } from '../../../../lib/lunes.mjs'
 import { resumenAdmin } from '../../../../lib/admin.mjs'
 import { canonStaff } from '../../../../lib/staff'
@@ -87,7 +87,10 @@ export default async function handler(req, res) {
     // Si falla, el mail sale igual y lo dice.
     let admin = null
     try { admin = resumenAdmin(await getAllData(), { hoy: ahoraAR, canonStaff, maxSlots: MAX_SLOTS }) } catch (e) { admin = { error: e.message } }
-    const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '', admin, linkAdmin: `${APP}/?caja=1` })
+    // El backup de la Mac: solo aparece si hace 3 días o más que no corre. Si no se puede leer el LOG, el mail sale igual.
+    let backup = ''
+    try { backup = await withSheetsRetry(() => avisoBackup(sheets, SHEET_ID)) } catch (e) { console.error('aviso de backup:', e) }
+    const { subject, texto, html } = armarMail({ brief, contador, tarde, ahoraAR, link, origen: 'Vercel (la Mac no lo había mandado)', contadorLeido: ult?.leido || '', admin, linkAdmin: `${APP}/?caja=1`, backup })
 
     if (dry) return res.json({ ok: true, dry: true, enviaria: true, aviso, para, subject, contadorLeido: ult?.leido || null, alertas: brief.alertas, lunes, impuestos, html })
 
