@@ -47,11 +47,13 @@ const JORNADAS = [
   { nro: '2250', de: 190000, a: 180000, nota: 'Jornada 12 de septiembre: extra a $180.000' },
   { nro: '2355', de: 190000, a: 180000, nota: 'Jornada 13 de septiembre: extra a $180.000' },
 ]
+// En pesos enteros, como los guarda la app: el campo Viáticos de Pagos Staff lee el número a la argentina y un
+// "61151.33" lo tomaría como 6.115.133 al salir del campo. Los centavos quedan en la nota de cada fila.
 const VIATICOS = [
-  { nro: '2302', monto: 61151.33, nota: 'Viáticos: Cabify ida y vuelta a Pilar $24.903,80 + $36.247,53 (comprobantes en la planilla de Lucho)' },
-  { nro: '2210', monto: 33178.27, nota: 'Viáticos: Cabify $19.759,27 + Uber $13.419,00, Munro (comprobantes en la planilla de Lucho)' },
+  { nro: '2302', monto: 61151, nota: 'Viáticos: Cabify ida y vuelta a Pilar $24.903,80 + $36.247,53 (comprobantes en la planilla de Lucho)' },
+  { nro: '2210', monto: 33178, nota: 'Viáticos: Cabify $19.759,27 + Uber $13.419,00, Munro (comprobantes en la planilla de Lucho)' },
   { nro: '2211', monto: 15862, nota: 'Viáticos: Uber $15.862,00, Munro (comprobante en la planilla de Lucho)' },
-  { nro: '2250', monto: 28863.47, nota: 'Viáticos: Cabify $13.784,86 + $15.078,61, Munro (comprobantes en la planilla de Lucho)' },
+  { nro: '2250', monto: 28863, nota: 'Viáticos: Cabify $13.784,86 + $15.078,61, Munro (comprobantes en la planilla de Lucho)' },
 ]
 const ANULAR = { nro: '2293', nota: 'Anulada el 05/10/2026: el #2293 se represupuestó y hoy es el #2302, que ya tiene su fila. Es el mismo trabajo (Farmacity 11/09).' }
 const HORAS = [
