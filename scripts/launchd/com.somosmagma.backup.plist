@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- El backup de la Mac de Juan: todos los días a las 13:00 arma el .dmg cifrado y lo sube a Drive.
+       Antes de instalarlo tiene que existir la clave en el Llavero:  node scripts/backup-mac.mjs --clave
+       Se instala a mano, una sola vez (y se repite si este archivo cambia):
+         launchctl unload ~/Library/LaunchAgents/com.somosmagma.backup.plist 2>/dev/null
+         cp scripts/launchd/com.somosmagma.backup.plist ~/Library/LaunchAgents/
+         launchctl load ~/Library/LaunchAgents/com.somosmagma.backup.plist
+       Probar ahora mismo:   launchctl start com.somosmagma.backup
+       Frenar:               launchctl unload ~/Library/LaunchAgents/com.somosmagma.backup.plist
+       Si la Mac estaba dormida a esa hora, launchd lo corre al despertarse. -->
+  <key>Label</key><string>com.somosmagma.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>scripts/backup-mac.mjs</string>
+    <string>--escribir</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/dronjuan/somos-magma-app</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/dronjuan/Backups Magma/backup.log</string>
+  <key>StandardErrorPath</key><string>/Users/dronjuan/Backups Magma/backup-errores.log</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin</string></dict>
+</dict>
+</plist>
