@@ -8,7 +8,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { T, MONO } from '../lib/ui'
-import { semaforo, hoyCero, limpiarPedido, estaCerrado, esperaAlPM } from '../lib/edicion'
+import { semaforo, hoyCero, nombrePieza, estaCerrado, esperaAlPM } from '../lib/edicion'
 
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
@@ -98,7 +98,7 @@ export default function Novedades({ data, mail, persona, goTo, cel }) {
           <span style={{ width: 7, height: 7, borderRadius: 7, background: f.__color, flexShrink: 0 }} />
           <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.ink3 }}>#{f['N° presupuesto']}</span>
           <span style={{ fontWeight: 600, color: T.ink }}>{f.Cliente || f.Agencia}</span>
-          <span style={{ color: T.ink2 }}>{limpiarPedido(f.Entregable)}</span>
+          <span style={{ color: T.ink2 }}>{nombrePieza(f)}</span>
           {String(f.Consulta || '').trim() && <span style={{ color: T.brand, fontStyle: 'italic' }}>“{String(f.Consulta).slice(0, 60)}”</span>}
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 11, fontWeight: 600, color: f.__color, whiteSpace: 'nowrap' }}>{f.__motivo}</span>

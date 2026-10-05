@@ -4,7 +4,7 @@
 
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza } from '../../lib/edicion'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { darFinalesAlStaff } from '../../lib/finales'
 import { mailsDelStaff } from '../../lib/finales'
@@ -25,6 +25,9 @@ const EDITABLES = [
   // El título solo se puede cambiar en las tareas cargadas a mano (ver más abajo):
   // en las que vienen del presupuesto lo pisa el sync en la próxima corrida.
   'Entregable',
+  // Cómo le dice el equipo a la pieza. Este sí se puede cambiar en todas: el sync
+  // no lo toca (ver nombrePieza en lib/edicion.js).
+  'Nombre',
 ]
 
 export default async function handler(req, res) {
@@ -80,10 +83,12 @@ export default async function handler(req, res) {
     for (const [k, v] of Object.entries(campos)) {
       if (!EDITABLES.includes(k)) continue
       if (k === 'Entregable' && !esManual) continue   // lo pisaría el sync
+      // Sin la columna en el sheet el nombre caería en una celda sin título: mejor avisar.
+      if (k === 'Nombre' && !hE.includes('Nombre')) return res.status(400).json({ error: 'Falta la columna "Nombre" en la solapa EDICION — correr scripts/edicion-setup.mjs --escribir' })
       const col = cE(k)
       const antes = String(actual[col] || '')
       // "Dani" y "Daniela Viviana Ayala" eran dos personas para el tablero (14/9/2026).
-      const ahora = k === 'Editor' ? canonStaff(String(v ?? '')) : String(v ?? '')
+      const ahora = k === 'Editor' ? canonStaff(String(v ?? '')) : k === 'Nombre' ? String(v ?? '').trim() : String(v ?? '')
       if (antes === ahora) continue
       data.push({ range: `EDICION!${colLetra(col)}${sheetRow}`, values: [[ahora]] })
       cambios.push(`${k}: "${antes}" → "${ahora}"`)
@@ -182,7 +187,7 @@ export default async function handler(req, res) {
           try {
             const quienes = mailsDelStaff(proyecto, rrhhObj).con.map(x => x.nombre)
             const titulo = [String(proyecto.Cliente || proyecto.Agencia || '').trim(), String(proyecto.Proyecto || '').trim()].filter(Boolean).join(' · ')
-            if (quienes.length) finales.alCelular = (await mandarPush({ sheets, SHEET_ID, personas: quienes, titulo: `Se entregó: ${titulo}`, cuerpo: `${String(actual[cE('Entregable')] || '').replace(/^[^\p{L}\p{N}]+/u, '').trim()} ya está en manos del cliente. Mirá cómo quedó.`, url: '/mi?tab=entregas', tag: `entrega-${nro}` })).mandados
+            if (quienes.length) finales.alCelular = (await mandarPush({ sheets, SHEET_ID, personas: quienes, titulo: `Se entregó: ${titulo}`, cuerpo: `${nombrePieza({ Nombre: campos.Nombre ?? actual[cE('Nombre')], Entregable: actual[cE('Entregable')] })} ya está en manos del cliente. Mirá cómo quedó.`, url: '/mi?tab=entregas', tag: `entrega-${nro}` })).mandados
           } catch (e) { console.error('push entrega:', e.message) }
         }
       } catch (e) { console.error('finales:', e.message); finales = { error: e.message } }

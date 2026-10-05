@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
-import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
+import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, nombrePieza as nombrePiezaEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara } from '../lib/acuerdos'
 import { repartoDelMes, previasDelAcuerdo } from '../lib/jornadas'
@@ -2488,7 +2488,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
                   amarillo esta semana, verde en fecha, gris entregado). Punteado = fecha del
                   manual, todavía no la confirmó el PM. */}
               {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
-                return <div key={'n'+j} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${limpiarPedidoEd(f.Entregable)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{cursor:goTo?'pointer':undefined, fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
+                return <div key={'n'+j} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${nombrePiezaEd(f)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{cursor:goTo?'pointer':undefined, fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
               })}
               {total>TOPE&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-TOPE} más</div>}
             </div>
@@ -2507,7 +2507,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
                 <span style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>✂ #{f['N° presupuesto']}</span>
                 <span style={{fontSize:11, fontWeight:600, color:c.fg, background:c.bg, padding:'2px 8px', borderRadius:6, whiteSpace:'nowrap'}}>{f.__sem.txt}</span>
               </div>
-              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{limpiarPedidoEd(f.Entregable)}</div>
+              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{nombrePiezaEd(f)}</div>
               <div style={{fontSize:12, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
               <div style={{fontSize:11.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.brand}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
               {f.__estimada && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}

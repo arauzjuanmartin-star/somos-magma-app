@@ -1,6 +1,7 @@
 // Prepara el sheet para el módulo de Edición (post-producción):
 //   1. Crea la solapa EDICION con sus headers (una fila por entregable)
 //   2. Agrega a PROYECTOS las columnas "Drive Crudo" (ES) y "Drive Entrega" (ET)
+//   3. Si EDICION ganó columnas, estira el filtro de la solapa para que las tome
 //
 // Sin --escribir solo muestra qué va a hacer. Nada destructivo: no borra ni pisa.
 //   node scripts/edicion-setup.mjs              → preview
@@ -26,8 +27,9 @@ const ESCRIBIR = process.argv.includes('--escribir')
 const COLS_PROY_NUEVAS = ['Drive Crudo', 'Drive Entrega']
 const colLetraTop = n => { let s2=''; n++; while(n>0){ const m=(n-1)%26; s2=String.fromCharCode(65+m)+s2; n=Math.floor((n-1)/26) } return s2 }
 
-const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties(title,sheetId,gridProperties))' })
+const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets(properties(title,sheetId,gridProperties),basicFilter)' })
 const solapas = meta.data.sheets.map(s => s.properties)
+const filtroEdicion = meta.data.sheets.find(s => s.properties.title === 'EDICION')?.basicFilter
 const yaExiste = solapas.find(s => s.title === 'EDICION')
 
 console.log('════════ SETUP MÓDULO EDICIÓN ════════\n')
@@ -56,6 +58,20 @@ if (yaExiste) {
         valueInputOption: 'RAW', requestBody: { values: [faltan] },
       })
       console.log('   ✓ agregadas')
+    }
+  }
+  // El filtro de la solapa tiene un rango fijo: una columna agregada después queda
+  // afuera y no aparece en el desplegable (Regla de oro #4). Se estira conservando
+  // lo que haya filtrado u ordenado quien esté mirando la solapa.
+  const total = h.length + faltan.length
+  if (filtroEdicion?.range && (filtroEdicion.range.endColumnIndex || 0) < total) {
+    console.log(`   + filtro: hoy llega hasta ${colLetraTop((filtroEdicion.range.endColumnIndex || 1) - 1)}, se estira hasta ${colLetraTop(total - 1)}`)
+    if (ESCRIBIR) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { requests: [{ setBasicFilter: { filter: { ...filtroEdicion, range: { ...filtroEdicion.range, endColumnIndex: total } } } }] },
+      })
+      console.log('   ✓ filtro estirado')
     }
   }
 } else {

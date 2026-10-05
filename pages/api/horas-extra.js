@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const batch = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['HORAS_EXTRA!A:M', 'EDICION!A:AM', 'PROYECTOS!A:ET', 'RRHH!A:F'] })
+    const batch = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['HORAS_EXTRA!A:M', 'EDICION!A:AZ', 'PROYECTOS!A:ET', 'RRHH!A:F'] })
     const [HX, ED, PR, RH] = batch.data.valueRanges.map(v => v.values || [])
     if (!HX.length) return res.status(400).json({ error: 'Falta la solapa HORAS_EXTRA — correr scripts/horas-extra-setup.mjs --escribir' })
 
@@ -46,7 +46,9 @@ export default async function handler(req, res) {
     const fila = id ? ED.slice(1).find(r => String(r[hE.indexOf('ID')] || '').trim() === String(id).trim()) : null
     if (fila) {
       numero = String(fila[hE.indexOf('N° presupuesto')] || '').trim() || numero
-      cliente = String(fila[hE.indexOf('Cliente')] || ''); proyecto = String(fila[hE.indexOf('Proyecto')] || ''); entregable = String(fila[hE.indexOf('Entregable')] || '')
+      cliente = String(fila[hE.indexOf('Cliente')] || ''); proyecto = String(fila[hE.indexOf('Proyecto')] || '')
+      // Con el nombre que le puso el equipo, si lo tiene: con ocho "Edit 15-30s" en un mismo trabajo, el pedido solo no dice a cuál fueron las horas.
+      entregable = String(fila[hE.indexOf('Nombre')] || '').trim() || String(fila[hE.indexOf('Entregable')] || '')
     } else if (numero) {
       const hP = PR[0] || []
       const p = PR.slice(1).find(r => String(r[hP.indexOf('N° presupuesto')] || '').trim() === numero)

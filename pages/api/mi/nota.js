@@ -4,7 +4,7 @@ import { getSheets, getAllData, withSheetsRetry } from '../../../lib/sheets'
 import { personaPorMail, PREFIJO_NOTA, sePuedeNotar } from '../../../lib/mi-magma'
 import { lineasDeProyecto } from '../../../lib/jornadas'
 import { canonStaff, canonKey, STAFF_CANON_MAP } from '../../../lib/staff'
-import { HEADERS_EDICION, IDX_EDICION, textoParaElEditor, limpiarPedido, estaCerrado } from '../../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, textoParaElEditor, limpiarPedido, nombrePieza, estaCerrado } from '../../../lib/edicion'
 import { mailDe, mandarAviso } from '../../../lib/edicion-avisos'
 import { mailInternoDe } from '../../../lib/roles'
 
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
     const cuerpo = [
       `${persona} (${limpiarPedido(linea.pedido)}, ${linea.fecha}) dejó una nota del rodaje para la edición de este trabajo:`,
       '', `"${nota}"`, '',
-      `Quedó arriba de la bitácora de ${piezas.length === 1 ? 'la pieza' : `las ${piezas.length} piezas`}: ${filas.map(f => limpiarPedido(f.Entregable)).join(', ')}.`,
+      `Quedó arriba de la bitácora de ${piezas.length === 1 ? 'la pieza' : `las ${piezas.length} piezas`}: ${filas.map(f => nombrePieza(f)).join(', ')}.`,
       '', 'ABRIRLO EN EL TABLERO', `${APP}/?e=${encodeURIComponent(txt(filas[0].ID))}`,
       '', '———————————————————————', 'EL TRABAJO, COMPLETO', '', textoParaElEditor(filas[0]),
     ].join('\n')

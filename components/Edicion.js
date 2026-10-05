@@ -18,7 +18,7 @@ import {
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero, diasEntre,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
   textoPedirBrief, textoParaElEditor, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
-  esPedidoFoto, llevaFotos,
+  esPedidoFoto, llevaFotos, nombrePieza,
 } from '../lib/edicion'
 import FotosProyecto from './FotosProyecto'
 import { quienSoy, esMio } from '../lib/quien-soy'
@@ -36,16 +36,61 @@ const btnPri = { ...btn, background: T.brand, color: '#fff', border: 'none', fon
 const lbl = { fontSize: 10.5, color: T.ink3, letterSpacing: 0.4, textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 5 }
 
 const COLOR_PRIO = { Urgente: T.brand, Normal: T.ink3, Baja: T.ink3 }
-const FILTROS = [
-  { id: 'activos',  label: 'Todo lo abierto' },
-  { id: 'revisar',  label: 'Esperan tu OK' },
-  { id: 'cliente',  label: 'Con el cliente' },   // esperan el OK del cliente: la lista para llamar
-  { id: 'rojo',     label: 'Atrasado' },
-  { id: 'naranja',  label: 'Vence hoy' },
-  { id: 'amarillo', label: 'Esta semana' },
-  { id: 'verde',    label: 'En fecha' },
-  { id: 'listo',    label: 'Terminados' },
+// La lista se parte por QUIÉN TIENE LA PELOTA, igual que las columnas del Tablero.
+// Juan, 4/10/2026, mirando CeraVe (11 renglones iguales, todos en rojo): "sigue
+// habiendo mucha información a primera vista". Arriba había ocho chips de plazo con
+// su número, y "Atrasado 57" eran en su mayoría trabajos sin material, que no son
+// un atraso de edición; "Vence hoy 18" eran 18 sin fecha, y ninguno vencía hoy.
+// Ahora los títulos de las secciones son el resumen, y el plazo es un filtro más.
+const SECCIONES = [
+  { id: 'revisar', titulo: 'Para revisar',   sub: 'esperan el OK del PM', estados: ['Para revisar'] },
+  { id: 'editar',  titulo: 'Para editar',    sub: 'ya hay material',      estados: ['Material listo', 'Editando', 'Cambios internos', 'Cambios del cliente'] },
+  { id: 'cliente', titulo: 'Con el cliente', sub: 'esperan su OK',        estados: ['Con el cliente'] },
 ]
+// 'espera' (sin material) y 'listo' (terminados) van plegadas abajo.
+const seccionDe = f => {
+  const e = estadoDe(f.Estado)
+  if (e === 'Sin material') return 'espera'
+  if (e === 'Terminado') return 'listo'
+  return (SECCIONES.find(x => x.estados.includes(e)) || SECCIONES[1]).id
+}
+const PLAZOS = [
+  { id: 'atrasado', label: 'Atrasado' },
+  { id: 'hoy',      label: 'Vence hoy' },
+  { id: 'semana',   label: 'Vence en 1 o 2 días' },
+  { id: 'enfecha',  label: 'En fecha' },
+  { id: 'sinfecha', label: 'Sin fecha de entrega' },
+]
+
+// El plazo de una pieza, dicho UNA vez y sin gritar. El semáforo (lib/edicion) sigue
+// siendo el que ordena y el que usan el calendario y el reporte; esto es solo cómo se
+// escribe en la lista. Reglas: una píldora de color únicamente cuando hay una fecha
+// puesta por el PM (ahí "atrasado" es verdad); lo que falta cargar va en gris; y en
+// "Sin material" no se repite el estado: se dice hace cuánto fue el evento.
+function plazoDe(f, hoy) {
+  const e = estadoDe(f.Estado)
+  if (e === 'Terminado') return { clave: '', txt: '' }
+  if (String(f.Consulta || '').trim()) return { clave: '', txt: 'esperando respuesta', tono: 'rojo', nivel: 'rojo' }
+  if (e === 'Sin material') {
+    const ev = parseFechaAR(f['Fecha Evento'])
+    if (!ev) return { clave: '', txt: '' }
+    const d = diasEntre(ev, hoy)
+    if (d >= 3) return { clave: '', txt: `evento hace ${d} días`, tono: 'rojo', ayuda: 'El evento ya pasó y el material todavía no está subido' }
+    if (d >= 1) return { clave: '', txt: d === 1 ? 'evento ayer' : `evento hace ${d} días`, tono: 'gris' }
+    if (d === 0) return { clave: '', txt: 'evento hoy', tono: 'gris' }
+    return { clave: '', txt: `evento el ${String(ev.getDate()).padStart(2, '0')}/${String(ev.getMonth() + 1).padStart(2, '0')}`, tono: 'gris' }
+  }
+  if (e === 'Con el cliente') {
+    const en = parseFechaAR(f['Fecha entrega'])
+    const d = en ? diasEntre(en, hoy) : null
+    if (d === null) return { clave: '', txt: '' }
+    return { clave: '', txt: d <= 0 ? 'desde hoy' : `hace ${d} ${d === 1 ? 'día' : 'días'}`, tono: d >= 5 ? 'rojo' : 'gris', ayuda: d >= 5 ? 'Hace 5 días o más que lo tiene: vale un llamado' : 'Hace cuánto lo tiene el cliente' }
+  }
+  const puesta = parseFechaAR(f['Fecha compromiso'])
+  if (!puesta) return { clave: 'sinfecha', txt: 'sin fecha', tono: 'gris', ayuda: 'El PM todavía no puso para cuándo es' }
+  const faltan = diasEntre(hoy, puesta)
+  return { clave: faltan < 0 ? 'atrasado' : faltan === 0 ? 'hoy' : faltan <= 2 ? 'semana' : 'enfecha', txt: f.__sem.txt, nivel: f.__sem.nivel }
+}
 
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 const nombreDe = mail => String(mail || '').split('@')[0]
@@ -76,8 +121,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const [verFiltros, setVerFiltros] = useState(false)
   const [verEspera, setVerEspera] = useState(false)
   useEffect(() => { if (recordado('ed-ver-espera') === '1') setVerEspera(true) }, [])
+  const [verListo, setVerListo] = useState(false)
   const [local, setLocal] = useState({})          // cambios ya aplicados en pantalla
-  const [filtro, setFiltro] = useState('activos')
+  // Por plazo: era la fila de chips de arriba; ahora es un filtro más, adentro de "Filtros".
+  const [plazoF, setPlazoF] = useState('todos')
   const [q, setQ] = useState('')
   const [personaF, setPersonaF] = useState('todos')
   // Filtrar por PM es distinto de filtrar por editor: el editor es quien lo hace, el PM
@@ -97,6 +144,8 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // ya no entre en el filtro. Antes, mover una fila la recalculaba, cambiaba de
   // chip y desaparecía de la pantalla: "la apretás y desaparece".
   const [tocados, setTocados] = useState(() => new Set())
+  // Lo recién agregado se marca en la lista, para verlo sin tener que buscarlo.
+  const [recien, setRecien] = useState(() => new Set())
   const [scrollA, setScrollA] = useState(null)
   const cel = useEsCelular()
 
@@ -133,7 +182,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     if (col.id === 'Terminado' && de !== 'Con el cliente') { showToast('Se termina cuando el cliente da el OK: primero tiene que estar “Con el cliente”', 'err'); return }
     if (col.id === 'Editando' && (de === 'Para revisar' || de === 'Con el cliente')) { showToast('Si vuelve con cambios, cargalos en la ficha: le llega la nota al editor y se cuenta la vuelta'); return abrir(id) }
     guardar(id, { Estado: col.id })
-    showToast(`${limpiarPedido(f.Entregable)} → ${col.id}`)
+    showToast(`${nombrePieza(f)} → ${col.id}`)
   }
   function salirFicha() {
     const id = abierto
@@ -163,6 +212,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const id = String(f.ID || '').trim()
     const m = { ...f, ...(local[id] || {}) }
     m.__sem = semaforo(m, hoy)
+    m.__plazo = plazoDe(m, hoy)
     return m
   }), [crudas, local]) // eslint-disable-line
 
@@ -185,7 +235,6 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // "Esperan tu OK" solo es verdad si sos PM de algo. Para quien solo edita (Dani) son
   // trabajos que ELLA mandó y esperan el OK de otro: decirle "tu OK" es al revés.
   const soyPM = useMemo(() => mias.some(f => (yo.pms || []).includes(norm(f.PM).trim())), [mias, yo])
-  const etiqueta = f => f.id === 'revisar' && hayMio && !soyPM ? 'Esperan el OK del PM' : f.label
   const elegirMio = v => { setSoloMio(v); recordar('ed-solo-mio', v ? '1' : '0'); if (v) { setPersonaF('todos'); setPmF('todos') } }
   // Todo lo que se cuenta y se lista sale de acá: si estoy en "lo mío", los números
   // de arriba también son los míos (si no, dice "5 atrasados" y al tocar hay 2).
@@ -237,52 +286,48 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   const sinPM = useMemo(() => filas.filter(f => !estaCerrado(f.Estado) && !String(f.PM || '').trim()).length, [filas])
   const consultas = useMemo(() => base.filter(f => String(f.Consulta || '').trim()), [base])
 
+  const pasaPersona = f => {
+    if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
+    else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
+    if (pmF === '__sin__') { if (String(f.PM || '').trim()) return false }
+    else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return false
+    return true
+  }
   const visibles = useMemo(() => {
     const nq = norm(q.trim())
     return base.filter(f => {
-      const nivel = f.__sem.nivel
-      // Lo abierto desde un link y lo tocado en esta sesión se saltan el chip de
-      // plazo y el desplegable de estado — son los que cambian cuando se mueve la
-      // fila ("la apretás y desaparece"). El buscador y los filtros de persona NO:
-      // escribir "farmacity" mostraba el Stand de Brasil recién tocado (14/9/2026).
+      // Lo abierto desde un link y lo tocado en esta sesión se saltan el filtro de
+      // plazo y el de estado — son los que cambian cuando se mueve la fila ("la
+      // apretás y desaparece"). El buscador y los filtros de persona NO: escribir
+      // "farmacity" mostraba el Stand de Brasil recién tocado (14/9/2026).
       const fijada = abierto === f.ID || tocados.has(f.ID)
       if (!fijada) {
-        if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return false }
-        else if (filtro === 'cliente') { if (!esperaAlCliente(f.Estado)) return false }
-        else {
-          if (filtro === 'activos' && nivel === 'listo') return false
-          if (filtro !== 'activos' && filtro !== nivel) return false
-        }
+        if (plazoF !== 'todos' && f.__plazo.clave !== plazoF) return false
         if (estadoF !== 'todos' && estadoDe(f.Estado) !== estadoF) return false
       }
-      if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return false }
-      else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return false
-      if (pmF === '__sin__') { if (String(f.PM || '').trim()) return false }
-      else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return false
-      if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
+      if (!pasaPersona(f)) return false
+      if (nq && !norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Nombre, f.Entregable, f.Editor, f.Notas].join(' ')).includes(nq)) return false
       return true
     })
-  }, [base, filtro, q, personaF, pmF, estadoF, abierto, tocados])
+  }, [base, plazoF, q, personaF, pmF, estadoF, abierto, tocados]) // eslint-disable-line
 
-  // Cuántos hay en cada estado, para no tener que elegir a ciegas en el desplegable.
-  // Cuenta sobre lo que dejó pasar el chip de plazo y el filtro de persona: si estás
-  // mirando "Atrasado", el desplegable dice cuántos atrasados hay en cada estado.
+  // Cuántos hay en cada estado y en cada plazo, para no elegir a ciegas en los
+  // desplegables. El de estado cuenta sobre lo que dejaron pasar los otros filtros.
   const porEstado = useMemo(() => {
     const c = {}
     base.forEach(f => {
-      if (filtro === 'revisar') { if (!esperaAlPM(f.Estado)) return }
-      else if (filtro === 'cliente') { if (!esperaAlCliente(f.Estado)) return }
-      else if (filtro === 'activos') { if (f.__sem.nivel === 'listo') return }
-      else if (filtro !== f.__sem.nivel) return
-      if (personaF === '__sin__') { if (String(f.Editor || '').trim()) return }
-      else if (personaF !== 'todos' && String(f.Editor || '').trim() !== personaF) return
-      if (pmF === '__sin__') { if (String(f.PM || '').trim()) return }
-      else if (pmF !== 'todos' && String(f.PM || '').trim() !== pmF) return
+      if (plazoF !== 'todos' && f.__plazo.clave !== plazoF) return
+      if (!pasaPersona(f)) return
       const e = estadoDe(f.Estado)
       c[e] = (c[e] || 0) + 1
     })
     return c
-  }, [base, filtro, personaF, pmF])
+  }, [base, plazoF, personaF, pmF]) // eslint-disable-line
+  const porPlazo = useMemo(() => {
+    const c = {}
+    base.forEach(f => { const k = f.__plazo.clave; if (k) c[k] = (c[k] || 0) + 1 })
+    return c
+  }, [base])
 
   const armarGrupos = lista => {
     const m = new Map()
@@ -299,27 +344,41 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     return gs.sort((a, b) => a.orden - b.orden)
   }
   // "Sin material" no es trabajo de edición todavía: es un trabajo esperando que
-  // llegue el crudo. Al 20/9/2026 eran 52 de las 77 abiertas, todas en rojo, tapando
-  // las 25 que sí se están editando. En la vista de todos los días van plegadas
-  // abajo, con UN aviso que dice cuántas hay y cuántas llevan días así. Si alguien
-  // filtra (Atrasado, un estado, el buscador) la lista va entera, como siempre. Lo
-  // tocado en la sesión no se pliega: si no, otra vez "la apretás y desaparece".
+  // llegue el crudo (al 4/10/2026, 56 de las 85 abiertas). Va plegado abajo, con UN
+  // aviso que dice cuántas hay y cuántas llevan días así; lo terminado, también. Si
+  // alguien busca o filtra, "Esperando material" se abre sola: está buscando algo.
+  // Lo tocado en la sesión se ve aunque su sección esté plegada: si no, otra vez
+  // "la apretás y desaparece".
   const enColumnas = vista === 'columnas'
-  const separar = enColumnas || (filtro === 'activos' && estadoF === 'todos' && !q.trim())
-  // En el tablero "Sin material" no tiene columna: va siempre a la sección plegada.
-  const espera = f => separar && estadoDe(f.Estado) === 'Sin material' && (enColumnas || (abierto !== f.ID && !tocados.has(f.ID)))
-  const filasActivas = useMemo(() => visibles.filter(f => !espera(f)), [visibles, separar, enColumnas, abierto, tocados]) // eslint-disable-line
-  const grupos = useMemo(() => armarGrupos(filasActivas), [filasActivas]) // eslint-disable-line
-  const filasEspera = useMemo(() => visibles.filter(espera), [visibles, separar, enColumnas, abierto, tocados]) // eslint-disable-line
-  const gruposEspera = useMemo(() => armarGrupos(filasEspera), [filasEspera]) // eslint-disable-line
-  const esperaViejas = filasEspera.filter(f => f.__sem.nivel === 'rojo').length
-  const nFiltros = [estadoF, pmF, personaF].filter(v => v !== 'todos').length
-
-  const cuenta = useMemo(() => {
-    const c = { activos: 0, revisar: 0, cliente: 0, rojo: 0, naranja: 0, amarillo: 0, verde: 0, listo: 0 }
-    base.forEach(f => { c[f.__sem.nivel]++; if (f.__sem.nivel !== 'listo') c.activos++; if (esperaAlPM(f.Estado)) c.revisar++; if (esperaAlCliente(f.Estado)) c.cliente++ })
-    return c
-  }, [base])
+  const filtrando = !!q.trim() || estadoF !== 'todos' || plazoF !== 'todos'
+  const porSeccion = useMemo(() => {
+    const m = { revisar: [], editar: [], cliente: [], espera: [], listo: [] }
+    visibles.forEach(f => m[seccionDe(f)].push(f))
+    return m
+  }, [visibles])
+  const filasActivas = useMemo(() => [...porSeccion.revisar, ...porSeccion.editar, ...porSeccion.cliente], [porSeccion])
+  const esperaViejas = porSeccion.espera.filter(f => f.__plazo.tono === 'rojo').length
+  const nFiltros = [estadoF, plazoF, pmF, personaF].filter(v => v !== 'todos').length
+  const sacarFiltros = () => { setEstadoF('todos'); setPlazoF('todos'); setPmF('todos'); setPersonaF('todos') }
+  // Quien solo edita ve primero lo que tiene para editar; quien responde por
+  // trabajos (PM) ve primero lo que espera su OK.
+  const soloEdita = (!!yo.editor || !!data?.__soloLoSuyo) && !soyPM
+  const ordenSecciones = soloEdita ? [SECCIONES[1], SECCIONES[0], SECCIONES[2]] : SECCIONES
+  const subDe = sec => sec.id === 'revisar' && soloMio && hayMio && soyPM ? 'esperan tu OK' : sec.sub
+  // Lo que hay que saber de cada sección, en palabras y una sola vez (antes iba en
+  // rojo renglón por renglón).
+  const avisosDe = (id, items) => {
+    if (id === 'editar') {
+      const sinNadie = items.filter(f => !String(f.Editor || '').trim()).length
+      const sinFecha = items.filter(f => f.__plazo.clave === 'sinfecha').length
+      return [sinNadie && { txt: `${sinNadie} sin asignar`, rojo: true }, sinFecha && { txt: `${sinFecha} sin fecha de entrega` }].filter(Boolean)
+    }
+    if (id === 'cliente') {
+      const viejas = items.filter(f => { const d = parseFechaAR(f['Fecha entrega']); return d && diasEntre(d, hoy) >= 5 }).length
+      return viejas ? [{ txt: `${viejas} hace 5 días o más: vale un llamado`, rojo: true }] : []
+    }
+    return []
+  }
 
   // `extra.nota` = el texto que se acaba de sumar a la bitácora. Es lo que hace
   // que salga el mail: sin eso, guardar un campo no le escribe a nadie. Y el
@@ -348,11 +407,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       if (!j.ok) { showToast(j.error || 'No se pudo crear', 'err'); return false }
       const nombres = (j.nombres || []).join(', ')
       showToast(j.creadas === 1 ? `Agregado: ${nombres || 'tarea'} ✓` : `${j.creadas} agregados: ${nombres} ✓`)
-      // Que se vea dónde quedó: se abre y la pantalla baja hasta ahí. "El otro día
+      // Que se vea dónde quedó: queda marcado y la pantalla baja hasta ahí. "El otro día
       // cargamos una tarea y nos costó encontrarla" (Juan, 14/9/2026).
       if (j.ids?.length) {
         setTocados(t => { const n = new Set(t); j.ids.forEach(i => n.add(i)); return n })
-        setAbierto(j.ids[0]); setScrollA(j.ids[0])
+        setRecien(new Set(j.ids)); setScrollA(j.ids[0])
       }
       setNueva(false); onRefresh && onRefresh()
       return true
@@ -485,6 +544,21 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }, [data])
   const props = { guardar, carpeta, crudoAlCliente, mail, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, logos, horas, onRefresh, soloLoSuyo: data?.__soloLoSuyo || null, recursosDe }
 
+  // Todas las piezas de un proyecto (no solo las que pasaron el filtro): lo usan
+  // "+ Video" (copia el brief de una hermana), el logo y las fotos.
+  const grupoEntero = num => armarGrupos(filas.filter(f => String(f['N° presupuesto'] || '—') === String(num)))[0]
+  const ctx = { props, abrir, abierto, drive, mailsDe, sucesorDe, proyDe, grupoEntero, recien }
+  // Una sección de la lista. En la compu, una tabla con el trabajo a la izquierda
+  // y un renglón por pieza; en el teléfono, las tarjetas por proyecto de siempre.
+  const pintar = (items, sec) => {
+    if (!items.length) return null
+    const gs = sec === 'listo' ? armarGrupos(items).reverse() : armarGrupos(items)
+    if (cel) return gs.map(g => <Grupo key={sec + g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)
+    return <div style={{ ...card, overflow: 'hidden' }}>
+      {gs.map((g, i) => <Bloque key={sec + g.num} g={g} primero={i === 0} conAccion={sec === 'revisar' || sec === 'cliente'} ctx={ctx} />)}
+    </div>
+  }
+
   // ------------------------------------------------------------ la ficha
   // El trabajo abierto, solo. El grupo se arma con TODAS las piezas del proyecto
   // (el logo se copia a las hermanas, "+ Video" copia el brief de una de ellas)
@@ -529,6 +603,10 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       </div>
     </div>
 
+    {/* Lo que en la lista aparece recién al pasar el mouse: el lápiz de cambiar el
+        nombre y los tres puntitos del trabajo. Los estilos de la app son inline y
+        un hover de padre a hijo no se puede escribir así. */}
+    <style>{`.ed-fila:hover{background:${T.surfaceAlt}}.ed-lapiz{opacity:0}.ed-fila:hover .ed-lapiz{opacity:.55}.ed-fila .ed-lapiz:hover{opacity:1}.ed-proy .ed-mas{opacity:0}.ed-proy:hover .ed-mas{opacity:.8}`}</style>
     {vista === 'info' ? <Info mail={mail} showToast={showToast} /> : <>
       {!crudas.length
         ? <div style={{ ...card, padding: 28, textAlign: 'center' }}>
@@ -546,7 +624,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
           {/* UNA línea: de quién · buscar · filtros · actualizar · nuevo. Antes eran cuatro
               filas de controles antes del primer trabajo (y las tarjetas repetían los
               mismos números que los chips de abajo: 13 · 4 · 0 · 3 dos veces). */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
             {/* Lo mío / todo el equipo: manda sobre los números, los chips y la lista. Dani,
                 17/9/2026: "cuando aprieto veo las de todos y a veces tengo que andar buscando". */}
             {hayMio && <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: 9, overflow: 'hidden', flex: cel ? '1 1 100%' : undefined }}>
@@ -557,15 +635,19 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             </div>}
             {!cel && <div style={{ flex: 1 }} />}
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '7px 10px', fontSize: cel ? 13 : 12.5, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 210 }} />
-            <button onClick={() => setVerFiltros(v => !v)} title="Por estado, por PM o por quién lo edita" style={{ ...btn, padding: cel ? '9px 12px' : '7px 12px', flex: cel ? 1 : undefined, background: nFiltros ? T.ink : T.surface, color: nFiltros ? '#fff' : T.ink2, borderColor: nFiltros || verFiltros ? T.ink : T.border }}>Filtros{nFiltros ? ` · ${nFiltros}` : ''} {verFiltros ? '▴' : '▾'}</button>
+            <button onClick={() => setVerFiltros(v => !v)} title="Por estado, por plazo, por PM o por quién lo edita" style={{ ...btn, padding: cel ? '9px 12px' : '7px 12px', flex: cel ? 1 : undefined, background: nFiltros ? T.ink : T.surface, color: nFiltros ? '#fff' : T.ink2, borderColor: nFiltros || verFiltros ? T.ink : T.border }}>Filtros{nFiltros ? ` · ${nFiltros}` : ''} {verFiltros ? '▴' : '▾'}</button>
             <button onClick={() => sincronizar(false)} disabled={sincro} title="Trae los entregables nuevos desde Proyectos (también corre solo al abrir)" style={{ ...btn, padding: cel ? '9px 12px' : '7px 11px' }}>{sincro ? '…' : '↻'}</button>
-            <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un proyecto que ya está en el tablero, usá el “+ Video” de ese proyecto" style={{ ...btnPri, padding: cel ? '9px 14px' : '7px 13px', flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
+            <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un trabajo que ya está en el tablero, tocá el nombre del trabajo y usá “+ Video”" style={{ ...btnPri, padding: cel ? '9px 14px' : '7px 13px', flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
-          {verFiltros && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', padding: '9px 11px', background: T.surfaceAlt, borderRadius: 9 }}>
+          {verFiltros && <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '-8px 0 18px', flexWrap: 'wrap', padding: '9px 11px', background: T.surfaceAlt, borderRadius: 9 }}>
             <select value={estadoF} onChange={e => setEstadoF(e.target.value)} title="En qué anda cada entregable (distinto del plazo)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 200, borderColor: estadoF !== 'todos' ? T.ink : T.border, fontWeight: estadoF !== 'todos' ? 600 : 400 }}>
               <option value="todos">Cualquier estado</option>
               {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
+            </select>
+            <select value={plazoF} onChange={e => setPlazoF(e.target.value)} title="Contra la fecha de entrega que puso el PM" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 200, borderColor: plazoF !== 'todos' ? T.ink : T.border, fontWeight: plazoF !== 'todos' ? 600 : 400 }}>
+              <option value="todos">Cualquier plazo</option>
+              {PLAZOS.filter(x => porPlazo[x.id] || x.id === plazoF).map(x => <option key={x.id} value={x.id}>{x.label} ({porPlazo[x.id] || 0})</option>)}
             </select>
             <select value={pmF} onChange={e => { setPmF(e.target.value); if (e.target.value !== 'todos') setSoloMio(false) }} title="Quién responde por el trabajo ante el cliente (distinto del editor)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 180, borderColor: pmF !== 'todos' ? T.ink : T.border, fontWeight: pmF !== 'todos' ? 600 : 400 }}>
               <option value="todos">Cualquier PM</option>
@@ -577,51 +659,30 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
               {sinAsignar > 0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
               {personas.map(([e, n]) => <option key={e} value={e}>{e} ({n})</option>)}
             </select>
-            {nFiltros > 0 && <button onClick={() => { setEstadoF('todos'); setPmF('todos'); setPersonaF('todos') }} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, border: 'none', background: 'transparent', color: T.ink2, textDecoration: 'underline' }}>Sacar filtros</button>}
+            {nFiltros > 0 && <button onClick={sacarFiltros} style={{ ...btn, padding: '5px 10px', fontSize: 11.5, border: 'none', background: 'transparent', color: T.ink2, textDecoration: 'underline' }}>Sacar filtros</button>}
           </div>}
-
-          {/* Los plazos. En el celular los chips son tres renglones: ahí van las cuatro
-              tarjetas (que se leen de un vistazo) y un desplegable. */}
-          {cel && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 10 }}>
-            <Kpi n={cuenta.rojo} l="atrasados" c={COLOR_SEM.rojo.fg} onClick={() => setFiltro('rojo')} activo={filtro === 'rojo'} cel={cel} />
-            <Kpi n={cuenta.naranja} l="hoy" c={COLOR_SEM.naranja.fg} onClick={() => setFiltro('naranja')} activo={filtro === 'naranja'} cel={cel} />
-            <Kpi n={cuenta.amarillo} l="semana" c={COLOR_SEM.amarillo.fg} onClick={() => setFiltro('amarillo')} activo={filtro === 'amarillo'} cel={cel} />
-            <Kpi n={cuenta.revisar} l={hayMio && !soyPM ? 'OK del PM' : 'tu OK'} c={T.brand} onClick={() => setFiltro('revisar')} activo={filtro === 'revisar'} cel={cel} />
-          </div>}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-            {cel && <select value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...inp, flex: '1 1 100%', fontSize: 13, padding: '9px 10px', cursor: 'pointer' }}>
-              {FILTROS.map(f => <option key={f.id} value={f.id}>{etiqueta(f)} ({cuenta[f.id]})</option>)}
-            </select>}
-            {!cel && FILTROS.map(f => {
-              const activo = filtro === f.id, n = cuenta[f.id], punto = COLOR_SEM[f.id]?.fg || (f.id === 'revisar' ? T.brand : null)
-              return <button key={f.id} onClick={() => setFiltro(f.id)} style={{
-                ...btn, padding: '5px 11px', fontSize: 12, borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
-                border: `1px solid ${activo ? T.ink : T.border}`, background: activo ? T.ink : 'transparent', color: activo ? '#fff' : T.ink2, fontWeight: activo ? 600 : 500,
-                opacity: n || activo ? 1 : 0.45,
-              }}>{punto && n > 0 && f.id !== 'listo' && <span style={{ width: 7, height: 7, borderRadius: 7, background: punto, display: 'inline-block' }} />}{etiqueta(f)} <span style={{ fontFamily: MONO, opacity: 0.65 }}>{n}</span></button>
-            })}
-          </div>
 
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
-          {!grupos.length && !gruposEspera.length
-            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {(filtro !== 'activos' || estadoF !== 'todos') && <button onClick={() => { setFiltro('activos'); setEstadoF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo lo abierto</button>}{soloMio && hayMio && <button onClick={() => elegirMio(false)} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
+          {!visibles.length
+            ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {nFiltros > 0 && <button onClick={sacarFiltros} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Sacar filtros</button>}{soloMio && hayMio && <button onClick={() => elegirMio(false)} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
             : <>
-              {!grupos.length && <div style={{ fontSize: 13, color: T.ink2, padding: '6px 2px 16px' }}>{soloMio && hayMio ? 'No tenés nada en edición ahora.' : 'No hay nada en edición ahora.'}</div>}
+              {!filasActivas.length && !filtrando && <div style={{ fontSize: 13, color: T.ink2, padding: '6px 2px 16px' }}>{soloMio && hayMio ? 'No tenés nada en edición ahora.' : 'No hay nada en edición ahora.'}</div>}
               {enColumnas
-                ? filasActivas.length > 0 && <Columnas filas={filasActivas} onAbrir={abrir} onMover={moverA} onEstado={(f, e) => { guardar(f.ID, { Estado: e }); showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} cel={cel} />
-                : grupos.map(g => <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
-              {gruposEspera.length > 0 && <>
-                <button onClick={() => { const n = !verEspera; setVerEspera(n); recordar('ed-ver-espera', n ? '1' : '0') }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', marginTop: grupos.length ? 8 : 0, marginBottom: 10, borderRadius: 12, border: `1px dashed ${T.border}`, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: T.ink3 }}>{verEspera ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Esperando material</span>
-                  <span style={{ fontSize: 12.5, fontFamily: MONO, color: T.ink2 }}>{filasEspera.length}</span>
-                  <span style={{ fontSize: 12, color: T.ink3 }}>todavía no hay nada para editar</span>
-                  <span style={{ flex: 1 }} />
-                  {esperaViejas > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: T.brand }}>{esperaViejas} con el evento hace 3 días o más</span>}
-                </button>
-                {verEspera && gruposEspera.map(g => <Grupo key={'e' + g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)}
-              </>}
+                ? filasActivas.length > 0 && <Columnas filas={filasActivas} onAbrir={abrir} onMover={moverA} onEstado={(f, e) => { guardar(f.ID, { Estado: e }); showToast(`${nombrePieza(f)} → ${e}`) }} cel={cel} />
+                : ordenSecciones.map(sec => {
+                    const items = porSeccion[sec.id]
+                    return items.length > 0 && <Seccion key={sec.id} titulo={sec.titulo} n={items.length} sub={subDe(sec)} avisos={avisosDe(sec.id, items)}>{pintar(items, sec.id)}</Seccion>
+                  })}
+              {porSeccion.espera.length > 0 && <Seccion titulo="Esperando material" n={porSeccion.espera.length} sub="todavía no hay nada para editar"
+                plegada={filtrando ? null : !verEspera} onPlegar={() => { const n = !verEspera; setVerEspera(n); recordar('ed-ver-espera', n ? '1' : '0') }}
+                avisos={esperaViejas ? [{ txt: `${esperaViejas} con el evento hace 3 días o más`, rojo: true }] : []}>
+                {pintar(filtrando || verEspera ? porSeccion.espera : porSeccion.espera.filter(f => tocados.has(f.ID)), 'espera')}
+              </Seccion>}
+              {porSeccion.listo.length > 0 && <Seccion titulo="Terminados" n={porSeccion.listo.length} sub="el cliente dio el OK"
+                plegada={estadoF === 'Terminado' ? null : !verListo} onPlegar={() => setVerListo(v => !v)}>
+                {pintar(verListo || estadoF === 'Terminado' ? porSeccion.listo : porSeccion.listo.filter(f => tocados.has(f.ID)), 'listo')}
+              </Seccion>}
             </>}
         </>}
     </>}
@@ -758,7 +819,7 @@ function OKCliente({ f, guardar, showToast, cel }) {
 
   const terminar = () => {
     guardar(f.ID, { Estado: 'Terminado' })
-    showToast && showToast(`${limpiarPedido(f.Entregable)} → Terminado ✓`)
+    showToast && showToast(`${nombrePieza(f)} → Terminado ✓`)
   }
   const pedirCambios = () => {
     const t = texto.trim()
@@ -992,7 +1053,7 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
           <div>
             <label style={lbl}>Igual que</label>
             <select value={copiarDe} onChange={e => setCopiarDe(e.target.value)} style={{ ...inp, width: '100%', cursor: 'pointer' }}>
-              {hermanos.map(h => <option key={h.ID} value={h.ID}>{limpiarPedido(h.Entregable)}{String(h.Editor || '').trim() ? ` · ${String(h.Editor).split(' ')[0]}` : ''}</option>)}
+              {hermanos.map(h => <option key={h.ID} value={h.ID}>{nombrePieza(h)}{String(h.Editor || '').trim() ? ` · ${String(h.Editor).split(' ')[0]}` : ''}</option>)}
             </select>
             <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>Copia el brief, el crudo y el PM de esa pieza. Quién lo edita lo elegís abajo.</div>
           </div>
@@ -1047,7 +1108,7 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
         {yendo ? 'Agregando…' : esVideo ? (cant > 1 ? `Agregar ${cant} videos` : 'Agregar el video') : cant > 1 ? `Agregar ${cant} tareas` : 'Agregar'}
       </button>
       <button onClick={onCancelar} style={btn}>Cancelar</button>
-      {esVideo && !titulo.trim() && <span style={{ fontSize: 11.5, color: T.ink3 }}>Queda como “{baseNombre} {yaHay + 1}”{cant > 1 ? `, “${baseNombre} ${yaHay + 2}”…` : ''} — y aparece abajo, abierto.</span>}
+      {esVideo && !titulo.trim() && <span style={{ fontSize: 11.5, color: T.ink3 }}>Queda como “{baseNombre} {yaHay + 1}”{cant > 1 ? `, “${baseNombre} ${yaHay + 2}”…` : ''} — y aparece abajo, marcado.</span>}
       {!esVideo && cant > 1 && <span style={{ fontSize: 11.5, color: T.ink3 }}>Se numeran solas: “{titulo || 'Tarea'} 1”, “{titulo || 'Tarea'} 2”…</span>}
     </div>
   </div>
@@ -1131,7 +1192,8 @@ function Columnas({ filas, onAbrir, onMover, onEstado, cel }) {
           </div>
           {!items.length && <div style={{ fontSize: 11.5, color: T.ink3, padding: '10px 6px 14px' }}>—</div>}
           {items.map(f => {
-            const c = COLOR_SEM[f.__sem.nivel] || COLOR_SEM.verde, e = estadoDe(f.Estado), vuelta = ES_VUELTA(e)
+            const pz = f.__plazo || {}, e = estadoDe(f.Estado), vuelta = ES_VUELTA(e)
+            const c = pz.nivel ? (COLOR_SEM[pz.nivel] || COLOR_SEM.verde) : { fg: pz.tono === 'rojo' ? T.brand : T.border }
             const sinNadie = !String(f.Editor || '').trim()
             return <div key={f.ID} id={`ed-${f.ID}`} draggable={!cel}
               onDragStart={e2 => { e2.dataTransfer.setData('text/plain', f.ID); e2.dataTransfer.effectAllowed = 'move'; setArrastra(f.ID) }}
@@ -1142,13 +1204,13 @@ function Columnas({ filas, onAbrir, onMover, onEstado, cel }) {
                 <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.Cliente || f.Agencia || '—'}</span>
                 <span style={{ fontSize: 10.5, fontFamily: MONO, color: T.ink3 }}>#{f['N° presupuesto']}</span>
               </div>
-              <div style={{ fontSize: 12.5, color: T.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{limpiarPedido(f.Entregable)}</div>
+              <div style={{ fontSize: 12.5, color: T.ink2, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombrePieza(f)}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.ink3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {sinNadie ? <span style={{ color: T.brand, fontWeight: 600 }}>sin asignar</span> : <span style={{ color: T.ink2 }}>{primerNombre(f.Editor)}</span>}
+                  {sinNadie ? <span style={{ color: T.brand }}>sin asignar</span> : <span style={{ color: T.ink2 }}>{primerNombre(f.Editor)}</span>}
                   {String(f.PM || '').trim() && <span> · PM {f.PM}</span>}
                 </span>
-                {!estaCerrado(f.Estado) && <span style={{ fontSize: 10.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>{f.__sem.txt}</span>}
+                {!estaCerrado(f.Estado) && <span style={{ flexShrink: 0 }}><Plazo p={pz} /></span>}
               </div>
               {(vuelta || String(f.Prioridad || '').trim() === 'Urgente' || !!String(f.Consulta || '').trim()) && <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
                 {vuelta && <span style={{ fontSize: 10.5, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap' }}>{e === 'Cambios internos' ? 'cambios internos' : 'cambios del cliente'}</span>}
@@ -1163,13 +1225,6 @@ function Columnas({ filas, onAbrir, onMover, onEstado, cel }) {
       })}
     </div>
   </div>
-}
-
-function Kpi({ n, l, c, onClick, activo, cel }) {
-  return <button onClick={onClick} style={{ ...card, padding: cel ? '8px 6px' : '13px 15px', textAlign: cel ? 'center' : 'left', cursor: 'pointer', borderColor: activo ? c : T.border, borderWidth: activo ? 1.5 : 1 }}>
-    <div style={{ fontSize: cel ? 19 : 25, fontWeight: 700, color: n ? c : T.ink3, fontFamily: MONO, lineHeight: 1.1 }}>{n}</div>
-    <div style={{ fontSize: cel ? 10 : 11.5, color: T.ink2, marginTop: 2 }}>{l}</div>
-  </button>
 }
 
 function Punto({ nivel }) {
@@ -1187,7 +1242,7 @@ function Consultas({ consultas, responder, setAbierto }) {
     {consultas.map(f => <div key={f.ID} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 7, flexWrap: 'wrap' }}>
       <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.ink2 }}>#{f['N° presupuesto']}</span>
       <span style={{ fontSize: 12.5, color: T.ink, fontWeight: 600 }}>{f.Cliente || f.Agencia}</span>
-      <span style={{ fontSize: 12, color: T.ink2 }}>· {limpiarPedido(f.Entregable)}</span>
+      <span style={{ fontSize: 12, color: T.ink2 }}>· {nombrePieza(f)}</span>
       <span style={{ fontSize: 12.5, color: T.ink, flex: 1, minWidth: 200 }}>“{f.Consulta}”</span>
       <input value={resp[f.ID] || ''} onChange={e => setResp(r => ({ ...r, [f.ID]: e.target.value }))}
         onKeyDown={e => { if (e.key === 'Enter') { responder(f, resp[f.ID] || ''); setResp(r => ({ ...r, [f.ID]: '' })) } }}
@@ -1197,7 +1252,140 @@ function Consultas({ consultas, responder, setAbierto }) {
   </div>
 }
 
-function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe, soloId = null }) {
+// ---------------------------------------------------------------- la lista
+// El título de una sección: qué es, cuántas hay y, a la derecha, lo que hay que
+// saber dicho en palabras. `plegada` null = no se pliega.
+function Seccion({ titulo, n, sub, avisos = [], plegada = null, onPlegar, children }) {
+  const fija = plegada === null
+  const cab = <>
+    {!fija && <span style={{ fontSize: 10.5, color: T.ink3, width: 10 }}>{plegada ? '▶' : '▼'}</span>}
+    <span style={{ fontSize: fija ? 14 : 13, fontWeight: fija ? 700 : 600, color: T.ink }}>{titulo}</span>
+    <span style={{ fontSize: 12.5, fontFamily: MONO, color: T.ink2 }}>{n}</span>
+    <span style={{ fontSize: 12, color: T.ink3 }}>{sub}</span>
+    <span style={{ flex: 1 }} />
+    {avisos.map(a => <span key={a.txt} style={{ fontSize: 12, fontWeight: a.rojo ? 600 : 400, color: a.rojo ? T.brand : T.ink3 }}>{a.txt}</span>)}
+  </>
+  return <div style={{ marginBottom: fija ? 20 : 10 }}>
+    {fija
+      ? <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, padding: '0 2px 8px', flexWrap: 'wrap' }}>{cab}</div>
+      : <button onClick={onPlegar} style={{ width: '100%', display: 'flex', alignItems: 'baseline', gap: 9, padding: '11px 14px', marginBottom: children ? 8 : 0, borderRadius: 12, border: `1px dashed ${T.border}`, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexWrap: 'wrap' }}>{cab}</button>}
+    {children}
+  </div>
+}
+
+// El plazo en la lista (ver plazoDe). Es texto, no una píldora: en cada renglón la
+// única píldora es el estado, que es lo que se toca. El color sale del semáforo
+// cuando hay una fecha puesta (rojo atrasado, ámbar hoy o mañana) y si no, gris.
+function Plazo({ p }) {
+  if (!p || !p.txt) return null
+  const rojo = p.nivel === 'rojo' || p.tono === 'rojo'
+  const ambar = p.nivel === 'naranja' || p.nivel === 'amarillo'
+  return <span title={p.ayuda} style={{ fontSize: 11.5, color: rojo ? T.brand : ambar ? T.warn : p.nivel ? T.ink2 : T.ink3, fontWeight: rojo || p.nivel === 'naranja' ? 600 : 400, whiteSpace: 'nowrap' }}>{p.txt}</span>
+}
+
+// El nombre de la pieza, que se puede cambiar ahí mismo. Sofi, 4/10/2026: "estaría
+// bueno poder editar el nombre de las piezas así nos es más fácil internamente
+// referirnos a ellas" — CeraVe tenía ocho que se llamaban "Edit 15-30s", y además
+// la duración del nombre no era la real. Se guarda en la columna "Nombre" de
+// EDICION; lo que se vendió ("Entregable") no se toca. Dejarlo vacío vuelve al
+// nombre del presupuesto.
+function NombrePieza({ f, guardar, enFicha = false }) {
+  const [editando, setEditando] = useState(false)
+  const [v, setV] = useState('')
+  const cancelar = useRef(false)
+  const actual = nombrePieza(f)
+  const vendido = limpiarPedido(f.Entregable)
+  const propio = !!String(f.Nombre || '').trim() && actual !== vendido
+  const confirmar = () => {
+    setEditando(false)
+    if (cancelar.current) { cancelar.current = false; return }
+    const n = v.trim()
+    const nuevo = !n || n === vendido ? '' : n
+    if (nuevo !== String(f.Nombre || '').trim()) guardar(f.ID, { Nombre: nuevo })
+  }
+  if (editando) return <input autoFocus value={v} onChange={e => setV(e.target.value)} onClick={e => e.stopPropagation()} onBlur={confirmar} maxLength={80}
+    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); else if (e.key === 'Escape') { e.stopPropagation(); cancelar.current = true; e.target.blur() } }}
+    placeholder={vendido} title="Enter guarda · Esc cancela · vacío vuelve al nombre del presupuesto"
+    style={{ ...inp, flex: 1, minWidth: 120, maxWidth: 420, padding: '4px 8px', fontSize: 13, fontWeight: 500, borderColor: T.ink }} />
+  const empezar = e => { e.stopPropagation(); setV(actual); setEditando(true) }
+  return <>
+    <span title={propio ? `En el presupuesto: ${vendido}` : undefined} style={enFicha ? { fontSize: 14, color: T.ink, fontWeight: 600 } : { fontSize: 13, color: T.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{actual}</span>
+    {enFicha
+      ? <button onClick={empezar} title="Así lo ve todo el equipo: en el tablero, el calendario y los mails" style={{ ...btn, padding: '2px 8px', fontSize: 11, color: T.ink2, flexShrink: 0 }}>✎ Cambiar nombre</button>
+      : <button className="ed-lapiz" onClick={empezar} title="Cambiarle el nombre" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 3px', fontSize: 13, color: T.ink2, flexShrink: 0, fontFamily: 'inherit' }}>✎</button>}
+    {enFicha && propio && !/-M\d+$/.test(String(f.ID || '')) && <span style={{ fontSize: 11.5, color: T.ink3, whiteSpace: 'nowrap', flexShrink: 0 }}>en el presupuesto: {vendido}</span>}
+  </>
+}
+
+// Un renglón de la lista (compu): UNA pieza, una línea. Toda la fila abre la ficha;
+// el estado, el lápiz y los botones frenan el clic.
+function FilaLista({ f, conAccion, plazoRepetido, ctx }) {
+  const { guardar, showToast } = ctx.props
+  const cerrado = estaCerrado(f.Estado)
+  const e = estadoDe(f.Estado)
+  const sinNadie = !String(f.Editor || '').trim()
+  const grita = sinNadie && e !== 'Sin material' && !cerrado
+  const cambiarEstado = nuevo => { guardar(f.ID, { Estado: nuevo }); showToast && showToast(`${nombrePieza(f)} → ${nuevo}`) }
+  return <div id={`ed-${f.ID}`} className="ed-fila" onClick={() => ctx.abrir(f.ID)}
+    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 14px 5px 8px', minHeight: 36, cursor: 'pointer', opacity: cerrado ? 0.6 : 1, background: ctx.recien.has(f.ID) ? T.warnSoft : undefined }}>
+    <span style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+      <NombrePieza f={f} guardar={guardar} />
+      {String(f.Prioridad || '').trim() === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3, flexShrink: 0 }}>URGENTE</span>}
+      {!!String(f.Consulta || '').trim() && <span title={f.Consulta} style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>🙋 PREGUNTA</span>}
+    </span>
+    {/* "Sin asignar" solo grita cuando ya hay material: ahí es trabajo parado sin dueño. */}
+    <span title={sinNadie ? undefined : String(f.Editor).trim()} style={{ width: 96, flexShrink: 0, fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: sinNadie ? (grita ? T.brand : T.ink3) : T.ink2 }}>{sinNadie ? 'sin asignar' : primerNombre(f.Editor)}</span>
+    {/* En "Para revisar" y "Con el cliente" el título de la sección ya dice el estado:
+        ahí va el paso que sigue. Cualquier otro cambio de estado se hace en la ficha,
+        igual que en el Tablero (mandar al cliente o pedir cambios llevan nota y archivo). */}
+    <span onClick={conAccion ? ev => ev.stopPropagation() : undefined} style={{ width: 166, display: 'flex', flexShrink: 0 }}>
+      {conAccion && esperaAlPM(f.Estado)
+        ? <button onClick={() => ctx.abrir(f.ID)} title="Mirarlo y decidir" style={{ ...btn, padding: '4px 12px', fontSize: 11.5, color: T.brand, borderColor: `${T.brand}66`, fontWeight: 600 }}>Revisar</button>
+        : conAccion && esperaAlCliente(f.Estado)
+          // Un clic cierra: el cliente ya dijo que sí. Si pidió cambios, se abre la ficha y va con la nota.
+          ? <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la ficha." style={{ ...btn, padding: '4px 12px', fontSize: 11.5, color: T.pos, borderColor: `${T.pos}77`, fontWeight: 600, whiteSpace: 'nowrap' }}>✓ OK del cliente</button>
+          : <EstadoPill estado={f.Estado} onChange={cambiarEstado} />}
+    </span>
+    <span style={{ width: 138, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>{!plazoRepetido && <Plazo p={f.__plazo} />}</span>
+    <span style={{ fontSize: 15, color: T.ink3, width: 10, textAlign: 'right', flexShrink: 0 }}>›</span>
+  </div>
+}
+
+// Un trabajo en la lista: a la izquierda de quién es (una sola vez), a la derecha
+// sus piezas. Antes cada proyecto era una tarjeta con su cabecera, y como 2 de cada
+// 3 tienen una sola pieza, eran dos renglones para decir una cosa. Tocar el nombre
+// del trabajo abre lo que es del proyecto y no de una pieza: carpetas, "+ Video",
+// fotos, compartir (lo mismo que está siempre a la vista en la ficha).
+function Bloque({ g, primero, conAccion, ctx }) {
+  const [herr, setHerr] = useState(false)
+  const fant = ctx.sucesorDe(g)
+  const varias = g.items.length > 1
+  const igual = (a, b) => estadoDe(a.Estado) === 'Sin material' && estadoDe(b.Estado) === 'Sin material' && a.__plazo.txt === b.__plazo.txt
+  return <div style={{ borderTop: primero ? 'none' : `1px solid ${T.border}` }}>
+    <div className="ed-proy" style={{ display: 'flex', alignItems: 'stretch' }}>
+      <div onClick={() => setHerr(h => !h)} title={`${[g.cliente || g.agencia, g.proyecto, g.fecha].filter(Boolean).join(' · ')} — tocá para ver las carpetas, sumar un video, las fotos y compartir`}
+        style={{ flex: '0 0 30%', maxWidth: 400, minWidth: 0, padding: varias || fant ? '10px 8px 8px 14px' : '0 8px 0 14px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: varias || fant ? 'flex-start' : 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0 }}>
+          <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.ink3, flexShrink: 0 }}>#{g.num}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+            {g.cliente || g.agencia || '—'}{g.proyecto && <span style={{ fontWeight: 400, color: T.ink2 }}> · {g.proyecto}</span>}
+          </span>
+          <span className="ed-mas" style={herr ? { opacity: 1, fontSize: 10.5, color: T.ink2, flexShrink: 0 } : { fontSize: 12, color: T.ink3, flexShrink: 0 }}>{herr ? '✕' : '⋯'}</span>
+        </div>
+        {(varias || fant) && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: T.ink3 }}>{g.fecha}{varias ? ` · ${g.items.length} piezas` : ''}</span>
+          {fant && <span title="Este número ya no está en Proyectos: se represupuestó, se desaprobó o se borró. Las carpetas y el material van con el número vigente." style={{ fontSize: 11, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '1px 7px', borderRadius: 5, whiteSpace: 'nowrap' }}>ya no existe{fant.sucesor ? ` · ahora es #${fant.sucesor}` : ''}</span>}
+        </div>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, padding: '2px 0' }}>
+        {g.items.map((f, i) => <FilaLista key={f.ID} f={f} conAccion={conAccion} plazoRepetido={i > 0 && igual(f, g.items[i - 1])} ctx={ctx} />)}
+      </div>
+    </div>
+    {herr && <Grupo g={ctx.grupoEntero(g.num) || g} abierto={ctx.abierto} setAbierto={ctx.abrir} drive={ctx.drive} mailsCliente={ctx.mailsDe(g.agencia, g.cliente)} {...(fant || {})} proy={ctx.proyDe.get(String(g.num))} {...ctx.props} soloCabecera />}
+  </div>
+}
+
+function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive, mail, mailsCliente, preguntar, responder, cel, showToast, personaF, editores, PMS, crearTarea, fantasma = false, sucesor = '', proy, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe, soloId = null, soloCabecera = false }) {
   const peor = g.items[0].__sem
   const logoGrupo = g.items.map(h => String(h['Logo y placas'] || '').trim()).find(esURL)
   const rec = recursosDe ? recursosDe(g.agencia, g.cliente) : {}
@@ -1222,13 +1410,14 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
   // Compartir…) eran lo que más ruido metía en la lista. En reposo no se ven: aparecen
   // al pasar el mouse por el proyecto. En la ficha y en el celular están siempre.
   const [encima, setEncima] = useState(false)
-  const verBotones = cel || !!soloId || encima || panel || nuevaAca || verFotos || creando
-  const flotan = !cel && !soloId
+  const verBotones = cel || !!soloId || soloCabecera || encima || panel || nuevaAca || verFotos || creando
+  const flotan = !cel && !soloId && !soloCabecera
   // En el teléfono, en la lista, solo los íconos de Drive: el resto está en la ficha.
   const enLista = !cel || !!soloId
 
-  return <div onMouseEnter={() => setEncima(true)} onMouseLeave={() => setEncima(false)} style={{ ...card, marginBottom: 10, overflow: 'hidden' }}>
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '9px 14px', minHeight: cel ? undefined : 46, background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, flexWrap: flotan ? 'nowrap' : 'wrap', overflow: flotan ? 'hidden' : undefined }}>
+  return <div onMouseEnter={() => setEncima(true)} onMouseLeave={() => setEncima(false)} style={soloCabecera ? { borderTop: `1px solid ${T.border}` } : { ...card, marginBottom: 10, overflow: 'hidden' }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: cel ? 7 : 10, padding: cel ? '9px 13px' : '9px 14px', minHeight: cel || soloCabecera ? undefined : 46, background: T.surfaceAlt, borderBottom: soloCabecera ? 'none' : `1px solid ${T.border}`, flexWrap: flotan ? 'nowrap' : 'wrap', overflow: flotan ? 'hidden' : undefined }}>
+      {!soloCabecera && <>
       <span style={{ fontFamily: MONO, fontSize: cel ? 11 : 12, color: T.ink2 }}>#{g.num}</span>
       <span style={{ fontSize: cel ? 13 : 13.5, fontWeight: 600, color: T.ink, whiteSpace: flotan ? 'nowrap' : undefined }}>{g.cliente || g.agencia || '—'}</span>
       {g.proyecto && <span style={{ fontSize: 12.5, color: T.ink2, ...(cel ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } : flotan ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 } : {}) }}>· {g.proyecto}</span>}
@@ -1237,6 +1426,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
         ya no existe{sucesor ? ` · ahora es #${sucesor}` : ''}
       </span>}
       <div style={{ flex: 1 }} />
+      </>}
       {/* En la lista flotan sobre la derecha de la cabecera: si fueran parte del renglón,
           escondidos seguirían ocupando lugar (y con títulos largos lo partían en dos). */}
       <div style={flotan
@@ -1265,7 +1455,7 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
       </div>
     </div>
 
-    {nuevaAca && <div style={{ padding: '10px 14px 0', background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+    {nuevaAca && <div style={{ padding: '10px 14px 0', background: T.bg, borderTop: soloCabecera ? `1px solid ${T.border}` : undefined, borderBottom: soloCabecera ? 'none' : `1px solid ${T.border}` }}>
       <NuevaTarea numFijo={g.num} hermanos={g.items} proyectos={[]} personas={editores.map(e => e.nombre)}
         onCrear={async d => { const ok = await crearTarea(d); if (ok) setNuevaAca(false); return ok }} onCancelar={() => setNuevaAca(false)} />
     </div>}
@@ -1274,13 +1464,13 @@ function Grupo({ g, abierto, setAbierto, guardar, carpeta, crudoAlCliente, drive
 
     {panel && <PanelCompartir g={g} carpeta={carpeta} crudoAlCliente={crudoAlCliente} mailsCliente={mailsCliente} />}
 
-    {g.items.filter(f => !soloId || f.ID === soloId).map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} enFicha={!!soloId} />)}
+    {!soloCabecera && g.items.filter(f => !soloId || f.ID === soloId).map(f => <Fila key={f.ID} f={f} g={g} abierto={abierto} setAbierto={setAbierto} guardar={guardar} mail={mail} preguntar={preguntar} responder={responder} cel={cel} mailsCliente={mailsCliente} showToast={showToast} personaF={personaF} editores={editores} PMS={PMS} logos={logos} horas={horas} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} recursosDe={recursosDe} enFicha={!!soloId} />)}
 
     {/* En la ficha se ve una pieza sola; las otras del proyecto quedan a un clic. */}
     {soloId && g.items.length > 1 && <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', background: T.surfaceAlt, borderTop: `1px solid ${T.border}` }}>
       <span style={{ fontSize: 11.5, color: T.ink3 }}>Otras piezas de este proyecto:</span>
       {g.items.filter(h => h.ID !== soloId).map(h => { const c = COLOR_SEM[h.__sem.nivel] || COLOR_SEM.verde
-        return <button key={h.ID} onClick={() => setAbierto(h.ID)} title={`${String(h.Editor || '').trim() || 'sin asignar'} · ${h.__sem.txt}`} style={{ ...btn, padding: '4px 10px', fontSize: 11.5, borderLeft: `3px solid ${c.fg}` }}>{limpiarPedido(h.Entregable)} <span style={{ color: T.ink3 }}>· {estadoDe(h.Estado)}</span></button> })}
+        return <button key={h.ID} onClick={() => setAbierto(h.ID)} title={`${String(h.Editor || '').trim() || 'sin asignar'} · ${h.__sem.txt}`} style={{ ...btn, padding: '4px 10px', fontSize: 11.5, borderLeft: `3px solid ${c.fg}` }}>{nombrePieza(h)} <span style={{ color: T.ink3 }}>· {estadoDe(h.Estado)}</span></button> })}
     </div>}
   </div>
 }
@@ -1333,14 +1523,15 @@ function EstadoPill({ estado, onChange }) {
 }
 
 function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, personaF, editores, PMS, logos, horas, onRefresh, soloLoSuyo, recursosDe, enFicha = false }) {
-  const sem = f.__sem
-  const c = COLOR_SEM[sem.nivel] || COLOR_SEM.verde
+  // El borde de color solo cuando el plazo dice algo: una fecha puesta, o un aviso.
+  const pz = f.__plazo || {}
+  const c = pz.nivel ? (COLOR_SEM[pz.nivel] || COLOR_SEM.verde) : { fg: pz.tono === 'rojo' ? T.brand : T.border }
   const abierta = abierto === f.ID
   const cerrado = estaCerrado(f.Estado)
   const prio = String(f.Prioridad || 'Normal').trim()
   const hayConsulta = !!String(f.Consulta || '').trim()
   // El toast dice a dónde fue; la fila se queda a la vista (ver `tocados` arriba).
-  const cambiarEstado = e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }
+  const cambiarEstado = e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${nombrePieza(f)} → ${e}`) }
 
   // En el teléfono la fila de escritorio se parte y lo que se corta es justo lo
   // que hay que ver: el estado y para cuándo. Acá va apilada, con el estado y el
@@ -1352,13 +1543,15 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
         borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: enFicha ? 'default' : 'pointer',
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-          <span style={{ fontSize: 14, color: T.ink, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{limpiarPedido(f.Entregable)}</span>
+          {enFicha
+            ? <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}><NombrePieza f={f} guardar={guardar} enFicha /></span>
+            : <span style={{ fontSize: 14, color: T.ink, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{nombrePieza(f)}</span>}
           {hayConsulta && <span style={{ fontSize: 13 }}>🙋</span>}
           {prio === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>URGENTE</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <EstadoPill estado={f.Estado} onChange={cambiarEstado} />
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span>
+          <Plazo p={pz} />
           <div style={{ flex: 1 }} />
           {!enFicha && <span style={{ fontSize: 11.5, color: T.ink3 }}>{abierta ? 'cerrar ▲' : 'abrir →'}</span>}
         </div>
@@ -1379,8 +1572,10 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
     <div onClick={clicFila ? () => setAbierto(f.ID) : undefined} title={clicFila ? 'Abrir este trabajo' : undefined}
       onMouseEnter={clicFila ? e => { e.currentTarget.style.background = T.surfaceAlt } : undefined} onMouseLeave={clicFila ? e => { e.currentTarget.style.background = 'transparent' } : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', borderLeft: `3px solid ${c.fg}`, opacity: cerrado ? 0.6 : 1, cursor: clicFila ? 'pointer' : 'default' }}>
-      <span style={{ flex: '1.5 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{limpiarPedido(f.Entregable)}</span>
+      <span style={{ flex: enFicha ? '3 1 0' : '1.5 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: enFicha ? 'wrap' : undefined }}>
+        {enFicha
+          ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}><NombrePieza f={f} guardar={guardar} enFicha /></span>
+          : <span style={{ fontSize: 13, color: T.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombrePieza(f)}</span>}
         {prio === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3, flexShrink: 0 }}>URGENTE</span>}
         {hayConsulta && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>🙋 PREGUNTA</span>}
       </span>
@@ -1398,7 +1593,7 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
             cambios, se abre la fila y va con la nota. */}
         {esperaAlCliente(f.Estado) && <button onClick={() => cambiarEstado('Terminado')} title="El cliente dio el OK final: se cierra como Terminado. Si pidió cambios, abrí la fila." style={{ ...btn, padding: '4px 10px', fontSize: 11.5, background: T.pos, color: '#fff', border: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>✓ OK del cliente</button>}
       </span>
-      <span style={{ width: 176, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}><span style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, background: c.bg, padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{sem.txt}</span></span>
+      <span style={{ width: 176, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}><Plazo p={pz} /></span>
       {enFicha ? null : abierta
         ? <button onClick={e => { e.stopPropagation(); setAbierto(null) }} style={{ ...btn, padding: '4px 10px', fontSize: 11.5 }}>Cerrar</button>
         : <span style={{ fontSize: 15, color: T.ink3, width: 12, textAlign: 'right', flexShrink: 0 }}>›</span>}
@@ -1441,7 +1636,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
 
     <div style={{ marginBottom: 14 }}>
       <label style={lbl}>En qué anda — tocá el paso al que pasa</label>
-      <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${limpiarPedido(f.Entregable)} → ${e}`) }} />
+      <Barra estado={f.Estado} onChange={e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${nombrePieza(f)} → ${e}`) }} />
     </div>
 
     {/* Lo que hay que hacer AHORA va primero; el resto son secciones que se abren. */}
