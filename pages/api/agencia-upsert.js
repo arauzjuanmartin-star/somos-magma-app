@@ -9,12 +9,12 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nombre, cuit, condIVA, mailFact, telefono, pmDefault, direccion, tipo, notas } = req.body
+  const { nombre, cuit, condIVA, mailFact, telefono, pmDefault, direccion, tipo, notas, plazoPago } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
     const { sheets, SHEET_ID } = await getSheets()
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'AGENCIAS!A:L' })
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'AGENCIAS!A:Z' })
     const headers = r.data.values?.[0] || []
     const rows = r.data.values || []
 
@@ -23,14 +23,22 @@ export default async function handler(req, res) {
     // seguimos escribiendo en la correcta en vez de pisar datos de otra).
     const idxDefault = {
       Nombre: 0, CUIT: 1, 'Condicion IVA': 2, 'Mail facturacion': 3, Telefono: 4,
-      'PM default': 5, 'Direccion fiscal': 6, Tipo: 7, Notas: 8, Activa: 9, Creada: 10, Modificada: 11,
+      'PM default': 5, 'Direccion fiscal': 6, Tipo: 7, Notas: 8, Activa: 9, Creada: 10,
     }
+    // "Modificada" y "Plazo de pago" NO tienen posición de respaldo: si la solapa no tiene esa columna, no se
+    // escribe. "Modificada" caía en la columna 12 por posición y esa columna es "Drive Recursos": cada vez que se
+    // tocaba una agencia le quedaba una fecha donde va el link de la carpeta, y el link ya no se podía anotar solo.
+    const SOLO_SI_EXISTE = ['Modificada', 'Plazo de pago']
     const norm2 = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
     const idx = {}
+    const tieneTitulos = headers.some(h => norm2(h) === 'nombre')
     Object.entries(idxDefault).forEach(([campo, pos]) => {
       const real = headers.findIndex(h => norm2(h) === norm2(campo))
       idx[campo] = real >= 0 ? real : pos
     })
+    SOLO_SI_EXISTE.forEach(campo => { const real = headers.findIndex(h => norm2(h) === norm2(campo)); if (real >= 0) idx[campo] = real })
+    // Días de plazo: solo el número ("90 días" → 90). Vacío = sin plazo propio (la factura arranca en 30).
+    const plazoLimpio = plazoPago === undefined || plazoPago === null ? undefined : (String(plazoPago).match(/\d+/) || [''])[0]
     const norm = v => String(v||'').trim().toLowerCase()
     const filaExistente = rows.findIndex((row,i) => i>0 && norm(row[0]) === norm(nombre))
     const hoy = new Date().toLocaleDateString('es-AR')
@@ -52,6 +60,7 @@ export default async function handler(req, res) {
       if (direccion !== undefined) set('Direccion fiscal', direccion)
       if (tipo !== undefined) set('Tipo', tipo)
       if (notas !== undefined) set('Notas', notas)
+      if (plazoLimpio !== undefined) set('Plazo de pago', plazoLimpio)
       set('Modificada', hoy)
       if (updates.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
@@ -71,23 +80,16 @@ export default async function handler(req, res) {
     }
 
     // Nueva agencia
-    const row = new Array(12).fill('')
-    row[0] = nombre.trim()
-    row[1] = cuit || ''
-    row[2] = condIVA || ''
-    row[3] = mailFact || ''
-    row[4] = telefono || ''
-    row[5] = pmDefault || ''
-    row[6] = direccion || ''
-    row[7] = tipo || ''
-    row[8] = notas || ''
-    row[9] = 'SI'
-    row[10] = hoy
-    row[11] = ''
+    // Cada dato en SU columna, por título: con una columna más en el medio, escribir por posición corría todo.
+    const row = new Array(Math.max(headers.length, 11)).fill('')
+    const put = (campo, valor) => { const col = idx[campo]; if (col !== undefined) row[col] = valor }
+    put('Nombre', nombre.trim()); put('CUIT', cuit || ''); put('Condicion IVA', condIVA || ''); put('Mail facturacion', mailFact || '')
+    put('Telefono', telefono || ''); put('PM default', pmDefault || ''); put('Direccion fiscal', direccion || ''); put('Tipo', tipo || '')
+    put('Notas', notas || ''); put('Activa', 'SI'); put('Creada', hoy); if (plazoLimpio) put('Plazo de pago', plazoLimpio)
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'AGENCIAS!A:L',
+      range: tieneTitulos ? `AGENCIAS!A:${colLetra(headers.length - 1)}` : 'AGENCIAS!A:L',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },

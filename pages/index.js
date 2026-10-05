@@ -2888,7 +2888,20 @@ function BarraFacturado({pct, ancho=54}){
 function heredarDeFactura(x){
   const ult=x?.facturas?.[x.facturas.length-1]; if(!ult) return null
   const pl=String(ult['Plazo']||'').trim(), dias=/contado/i.test(pl)?'0':(pl.match(/\d+/)||[''])[0]
-  return { plazo:['0','15','30','60'].includes(dias)?dias:null, conIVA: parseMonto(ult['IVA'])>0 || !parseMonto(ult['Precio SIN IVA']) }
+  return { plazo:PLAZOS_FACTURA.includes(dias)?dias:null, conIVA: parseMonto(ult['IVA'])>0 || !parseMonto(ult['Precio SIN IVA']) }
+}
+// Los plazos que ofrece la factura nueva. 90 se sumó el 5/10/2026: Oir (Unilever) paga a 90 días.
+const PLAZOS_FACTURA=['0','15','30','60','90']
+// A quién se le factura un trabajo: a la agencia, o al cliente si es directo.
+const aQuienSeFactura = p => (p?.['Agencia']&&!/sin agencia|directo/i.test(p['Agencia']))?p['Agencia']:(p?.['Cliente']||'')
+// El plazo con el que paga ESA agencia (solapa AGENCIAS, columna "Plazo de pago", en días). Juan, 5/10/2026:
+// "cada vez que hagamos una factura de Unilever sea 90 días". Manda sobre el 30 de siempre y sobre lo que se
+// hereda de la factura anterior del mismo trabajo. Sin dato devuelve null y todo sigue como antes.
+function plazoDeAgencia(agencias, p){
+  const quien=normTxt(aQuienSeFactura(p)); if(!quien) return null
+  const ag=(agencias||[]).find(a=>normTxt(a['Nombre'])===quien)
+  const dias=(String(ag?.['Plazo de pago']||'').match(/\d+/)||[''])[0]
+  return dias ? String(parseInt(dias)) : null
 }
 
 // Semáforo de fecha de evento para "sin facturar": futuro (no se puede aún), recién pasó (verde),
@@ -3524,7 +3537,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, i
   const fechaInfo = p=>semEvento(p['Fecha Evento'])
   const [nroAuto,setNroAuto]=useState('')   // de dónde salió el N°: lo puso el PDF, no Flor
   const her0 = heredarDeFactura(initialSel)   // 2ª factura del trabajo: mismo plazo e IVA que la 1ª
-  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState(her0?.plazo||'30'), [conIVA,setConIVA]=useState(her0?her0.conIVA:true), [montoNeto,setMontoNeto]=useState(initialSel?String(Math.round(initialSel.pendiente)):''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
+  const [entidad,setEntidad]=useState('SRL'), [tipo,setTipo]=useState('A'), [nro,setNro]=useState(''), [plazo,setPlazo]=useState(plazoDeAgencia(agencias, initialSel?.p)||her0?.plazo||'30'), [conIVA,setConIVA]=useState(her0?her0.conIVA:true), [montoNeto,setMontoNeto]=useState(initialSel?String(Math.round(initialSel.pendiente)):''), [saving,setSaving]=useState(false), [pdfFile,setPdfFile]=useState(null)
   // A quién se le factura cada trabajo: solo se pueden juntar trabajos de la misma agencia (o cliente directo).
   const aQuien = p => (p['Agencia']&&!/sin agencia|directo/i.test(p['Agencia']))?p['Agencia']:p['Cliente']
   const nroDe = x => String(x.p['Columna 1']||'').trim()
@@ -3592,7 +3605,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, i
           <div style={{maxHeight:300, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:10}}>
             {lista.length===0 && <Empty>Nada pendiente de facturar</Empty>}
             {lista.map((x,i)=>{ const fi=fechaInfo(x.p); return (
-              <div key={i} onClick={()=>{setSel(x); setMontoNeto(String(Math.round(x.pendiente))); const h=heredarDeFactura(x); if(h){ if(h.plazo) setPlazo(h.plazo); setConIVA(h.conIVA) }}} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div key={i} onClick={()=>{setSel(x); setMontoNeto(String(Math.round(x.pendiente))); const h=heredarDeFactura(x), pa=plazoDeAgencia(agencias, x.p); if(h){ if(h.plazo) setPlazo(h.plazo); setConIVA(h.conIVA) } if(pa) setPlazo(pa) }} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div style={{minWidth:0}}><div style={{fontSize:13, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||'—'}</div><div style={{fontSize:11.5, color:T.ink3}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</div>
                   {x.facturado>0 && <div style={{display:'flex', alignItems:'center', gap:6, marginTop:3, fontSize:10.5, color:T.warn, fontWeight:600}}><BarraFacturado pct={x.facturado/x.neto*100} ancho={40}/>ya facturado {Math.round(x.facturado/x.neto*100)}% · falta el saldo</div>}
                 </div>
@@ -3669,7 +3682,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, i
             <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label>{varios
               ? <div title="Con varios trabajos, cada uno entra por lo que le falta facturar" style={{...inpV2, textAlign:'right', fontFamily:MONO, background:T.surfaceAlt, color:T.ink2}}>{Math.round(neto).toLocaleString('es-AR')}</div>
               : <input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>}</div>
-            <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
+            <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}>{[...new Set([...PLAZOS_FACTURA, plazo])].sort((x,y)=>x-y).map(d=><option key={d} value={d}>{d==='0'?'Contado':d+' días'}</option>)}</select>{plazoDeAgencia(agencias, sel?.p)===plazo && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, whiteSpace:'nowrap'}}>el plazo de {facturarA}</div>}</div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', paddingBottom:9}}><input type="checkbox" checked={conIVA} onChange={e=>setConIVA(e.target.checked)}/> Con IVA 21%</label>
           </div>
           {/* Los porcentajes son para facturar UN trabajo en partes; con varios trabajos en la factura no aplican. */}
@@ -4800,12 +4813,12 @@ function Agencias({data, onRefresh, showToast, nav, clearNav}){
   const st = agSel ? stats(agSel['Nombre']) : null
 
   async function guardar(){
-    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agSel['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas})})
+    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agSel['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas, plazoPago:form.plazoPago})})
       const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
       showToast('Agencia guardada'); setEdit(false); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
   }
-  const abrir=a=>{ setSel(a['Nombre']); setEdit(false); setForm({cuit:a['CUIT']||'',condIVA:a['Condicion IVA']||'',mailFact:a['Mail facturacion']||'',telefono:a['Telefono']||'',direccion:a['Direccion fiscal']||'',notas:a['Notas']||''}) }
+  const abrir=a=>{ setSel(a['Nombre']); setEdit(false); setForm({cuit:a['CUIT']||'',condIVA:a['Condicion IVA']||'',mailFact:a['Mail facturacion']||'',plazoPago:a['Plazo de pago']||'',telefono:a['Telefono']||'',direccion:a['Direccion fiscal']||'',notas:a['Notas']||''}) }
 
   return <>
     <PageHead title="Agencias" sub={`${filtrados.length} de ${rows.length}`}/>
@@ -4833,14 +4846,14 @@ function Agencias({data, onRefresh, showToast, nav, clearNav}){
         </div>
         <div style={{padding:'14px 18px'}}>
           {edit ? <>
-            {[['CUIT','cuit'],['Condición IVA','condIVA'],['Mail facturación','mailFact'],['Teléfono','telefono'],['Dirección fiscal','direccion'],['Notas','notas']].map(([l,k])=>(
+            {[['CUIT','cuit'],['Condición IVA','condIVA'],['Mail facturación','mailFact'],['Plazo de pago (días)','plazoPago'],['Teléfono','telefono'],['Dirección fiscal','direccion'],['Notas','notas']].map(([l,k])=>(
               <div key={k} style={{marginBottom:9}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
             ))}
           </> : <>
             <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
               <Mini label="Presupuestos" val={st.presus}/><Mini label="Aprobados" val={st.aprob}/><Mini label="Facturas" val={st.fact}/><Mini label="Cobrado" val={fmtM(st.cobrado)} color={T.pos}/>
             </div>
-            {[['CUIT',agSel['CUIT']],['Cond. IVA',agSel['Condicion IVA']],['Mail',agSel['Mail facturacion']],['Tel',agSel['Telefono']]].filter(x=>x[1]).map(([k,v])=>(
+            {[['CUIT',agSel['CUIT']],['Cond. IVA',agSel['Condicion IVA']],['Mail',agSel['Mail facturacion']],['Paga a',agSel['Plazo de pago']?agSel['Plazo de pago']+' días':''],['Tel',agSel['Telefono']]].filter(x=>x[1]).map(([k,v])=>(
               <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
             ))}
             <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
