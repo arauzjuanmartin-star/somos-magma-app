@@ -7,6 +7,10 @@ import { getSheets } from '../../lib/sheets'
 // Ruta PÚBLICA (ver middleware.js). Seguridad: verify_token en el GET + firma X-Hub-Signature-256 en el POST.
 export const config = { api: { bodyParser: false } }
 
+// Lo que escribe alguien de afuera entra como texto, nunca como fórmula: un mensaje que empieza con = + - @
+// se guarda con apóstrofo adelante (Sheets no lo muestra) para que no se ejecute en el Master.
+const plano = v => (/^[=+\-@]/.test(String(v)) ? "'" + v : v)
+
 function readRaw(req) {
   return new Promise((resolve) => { let d = ''; req.on('data', c => (d += c)); req.on('end', () => resolve(d)) })
 }
@@ -22,14 +26,14 @@ export default async function handler(req, res) {
 
   const raw = await readRaw(req)
 
-  // 2) Verificar firma si está configurado el app secret (recomendado)
+  // 2) Verificar la firma de Meta. Sin el app secret cargado no se acepta nada: esta ruta es pública y escribe
+  //    al Master, así que sin firma cualquiera con el link podría meter filas (y fórmulas) en la solapa WHATSAPP.
   const secret = process.env.WHATSAPP_APP_SECRET
-  if (secret) {
-    const sig = req.headers['x-hub-signature-256'] || ''
-    const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex')
-    const ok = sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-    if (!ok) { console.warn('WA webhook: firma inválida'); return res.status(401).end() }
-  }
+  if (!secret) return res.status(503).json({ error: 'Falta la variable WHATSAPP_APP_SECRET en Vercel: sin la firma de Meta no se recibe nada.' })
+  const sig = String(req.headers['x-hub-signature-256'] || '')
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex')
+  const ok = sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  if (!ok) { console.warn('WA webhook: firma inválida'); return res.status(401).end() }
 
   let body = {}
   try { body = JSON.parse(raw || '{}') } catch (e) {}
@@ -51,7 +55,7 @@ export default async function handler(req, res) {
           else if (tipo === 'interactive') texto = m.interactive?.button_reply?.title || m.interactive?.list_reply?.title || '[interactive]'
           else texto = `[${tipo}]`
           const ts = new Date(Number(m.timestamp || Math.floor(Date.now() / 1000)) * 1000)
-          filas.push([ts.toISOString(), ts.toLocaleDateString('es-AR'), ts.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }), 'Entrante', m.from || '', nombreDe(m.from), texto, tipo, m.id || '', 'recibido', 'NO', ''])
+          filas.push([ts.toISOString(), ts.toLocaleDateString('es-AR'), ts.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }), 'Entrante', plano(m.from || ''), plano(nombreDe(m.from)), plano(texto), plano(tipo), plano(m.id || ''), 'recibido', 'NO', ''])
         }
       }
     }
