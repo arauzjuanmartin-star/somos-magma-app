@@ -6328,11 +6328,18 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
-  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
+  // Leído no es guardado: hasta "Confirmar y cargar" no hay nada en el sheet. Cerrar con un resumen leído (o a medio leer) lo pierde,
+  // así que se pregunta antes; y un clic afuera de la ventana no cierra (el 05/10/2026 se perdió así el Santander de septiembre).
+  const enJuego=!!data||loading||saving
+  const cerrar=()=>{ if(saving) return
+    if(data && !window.confirm(`${tarjeta} está leída pero TODAVÍA NO SE GUARDÓ.\n\nSi cerrás, se pierde y hay que leer el PDF de nuevo.\n\n¿Cerrar igual?`)) return
+    if(loading && !window.confirm('Se está leyendo el PDF.\n\nSi cerrás, la lectura se pierde.\n\n¿Cerrar igual?')) return
+    onClose() }
+  return <div onClick={()=>{ if(!enJuego) onClose() }} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:22, width:data?680:500, maxWidth:'100%', maxHeight:'90vh', overflow:'auto', border:`1px solid ${T.border}`}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h3 style={{margin:0, fontSize:17, fontWeight:700, color:T.ink}}>Subir resumen de tarjeta</h3>
-        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        <button onClick={cerrar} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       {!data ? <>
         <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap'}}>
@@ -6344,6 +6351,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
         <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.ink3:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA… puede tardar unos minutos':'Leer PDF'}</button>
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
+        <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'9px 13px', fontSize:12.5, marginBottom:10, fontWeight:600}}>Leído, todavía NO guardado. Revisalo y tocá “Confirmar y cargar” abajo.</div>
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
           <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen de <select value={mes} onChange={e=>setMes(parseInt(e.target.value))} style={{...inp, padding:'2px 4px', fontSize:12}}>{MESES_LARGO.map((x,k)=><option key={k} value={k+1}>{x}</option>)}</select> {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
           <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
@@ -6383,7 +6391,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
         </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ No pude clasificar bien este resumen. Igual cargo el <b>total a pagar</b> correcto — la división Empresa/Juan/Sofi la hacemos aparte.</div>}
         {yaCargados>0 && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 13px', fontSize:12, marginBottom:12, fontWeight:500, lineHeight:1.5}}>⚠ {tarjeta} de {MESES_LARGO[mes-1]} {anio} ya está cargada ({yaCargados} consumos). Si confirmás, se REEMPLAZAN por los de este PDF. Lo que ya estaba marcado (revisado, de qué trabajo fue) se conserva en los consumos que sigan iguales; si acá un consumo de Magma quedó como personal, o al revés, vale lo de esta pantalla.</div>}
         <div style={{display:'flex', gap:8}}>
-          <button onClick={()=>setData(null)} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
+          <button onClick={()=>{ if(saving) return; if(window.confirm(`${tarjeta} todavía NO se guardó.\n\nSi volvés para elegir otro PDF, esta lectura se pierde.\n\n¿Volver igual?`)) setData(null) }} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
         </div>
       </>}
