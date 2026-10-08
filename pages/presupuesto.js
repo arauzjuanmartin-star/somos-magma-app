@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { desglosarPrecio, agruparLineas, opcionesDePresu, presuDesglosado } from '../lib/desglose'
 import { prettifySvc as prettifySvcBase, labelsDeListado } from '../lib/servicios-pdf'
+import { textoFechasCliente } from '../lib/fechas'
 
 // Parsea formatos AR ($1.234,56) y US ($1,234.56) de forma robusta
 const parseMonto = v => {
@@ -154,6 +155,8 @@ function aplicarConfig(cfg, ahora) {
       .map(a => { const g = guardados.find(x => x.origen != null && x.origen === a.origen); return g ? { ...a, nombre: g.nombre } : a })
       .concat(guardados.filter(x => x.origen == null).map(x => ({ origen: null, nombre: x.nombre, precio: x.precio })))
   }
+  // El "$" de cada línea (col "Precio visible") manda desde el sheet, no desde el PDF guardado.
+  if (out.costos) out.costos = out.costos.map(c => { const a = c.origen != null ? (ahora.costos || []).find(x => x.origen === c.origen) : null; return a ? { ...c, visible: !!a.visible } : c })
   // Precio: si el presu sigue valiendo lo que decía este PDF, vuelven el precio de lista,
   // el descuento y los precios por ítem. Si no, manda el presu.
   const lista = Math.round(Number(f.precioTotal) || 0)
@@ -230,6 +233,8 @@ export default function Presupuesto() {
       const preciosClienteManualCSV = String(p['Precio Cliente Manual']||'').split('|')
       // Quién lleva margen Magma. Sin CSV (presus viejos) asumimos que sí: es el caso normal.
       const feeCSV = String(p['Fee Servicios']||'').split('|')
+      // "$" por línea (col "Precio visible"): el cliente ve el precio de ESE ítem aunque el presu vaya cerrado.
+      const visibleCSV = String(p['Precio visible']||'').split('|')
       // Calcular factor del presu base para precio cliente automático de adicionales sin manual
       const parseMontoLocal = v => { const n = parseFloat(String(v||'').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
       const subtotalBase = pedidosRaw.reduce((s,_,i) => esAdicCSV[i]==='1' ? s : s+parseMontoLocal(preciosRaw[i]), 0)
@@ -251,14 +256,14 @@ export default function Presupuesto() {
           adicionales.push({origen: ped, nombre, precio: precioCliente})
         } else {
           baseSvcs.push(nombre)
-          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1', origen: ped })
+          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1', origen: ped, visible: visibleCSV[i] === '1' })
         }
       })
       // Huella de los servicios del presu: si cambia, el PDF guardado se cruza por nombre
       const pedidosKey = pedidosRaw.map((ped, i) => [ped, preciosRaw[i] || '', esAdicCSV[i] || '', feeCSV[i] || '', preciosClienteManualCSV[i] || ''].join('~')).join('|')
       console.log('[Presu '+nro+'] base:', baseSvcs, '· adicionales:', adicionales)
       setUltimosServiciosDelSheet(baseSvcs)
-      return { p, svcs: baseSvcs, costos: baseCostos, adicionales, pedidosKey }
+      return { p, svcs: baseSvcs, costos: baseCostos, adicionales, pedidosKey, pedidosRaw }
     } catch (e) {
       console.error('Error cargando presu:', e)
       setLoading(false)
@@ -272,24 +277,12 @@ export default function Presupuesto() {
     if (!nro) return
     cargarDelSheet(nro).then(res => {
       if (!res) { setLoading(false); return }
-      const { p, svcs, costos, adicionales, pedidosKey } = res
+      const { p, svcs, costos, adicionales, pedidosKey, pedidosRaw } = res
       const fechaHoy = new Date().toISOString().slice(0,10)
-      const fechaEv = (() => {
-        const tipo = String(p['Tipo Fechas']||'').trim()
-        const fe = String(p['Fecha Evento']||'').trim()
-        const adicionales = String(p['Fechas Adicionales']||'').trim()
-        if (tipo === 'rango' && adicionales) return `${fe} al ${adicionales}`
-        // Fechas todavía sin definir: al cliente se le muestran igual, pero avisadas.
-        // Las que van con "?" son las que faltan confirmar (ver lib/fechas.js).
-        if (tipo === 'tentativa') return `${[fe, ...adicionales.split('|').filter(Boolean)].join(', ')} (a confirmar)`
-        if (tipo === 'multi' && adicionales) {
-          const partes = adicionales.split('|').filter(Boolean).map(x => x.trim())
-          const firmes = [fe, ...partes.filter(x => !x.startsWith('?'))].join(', ')
-          const tent = partes.filter(x => x.startsWith('?')).map(x => x.slice(1))
-          return tent.length ? `${firmes} · a confirmar: ${tent.join(', ')}` : firmes
-        }
-        return fe
-      })()
+      // Fechas sin definir: al cliente se le dicen por mes ("Octubre 2026 (fecha a
+      // confirmar)") y no los 31 días uno por uno. Las que van con "?" son las que faltan
+      // confirmar (ver textoFechasCliente en lib/fechas.js).
+      const fechaEv = textoFechasCliente(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales'])
       const precioFinal = Math.round(parseMonto(p['Precio Final']))
       const delSheet = {
         nro: String(p['Columna 1']||''),
@@ -316,7 +309,8 @@ export default function Presupuesto() {
       setConfigInfo(cfg ? { fecha: cfg.guardado, por: cfg.por, deOtro: cfg.nro && String(cfg.nro) !== delSheet.nro ? String(cfg.nro) : null, cambios: rec.cambios } : null)
       setValidez(addDays(fechaHoy, 20))
       // opts = con qué impuestos y plazo se armó ESE presu. El desglose los repite por ítem.
-      setPresuSheet({ nro: delSheet.nro, precioFinal, fila: p.__row || null, opts: opcionesDePresu(p) })
+      // pedidosRaw = los slots con algo cargado, en orden: es el eje del CSV "Precio visible".
+      setPresuSheet({ nro: delSheet.nro, precioFinal, fila: p.__row || null, opts: opcionesDePresu(p), pedidosRaw })
       cargadoRef.current = true
       setLoading(false)
     })
@@ -351,6 +345,25 @@ export default function Presupuesto() {
   const addAdic = () => setForm(p => ({...p, adicionales:[...(p.adicionales||[]),{nombre:'',precio:''}]}))
   const delAdic = i => setForm(p => ({...p, adicionales:(p.adicionales||[]).filter((_,j)=>j!==i)}))
 
+  // "$" de una línea: el cliente ve el precio de ESE servicio (viáticos, rental) aunque el
+  // presu no esté abierto entero. Va al sheet enseguida (col "Precio visible", CSV por slot
+  // alineado con Fee Servicios) para que el presupuesto y el PDF digan lo mismo. Se aplica a
+  // todos los slots con ese mismo pedido: "3 × Edición" es un solo renglón en el PDF.
+  const [visibleSaving, setVisibleSaving] = useState(false)
+  const toggleVisible = async (i) => {
+    const costos = (form.costos || []).map((c, j) => j === i ? { ...(c || { costo: 0, fee: true }), visible: !c?.visible } : c)
+    setF('costos', costos)
+    if (!presuSheet?.nro || !presuSheet.pedidosRaw) return
+    const csv = presuSheet.pedidosRaw.map(ped => costos.some(c => c && c.origen === ped && c.visible) ? '1' : '0').join('|')
+    setVisibleSaving(true)
+    try {
+      const r = await fetch('/api/presupuesto-editar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ num: presuSheet.nro, cambios: { 'Precio visible': csv } }) })
+      const j = await r.json()
+      if (j.msg === 'Nada para actualizar') console.warn('PRESUPUESTOS no tiene la columna "Precio visible": corré scripts/presupuestos-columna-precio-visible.mjs --escribir')
+    } catch (e) { console.warn('No se guardó el precio visible:', e.message) }
+    setVisibleSaving(false)
+  }
+
   // ---- Guardar el PDF en el presu ----
   // Todo lo editable de esta pantalla, más `base` (lo que decía el sheet) para poder
   // detectar al reabrir qué cambió en el presupuesto. `desglosar` no va: ya tiene su
@@ -360,7 +373,7 @@ export default function Presupuesto() {
     base: baseRef.current,
     form: {
       tipoPresu: form.tipoPresu, cliente: form.cliente, agencia: form.agencia, proyecto: form.proyecto, fechaEvento: form.fechaEvento,
-      lineas: form.servicios.map((texto, i) => ({ origen: form.costos?.[i]?.origen ?? null, texto, costo: { costo: form.costos?.[i]?.costo || 0, fee: form.costos?.[i]?.fee !== false } })),
+      lineas: form.servicios.map((texto, i) => ({ origen: form.costos?.[i]?.origen ?? null, texto, costo: { costo: form.costos?.[i]?.costo || 0, fee: form.costos?.[i]?.fee !== false, visible: !!form.costos?.[i]?.visible } })),
       adicionales: (form.adicionales || []).map(a => ({ origen: a.origen ?? null, nombre: a.nombre, precio: a.precio })),
       descripcion: form.descripcion, observaciones: form.observaciones,
       precioTotal: form.precioTotal, descPct: form.descPct, descMotivo: form.descMotivo, preciosItem: form.preciosItem,
@@ -421,8 +434,13 @@ export default function Presupuesto() {
     nombre: prettifySvc(s),
     costo: form.costos?.[i]?.costo || 0,
     fee: form.costos?.[i]?.fee !== false,
+    visible: !!form.costos?.[i]?.visible,   // el cliente ve ESTE precio aunque el resto vaya cerrado
   })).filter(it => it.nombre)
-  const desgloseAuto = form.desglosar
+  // Dos formas de abrir el precio: el tilde (todos los renglones) o el "$" de una línea
+  // suelta (los viáticos, el rental — pedido del equipo, 08/10/2026). En la segunda el
+  // Valor total no se mueve: el renglón visible es informativo y los demás absorben.
+  const hayVisibles = !form.desglosar && itemsDesglose.some(it => it.visible && it.costo > 0)
+  const desgloseAuto = (form.desglosar || hayVisibles)
     ? agruparLineas(desglosarPrecio(itemsDesglose, { ...(presuSheet?.opts || {}), total: precioLista }).lineas)
     : []
   // Si hay precios a mano, mandan ellos. El reparto automático reparte el total entre
@@ -438,9 +456,12 @@ export default function Presupuesto() {
   const redondearItem = v => v >= 10000 ? Math.round(v / 1000) * 1000 : Math.max(100, Math.round(v / 100) * 100)
   // Congela TODAS las líneas y mueve el Valor total a la suma: así el PDF nunca puede
   // mostrar renglones que no dan el número de abajo.
+  // Con el precio abierto entero, fijar un ítem congela todos y el total pasa a ser la suma.
+  // Con una línea suelta visible, el total queda como está: solo cambia ese renglón.
   const fijarItems = mapa => setForm(p => ({ ...p, preciosItem: mapa,
-    precioTotal: String(Object.values(mapa).reduce((t, v) => t + (Number(v) || 0), 0)) }))
-  const preciosActuales = () => Object.fromEntries(desglose.filter(l => !l.sinPrecio).map(l => [l.nombre, l.precio]))
+    ...(hayVisibles ? {} : { precioTotal: String(Object.values(mapa).reduce((t, v) => t + (Number(v) || 0), 0)) }) }))
+  const lineasEditables = hayVisibles ? desglose.filter(l => l.visible) : desglose
+  const preciosActuales = () => Object.fromEntries(lineasEditables.filter(l => !l.sinPrecio).map(l => [l.nombre, l.precio]))
   const redondearItems = () => fijarItems(Object.fromEntries(Object.entries(preciosActuales()).map(([k, v]) => [k, redondearItem(v)])))
   const editarItem = (nombre, valor) => fijarItems({ ...preciosActuales(), [nombre]: Math.round(Number(valor) || 0) })
   // Volver al automático: el total manda de nuevo y se reparte solo entre los ítems.
@@ -448,7 +469,7 @@ export default function Presupuesto() {
   // Tocar el total a mano (o un chip de redondeo) vuelve al reparto automático: si no,
   // el total diría una cosa y los renglones seguirían sumando otra.
   const setTotal = v => setForm(p => ({ ...p, precioTotal: v, preciosItem: null }))
-  const itemsRedondeados = desglose.length > 0 && desglose.filter(l => !l.sinPrecio).every(l => l.precio === redondearItem(l.precio))
+  const itemsRedondeados = lineasEditables.length > 0 && lineasEditables.filter(l => !l.sinPrecio).every(l => l.precio === redondearItem(l.precio))
   // Servicios agregados a mano acá, que no existen como línea en el presu: no tienen
   // costo, así que no se les puede poner precio. Van listados sin número.
   const svcsSinCosto = itemsDesglose.filter(it => it.costo <= 0).map(it => it.nombre)
@@ -666,13 +687,18 @@ export default function Presupuesto() {
         doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
         const svcsMap = {}, orden = []
         for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
+        // Las líneas con el "$" puesto salen con su precio a la derecha; las demás, sin número.
+        const precioVisible = {}; desglose.forEach(l => { if (l.visible && !l.sinPrecio) precioVisible[l.nombre] = l.precio })
         for (const s of orden) {
           const cant = svcsMap[s]
           const label = cant > 1 ? `${cant} ${s}` : s
+          const precioTxt = precioVisible[s] != null ? '$' + fmt$(precioVisible[s]) : ''
+          const pw = precioTxt ? doc.getTextWidth(precioTxt) + 3 : 0
           // Cuadrado pequeño negro como bullet (manual: figuras geométricas simples)
           doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F')
-          const lines = doc.splitTextToSize(label, W-M*2-7)
+          const lines = doc.splitTextToSize(label, W-M*2-7-pw)
           doc.text(lines, M+5, y)
+          if (precioTxt) doc.text(precioTxt, W-M, y, {align:'right'})
           y += lines.length * 5
         }
         y += 6
@@ -905,13 +931,23 @@ export default function Presupuesto() {
             </div>}
             <div style={{display:'grid',gap:8}}>
               {form.servicios.map((s,i)=>(
-                <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 28px',gap:6,alignItems:'center'}}>
+                <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 34px 28px',gap:6,alignItems:'center'}}>
                   <input style={S.inp} value={s} onChange={e=>setSvc(i,e.target.value)} placeholder={'Servicio '+(i+1)}/>
+                  {/* "$": el cliente ve el precio de ESTA línea aunque el resto vaya cerrado (viáticos, rental) */}
+                  {(()=>{ const on = !!form.costos?.[i]?.visible && !form.desglosar; return (
+                  <button onClick={()=>toggleVisible(i)} disabled={!!form.desglosar}
+                    title={form.desglosar ? 'Con "Mostrar precio por ítem" ya salen todos con precio' : on ? 'El cliente ve el precio de esta línea · clic para cerrarlo' : 'Mostrar al cliente el precio de esta línea sola (viáticos, rental…). El Valor total no cambia.'}
+                    style={{width:34,height:36,border:'0.5px solid '+(on?'#1D9E75':'#2A2A2A'),background:on?'#1D9E7520':'transparent',color:on?'#1D9E75':'#555',cursor:form.desglosar?'default':'pointer',borderRadius:6,fontSize:12,fontWeight:700,fontFamily:'monospace',opacity:form.desglosar?0.4:1}}>$</button>
+                  )})()}
                   <button onClick={()=>delSvc(i)} style={{width:28,height:36,border:'0.5px solid #2A2A2A',background:'transparent',color:'#555',cursor:'pointer',borderRadius:6,fontSize:15}}>×</button>
                 </div>
               ))}
               <button onClick={addSvc} style={{padding:'7px',borderRadius:6,border:'0.5px dashed #2A2A2A',background:'transparent',color:'#555',fontSize:11,cursor:'pointer'}}>+ Agregar servicio</button>
             </div>
+            {hayVisibles && <div style={{marginTop:8,padding:'7px 10px',background:'#1D9E7508',border:'0.5px solid #1D9E7530',borderRadius:6,fontSize:10.5,color:'#1D9E75',lineHeight:1.5}}>
+              <strong>Con precio a la vista:</strong> {desglose.filter(l=>l.visible&&!l.sinPrecio).map(l=>`${l.nombre} $${fmt$(l.precio)}`).join(' · ')}. El resto sale sin precio y el Valor total no cambia.{visibleSaving && <span style={{color:'#555'}}> guardando…</span>}
+            </div>}
+            {!form.desglosar && !hayVisibles && <div style={{marginTop:8,fontSize:10.5,color:'#555',lineHeight:1.5}}>El <span style={{fontFamily:'monospace',color:'#888'}}>$</span> de una línea abre solo ese precio (los viáticos, por ejemplo) sin abrir el resto.</div>}
           </div>
 
           {form.tipoPresu==='produccion'&&<div style={S.card}>
@@ -960,9 +996,9 @@ export default function Presupuesto() {
                 El cliente ve estos números: "$237.482" en un renglón es un cartel de que
                 el precio salió de una fórmula. Al tocar cualquiera, el Valor total pasa a
                 ser la suma, así los renglones y el total nunca dicen cosas distintas. */}
-            {form.desglosar && desglose.length > 0 && <div style={{marginTop:10,padding:'10px 11px',border:'0.5px solid #2A2A2A',borderRadius:7}}>
+            {(form.desglosar || hayVisibles) && lineasEditables.length > 0 && <div style={{marginTop:10,padding:'10px 11px',border:'0.5px solid #2A2A2A',borderRadius:7}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-                <span style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>Precio de cada ítem</span>
+                <span style={{fontSize:10,color:'#555',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>{hayVisibles ? 'Precio de las líneas con $' : 'Precio de cada ítem'}</span>
                 {!itemsRedondeados && <button onClick={redondearItems}
                   style={{padding:'4px 10px',borderRadius:6,border:'0.5px solid #1D9E7550',background:'#1D9E7510',color:'#1D9E75',fontSize:11.5,cursor:'pointer'}}>
                   Redondear todos
@@ -972,7 +1008,7 @@ export default function Presupuesto() {
                   Volver al automático
                 </button>}
               </div>
-              {desglose.filter(l=>!l.sinPrecio).map(l=>(
+              {lineasEditables.filter(l=>!l.sinPrecio).map(l=>(
                 <div key={l.nombre} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
                   <span style={{flex:1,fontSize:11.5,color:'#BBB',lineHeight:1.35}}>{l.cantidad>1?l.cantidad+' × ':''}{l.nombre}</span>
                   <input type="number" value={l.precio} onChange={e=>editarItem(l.nombre,e.target.value)}
@@ -980,11 +1016,13 @@ export default function Presupuesto() {
                       border:'0.5px solid '+(l.aMano?'#1D9E7550':'#2A2A2A')}}/>
                 </div>
               ))}
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,color:'#888',fontFamily:'monospace',borderTop:'0.5px solid #2A2A2A',paddingTop:6,marginTop:2}}>
+              {!hayVisibles && <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,color:'#888',fontFamily:'monospace',borderTop:'0.5px solid #2A2A2A',paddingTop:6,marginTop:2}}>
                 <span>Suma de los ítems</span>
                 <strong style={{color:totalItems===precioLista?'#F0F0F0':'#BA7517'}}>${fmt$(totalItems)}</strong>
-              </div>
-              {form.preciosItem
+              </div>}
+              {hayVisibles
+                ? <div style={{fontSize:10.5,color:'#555',marginTop:6,lineHeight:1.45}}>Solo estas líneas salen con precio. Tocá el número para fijarlo a mano: el Valor total no se mueve.</div>
+                : form.preciosItem
                 ? <div style={{fontSize:10.5,color:'#555',marginTop:6,lineHeight:1.45}}>Precios puestos a mano: el Valor total es la suma. {desincronizado && 'Guardalo abajo para que el sistema diga lo mismo.'}</div>
                 : <div style={{fontSize:10.5,color:'#555',marginTop:6,lineHeight:1.45}}>Repartidos solos desde el Valor total. Tocá cualquiera para fijarlo a mano.</div>}
             </div>}
@@ -1140,6 +1178,8 @@ function PreviewPDF({form, clausulas, desglose = []}) {
   const svcsMap = {}
   const orden = []
   for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
+  // Líneas con el "$" puesto: precio a la derecha, el resto sin número (igual que el PDF)
+  const precioVisible = {}; desglose.forEach(l => { if (l.visible && !l.sinPrecio) precioVisible[l.nombre] = l.precio })
 
   const C = {
     black: '#090909', magma: '#CE2637', azul: '#1543F8',
@@ -1219,9 +1259,12 @@ function PreviewPDF({form, clausulas, desglose = []}) {
     </> : orden.length > 0 ? <>
       <div style={{...S.h2,fontSize:11,marginTop:14,marginBottom:5}}>El servicio incluye:</div>
       <div>
-        {orden.map((s,i) => <div key={i} style={S.bullet}>
-          <span style={S.cuadrado}/>
-          <span style={{fontSize:10.5}}>{svcsMap[s] > 1 ? svcsMap[s]+' '+s : s}</span>
+        {orden.map((s,i) => <div key={i} style={{...S.bullet, justifyContent:'space-between'}}>
+          <span style={{display:'flex',gap:7,alignItems:'flex-start'}}>
+            <span style={S.cuadrado}/>
+            <span style={{fontSize:10.5}}>{svcsMap[s] > 1 ? svcsMap[s]+' '+s : s}</span>
+          </span>
+          {precioVisible[s] != null && <span style={{fontSize:10.5,color:C.texto,whiteSpace:'nowrap'}}>${fmt$(precioVisible[s])}</span>}
         </div>)}
       </div>
     </> : <div style={{padding:'8px 10px',background:'#FEF3E0',border:'0.5px solid #BA7517',borderRadius:4,fontSize:10,color:'#7A5410',marginTop:12}}>

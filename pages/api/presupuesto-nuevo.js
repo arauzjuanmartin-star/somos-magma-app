@@ -1,4 +1,4 @@
-import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED, COL_PDF } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED, COL_PDF, COL_PRECIO_VISIBLE, HEADER_PRECIO_VISIBLE } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
@@ -10,6 +10,7 @@ import { requireAuth } from '../../lib/auth-helpers'
 // 44 Interes $ | 45 Total | 46 Ajuste
  // 47 Tipo Fechas (dia/rango/multi/tentativa) | 48 Fechas Adicionales (csv |) | 49 Fee Servicios (csv 1|0|1)
 // 113 Desglosar (DJ, casilla): el PDF muestra el precio de cada servicio
+// 127 Precio visible (DX, csv 0|1|0): qué líneas salen con precio aunque el presu no esté desglosado
 
 // Lock simple en memoria del proceso para evitar race condition dentro del mismo node instance.
 // Para Vercel multi-instance, igual lo evita porque cada uno consulta el sheet al momento.
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
     await esperarLock()
     asignandoNumero = true
 
-    let numeroAsignado
+    let numeroAsignado, avisoVisible = ''
     try {
       const nuevoNum = await calcularSiguienteNumero(sheets, SHEET_ID)
       numeroAsignado = nuevoNum
@@ -134,6 +135,15 @@ export default async function handler(req, res) {
       // todo. Solo se extiende la fila si hay algo que copiar: la columna existe recién
       // desde que alguien guardó un PDF (la crea /api/presupuesto-pdf).
       if (p['PDF Config']) row[COL_PDF] = String(p['PDF Config'])
+      // DX: qué líneas salen con precio aunque el presu no esté abierto entero ("Precio visible",
+      // CSV alineado con Fee Servicios: los viáticos sí, el resto no). Se escribe solo si hay
+      // alguna en 1 y la columna existe (scripts/presupuestos-columna-precio-visible.mjs): una
+      // fila más ancha que la hoja hace fallar el append entero.
+      if (/1/.test(String(p[HEADER_PRECIO_VISIBLE] || ''))) {
+        const h1 = (await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!1:1' }))).data.values?.[0] || []
+        if (h1[COL_PRECIO_VISIBLE] === HEADER_PRECIO_VISIBLE) row[COL_PRECIO_VISIBLE] = String(p[HEADER_PRECIO_VISIBLE])
+        else avisoVisible = `El "$" por línea no se guardó: falta la columna "${HEADER_PRECIO_VISIBLE}" en PRESUPUESTOS (node scripts/presupuestos-columna-precio-visible.mjs --escribir).`
+      }
       row[8] = num(p['Precio Final']) || total
 
       await withSheetsRetry(() => sheets.spreadsheets.values.append({
@@ -172,7 +182,7 @@ export default async function handler(req, res) {
       console.warn('Calendar sync (nuevo presu) falló (no bloquea):', e.message)
     }
 
-    res.json({ ok: true, numero: numeroAsignado, calendar: calendarResult })
+    res.json({ ok: true, numero: numeroAsignado, calendar: calendarResult, aviso: avisoVisible || undefined })
   } catch (e) {
     asignandoNumero = false
     console.error(e)

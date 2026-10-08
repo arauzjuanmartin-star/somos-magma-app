@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from 
 import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
+import { condicionDe, sinPedir, esOC, CONDICIONES } from '../lib/condicion-cobro'
+import { armarMailSeguro, datosSeguro, vigenciaSugerida, requisitosSugeridos, lugaresConocidos, BROKER_MAILS } from '../lib/seguros'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, nombrePieza as nombrePiezaEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara, monotributosDelMes } from '../lib/acuerdos'
@@ -1076,13 +1078,14 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     }catch(e){ showToast('Error de conexión','err'); setBorrSaving(false) }
   }
 
+  const [resg,setResg]=useState(null), [resgPend,setResgPend]=useState(null)   // 🔒 resguardo del cobro antes de aprobar
   async function aprobarConAdic({nuevoEsAdic, nuevoTotal, extras}){
     const p=aprobAdic; if(!p) return
     const id=p['Columna 1']
     setAprobSaving(true)
     try{
       await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal), ...(extras||{})}})})
-      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true, resguardo: resgPend?.num===id ? resgPend.r : undefined})})
       const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
       showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false)
       if(onRefresh) onRefresh()
@@ -1106,7 +1109,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     }catch(e){ showToast('Error de conexión','err'); setSegSaving(false) }
   }
 
-  async function cambiarEstado(id, nuevo, actual, motivo){
+  async function cambiarEstado(id, nuevo, actual, motivo, resguardo){
     if(String(nuevo).toUpperCase()===String(actual||'').toUpperCase()) return
     const eraActivo = ['APROBADO','EN CURSO','ENTREGADO'].includes(String(actual||'').toUpperCase())
     if(eraActivo && nuevo!=='APROBADO'){
@@ -1114,9 +1117,11 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     }
     setRows(rs=>rs.map(r=> (String(r['Columna 1'])===String(id) ? {...r, Estado:nuevo, ...(motivo?{'Motivo Desaprobado':motivo}:{})} : r)))
     try{
-      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo, motivo, noCalendar:true})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:nuevo, motivo, noCalendar:true, resguardo})})
       const j=await r.json()
-      if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr))); return }
+      if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr)))
+        if(j.sinResguardo){ const p=rows.find(rr=>String(rr['Columna 1'])===String(id)); if(p) setResg(p) }   // el servidor lo exige: pedirlo
+        return }
       showToast(`#${id} → ${estadoInfo(nuevo).l}`)
       if(onRefresh) onRefresh()  // refresca datos globales: producción/Facturación/Calendar quedan sincronizados
       // Calendar en segundo plano
@@ -1184,6 +1189,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
 
   const abrirFila=it=>{ if(open===it.key){ setOpen(null); return } setOpen(it.key); setTab(it.proy?'prod':'coti') }
   const onEstado=(it,nuevo)=>{ const p=it.p, id=it.num
+    if(nuevo==='APROBADO' && necesitaResguardo(p, data.agencias, data.clientes)) return setResg(p)   // 🔒 seña u OC primero
     return nuevo==='REPRESUPUESTADO' ? setRepresu(p) : nuevo==='DESAPROBADO' ? setMotivoModal({num:id, estado:'DESAPROBADO', actual:p['Estado']}) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado']) }
 
   return <>
@@ -1292,7 +1298,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
             ))}
           </div>}
           {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null}/>}
-          {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
+          {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} seguros={data.seguros||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
     </div>
@@ -1301,6 +1307,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       onSaved={(id,cambios)=>{ setRows(rs=>rs.map(r=>String(r['Columna 1'])===String(id)?{...r,...cambios}:r)); setEditing(null); if(onRefresh) onRefresh() }}/>}
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
     {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
+    {resg && <ResguardoModal presu={resg} condicion={condicionDe(resg, data.agencias, data.clientes)} onClose={()=>setResg(null)} onConfirm={r=>{ const p=resg; setResg(null); setResgPend({num:p['Columna 1'], r}); presuTieneOpciones(p) ? setAprobAdic(p) : cambiarEstado(p['Columna 1'],'APROBADO',p['Estado'],undefined,r) }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
     {motivoModal && <MotivoEstadoModal num={motivoModal.num} estado={motivoModal.estado} saving={motivoSaving}
       onClose={()=>setMotivoModal(null)}
@@ -1619,6 +1626,7 @@ const readPedidosOrig = p => {
   const feeFlags=String(p['Fee Servicios']||'').split('|')
   const adicFlags=String(p['Es Adicional']||'').split('|')
   const precioCli=String(p['Precio Cliente Manual']||'').split('|')
+  const visFlags=String(p['Precio visible']||'').split('|')   // "$" por línea: el cliente ve ese precio aunque el presu vaya cerrado
   const out=[]; let idx=0
   for(let i=1;i<=MAX_SLOTS;i++){
     const svc=p['Pedido '+i]||(i===1?p['Pedido']:'')||''
@@ -1627,11 +1635,12 @@ const readPedidosOrig = p => {
       const fl=feeFlags[idx]
       const feeAg=fl==='0'?false:fl==='1'?true:(SVCS_LIST.find(s=>s.n===svc)?.fee ?? true)
       const adicional=adicFlags[idx]==='1'
+      const verPrecio=visFlags[idx]==='1'
       // Las líneas iguales y seguidas vuelven juntas como una sola con cantidad:
       // 3 cápsulas se cargaron como 3 slots, pero editarlas de a una es un dolor.
       const ult=out[out.length-1]
-      if(ult && ult.svc===svc && ult.precio===String(precio||'') && ult.feeAg===feeAg && ult.adicional===adicional && !adicional) ult.cant++
-      else out.push({id:idx+1, svc, precio:String(precio||''), cant:1, feeAg, manual:false, adicional, precioCliente:adicional?(precioCli[idx]||''):''})
+      if(ult && ult.svc===svc && ult.precio===String(precio||'') && ult.feeAg===feeAg && ult.adicional===adicional && !adicional && !!ult.verPrecio===verPrecio) ult.cant++
+      else out.push({id:idx+1, svc, precio:String(precio||''), cant:1, feeAg, manual:false, adicional, precioCliente:adicional?(precioCli[idx]||''):'', verPrecio})
       idx++
     }
   }
@@ -1776,8 +1785,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // el que después sale en el PDF. El cálculo vive en lib/desglose.js: una sola copia.
   const itemsDesglose=baseList.filter(p=>p.svc.trim()||(parseFloat(p.precio)||0)>0)
     .flatMap(p=>Array.from({length:cantDe(p)},()=>({id:p.id, nombre:p.svc, costo:parseFloat(p.precio)||0, fee:!!p.feeAg})))
+  // También se calcula cuando alguna línea tiene el "$" puesto (precio visible de un ítem
+  // suelto, pedido del equipo 08/10/2026): el número que se ve acá es el mismo que sale en el PDF.
+  const hayVerPrecio=baseList.some(p=>p.verPrecio&&p.svc.trim())
   const precioItem={}
-  if(form.desglosar&&itemsDesglose.length){
+  if((form.desglosar||hayVerPrecio)&&itemsDesglose.length){
     desglosarPrecio(itemsDesglose,{gan:form.gan, iibb:form.iibb, interesPct:parseFloat(form.interes)||0, total:Math.round(total)})
       .lineas.forEach(l=>{ precioItem[l.id]=(precioItem[l.id]||0)+l.precio })
   }
@@ -1833,6 +1845,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       'Es Adicional':valid.map(p=>p.adicional?'1':'0').join('|'),
       'Precio Cliente Manual':valid.map(p=>p.adicional?(p.precioCliente||''):'').join('|'),
       'Desglosar':!!form.desglosar,   // DJ: el PDF sale con el precio de cada servicio
+      'Precio visible':valid.map(p=>(p.verPrecio&&!p.adicional)?'1':'0').join('|'),   // DX: qué líneas salen con precio aunque el presu vaya cerrado
       // DK-DP: el brief de edición. Duración y material no se preguntan: ya están en el
       // presu (el pedido dice "Edit 60s"; si hay jornadas de cámara, lo filmamos nosotros).
       'Ed. Clase':form.edClase, 'Ed. Formato':form.edFormato, 'Ed. Red':form.edRed, 'Ed. Gráfica':form.edGrafica,
@@ -1852,6 +1865,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       const r=await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j=await r.json()
       if(!j.ok){ showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
+      if(j.aviso) showToast(j.aviso,'err')   // p. ej. falta la columna "Precio visible" en el sheet
       // Represupuestar: marcar el original como REPRESUPUESTADO (con motivo)
       // `nuevo` va para que las tareas de Edición del original pasen al número nuevo
       // en vez de quedar huérfanas (y sin link a las carpetas, que se crean con el nuevo).
@@ -1992,23 +2006,25 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
             Mostrar precio por ítem al cliente
           </label>
         </div>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
-          <span>Servicio</span><span style={{textAlign:'right'}}>Costo c/u</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'center'}}>Fee</span><span/>
+        <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 48px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
+          <span>Servicio</span><span style={{textAlign:'right'}}>Costo c/u</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'center'}}>Fee</span><span style={{textAlign:'center'}} title="El cliente ve el precio de ESTA línea (viáticos, rental…) aunque el resto del presu vaya sin precios. El precio final no cambia.">Ver $</span><span/>
         </div>
         {peds.map((p,i)=> !p.adicional && (()=>{ const n=cantDe(p), costo=parseFloat(p.precio)||0; return (
           <div key={p.id} style={{marginBottom:7}}>
-            <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 36px', gap:8, alignItems:'center'}}>
+            <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 48px 36px', gap:8, alignItems:'center'}}>
               <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" style={inpV2}/>
               <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
               {/* 3 cápsulas = poner 3 acá, no cargar la misma línea tres veces */}
               <input type="number" min="1" max={MAX_SLOTS} value={p.cant ?? 1} onChange={e=>updPed(i,{cant:e.target.value})} title="Cuántos de este servicio" style={{...inpV2, textAlign:'center', fontFamily:MONO, padding:'8px 4px', color:n>1?T.brand:T.ink, fontWeight:n>1?600:400}}/>
               <input type="checkbox" checked={p.feeAg} onChange={e=>updPed(i,{feeAg:e.target.checked})} title="Aplica fee Magma" style={{justifySelf:'center', cursor:'pointer'}}/>
+              {/* "$" de una línea sola: el cliente ve ese precio (viáticos, rental) sin abrir el resto */}
+              <input type="checkbox" checked={!!form.desglosar||!!p.verPrecio} disabled={!!form.desglosar} onChange={e=>updPed(i,{verPrecio:e.target.checked})} title={form.desglosar?'Con "Mostrar precio por ítem" ya salen todos con precio':'El cliente ve el precio de esta línea aunque el resto vaya cerrado'} style={{justifySelf:'center', cursor:form.desglosar?'default':'pointer', accentColor:T.pos}}/>
               <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
             </div>
             {n>1 && costo>0 && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>{n} × {fmt(costo)} = <strong style={{color:T.ink2}}>{fmt(costo*n)}</strong> de costo · van {n} líneas al sheet y {n} tareas al tablero de Edición</div>}
-            {form.desglosar && (p.svc.trim()||costo>0) && <div style={{fontSize:10.5, marginTop:3, paddingLeft:2, color:costo>0?T.pos:T.warn}}>
+            {(form.desglosar||p.verPrecio) && (p.svc.trim()||costo>0) && <div style={{fontSize:10.5, marginTop:3, paddingLeft:2, color:costo>0?T.pos:T.warn}}>
               {costo>0
-                ? <>El cliente ve <strong>{fmt(precioItem[p.id]||0)} + IVA</strong>{n>1?<span style={{color:T.ink3}}> · {fmt(Math.round((precioItem[p.id]||0)/n))} c/u</span>:null}</>
+                ? <>El cliente ve <strong>{fmt(precioItem[p.id]||0)} + IVA</strong>{n>1?<span style={{color:T.ink3}}> · {fmt(Math.round((precioItem[p.id]||0)/n))} c/u</span>:null}{!form.desglosar && <span style={{color:T.ink3}}> · solo esta línea sale con precio, el resto no</span>}</>
                 : <>Sin costo cargado — en el PDF sale listado sin precio</>}
             </div>}
           </div>
@@ -2144,6 +2160,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
         <div style={{display:'flex', alignItems:'center', gap:14}}>
           <span style={{fontSize:12, color:semaforo(margenBasePct).c, fontWeight:600}}>Margen {Math.round(margenBasePct)}% · {semaforo(margenBasePct).l}</span>
           {form.desglosar && <span style={{fontSize:11.5, color:T.pos}}>Precio abierto · los ítems suman {fmt(Object.values(precioItem).reduce((s,v)=>s+v,0))}</span>}
+          {!form.desglosar && hayVerPrecio && <span style={{fontSize:11.5, color:T.pos}}>Con precio a la vista: {baseList.filter(p=>p.verPrecio&&p.svc.trim()).map(p=>p.svc).join(', ')}</span>}
           {adicList.length>0 && <span style={{fontSize:11.5, color:T.ink3}}>+ {fmt(adicCalc.reduce((s,a)=>s+a.precioCliente,0))} en adicionales</span>}
           <div style={{flex:1}}/>
           {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
@@ -2173,6 +2190,57 @@ function FilaOpcion({marcado, nombre, precio, esAdic, onToggle}){
   </label>
 }
 
+// 🔒 Resguardo del cobro. Desde el 08/10/2026 nada se aprueba sin la seña del 30 % cobrada o la
+// orden de compra del cliente (lo exige /api/presupuesto-estado; acá se pide ANTES para no chocar
+// contra el error). CeraVe #2355 fue la gota: 4 presupuestos, 11 piezas por 8 cotizadas, $0 de seña.
+// Un presupuesto en $0 o que ya tiene resguardo (col Resguardo de PRESUPUESTOS) no vuelve a pedirlo.
+// Con "Cuenta corriente" u "OC después" (condición de la agencia o del cliente) no se pide nada: el servidor lo anota solo.
+const necesitaResguardo = (p, agencias, clientes) => parseMonto(p['Precio Final'])>0 && !String(p['Resguardo']||'').trim() && !sinPedir(condicionDe(p, agencias, clientes))
+function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
+  const num=presu['Columna 1'], total=parseMonto(presu['Precio Final']), sena30=Math.round(total*0.3)
+  const [tipo,setTipo]=useState(esOC(condicion)?'oc':'sena'), [monto,setMonto]=useState(sena30), [ref,setRef]=useState(''), [copiado,setCopiado]=useState(false)
+  const [fecha,setFecha]=useState(()=>new Date().toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}))
+  const ok = tipo==='sena' ? Number(monto)>0 : ref.trim()!==''
+  const pedido=`Hola! Para dejar reservada la fecha${presu['Fecha Evento']?' del '+presu['Fecha Evento']:''} necesitamos la seña del 30% del presupuesto #${num}: ${fmt(sena30)} + IVA. Con la transferencia confirmamos el equipo. Gracias!`
+  async function copiar(){ try{ await navigator.clipboard.writeText(pedido); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }catch(e){} }
+  const inp={width:'100%', padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:13.5, background:T.surface, color:T.ink, boxSizing:'border-box', marginTop:4}
+  const lab={fontSize:11.5, color:T.ink3, display:'block'}
+  const opcion=(k,titulo,sub)=><button type="button" onClick={()=>setTipo(k)} style={{flex:1, textAlign:'left', padding:'12px 14px', borderRadius:10, border:`2px solid ${tipo===k?T.pos:T.border}`, background:T.surface, cursor:'pointer'}}>
+    <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{tipo===k?'● ':'○ '}{titulo}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>{sub}</div></button>
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:930, display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'60px 20px', overflowY:'auto'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:460, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}>
+        <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Antes de aprobar #{num}</div>
+        <div style={{fontSize:12, color:T.ink3, marginTop:2}}>{presu['Proyecto']||presu['Cliente']||''} · {fmt(total)} + IVA</div>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <div style={{fontSize:12, color:condicion?T.ink2:T.warn, marginBottom:8}}>{condicion ? `Condición de ${presu['Agencia']||presu['Cliente']}: ${condicion}` : `${presu['Agencia']||presu['Cliente']||'Este cliente'} no tiene condición de cobro cargada: rige Seña 30%. Se cambia en Agencias.`}</div>
+        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>¿Cómo está resguardado el cobro? Sin seña ni orden de compra el trabajo no se aprueba ni se agenda.</div>
+        <div style={{display:'flex', gap:8}}>
+          {opcion('sena','Seña cobrada','El 30% ya entró')}
+          {opcion('oc','Orden de compra','El cliente mandó la OC (agencias a 60/90 días)')}
+        </div>
+        {tipo==='sena' ? <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+            <label style={lab}>Monto cobrado (sugerido: 30% de {fmt(total)})<input id="resg-monto" type="number" value={monto} onChange={e=>setMonto(e.target.value)} style={inp}/></label>
+            <label style={lab}>Fecha<input id="resg-fecha" value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></label>
+            <label style={{...lab, gridColumn:'1 / -1'}}>Cómo entró (opcional)<input id="resg-ref" value={ref} onChange={e=>setRef(e.target.value)} placeholder="transferencia BBVA, efectivo…" style={inp}/></label>
+          </div>
+        : <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+            <label style={{...lab, gridColumn:'1 / -1'}}>N° de orden de compra (o link)<input id="resg-oc" value={ref} onChange={e=>setRef(e.target.value)} placeholder="4500123456" style={inp}/></label>
+            <label style={lab}>Fecha<input id="resg-fecha-oc" value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></label>
+          </div>}
+        <div style={{marginTop:16, padding:'10px 12px', background:'rgba(0,0,0,0.035)', borderRadius:8, fontSize:12, color:T.ink2, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap'}}>
+          <span>¿Todavía no hay ninguna de las dos? Pedí la seña y volvé.</span>
+          <button type="button" onClick={copiar} style={miniBtn}>{copiado?'Copiado ✓':'Copiar el pedido de seña'}</button>
+        </div>
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Todavía no</button>
+        <button onClick={()=>onConfirm({tipo, monto:Number(monto)||0, ref:ref.trim(), fecha})} disabled={!ok} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:13.5, fontWeight:600, cursor:ok?'pointer':'default', opacity:ok?1:0.6}}>Aprobar #{num}</button>
+      </div>
+    </div>
+  </div>
+}
 function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
   const desglosado=presuDesglosado(presu)
   const items=itemsDePresu(presu)
@@ -2363,12 +2431,13 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
   const [motivoModal,setMotivoModal]=useState(null)   // {num, estado} — pide el porqué antes de desaprobar
   const [motivoSaving,setMotivoSaving]=useState(false)
   const [represu,setRepresu]=useState(null)           // presupuesto a represupuestar (versión nueva)
+  const [resg,setResg]=useState(null), [resgPend,setResgPend]=useState(null)   // 🔒 resguardo del cobro antes de aprobar
   async function aprobarConAdic({nuevoEsAdic, nuevoTotal, extras}){
     const p=aprobAdic; if(!p) return; const id=p['Columna 1']
     setAprobSaving(true)
     try{
       await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal), ...(extras||{})}})})
-      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true})})
+      const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true, resguardo: resgPend?.num===id ? resgPend.r : undefined})})
       const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
       showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false); setPendingStaff(id)
       if(onRefresh) onRefresh()
@@ -2428,9 +2497,9 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
   const espSel = diaSel&&verRod ? (enEsperaPorDia[dayKey(diaSel)]||[]) : []
   const entSel = diaSel&&verEnt ? (entregasPorDia[dayKey(diaSel)]||[]) : []
 
-  async function setEstado(num, estado, motivo){
+  async function setEstado(num, estado, motivo, resguardo){
     if(estado!=='APROBADO' && !motivo && !window.confirm(`¿Marcar #${num} como ${estadoInfo(estado).l}?`)) return
-    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,motivo,noCalendar:true})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh()
+    try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num,estado,motivo,noCalendar:true,resguardo})}); const j=await r.json(); if(j.error){ showToast(j.error,'err'); if(j.sinResguardo){ const p=presusByNum[String(num).trim()]; if(p) setResg(p) } return } showToast(`#${num} → ${estadoInfo(estado).l}`); if(estado==='APROBADO') setPendingStaff(num); if(onRefresh) onRefresh()
       const accion = estado==='APROBADO'?'aprobar':(estado==='DESAPROBADO'||estado==='REPRESUPUESTADO')?'borrar':'pendiente'
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion})}).catch(()=>{})
     }catch(e){showToast('Error de conexión','err')}
@@ -2544,7 +2613,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
               <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
               <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
               <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                {!soloVer && <button onClick={()=> presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
+                {!soloVer && <button onClick={()=> necesitaResguardo(p, data.agencias, data.clientes) ? setResg(p) : presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
                 {!soloVer && <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>}
                 <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
                 {!soloVer && <button onClick={()=>setRepresu(p)} style={miniBtn}>Represupuestar</button>}
@@ -2561,10 +2630,11 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
           <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Cargar staff · #{staffModal.proy['N° presupuesto']}</div>
           <button onClick={()=>setStaffModal(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
+        <StaffEditor p={staffModal.proy} num={staffModal.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} seguros={data.seguros||[]} presu={staffModal.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModal(null)}/>
       </div>
     </div>}
     {editando && <EditarModal p={editando} data={data} onClose={()=>setEditando(null)} showToast={showToast} onSaved={()=>{ setEditando(null); if(onRefresh) onRefresh() }}/>}
+    {resg && <ResguardoModal presu={resg} condicion={condicionDe(resg, data.agencias, data.clientes)} onClose={()=>setResg(null)} onConfirm={r=>{ const p=resg; setResg(null); setResgPend({num:p['Columna 1'], r}); presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(p['Columna 1'],'APROBADO',undefined,r) }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
     {motivoModal && <MotivoEstadoModal num={motivoModal.num} estado={motivoModal.estado} saving={motivoSaving}
       onClose={()=>setMotivoModal(null)}
@@ -2575,7 +2645,7 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
 
 // ============================ PRODUCCIÓN DE UN TRABAJO ============================
 // (La lista de Proyectos ahora es una vista de Trabajos. Esto es el bloque "Producción".)
-function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], disponibilidad=[], agencias=[], clientes=[], onRefresh, showToast, onClose, onEditarDatos}){
+function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, proyectos=[], acuerdos=[], disponibilidad=[], agencias=[], clientes=[], seguros=[], onRefresh, showToast, onClose, onEditarDatos}){
   // svcKey (no lowercase pelado): en el sheet los servicios vienen con emoji y "½"
   // ("🎥 Video ½") pero acá se guardan sin emoji y con "1/2". Comparados crudos nunca
   // matcheaban y TODO servicio ya existente salía marcado como "+ servicio nuevo".
@@ -2717,6 +2787,12 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   let fl=0,mg=0; items.forEach(s=>{ if(!s.quien)return; const v=Number(s.precio)||0; if(s.quien==='Somos Magma')mg+=v; else fl+=v })
   const fee=total-fl-mg
   const sinAsignar=items.filter(s=>s.pedido&&!s.quien).length
+  // 🛡 Seguro de accidentes personales: qué se pidió ya para este trabajo (solapa SEGUROS, una fila por persona)
+  const [seguroModal,setSeguroModal]=useState(false)
+  const segurosTrabajo=(seguros||[]).filter(r=>String(r['N° Presupuesto']||'').trim()===String(num).trim())
+  const seguroResumen=(()=>{ if(!segurosTrabajo.length) return ''; const ult=segurosTrabajo[segurosTrabajo.length-1]; const fecha=String(ult['Fecha pedido']||'').trim()
+    const quienes=[...new Set(segurosTrabajo.filter(r=>String(r['Fecha pedido']||'').trim()===fecha).map(r=>String(r['Persona']||'').trim().split(' ')[0]))]
+    return `Seguro pedido el ${fecha} para ${quienes.join(', ')}${ult['Vigencia']?` · ${ult['Vigencia']}`:''} · a ${ult['Enviado a']||''}` })()
 
   async function guardar(){
     setSaving(true)
@@ -2799,6 +2875,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     <datalist id={dlStaff}>{opcionesStaff.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
+    {seguroResumen && <div style={{fontSize:11.5, color:T.pos, marginTop:6}}>🛡 {seguroResumen}</div>}
 
     {/* Gastos de este trabajo: lo que se pagó aparte del staff (alquiler de equipos, auto, nafta). Se anotan desde
         Caja → "¿Pagaste algo?", eligiendo el trabajo. Acá se ven y se restan de la ganancia. */}
@@ -2820,9 +2897,143 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div><div style={{fontSize:9, color:T.ink3, marginTop:1}}>{gastosT>0?'fee + Somos Magma − gastos':'fee + Somos Magma'}</div></div>
       <div style={{flex:1}}/>
       {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
+      <button onClick={()=>setSeguroModal(true)} title="Mail a La Segunda con los datos de quienes van (nombre, DNI, nacimiento) para el certificado de accidentes personales. Queda anotado en SEGUROS." style={{...miniBtn, padding:'8px 14px', fontWeight:600, color:segurosTrabajo.length?T.pos:T.ink2, borderColor:segurosTrabajo.length?T.pos:T.border}}>🛡 {segurosTrabajo.length?'Seguro pedido':'Pedir seguro'}</button>
       <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
     </div> )})()}
     {freel && <FreelancerModal nombre={freel} datos={{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {seguroModal && <PedirSeguroModal p={p} num={num} presu={presu} items={items} rrhh={rrhh} rrhhNames={rrhhNames} clientes={clientes} seguros={seguros} onClose={()=>setSeguroModal(false)} onSent={()=>{ setSeguroModal(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+  </div>
+}
+
+// 🛡 PEDIDO DE SEGURO — el mail a La Segunda con la nómina del rodaje.
+// Juan, 08/10/2026: "una vez que confirmamos un laburo y ponemos a los que van, deberíamos
+// poder mandarle un mail a la aseguradora con las personas que necesitamos asegurar y los
+// datos necesarios… también podría tener un historial de los seguros o datos por cliente".
+// Los datos (DNI, nacimiento, nacionalidad) salen de RRHH; si a alguien le falta algo se
+// completa acá y queda guardado en RRHH. Lo que exigen para asegurar (cláusula de no repetición
+// a favor de tal razón social, monto, papeles) depende del LUGAR, no del cliente: "hay muchos
+// que es la única vez y otros se repiten" (Juan). El PM pega lo que le mandaron, queda en la fila
+// de SEGUROS, y la próxima vez en el mismo lugar sale precargado (lib/seguros.js).
+// El mail sale desde la casilla de quien lo manda (queda en sus Enviados) y cada persona queda
+// anotada en SEGUROS (pages/api/seguro-pedir.js). El texto vive en lib/seguros.js.
+function PedirSeguroModal({p, num, presu, items=[], rrhh=[], rrhhNames=[], clientes=[], seguros=[], onClose, onSent, showToast}){
+  const { data: session } = useSession()
+  const yo=String(session?.user?.email||'').toLowerCase().trim()
+  const firma=String(session?.user?.name||'').trim().split(' ')[0]
+  const cliente=String(p['Cliente']||'').trim(), agencia=String(p['Agencia']||'').trim(), proyecto=String(p['Proyecto']||'').trim()
+  const rrhhDe=nombre=>{ const k=canonKey(canonStaff(nombre)); return rrhh.find(r=>canonKey(canonStaff(r['Nombre Apellido']||r['Nombre']))===k) }
+  // Quiénes van: las líneas de staff con nombre (sin "Somos Magma"), sin repetir
+  const delStaff=[...new Set(items.map(s=>String(s.quien||'').trim()).filter(n=>n && !esMagma(n)))]
+  const armar=nombre=>{ const d=datosSeguro(nombre, rrhhDe(nombre)); return {...d, sel:true, edit:{dni:d.dni, nacimiento:d.nacimiento, nacionalidad:d.nacionalidad||'Argentino'}} }
+  const [personas,setPersonas]=useState(()=>delStaff.map(armar))
+  const [otro,setOtro]=useState('')
+  const agregar=()=>{ const n=otro.trim(); if(!n) return; if(personas.some(x=>canonKey(canonStaff(x.nombre))===canonKey(canonStaff(n)))){ setOtro(''); return } setPersonas(ps=>[...ps,armar(n)]); setOtro('') }
+  const updP=(i,ch)=>setPersonas(ps=>ps.map((x,j)=>j===i?{...x, edit:{...x.edit,...ch}}:x))
+  const elegidas=personas.filter(x=>x.sel)
+  // Las fechas y el lugar del trabajo (del presupuesto: el "?" marca los días sin confirmar)
+  const fechas=[...new Set([String(presu?.['Fecha Evento']||p['Fecha Evento']||'').trim(), ...String(presu?.['Fechas Adicionales']||'').split('|').map(x=>x.trim().replace(/^\?/,''))].filter(Boolean))]
+  const [vigencia,setVigencia]=useState(()=>vigenciaSugerida(fechas, presu?.['Tipo Fechas']))
+  const [lugar,setLugar]=useState(String(presu?.['Ubicación']||'').trim())
+  // Lo que piden depende del lugar: se propone lo que se cargó la última vez ahí (o para ese
+  // cliente) y sigue al campo "Dónde" hasta que el PM escribe algo a mano.
+  const sug=useMemo(()=>requisitosSugeridos(seguros,{lugar, cliente}),[seguros, lugar, cliente])
+  const [requisitos,setRequisitos]=useState(()=>sug.texto)
+  const [reqTocado,setReqTocado]=useState(false)
+  useEffect(()=>{ if(!reqTocado) setRequisitos(sug.texto) },[sug.texto, reqTocado])
+  const lugares=useMemo(()=>[...new Set([String(presu?.['Ubicación']||'').trim(), ...lugaresConocidos(seguros)].filter(Boolean))],[seguros, presu])
+  // A quién se le pide: lo último que se usó (SEGUROS → "Enviado a"); si no hay nada, el productor de siempre
+  const ultimo=[...seguros].reverse().find(r=>String(r['Enviado a']||'').trim())
+  const [to,setTo]=useState(()=>String(ultimo?.['Enviado a']||BROKER_MAILS.join(', ')))
+  const [cc,setCc]=useState(()=>yo && yo!=='sofi@somosmagma.com' ? 'sofi@somosmagma.com' : '')
+  const [asuntoM,setAsuntoM]=useState(null), [cuerpoM,setCuerpoM]=useState(null)
+  const [saving,setSaving]=useState(false)
+  const auto=armarMailSeguro({ personas:elegidas.map(x=>({nombre:x.nombre, ...x.edit})), trabajo:{cliente, agencia, proyecto, fechas, lugar}, vigencia, requisitos, firma })
+  const asunto=asuntoM??auto.asunto, cuerpo=cuerpoM??auto.cuerpo
+  const faltan=elegidas.filter(x=>!x.edit.dni||!x.edit.nacimiento)
+  // Historial de este cliente: qué se pidió antes, para quién
+  const hist=(()=>{ const m={}; seguros.filter(r=>normTxt(r['Cliente'])===normTxt(cliente)).forEach(r=>{ const k=`${r['Fecha pedido']}|${r['N° Presupuesto']}`
+    ;(m[k]=m[k]||{fecha:String(r['Fecha pedido']||'').trim(), nro:String(r['N° Presupuesto']||'').trim(), proyecto:String(r['Proyecto']||'').trim(), vigencia:String(r['Vigencia']||'').trim(), personas:[]}).personas.push(String(r['Persona']||'').trim().split(' ')[0]) })
+    return Object.values(m).reverse().slice(0,6) })()
+  const partir=s=>String(s||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean)
+  async function enviar(){
+    if(!elegidas.length){ showToast('Tildá al menos una persona','err'); return }
+    const dests=partir(to); if(!dests.length){ showToast('Falta a quién se lo mandás','err'); return }
+    setSaving(true)
+    try{
+      // Lo que se completó acá (DNI, nacimiento) → a RRHH, así la próxima sale solo
+      for(const x of elegidas){ const ch={}
+        if(x.edit.dni && x.edit.dni!==x.dni) ch.dni=x.edit.dni
+        if(x.edit.nacimiento && x.edit.nacimiento!==x.nacimiento) ch.fechaNac=x.edit.nacimiento
+        if(x.edit.nacionalidad && x.edit.nacionalidad!==x.nacionalidad) ch.nacionalidad=x.edit.nacionalidad
+        if(Object.keys(ch).length){ try{ await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:x.nombre, ...ch})}) }catch(e){} } }
+      const r=await fetch('/api/seguro-pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, to:dests, cc:partir(cc), asunto, cuerpo,
+        personas:elegidas.map(x=>({nombre:x.nombre, dni:x.edit.dni, nacimiento:x.edit.nacimiento, nacionalidad:x.edit.nacionalidad})),
+        trabajo:{cliente, agencia, proyecto, fechaEvento:fechas[0]||'', lugar}, vigencia, requisitos})})
+      const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
+      showToast(j.aviso || `Seguro pedido ✓ · ${elegidas.length} ${elegidas.length===1?'persona':'personas'} · desde ${j.desde}`, j.aviso?'err':undefined); onSent&&onSent()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  const chk={display:'flex', gap:9, alignItems:'flex-start', padding:'7px 0', fontSize:12.5}
+  const mini={...inpV2, padding:'5px 8px', fontSize:12}
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:950, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:640, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>🛡 Pedir seguro · #{num}</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>{[cliente, proyecto].filter(Boolean).join(' · ')} · mail a La Segunda con la nómina. Queda anotado en SEGUROS.</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px'}}>
+        <label style={lblV2}>Quiénes van · {elegidas.length}</label>
+        <div style={{border:`1px solid ${T.border}`, borderRadius:10, padding:'2px 12px', marginBottom:8}}>
+          {personas.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'9px 0'}}>Todavía no hay nadie en el staff de este trabajo. Agregá abajo a quien vaya.</div>}
+          {personas.map((x,i)=><div key={x.nombre} style={{...chk, borderTop:i===0?'none':`1px solid ${T.border}`}}>
+            <input type="checkbox" checked={!!x.sel} onChange={()=>setPersonas(ps=>ps.map((y,j)=>j===i?{...y,sel:!y.sel}:y))} style={{marginTop:3, cursor:'pointer'}}/>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{color:T.ink, fontWeight:600}}>{x.nombre}{!x.enRRHH && <span style={{color:T.warn, fontSize:11}}> · no está en RRHH: se crea con estos datos</span>}</div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginTop:5}}>
+                <input value={x.edit.dni} onChange={e=>updP(i,{dni:e.target.value.replace(/\D/g,'')})} placeholder="DNI" style={{...mini, fontFamily:MONO, borderColor:x.edit.dni?T.border:T.warn}}/>
+                <input value={x.edit.nacimiento} onChange={e=>updP(i,{nacimiento:e.target.value})} placeholder="Nacimiento dd/mm/aaaa" style={{...mini, fontFamily:MONO, borderColor:x.edit.nacimiento?T.border:T.warn}}/>
+                <input value={x.edit.nacionalidad} onChange={e=>updP(i,{nacionalidad:e.target.value})} placeholder="Nacionalidad" style={mini}/>
+              </div>
+              {(!x.edit.dni||!x.edit.nacimiento) && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Falta {[!x.edit.dni&&'DNI', !x.edit.nacimiento&&'fecha de nacimiento'].filter(Boolean).join(' y ')} en RRHH. Completalo acá y queda guardado.</div>}
+            </div>
+          </div>)}
+        </div>
+        <div style={{display:'flex', gap:8, marginBottom:16}}>
+          <input list="seg-rrhh" value={otro} onChange={e=>setOtro(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); agregar() } }} placeholder="Agregar a alguien más (Juan, Sofi, un asistente…)" style={{...inpV2, flex:1}}/>
+          <datalist id="seg-rrhh">{rrhhNames.filter(n=>!esMagma(n)).map(n=><option key={n} value={n}/>)}</datalist>
+          <button onClick={agregar} style={{...miniBtn, padding:'8px 14px'}}>Agregar</button>
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1.4fr', gap:10, marginBottom:14}}>
+          <div><label style={lblV2}>Para cuándo</label><input value={vigencia} onChange={e=>setVigencia(e.target.value)} placeholder="el sábado 10/10/2026 · todo octubre 2026" style={inpV2}/></div>
+          <div><label style={lblV2}>Dónde</label><input list="seg-lugares" value={lugar} onChange={e=>setLugar(e.target.value)} placeholder="Dirección del evento" style={inpV2}/>
+            <datalist id="seg-lugares">{lugares.map(l=><option key={l} value={l}/>)}</datalist></div>
+        </div>
+        <label style={lblV2}>Lo que piden para este lugar (cláusula de no repetición, monto, papeles)</label>
+        <textarea value={requisitos} onChange={e=>{ setReqTocado(true); setRequisitos(e.target.value) }} rows={3} placeholder="Pegá acá lo que mandó el cliente. Ej: cláusula de no repetición a favor de Winter 99 SRL, CUIT 30-71780733-9, por $50.000.000." style={{...inpV2, resize:'vertical', marginBottom:4}}/>
+        <div style={{fontSize:11, color:T.ink3, marginBottom:14, lineHeight:1.45}}>
+          {sug.fuente && requisitos===sug.texto
+            ? <>Precargado de {sug.fuente}. <button onClick={()=>{ setReqTocado(true); setRequisitos('') }} style={{border:'none', background:'transparent', color:T.brand, cursor:'pointer', fontSize:11, padding:0}}>Esta vez es otra cosa, borrar</button></>
+            : 'Va en el mail y queda guardado con este pedido: la próxima vez en el mismo lugar sale solo.'}
+        </div>
+        {hist.length>0 && <div style={{background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', margin:'6px 0 14px'}}>
+          <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, marginBottom:4}}>Seguros pedidos para {cliente}</div>
+          {hist.map((h,i)=><div key={i} style={{fontSize:12, color:T.ink2, padding:'3px 0'}}>{h.fecha} · #{h.nro} {h.proyecto} · {h.personas.join(', ')}{h.vigencia?` · ${h.vigencia}`:''}</div>)}
+        </div>}
+        <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:10, marginBottom:12}}>
+          <div><label style={lblV2}>Para</label><input value={to} onChange={e=>setTo(e.target.value)} style={inpV2}/></div>
+          <div><label style={lblV2}>CC</label><input value={cc} onChange={e=>setCc(e.target.value)} placeholder="opcional" style={inpV2}/></div>
+        </div>
+        <label style={lblV2}>Asunto</label>
+        <input value={asunto} onChange={e=>setAsuntoM(e.target.value)} style={{...inpV2, marginBottom:12}}/>
+        <label style={lblV2}>Mail {(asuntoM!=null||cuerpoM!=null) && <button onClick={()=>{setAsuntoM(null);setCuerpoM(null)}} style={{border:'none', background:'transparent', color:T.brand, cursor:'pointer', fontSize:11, padding:0, marginLeft:6}}>volver al texto automático</button>}</label>
+        <textarea value={cuerpo} onChange={e=>setCuerpoM(e.target.value)} rows={13} style={{...inpV2, resize:'vertical', fontFamily:MONO, fontSize:12.5, lineHeight:1.45}}/>
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, alignItems:'center'}}>
+        <span style={{fontSize:11.5, color:faltan.length?T.warn:T.ink3, flex:1, lineHeight:1.4}}>{faltan.length?`A ${faltan.map(x=>x.nombre.split(' ')[0]).join(' y ')} le falta DNI o nacimiento: el mail sale igual, pero el productor lo va a pedir.`:`Sale desde ${yo||'tu casilla'} y queda en Enviados.`}</span>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={enviar} disabled={saving||!elegidas.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:saving||!elegidas.length?'default':'pointer', opacity:saving||!elegidas.length?0.6:1}}>{saving?'Enviando…':'Enviar a La Segunda'}</button>
+      </div>
+    </div>
   </div>
 }
 // Los links de Drive del proyecto, a la vista de todos. Juan, 14/9/2026: "tengo que
@@ -4546,7 +4757,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
           <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Editar staff · #{staffModalPS.proy['N° presupuesto']}</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Corregí montos o agregá líneas (horas extra, otro servicio…). Los viáticos van en el campo de cada trabajo.</div></div>
           <button onClick={()=>setStaffModalPS(null)} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
-        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
+        <StaffEditor p={staffModalPS.proy} num={staffModalPS.proy['N° presupuesto']} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} seguros={data.seguros||[]} presu={staffModalPS.presu} onRefresh={onRefresh} showToast={showToast} onClose={()=>setStaffModalPS(null)}/>
       </div>
     </div>}
     {selList.length>0 && <div style={{position:'fixed', left:0, right:0, bottom:0, zIndex:850, padding:'0 16px 14px', pointerEvents:'none'}}>
@@ -4813,12 +5024,12 @@ function Agencias({data, onRefresh, showToast, nav, clearNav}){
   const st = agSel ? stats(agSel['Nombre']) : null
 
   async function guardar(){
-    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agSel['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas, plazoPago:form.plazoPago})})
+    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agSel['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas, plazoPago:form.plazoPago, condicionCobro:form.condicionCobro})})
       const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
       showToast('Agencia guardada'); setEdit(false); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
   }
-  const abrir=a=>{ setSel(a['Nombre']); setEdit(false); setForm({cuit:a['CUIT']||'',condIVA:a['Condicion IVA']||'',mailFact:a['Mail facturacion']||'',plazoPago:a['Plazo de pago']||'',telefono:a['Telefono']||'',direccion:a['Direccion fiscal']||'',notas:a['Notas']||''}) }
+  const abrir=a=>{ setSel(a['Nombre']); setEdit(false); setForm({cuit:a['CUIT']||'',condIVA:a['Condicion IVA']||'',mailFact:a['Mail facturacion']||'',plazoPago:a['Plazo de pago']||'',condicionCobro:a['Condición de cobro']||'',telefono:a['Telefono']||'',direccion:a['Direccion fiscal']||'',notas:a['Notas']||''}) }
 
   return <>
     <PageHead title="Agencias" sub={`${filtrados.length} de ${rows.length}`}/>
@@ -4849,11 +5060,19 @@ function Agencias({data, onRefresh, showToast, nav, clearNav}){
             {[['CUIT','cuit'],['Condición IVA','condIVA'],['Mail facturación','mailFact'],['Plazo de pago (días)','plazoPago'],['Teléfono','telefono'],['Dirección fiscal','direccion'],['Notas','notas']].map(([l,k])=>(
               <div key={k} style={{marginBottom:9}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
             ))}
+            {/* 🔒 Qué se le pide a esta agencia para aprobar un trabajo (lib/condicion-cobro.js). Vacío = Seña 30%. */}
+            <div style={{marginBottom:9}}><label style={lblV2}>Condición de cobro</label>
+              <select value={form.condicionCobro||''} onChange={e=>setForm(f=>({...f,condicionCobro:e.target.value}))} style={inpV2}>
+                <option value="">Seña 30% (por defecto)</option>
+                {CONDICIONES.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <div style={{fontSize:11, color:T.ink3, marginTop:3}}>Seña 30% u OC: sin eso no se aprueba. OC después y Cuenta corriente: se aprueba sin pedir nada.</div>
+            </div>
           </> : <>
             <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
               <Mini label="Presupuestos" val={st.presus}/><Mini label="Aprobados" val={st.aprob}/><Mini label="Facturas" val={st.fact}/><Mini label="Cobrado" val={fmtM(st.cobrado)} color={T.pos}/>
             </div>
-            {[['CUIT',agSel['CUIT']],['Cond. IVA',agSel['Condicion IVA']],['Mail',agSel['Mail facturacion']],['Paga a',agSel['Plazo de pago']?agSel['Plazo de pago']+' días':''],['Tel',agSel['Telefono']]].filter(x=>x[1]).map(([k,v])=>(
+            {[['CUIT',agSel['CUIT']],['Cond. IVA',agSel['Condicion IVA']],['Mail',agSel['Mail facturacion']],['Paga a',agSel['Plazo de pago']?agSel['Plazo de pago']+' días':''],['Cobro',agSel['Condición de cobro']||'Seña 30% (por defecto)'],['Tel',agSel['Telefono']]].filter(x=>x[1]).map(([k,v])=>(
               <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
             ))}
             <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
