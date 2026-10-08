@@ -50,7 +50,7 @@ async function mandarComo(casilla, { to, cc, subject, text, attachments }) {
   } catch (e) { /* sin nombre, sale la casilla pelada */ }
   const raw = await new MailComposer({ from, to: to.join(', '), cc: cc.length ? cc.join(', ') : undefined, subject, text, attachments }).compile().build()
   const r = await gmail.users.messages.send({ userId: 'me', requestBody: { raw: raw.toString('base64url') } })
-  return { desde: casilla, id: r.data.id }
+  return { desde: casilla, id: r.data.id, threadId: r.data.threadId || '' }
 }
 
 export default async function handler(req, res) {
@@ -134,6 +134,8 @@ export default async function handler(req, res) {
 
     // 5) El registro: una fila por persona, cada dato en la columna que lleva su título.
     //    La fecha es la de Argentina (el servidor corre en UTC: a las 22 hs ya sería "mañana").
+    //    Se escribe RAW: con USER_ENTERED el sheet convertía "8/10/2026" y "25/10/1994" en números de
+    //    serie (46303, 34632) y la app los mostraba así (08/10/2026).
     const ar = new Date(Date.now() - 3 * 3600e3)
     const hoy = `${ar.getUTCDate()}/${ar.getUTCMonth() + 1}/${ar.getUTCFullYear()}`
     const fila = p => {
@@ -143,13 +145,15 @@ export default async function handler(req, res) {
         'Persona': texto(p.nombre), 'DNI': texto(p.dni), 'Nacimiento': texto(p.nacimiento), 'Nacionalidad': texto(p.nacionalidad),
         'Requisitos': texto(requisitos), 'Enviado a': texto(dest.join(', ')), 'Enviado por': texto(mail), 'Desde': texto(envio.desde), 'Certificado': '', 'Notas': '',
         'Adjuntos': adjuntosFila,
+        // Con esto se encuentra la respuesta de Álvaro (el certificado) sin confundirla con otro pedido
+        'Asunto': texto(asunto), 'Hilo': envio.threadId || '',
       }
       return headers.map(h => (h in dato ? dato[h] : ''))
     }
     try {
       await withSheetsRetry(() => sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: `${HOJA_SEGUROS}!A:${colLetra(headers.length - 1)}`,
-        valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS',
+        valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
         requestBody: { values: lista.map(fila) },
       }))
     } catch (e) {

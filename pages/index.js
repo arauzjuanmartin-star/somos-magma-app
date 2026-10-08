@@ -3,7 +3,7 @@ import Head from 'next/head'
 import { useSession, signIn } from 'next-auth/react'
 import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { condicionDe, sinPedir, esOC, CONDICIONES } from '../lib/condicion-cobro'
-import { armarMailSeguro, datosSeguro, vigenciaSugerida, requisitosSugeridos, lugaresConocidos, BROKER_MAILS } from '../lib/seguros'
+import { armarMailSeguro, datosSeguro, vigenciaSugerida, requisitosSugeridos, lugaresConocidos, fechaLegible as fechaSeguro, BROKER_MAILS } from '../lib/seguros'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, nombrePieza as nombrePiezaEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara, monotributosDelMes } from '../lib/acuerdos'
@@ -2792,7 +2792,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const segurosTrabajo=(seguros||[]).filter(r=>String(r['N° Presupuesto']||'').trim()===String(num).trim())
   const seguroResumen=(()=>{ if(!segurosTrabajo.length) return ''; const ult=segurosTrabajo[segurosTrabajo.length-1]; const fecha=String(ult['Fecha pedido']||'').trim()
     const quienes=[...new Set(segurosTrabajo.filter(r=>String(r['Fecha pedido']||'').trim()===fecha).map(r=>String(r['Persona']||'').trim().split(' ')[0]))]
-    return `Seguro pedido el ${fecha} para ${quienes.join(', ')}${ult['Vigencia']?` · ${ult['Vigencia']}`:''} · a ${ult['Enviado a']||''}` })()
+    return `Seguro pedido el ${fechaSeguro(fecha)} para ${quienes.join(', ')}${ult['Vigencia']?` · ${ult['Vigencia']}`:''} · a ${ult['Enviado a']||''}` })()
   // El certificado que devuelve La Segunda: se trae solo del mail (la respuesta de Álvaro con el PDF) o se sube a mano.
   // Queda en Drive y linkeado en SEGUROS; de acá se lo manda al cliente que lo pide para el ingreso.
   const certificado=(()=>{ const ult=segurosTrabajo[segurosTrabajo.length-1]; return String(ult?.['Certificado']||'').trim() })()
@@ -2987,7 +2987,7 @@ function PedirSeguroModal({p, num, presu, items=[], rrhh=[], rrhhNames=[], clien
   const faltan=elegidas.filter(x=>!x.edit.dni||!x.edit.nacimiento)
   // Historial de este cliente: qué se pidió antes, para quién
   const hist=(()=>{ const m={}; seguros.filter(r=>normTxt(r['Cliente'])===normTxt(cliente)).forEach(r=>{ const k=`${r['Fecha pedido']}|${r['N° Presupuesto']}`
-    ;(m[k]=m[k]||{fecha:String(r['Fecha pedido']||'').trim(), nro:String(r['N° Presupuesto']||'').trim(), proyecto:String(r['Proyecto']||'').trim(), vigencia:String(r['Vigencia']||'').trim(), personas:[]}).personas.push(String(r['Persona']||'').trim().split(' ')[0]) })
+    ;(m[k]=m[k]||{fecha:fechaSeguro(r['Fecha pedido']), nro:String(r['N° Presupuesto']||'').trim(), proyecto:String(r['Proyecto']||'').trim(), vigencia:String(r['Vigencia']||'').trim(), personas:[]}).personas.push(String(r['Persona']||'').trim().split(' ')[0]) })
     return Object.values(m).reverse().slice(0,6) })()
   const partir=s=>String(s||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean)
   async function enviar(){
