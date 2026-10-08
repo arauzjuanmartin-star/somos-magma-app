@@ -33,13 +33,17 @@ export default async function handler(req, res) {
 
     // Fecha Evento (col G): hasta el 24/09/2026 quedaba vacía y "Atrasadas +30d del evento" daba siempre $0 en la
     // diaria (las 42 facturas por cobrar de ese día no tenían fecha). Se busca por N° en PROYECTOS y, si no, en PRESUPUESTOS.
-    const fechaEventoDe = {}
+    // 🔒 Y si el presupuesto tiene la seña cobrada (col Resguardo = "Seña", la pide la app al aprobar desde el
+    // 08/10/2026), la factura nace con "Cobrado 30%" tildado: así el reporte de los lunes la cuenta.
+    const fechaEventoDe = {}, senaDe = {}
     try {
-      const ev = await withRetry(() => sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['PROYECTOS!C:D', 'PRESUPUESTOS!A:B'], valueRenderOption: 'FORMATTED_VALUE' }))
+      const ev = await withRetry(() => sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['PROYECTOS!C:D', 'PRESUPUESTOS!A:DW'], valueRenderOption: 'FORMATTED_VALUE' }))
       const [PRO, PRE] = ev.data.valueRanges.map(v => v.values || [])
+      const iResg = (PRE[0] || []).indexOf('Resguardo')
       for (const nro of nrosT) {
         const enPro = PRO.find(r => String(r[0] ?? '').trim() === nro), enPre = PRE.find(r => String(r[0] ?? '').trim() === nro)
         fechaEventoDe[nro] = String((enPro && enPro[1]) || (enPre && enPre[1]) || '').trim()
+        senaDe[nro] = iResg > -1 && !!enPre && /^se/i.test(String(enPre[iResg] || '').trim())
       }
     } catch (e) { /* sin fecha es como estaba antes: la diaria la busca en PROYECTOS igual */ }
 
@@ -84,7 +88,7 @@ export default async function handler(req, res) {
       insertDataOption: 'INSERT_ROWS',   // ← fuerza nueva fila en vez de overwrite
       includeValuesInResponse: true,
       requestBody: { values: trabajos.map(t => [
-        mesStr, t.presupuestoNum, false, false, false, '', fechaEventoDe[String(t.presupuestoNum ?? '').trim()] || '',
+        mesStr, t.presupuestoNum, !!senaDe[String(t.presupuestoNum ?? '').trim()], false, false, '', fechaEventoDe[String(t.presupuestoNum ?? '').trim()] || '',
         t.agencia||'', t.cliente||'', t.proyecto||'',
         t.neto, t.iva, t.total,
         'Factura '+tipo, nroFactura||'',

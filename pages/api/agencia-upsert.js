@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (!auth) return
   const mail = auth.mail
 
-  const { nombre, cuit, condIVA, mailFact, telefono, pmDefault, direccion, tipo, notas, plazoPago } = req.body
+  const { nombre, cuit, condIVA, mailFact, telefono, pmDefault, direccion, tipo, notas, plazoPago, condicionCobro } = req.body
   if (!nombre || !String(nombre).trim()) return res.status(400).json({ error: 'Nombre requerido' })
 
   try {
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     // "Modificada" y "Plazo de pago" NO tienen posición de respaldo: si la solapa no tiene esa columna, no se
     // escribe. "Modificada" caía en la columna 12 por posición y esa columna es "Drive Recursos": cada vez que se
     // tocaba una agencia le quedaba una fecha donde va el link de la carpeta, y el link ya no se podía anotar solo.
-    const SOLO_SI_EXISTE = ['Modificada', 'Plazo de pago']
+    const SOLO_SI_EXISTE = ['Modificada', 'Plazo de pago', 'Condición de cobro']   // la condición: lib/condicion-cobro.js
     const norm2 = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
     const idx = {}
     const tieneTitulos = headers.some(h => norm2(h) === 'nombre')
@@ -61,6 +61,7 @@ export default async function handler(req, res) {
       if (tipo !== undefined) set('Tipo', tipo)
       if (notas !== undefined) set('Notas', notas)
       if (plazoLimpio !== undefined) set('Plazo de pago', plazoLimpio)
+      if (condicionCobro !== undefined) set('Condición de cobro', condicionCobro)
       set('Modificada', hoy)
       if (updates.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
@@ -85,7 +86,7 @@ export default async function handler(req, res) {
     const put = (campo, valor) => { const col = idx[campo]; if (col !== undefined) row[col] = valor }
     put('Nombre', nombre.trim()); put('CUIT', cuit || ''); put('Condicion IVA', condIVA || ''); put('Mail facturacion', mailFact || '')
     put('Telefono', telefono || ''); put('PM default', pmDefault || ''); put('Direccion fiscal', direccion || ''); put('Tipo', tipo || '')
-    put('Notas', notas || ''); put('Activa', 'SI'); put('Creada', hoy); if (plazoLimpio) put('Plazo de pago', plazoLimpio)
+    put('Notas', notas || ''); put('Activa', 'SI'); put('Creada', hoy); if (plazoLimpio) put('Plazo de pago', plazoLimpio); if (condicionCobro) put('Condición de cobro', condicionCobro)
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,

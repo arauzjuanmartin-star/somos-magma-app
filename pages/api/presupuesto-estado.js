@@ -2,6 +2,7 @@ import { getSheets, MAX_SLOTS, SLOT_PRESU, SLOT_PROY, ANCHO_PROY } from '../../l
 import { requireAuth } from '../../lib/auth-helpers'
 import { asegurarCarpetasProyecto } from '../../lib/drive'
 import { sincronizarEdicion, migrarEdicionRepresupuesto } from '../../lib/edicion-sync'
+import { condicionDe, sinPedir, esOC } from '../../lib/condicion-cobro'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
 
     const r = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'PRESUPUESTOS!A:DI',
+      range: 'PRESUPUESTOS!A:DW',
     })
     const rows = r.data.values || []
     let rowIndex = -1
@@ -31,6 +32,52 @@ export default async function handler(req, res) {
     }
     if (rowIndex === -1) return res.status(404).json({ error: 'No encontrado' })
 
+    // 🔒 RESGUARDO DEL COBRO — desde el 08/10/2026 nada se aprueba (y por lo tanto nada
+    // entra a PROYECTOS ni al Calendar) sin la seña del 30 % cobrada o la orden de compra
+    // del cliente. Decisión de Juan y Sofi después de CeraVe #2355 (4 presupuestos, 11
+    // piezas por 8 cotizadas, $0 de seña, cobro a 30 días con el staff pagándose el 15).
+    // La seña era obligatoria desde el 18/08 y se cobró 0 veces en 164 facturas: escrita
+    // en el PDF no alcanzó, hace falta que la app lo trabe. Queda en PRESUPUESTOS
+    // (Resguardo · Resguardo detalle · Resguardo fecha, ver lib/slots.js) y en el LOG.
+    // Si el presupuesto ya tenía resguardo (re-aprobar) no se vuelve a pedir, y un
+    // presupuesto en $0 (interno, canje) no lo necesita. Se chequea ANTES de tocar nada.
+    const headers = rows[0] || []
+    const iResg = headers.indexOf('Resguardo')
+    const hoyAR = () => new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+    let resguardoEscrito = null
+    if (estado === 'APROBADO' && presuRow) {
+      const precio = parseFloat(String(presuRow[8] || '').replace(/[$\s,]/g, '')) || 0   // I = Precio Final
+      const yaTiene = iResg > -1 && String(presuRow[iResg] || '').trim() !== ''
+      const rg = req.body.resguardo || {}
+      const tipo = String(rg.tipo || '').toLowerCase()
+      const monto = Math.round(Number(rg.monto) || 0)
+      const ref = String(rg.ref || '').trim()
+      const valido = (tipo === 'sena' && monto > 0) || (tipo === 'oc' && ref !== '')
+      if (precio > 0 && !yaTiene) {
+        // La condición de cobro de la agencia (es quien paga) o, si no tiene, del cliente (lib/condicion-cobro.js).
+        // Vacía = Seña 30%. "Cuenta corriente" y "OC después" aprueban sin pedir nada y lo dejan anotado igual,
+        // para que se vea que fue una decisión y no un olvido. Juan, 07/10/2026: "Ostara nos paga después, ADN
+        // también y por eso nos dan un montón de trabajo; Austral hace la OC después de la fecha".
+        let condicion = '', fuente = ''
+        try {
+          const ac = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['AGENCIAS!A:Z', 'CLIENTES!A:Z'] })
+          const [AG, CL] = ac.data.valueRanges.map(v => v.values || [])
+          const objs = M => { const hh = M[0] || []; return M.slice(1).map(r => Object.fromEntries(hh.map((k, i) => [k, r[i] ?? '']))) }
+          const agencias = objs(AG), clientes = objs(CL), presuObj = { Agencia: presuRow[4] || '', Cliente: presuRow[5] || '' }
+          condicion = condicionDe(presuObj, agencias, clientes)
+          if (condicion) fuente = condicionDe(presuObj, agencias, []) ? `AGENCIAS: ${String(presuRow[4] || '').trim()}` : `CLIENTES: ${String(presuRow[5] || '').trim()}`
+        } catch (e) { console.warn('No pude leer la condición de cobro (sigo como Seña 30%):', e.message) }
+        if (sinPedir(condicion)) {
+          resguardoEscrito = { tipo: 'condicion', etiqueta: condicion, detalle: fuente, fecha: hoyAR() }
+        } else if (!valido) {
+          const que = esOC(condicion) ? 'la orden de compra del cliente' : 'la seña cobrada o la orden de compra del cliente'
+          return res.status(409).json({ error: `Para aprobar hace falta ${que}. Sin eso el trabajo no se agenda.`, sinResguardo: true, condicion })
+        } else {
+          resguardoEscrito = { tipo, monto, ref, fecha: String(rg.fecha || '').trim() || hoyAR() }
+        }
+      }
+    }
+
     // Actualizar estado col D (índice 3)
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
@@ -38,6 +85,47 @@ export default async function handler(req, res) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[estado]] }
     })
+
+    // 🔒 Dejar escrito el resguardo (ver arriba). Best-effort: la aprobación ya pasó el candado.
+    if (resguardoEscrito) {
+      const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
+      const etiqueta = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.etiqueta : resguardoEscrito.tipo === 'sena' ? 'Seña' : 'OC'
+      const detalle = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.detalle : resguardoEscrito.tipo === 'sena' ? resguardoEscrito.monto : resguardoEscrito.ref
+      try {
+        if (iResg > -1) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `PRESUPUESTOS!${colLetra(iResg)}${rowIndex}:${colLetra(iResg + 2)}${rowIndex}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[etiqueta, detalle, resguardoEscrito.fecha]] },
+          })
+        } else {
+          console.warn('PRESUPUESTOS no tiene la columna Resguardo: corré scripts/presupuestos-columnas-resguardo.mjs --escribir')
+        }
+        // Seña cobrada + factura ya cargada para este N° → "Cobrado 30%" tildado (lo lee el reporte de los lunes).
+        // Si la factura todavía no existe, factura-nueva la crea ya tildada leyendo esta misma columna.
+        if (resguardoEscrito.tipo === 'sena') {
+          const rF = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'FACTURACION!A:C' })
+          const fR = rF.data.values || [], fh = fR[0] || []
+          const iN = fh.indexOf('N° Presupuesto'), i30 = fh.indexOf('Cobrado 30%')
+          if (iN > -1 && i30 > -1) {
+            const data = []
+            for (let i = 1; i < fR.length; i++) if (String(fR[i][iN] || '').trim() === String(num).trim()) data.push({ range: `FACTURACION!${colLetra(i30)}${i + 1}`, values: [[true]] })
+            if (data.length) await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data } })
+          }
+        }
+      } catch (e) { console.error('No se pudo escribir el resguardo:', e.message) }
+      try {
+        const detLog = resguardoEscrito.tipo === 'condicion' ? `${resguardoEscrito.etiqueta} · ${resguardoEscrito.detalle} · sin pedir nada`
+          : resguardoEscrito.tipo === 'sena'
+          ? `Seña $${resguardoEscrito.monto.toLocaleString('es-AR')}${resguardoEscrito.ref ? ' · ' + resguardoEscrito.ref : ''} · ${resguardoEscrito.fecha}`
+          : `OC ${resguardoEscrito.ref} · ${resguardoEscrito.fecha}`
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[new Date().toISOString(), mail, 'presupuesto-resguardo', 'PRESUPUESTOS', String(num), detLog]] },
+        })
+      } catch (e) {}
+    }
 
     // Si el estado NO es APROBADO → eliminar la fila correspondiente en PROYECTOS si existe.
     // Solo APROBADO debe estar en PROYECTOS. Cualquier otro estado (EN ESPERA,
