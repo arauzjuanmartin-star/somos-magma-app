@@ -2941,13 +2941,24 @@ function PedirSeguroModal({p, num, presu, items=[], rrhh=[], rrhhNames=[], clien
   const [reqTocado,setReqTocado]=useState(false)
   useEffect(()=>{ if(!reqTocado) setRequisitos(sug.texto) },[sug.texto, reqTocado])
   const lugares=useMemo(()=>[...new Set([String(presu?.['Ubicación']||'').trim(), ...lugaresConocidos(seguros)].filter(Boolean))],[seguros, presu])
+  // Lo que mandó el cliente en PDF: archivos nuevos (van al mail y a Drive) y los de un pedido anterior
+  // en el mismo lugar (se vuelven a adjuntar desde Drive). Tope 3 MB en total: Vercel corta en 4,5 MB.
+  const MAX_ADJ=3*1024*1024
+  const [archivos,setArchivos]=useState([])
+  const [reusar,setReusar]=useState(()=>(sug.adjuntos||[]).map(a=>a.id))
+  useEffect(()=>{ if(!reqTocado) setReusar((sug.adjuntos||[]).map(a=>a.id)) },[sug.adjuntos, reqTocado])
+  const pesoAdj=archivos.reduce((s,f)=>s+f.size,0)
+  const agregarArchivos=lista=>{ const nuevos=[...lista].filter(f=>!archivos.some(x=>x.name===f.name&&x.size===f.size)); const total=pesoAdj+nuevos.reduce((s,f)=>s+f.size,0)
+    if(total>MAX_ADJ){ showToast(`Los archivos pesan ${(total/1024/1024).toFixed(1)} MB y el tope es 3 MB. Comprimí el PDF o mandalo aparte.`,'err'); return } setArchivos(a=>[...a,...nuevos]) }
+  const adjReusados=(sug.adjuntos||[]).filter(a=>reusar.includes(a.id))
+  const kb=n=>n>=1024*1024?`${(n/1024/1024).toFixed(1)} MB`:`${Math.round(n/1024)} KB`
   // A quién se le pide: lo último que se usó (SEGUROS → "Enviado a"); si no hay nada, el productor de siempre
   const ultimo=[...seguros].reverse().find(r=>String(r['Enviado a']||'').trim())
   const [to,setTo]=useState(()=>String(ultimo?.['Enviado a']||BROKER_MAILS.join(', ')))
   const [cc,setCc]=useState(()=>yo && yo!=='sofi@somosmagma.com' ? 'sofi@somosmagma.com' : '')
   const [asuntoM,setAsuntoM]=useState(null), [cuerpoM,setCuerpoM]=useState(null)
   const [saving,setSaving]=useState(false)
-  const auto=armarMailSeguro({ personas:elegidas.map(x=>({nombre:x.nombre, ...x.edit})), trabajo:{cliente, agencia, proyecto, fechas, lugar}, vigencia, requisitos, firma })
+  const auto=armarMailSeguro({ personas:elegidas.map(x=>({nombre:x.nombre, ...x.edit})), trabajo:{cliente, agencia, proyecto, fechas, lugar}, vigencia, requisitos, adjuntos:[...archivos.map(f=>f.name), ...adjReusados.map(a=>a.nombre)], firma })
   const asunto=asuntoM??auto.asunto, cuerpo=cuerpoM??auto.cuerpo
   const faltan=elegidas.filter(x=>!x.edit.dni||!x.edit.nacimiento)
   // Historial de este cliente: qué se pidió antes, para quién
@@ -2966,11 +2977,14 @@ function PedirSeguroModal({p, num, presu, items=[], rrhh=[], rrhhNames=[], clien
         if(x.edit.nacimiento && x.edit.nacimiento!==x.nacimiento) ch.fechaNac=x.edit.nacimiento
         if(x.edit.nacionalidad && x.edit.nacionalidad!==x.nacionalidad) ch.nacionalidad=x.edit.nacionalidad
         if(Object.keys(ch).length){ try{ await fetch('/api/freelancer-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:x.nombre, ...ch})}) }catch(e){} } }
+      // Los archivos viajan en base64 adentro del JSON (como el PDF de la tarjeta)
+      const adjuntos=[]
+      for(const f of archivos){ const b=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(f) }); adjuntos.push({nombre:f.name, tipo:f.type||'application/octet-stream', base64:b}) }
       const r=await fetch('/api/seguro-pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, to:dests, cc:partir(cc), asunto, cuerpo,
         personas:elegidas.map(x=>({nombre:x.nombre, dni:x.edit.dni, nacimiento:x.edit.nacimiento, nacionalidad:x.edit.nacionalidad})),
-        trabajo:{cliente, agencia, proyecto, fechaEvento:fechas[0]||'', lugar}, vigencia, requisitos})})
+        trabajo:{cliente, agencia, proyecto, fechaEvento:fechas[0]||'', lugar}, vigencia, requisitos, adjuntos, reutilizar:adjReusados.map(a=>({id:a.id, nombre:a.nombre, link:a.link}))})})
       const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo enviar','err'); setSaving(false); return }
-      showToast(j.aviso || `Seguro pedido ✓ · ${elegidas.length} ${elegidas.length===1?'persona':'personas'} · desde ${j.desde}`, j.aviso?'err':undefined); onSent&&onSent()
+      showToast(j.aviso || `Seguro pedido ✓ · ${elegidas.length} ${elegidas.length===1?'persona':'personas'}${j.adjuntos?` · ${j.adjuntos} ${j.adjuntos===1?'adjunto':'adjuntos'}`:''} · desde ${j.desde}`, j.aviso?'err':undefined); onSent&&onSent()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
   const chk={display:'flex', gap:9, alignItems:'flex-start', padding:'7px 0', fontSize:12.5}
@@ -3010,10 +3024,26 @@ function PedirSeguroModal({p, num, presu, items=[], rrhh=[], rrhhNames=[], clien
         </div>
         <label style={lblV2}>Lo que piden para este lugar (cláusula de no repetición, monto, papeles)</label>
         <textarea value={requisitos} onChange={e=>{ setReqTocado(true); setRequisitos(e.target.value) }} rows={3} placeholder="Pegá acá lo que mandó el cliente. Ej: cláusula de no repetición a favor de Winter 99 SRL, CUIT 30-71780733-9, por $50.000.000." style={{...inpV2, resize:'vertical', marginBottom:4}}/>
-        <div style={{fontSize:11, color:T.ink3, marginBottom:14, lineHeight:1.45}}>
+        <div style={{fontSize:11, color:T.ink3, marginBottom:10, lineHeight:1.45}}>
           {sug.fuente && requisitos===sug.texto
-            ? <>Precargado de {sug.fuente}. <button onClick={()=>{ setReqTocado(true); setRequisitos('') }} style={{border:'none', background:'transparent', color:T.brand, cursor:'pointer', fontSize:11, padding:0}}>Esta vez es otra cosa, borrar</button></>
+            ? <>Precargado de {sug.fuente}. <button onClick={()=>{ setReqTocado(true); setRequisitos(''); setReusar([]) }} style={{border:'none', background:'transparent', color:T.brand, cursor:'pointer', fontSize:11, padding:0}}>Esta vez es otra cosa, borrar</button></>
             : 'Va en el mail y queda guardado con este pedido: la próxima vez en el mismo lugar sale solo.'}
+        </div>
+        {/* Archivos: lo que mandó el cliente (protocolo, planilla). Van al mail, a Drive, y vuelven la próxima vez. */}
+        <div style={{border:`1px dashed ${T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
+          {(sug.adjuntos||[]).map(a=><label key={a.id} style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, padding:'3px 0', cursor:'pointer'}}>
+            <input type="checkbox" checked={reusar.includes(a.id)} onChange={e=>setReusar(r=>e.target.checked?[...r,a.id]:r.filter(x=>x!==a.id))}/>
+            <span style={{color:T.ink}}>Volver a adjuntar <strong>{a.nombre}</strong></span><a href={a.link} target="_blank" rel="noreferrer" style={{fontSize:11, color:T.ink3}}>ver</a>
+          </label>)}
+          {archivos.map((f,i)=><div key={f.name+f.size} style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, padding:'3px 0'}}>
+            <span style={{color:T.ink, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>📎 {f.name} <span style={{color:T.ink3}}>· {kb(f.size)}</span></span>
+            <button onClick={()=>setArchivos(a=>a.filter((_,j)=>j!==i))} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:15, padding:0}}>×</button>
+          </div>)}
+          <label style={{display:'flex', gap:8, alignItems:'center', fontSize:12, color:T.brand, cursor:'pointer', padding:'4px 0', fontWeight:600}}>
+            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" onChange={e=>{ agregarArchivos(e.target.files||[]); e.target.value='' }} style={{display:'none'}}/>
+            + Adjuntar lo que mandó el cliente (PDF, planilla)
+            <span style={{color:T.ink3, fontWeight:400}}>· hasta 3 MB en total{pesoAdj?` · ${kb(pesoAdj)}`:''}</span>
+          </label>
         </div>
         {hist.length>0 && <div style={{background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', margin:'6px 0 14px'}}>
           <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, marginBottom:4}}>Seguros pedidos para {cliente}</div>

@@ -12,7 +12,7 @@
  * el mismo lugar. No hace falta otra solapa.
  *
  * Es una solapa nueva y aparte: no toca ninguna columna de las que ya existen. Si ya existe,
- * no hace nada.
+ * solo agrega al final los títulos que le falten (p. ej. "Adjuntos", sumado el 08/10/2026).
  *
  * Uso:  node scripts/seguros-setup.mjs            (preview)
  *       node scripts/seguros-setup.mjs --escribir
@@ -28,11 +28,31 @@ const ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 const ESCRIBIR = process.argv.includes('--escribir')
 const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
 
-const meta = await sheets.spreadsheets.get({ spreadsheetId: ID, fields: 'sheets(properties(title,sheetId))' })
+const meta = await sheets.spreadsheets.get({ spreadsheetId: ID, fields: 'sheets(properties(title,sheetId,gridProperties))' })
 const existe = meta.data.sheets.find(s => s.properties.title === HOJA_SEGUROS)
 
 console.log(`\nSOLAPA "${HOJA_SEGUROS}" — ${ESCRIBIR ? 'ESCRIBIENDO' : 'PREVIEW (nada se toca)'}\n`)
-if (existe) { console.log('La solapa ya existe. No hago nada.\n'); process.exit(0) }
+if (existe) {
+  // Ya está: solo los títulos que falten, al final, sin tocar lo que hay
+  const h = ((await sheets.spreadsheets.values.get({ spreadsheetId: ID, range: `${HOJA_SEGUROS}!1:1` })).data.values || [])[0] || []
+  const faltan = HEADERS_SEGUROS.filter(x => !h.includes(x))
+  if (!faltan.length) { console.log(`La solapa ya existe con sus ${h.length} columnas. No hago nada.\n`); process.exit(0) }
+  console.log(`La solapa ya existe (${h.length} columnas, última "${h[h.length - 1]}"). Faltan: ${faltan.map((x, i) => `${colLetra(h.length + i)} ${x}`).join(' · ')}`)
+  if (!ESCRIBIR) { console.log('\n--- PREVIEW. Nada escrito. Correr con --escribir para aplicar. ---\n'); process.exit(0) }
+  const sid = existe.properties.sheetId, ancho = existe.properties.gridProperties.columnCount, ultima = h.length + faltan.length
+  const requests = []
+  if (ancho < ultima) requests.push({ appendDimension: { sheetId: sid, dimension: 'COLUMNS', length: ultima - ancho } })
+  faltan.forEach((x, i) => { const c = COLS_SEGUROS.find(k => k[0] === x); requests.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: h.length + i, endIndex: h.length + i + 1 }, properties: { pixelSize: c ? c[1] : 160 }, fields: 'pixelSize' } }) })
+  requests.push({ setBasicFilter: { filter: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1000, startColumnIndex: 0, endColumnIndex: ultima } } } })
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId: ID, requestBody: { requests } })
+  await sheets.spreadsheets.values.update({ spreadsheetId: ID, range: `${HOJA_SEGUROS}!${colLetra(h.length)}1`, valueInputOption: 'RAW', requestBody: { values: [faltan] } })
+  const h2 = ((await sheets.spreadsheets.values.get({ spreadsheetId: ID, range: `${HOJA_SEGUROS}!1:1` })).data.values || [])[0] || []
+  const mal = faltan.filter((x, i) => h2[h.length + i] !== x)
+  if (mal.length) { console.log(`\n✗ No quedaron bien: ${mal.join(', ')}. Revisar la fila 1 a mano.\n`); process.exit(1) }
+  console.log(`\n✓ Agregadas: ${faltan.join(' · ')} · filtro hasta ${colLetra(ultima - 1)} · ${h2.length} columnas\n`)
+  try { await sheets.spreadsheets.values.append({ spreadsheetId: ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), 'juan (script)', 'seguros-setup', HOJA_SEGUROS, '', `columnas nuevas: ${faltan.join(', ')}`]] } }) } catch (e) {}
+  process.exit(0)
+}
 console.log(`La solapa NO existe. Se crea vacía, con ${COLS_SEGUROS.length} columnas:\n`)
 COLS_SEGUROS.forEach((c, i) => console.log(`  ${colLetra(i).padEnd(3)} ${c[0].padEnd(16)} ${c[2]}`))
 console.log('\nFormato: título negro con letra blanca, fila 1 congelada, filtro, fechas como fecha. No toca ninguna otra solapa.')
