@@ -2793,6 +2793,20 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const seguroResumen=(()=>{ if(!segurosTrabajo.length) return ''; const ult=segurosTrabajo[segurosTrabajo.length-1]; const fecha=String(ult['Fecha pedido']||'').trim()
     const quienes=[...new Set(segurosTrabajo.filter(r=>String(r['Fecha pedido']||'').trim()===fecha).map(r=>String(r['Persona']||'').trim().split(' ')[0]))]
     return `Seguro pedido el ${fecha} para ${quienes.join(', ')}${ult['Vigencia']?` · ${ult['Vigencia']}`:''} · a ${ult['Enviado a']||''}` })()
+  // El certificado que devuelve La Segunda: se trae solo del mail (la respuesta de Álvaro con el PDF) o se sube a mano.
+  // Queda en Drive y linkeado en SEGUROS; de acá se lo manda al cliente que lo pide para el ingreso.
+  const certificado=(()=>{ const ult=segurosTrabajo[segurosTrabajo.length-1]; return String(ult?.['Certificado']||'').trim() })()
+  const [certSaving,setCertSaving]=useState(false)
+  async function traerCertificado(archivo){
+    setCertSaving(true)
+    try{
+      let body={num, modo:'mail'}
+      if(archivo){ const b=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(archivo) }); body={num, modo:'archivo', nombre:archivo.name, tipo:archivo.type||'application/pdf', base64:b} }
+      const r=await fetch('/api/seguro-certificado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const j=await r.json(); if(!j.ok){ showToast(j.error||'No se pudo guardar el certificado','err'); setCertSaving(false); return }
+      showToast(`Certificado guardado ✓ · ${j.nombre}`); setCertSaving(false); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err'); setCertSaving(false) }
+  }
 
   async function guardar(){
     setSaving(true)
@@ -2875,7 +2889,17 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     <datalist id={dlStaff}>{opcionesStaff.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="v2-svcs">{serviciosConocidos.map(n=><option key={n} value={n}/>)}</datalist>
     <button onClick={addRow} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginTop:2}}>+ Agregar línea</button>
-    {seguroResumen && <div style={{fontSize:11.5, color:T.pos, marginTop:6}}>🛡 {seguroResumen}</div>}
+    {seguroResumen && <div style={{fontSize:11.5, color:T.pos, marginTop:6, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+      <span>🛡 {seguroResumen}</span>
+      {certificado
+        ? <a href={certificado} target="_blank" rel="noreferrer" style={{color:T.pos, fontWeight:600}}>📄 Certificado ✓ ver</a>
+        : <>
+          <button onClick={()=>traerCertificado(null)} disabled={certSaving} title="Busca en tu casilla la respuesta del productor con el PDF del certificado, lo guarda en Drive y lo deja linkeado acá" style={{...miniBtn, padding:'3px 9px', fontSize:11, opacity:certSaving?0.6:1}}>{certSaving?'Buscando…':'📄 Traer el certificado del mail'}</button>
+          <label style={{...miniBtn, padding:'3px 9px', fontSize:11, cursor:'pointer'}} title="Si el PDF llegó por otro lado, subilo acá">
+            <input type="file" accept=".pdf" onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(f) traerCertificado(f) }} style={{display:'none'}}/>Subir el PDF
+          </label>
+        </>}
+    </div>}
 
     {/* Gastos de este trabajo: lo que se pagó aparte del staff (alquiler de equipos, auto, nafta). Se anotan desde
         Caja → "¿Pagaste algo?", eligiendo el trabajo. Acá se ven y se restan de la ganancia. */}

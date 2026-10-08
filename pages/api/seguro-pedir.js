@@ -21,32 +21,18 @@
 import { google } from 'googleapis'
 import nodemailer from 'nodemailer'
 import MailComposer from 'nodemailer/lib/mail-composer/index.js'
-import { Readable } from 'stream'
 import { getSheets, withSheetsRetry } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { HOJA_SEGUROS, formatAdjuntos } from '../../lib/seguros'
+import { getDrive, subirASeguros, nombreLimpio } from '../../lib/seguros-drive'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 const MAX_ADJUNTOS = 3 * 1024 * 1024
-const DRIVE_ADMINISTRACION = '0AHMUebE7UIa_Uk9PVA'   // unidad compartida ADMINISTRACION (la misma de las facturas de freelancers)
 
 // Un texto que empieza con = + - @ el sheet lo toma como fórmula y deja #ERROR! ("+Conectados").
 const texto = v => { const s = String(v ?? '').trim(); return /^[=+\-@]/.test(s) ? `'${s}` : s }
 const esMail = s => /^[a-z0-9][^@\s]*@[^@\s]+\.[^@\s]+$/i.test(String(s || '').trim())
 const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
-
-const getDrive = () => google.drive({ version: 'v3', auth: new google.auth.GoogleAuth({
-  credentials: { client_email: process.env.GOOGLE_CLIENT_EMAIL, private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n') },
-  scopes: ['https://www.googleapis.com/auth/drive'],
-}) })
-async function carpetaDe(drive, nombre, parentId) {
-  const safe = String(nombre).replace(/'/g, "\\'")
-  const r = await drive.files.list({ q: `name='${safe}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`, fields: 'files(id)', supportsAllDrives: true, includeItemsFromAllDrives: true })
-  if (r.data.files.length) return r.data.files[0].id
-  const f = await drive.files.create({ requestBody: { name: nombre, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }, fields: 'id', supportsAllDrives: true })
-  return f.data.id
-}
-const nombreLimpio = s => String(s || 'archivo').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120)
 
 // Manda el mail como esa casilla @somosmagma.com (delegación en todo el dominio, alcance gmail.modify).
 async function mandarComo(casilla, { to, cc, subject, text, attachments }) {
@@ -138,17 +124,7 @@ export default async function handler(req, res) {
     if (nuevos.length) {
       try {
         const drive = getDrive()
-        const carpetaSeg = await withSheetsRetry(() => carpetaDe(drive, 'Seguros', DRIVE_ADMINISTRACION))
-        const carpetaCli = await withSheetsRetry(() => carpetaDe(drive, nombreLimpio(trabajo.cliente || trabajo.agencia || 'Sin cliente'), carpetaSeg))
-        const ar0 = new Date(Date.now() - 3 * 3600e3), fechaArch = `${String(ar0.getUTCDate()).padStart(2, '0')}-${String(ar0.getUTCMonth() + 1).padStart(2, '0')}-${ar0.getUTCFullYear()}`
-        for (const a of nuevos) {
-          const f = await withSheetsRetry(() => drive.files.create({
-            requestBody: { name: `#${String(num).trim()} · ${fechaArch} · ${a.nombre}`, parents: [carpetaCli] },
-            media: { mimeType: a.tipo, body: Readable.from(a.content) },
-            fields: 'id,webViewLink', supportsAllDrives: true,
-          }))
-          subidos.push({ nombre: a.nombre, link: f.data.webViewLink, id: f.data.id })
-        }
+        for (const a of nuevos) subidos.push(await withSheetsRetry(() => subirASeguros(drive, { num, cliente: trabajo.cliente || trabajo.agencia, nombre: a.nombre, tipo: a.tipo, content: a.content })))
       } catch (e) {
         console.error('seguro-pedir (drive):', e.message)
         aviso = `El mail salió con los adjuntos, pero no pude guardarlos en Drive (${e.message}): la próxima vez habrá que subirlos de nuevo.`
