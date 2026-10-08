@@ -27,6 +27,10 @@ async function buscarEnMail(casilla, desde) {
   const l = await gmail.users.messages.list({ userId: 'me', q, maxResults: 15 })
   const cab = (msg, n) => (msg.payload?.headers || []).find(h => h.name.toLowerCase() === n.toLowerCase())?.value || ''
   const partes = []; const recorrer = p => { if (p?.filename && p.body?.attachmentId) partes.push(p); (p?.parts || []).forEach(recorrer) }
+  // Gmail devuelve del más nuevo al más viejo. Primero el que tenga un PDF que se llame
+  // "Certificado…" (así los manda Álvaro); si ninguno, el PDF más nuevo que haya. Un mail del
+  // productor con otro PDF (una cuota del auto) no gana si hay un certificado.
+  const candidatos = []
   for (const m of l.data.messages || []) {
     const msg = (await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' })).data
     const fecha = new Date(Number(msg.internalDate || 0))
@@ -35,12 +39,15 @@ async function buscarEnMail(casilla, desde) {
     if (!remitentes.some(r => from.includes(r)) && !from.includes(dominio)) continue
     if (/noresponder|no-reply|noreply|envios/.test(from)) continue   // los automáticos de la aseguradora no son el certificado
     partes.length = 0; recorrer(msg.payload)
-    const pdf = partes.find(p => /certificado/i.test(p.filename) && /\.pdf$/i.test(p.filename)) || partes.find(p => /\.pdf$/i.test(p.filename))
-    if (!pdf) continue
-    const att = (await gmail.users.messages.attachments.get({ userId: 'me', messageId: m.id, id: pdf.body.attachmentId })).data
-    return { nombre: pdf.filename, tipo: pdf.mimeType || 'application/pdf', content: Buffer.from(att.data, 'base64url'), asunto: cab(msg, 'Subject'), de: cab(msg, 'From'), fecha }
+    const pdfs = partes.filter(p => /\.pdf$/i.test(p.filename))
+    if (!pdfs.length) continue
+    const cert = pdfs.find(p => /certificado/i.test(p.filename))
+    candidatos.push({ id: m.id, pdf: cert || pdfs[0], esCert: !!cert, asunto: cab(msg, 'Subject'), de: cab(msg, 'From'), fecha })
   }
-  return null
+  const elegido = candidatos.find(c => c.esCert) || candidatos[0]
+  if (!elegido) return null
+  const att = (await gmail.users.messages.attachments.get({ userId: 'me', messageId: elegido.id, id: elegido.pdf.body.attachmentId })).data
+  return { nombre: elegido.pdf.filename, tipo: elegido.pdf.mimeType || 'application/pdf', content: Buffer.from(att.data, 'base64url'), asunto: elegido.asunto, de: elegido.de, fecha: elegido.fecha }
 }
 
 export default async function handler(req, res) {
