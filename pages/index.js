@@ -26,6 +26,7 @@ import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
 import TicketsRevisar from '../components/TicketsRevisar'
 import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe, facturasCandidatas } from '../lib/extracto.mjs'
+import { PMS_ACTIVOS } from '../lib/roles'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -1393,7 +1394,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   const ags=dedupCI([...(data?.agencias||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Agencia']))])
   const clis=dedupCI([...(data?.clientes||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(x=>x['Nombre']),...((data?.presupuestos||[]).map(x=>x['Contacto']))])
-  const pms=dedupCI((data?.presupuestos||[]).map(x=>x['PM Interno']))
+  const pms=PMS_ACTIVOS
   const dl = tipo => tipo==='ag'?ags:tipo==='cl'?clis:tipo==='ct'?cts:null
   const nrm=v=>String(v||'').trim().toLowerCase()
   const agSet=new Set(ags.map(nrm)), clSet=new Set(clis.map(nrm)), ctSet=new Set(cts.map(nrm))
@@ -1720,7 +1721,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ags=dedupCI([...(data?.agencias||[]).map(a=>a['Nombre']),...(data?.listado?.agencias||[]),...((data?.presupuestos||[]).map(p=>p['Agencia']))])
   const clis=dedupCI([...(data?.listado?.clientes||[]),...(data?.clientes||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Cliente']))])
   const cts=dedupCI([...(data?.contactos||[]).map(c=>c['Nombre']),...((data?.presupuestos||[]).map(p=>p['Contacto']))])
-  const pms=dedupCI([...['Juan','Sofi','Lulu','Tomi'],...((data?.presupuestos||[]).map(p=>p['PM Interno']))])
+  const pms=PMS_ACTIVOS
   // detección de nuevos (no están en la lista)
   const nrm=v=>String(v||'').trim().toLowerCase()
   const agSet=new Set(ags.map(nrm)), clSet=new Set(clis.map(nrm)), ctSet=new Set(cts.map(nrm))

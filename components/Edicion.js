@@ -22,6 +22,7 @@ import {
 } from '../lib/edicion'
 import FotosProyecto from './FotosProyecto'
 import { quienSoy, esMio } from '../lib/quien-soy'
+import { PMS_ACTIVOS } from '../lib/roles'
 
 // Lo que cada uno elige (ver solo lo suyo, qué secciones deja abiertas) queda en
 // su navegador. No va al sheet: es cómo le gusta mirar a cada uno, no un dato.
@@ -692,7 +693,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
 // Los PM posibles. Salen de los que ya figuran en PROYECTOS, más el equipo fijo:
 // si alguien nuevo toma la posta todavía no está en ningún proyecto y hay que poder
 // asignárselo igual.
-const PMS_FIJOS = ['Juan', 'Sofi', 'Lulu', 'Tomi']
+const PMS_FIJOS = PMS_ACTIVOS
 
 const lineaBitacora = (mail, texto) => {
   const d = new Date()
@@ -1213,9 +1214,9 @@ function Columnas({ filas, onAbrir, onMover, onEstado, cel }) {
                 </span>
                 {!estaCerrado(f.Estado) && <span style={{ flexShrink: 0 }}><Plazo p={pz} /></span>}
               </div>
-              {(vuelta || String(f.Prioridad || '').trim() === 'Urgente' || !!String(f.Consulta || '').trim()) && <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+              {(vuelta || (String(f.Prioridad || '').trim() === 'Urgente' && !estaCerrado(f.Estado)) || !!String(f.Consulta || '').trim()) && <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
                 {vuelta && <span style={{ fontSize: 10.5, fontWeight: 600, color: T.warn, background: T.warnSoft, padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap' }}>{e === 'Cambios internos' ? 'cambios internos' : 'cambios del cliente'}</span>}
-                {String(f.Prioridad || '').trim() === 'Urgente' && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}
+                {(String(f.Prioridad || '').trim() === 'Urgente' && !estaCerrado(f.Estado)) && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 }}>URGENTE</span>}
                 {!!String(f.Consulta || '').trim() && <span style={{ fontSize: 11 }} title="Hay una pregunta sin responder">🙋</span>}
               </div>}
               {/* En el teléfono no se puede arrastrar: el estado se cambia con la píldora. */}
@@ -1331,7 +1332,7 @@ function FilaLista({ f, conAccion, plazoRepetido, ctx }) {
     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 14px 5px 8px', minHeight: 36, cursor: 'pointer', opacity: cerrado ? 0.6 : 1, background: ctx.recien.has(f.ID) ? T.warnSoft : undefined }}>
     <span style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
       <NombrePieza f={f} guardar={guardar} />
-      {String(f.Prioridad || '').trim() === 'Urgente' && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3, flexShrink: 0 }}>URGENTE</span>}
+      {(String(f.Prioridad || '').trim() === 'Urgente' && !estaCerrado(f.Estado)) && <span style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3, flexShrink: 0 }}>URGENTE</span>}
       {!!String(f.Consulta || '').trim() && <span title={f.Consulta} style={{ fontSize: 10, fontWeight: 700, color: T.brand, background: T.brandSoft, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>🙋 PREGUNTA</span>}
     </span>
     {/* "Sin asignar" solo grita cuando ya hay material: ahí es trabajo parado sin dueño. */}
@@ -1529,7 +1530,8 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   const c = pz.nivel ? (COLOR_SEM[pz.nivel] || COLOR_SEM.verde) : { fg: pz.tono === 'rojo' ? T.brand : T.border }
   const abierta = abierto === f.ID
   const cerrado = estaCerrado(f.Estado)
-  const prio = String(f.Prioridad || 'Normal').trim()
+  // Terminado/Entregado ya no es urgente: el cartel rojo en algo cerrado molesta (Sofi, 13/10).
+  const prio = estaCerrado(f.Estado) ? 'Normal' : String(f.Prioridad || 'Normal').trim()
   const hayConsulta = !!String(f.Consulta || '').trim()
   // El toast dice a dónde fue; la fila se queda a la vista (ver `tocados` arriba).
   const cambiarEstado = e => { guardar(f.ID, { Estado: e }); showToast && showToast(`${nombrePieza(f)} → ${e}`) }
@@ -1648,7 +1650,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     <HorasExtra f={f} horas={horas} editores={editores} showToast={showToast} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} cel={cel} />
 
     <Plegable id="plazo" titulo="Para cuándo y quién" siempreSiAlerta alerta={faltaPlazo} abiertoPorDefecto={faltaPlazo}
-      contador={[`entregar ${compromiso || '—'}${String(f['Fecha compromiso'] || '').trim() ? '' : ' (estimado)'}`, String(f.Prioridad || '') === 'Urgente' ? 'URGENTE' : '', String(f.Editor || '').trim().split(' ')[0] || 'sin asignar', String(f.PM || '').trim() ? `PM ${f.PM}` : 'sin PM'].filter(Boolean).join(' · ')}>
+      contador={[`entregar ${compromiso || '—'}${String(f['Fecha compromiso'] || '').trim() ? '' : ' (estimado)'}`, String(f.Prioridad || '') === 'Urgente' && !estaCerrado(f.Estado) ? 'URGENTE' : '', String(f.Editor || '').trim().split(' ')[0] || 'sin asignar', String(f.PM || '').trim() ? `PM ${f.PM}` : 'sin PM'].filter(Boolean).join(' · ')}>
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
       <div>
         <label style={lbl}>Entregar el {!String(f['Fecha compromiso'] || '').trim() && <span style={{ color: T.brand }}>· falta</span>}</label>
