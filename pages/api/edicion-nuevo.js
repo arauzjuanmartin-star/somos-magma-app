@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     if (copiarDe) {
       const herm = rows.slice(1).find(r => String(r[cE('ID')] || '').trim() === String(copiarDe).trim())
       if (!herm) return res.status(404).json({ error: `No encontré la pieza ${copiarDe} para copiar` })
-      ;[...CAMPOS_PIEZA.map(c => c.campo), ...CAMPOS_BRIEF.map(c => c.campo), 'Link crudo', 'PM'].forEach(k => {
+      ;[...CAMPOS_PIEZA.map(c => c.campo), ...CAMPOS_BRIEF.map(c => c.campo), 'Link crudo', 'PM', 'Brief adjunto'].forEach(k => {
         const v = String(herm[cE(k)] || '').trim(); if (v) copia[k] = v
       })
       baseNombre = limpiarPedido(herm[cE('Entregable')]).replace(/\s+\d+$/, '') || 'Video'

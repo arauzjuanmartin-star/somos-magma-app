@@ -10,6 +10,7 @@ export const ALLOWED_MAILS = [
   'admin@somosmagma.com',
   'lulu@somosmagma.com',
   'dani@somosmagma.com',
+  'sol@somosmagma.com',      // PM: Trabajos, Edición, Calendario, Agencias y Clientes (ver lib/roles.js)
   'arauzjuanmartin@gmail.com',
   // Freelancers con acceso al tablero de Edición, limitados a sus propios
   // trabajos (ver SOLO_LO_SUYO en lib/roles.js).

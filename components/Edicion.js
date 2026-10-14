@@ -17,7 +17,7 @@ import {
   ESTADOS, PRIORIDADES, semaforo, COLOR_SEM, estaCerrado, ESTADO_IDX, estadoDe,
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero, diasEntre,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
-  textoPedirBrief, textoParaElEditor, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
+  textoPedirBrief, textoParaElEditor, briefsAdjuntos, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
   esPedidoFoto, llevaFotos, nombrePieza,
 } from '../lib/edicion'
 import FotosProyecto from './FotosProyecto'
@@ -793,7 +793,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
       <input value={mails} onChange={e => setMails(e.target.value)} placeholder="mail@cliente.com, otro@cliente.com"
         style={{ ...inp, width: '100%', marginBottom: 9, fontSize: 12.5 }} />
       {plan && <div style={{ fontSize: 12, color: T.ink2, marginBottom: 10, lineHeight: 1.6 }}>
-        {plan.moverArchivo ? '· El archivo pasa a la carpeta Finales' : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
+        {plan.moverArchivo ? `· ${plan.archivo ? '"' + plan.archivo + '"' : 'El archivo'} pasa a la carpeta Finales` : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
         {plan.abrir === 'carpeta' ? <>· Finales queda abierta: el que tenga el link la ve sin pedir permiso<br /></> : plan.abrir === 'archivo' ? <>· El archivo queda abierto: el que tenga el link lo ve sin pedir permiso<br /></> : null}
         {plan.compartirCon?.length ? `· Además le aparece en su Drive a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo Finales, no el resto` : plan.abrir ? '· Sin mails cargados: no pasa nada, con el link alcanza' : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
         · Queda "Con el cliente" con la fecha de entrega de hoy. Se cierra como Terminado cuando él dé el OK.
@@ -1605,6 +1605,37 @@ function Fila({ f, g, abierto, setAbierto, guardar, mail, preguntar, responder, 
   </div>
 }
 
+// El archivo de brief que mandó el cliente (Sofi, 14/10/2026). Va a la carpeta del
+// trabajo en CRUDO y queda en todas las piezas del N° (ver pages/api/edicion-brief.js).
+function BriefAdjunto({ f, showToast, onRefresh }) {
+  const [subiendo, setSubiendo] = useState(false)
+  const [nuevos, setNuevos] = useState([])
+  const lista = [...briefsAdjuntos(f), ...nuevos.filter(n => !briefsAdjuntos(f).some(b => b.link === n.link))]
+  const subir = async file => {
+    if (!file) return
+    if (file.size > 3 * 1024 * 1024) { showToast && showToast('El archivo pasa los 3 MB: subilo a la carpeta del crudo y pegá el link en las notas'); return }
+    setSubiendo(true)
+    try {
+      const base64 = await new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = mal; r.readAsDataURL(file) })
+      const res = await fetch('/api/edicion-brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: f.ID, nombre: file.name, tipo: file.type, base64 }) })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || 'No se pudo subir')
+      setNuevos(n => [...n, { nombre: file.name, link: j.link }])
+      showToast && showToast(`Brief adjuntado a ${j.piezas} pieza${j.piezas === 1 ? '' : 's'} del #${j.num}`)
+      onRefresh && onRefresh()
+    } catch (e) { showToast && showToast('❌ ' + e.message) }
+    setSubiendo(false)
+  }
+  return <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+    {lista.map(b => <a key={b.link} href={b.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+      style={{ fontSize: 12, color: T.ink, background: T.surfaceAlt, border: `1px solid ${T.border}`, padding: '5px 10px', borderRadius: 7, textDecoration: 'none' }}>📎 {b.nombre}</a>)}
+    <label style={{ fontSize: 12, color: T.ink2, border: `1px dashed ${T.border}`, padding: '5px 10px', borderRadius: 7, cursor: subiendo ? 'wait' : 'pointer' }}>
+      {subiendo ? 'Subiendo…' : lista.length ? '+ Otro archivo' : '📎 Adjuntar brief del cliente'}
+      <input type="file" disabled={subiendo} onChange={e => { subir(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
+    </label>
+  </div>
+}
+
 function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
@@ -1701,6 +1732,7 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
 
     <Plegable id="brief" titulo="Lo que necesita el editor" contador={`${briefLleno(f)}/${briefTotal(f)}`} alerta={briefLleno(f) < briefTotal(f)}>
       <Campos f={f} campos={CAMPOS_BRIEF} guardar={guardar} cols={cel ? 1 : 2} />
+      <BriefAdjunto f={f} showToast={showToast} onRefresh={onRefresh} />
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <BotonCopiar texto={() => textoPedirBrief(f)} etiqueta="✉️ Copiar el pedido para el cliente" />
         <BotonCopiar texto={() => textoPedirBrief(f, { porWhatsapp: true })} etiqueta="💬 Para WhatsApp" />

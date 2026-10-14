@@ -5,6 +5,7 @@ import { MAX_SLOTS, DIAS_SEGUIMIENTO } from '../lib/slots'
 import { condicionDe, sinPedir, esOC, CONDICIONES } from '../lib/condicion-cobro'
 import { armarMailSeguro, datosSeguro, vigenciaSugerida, requisitosSugeridos, lugaresConocidos, fechaLegible as fechaSeguro, BROKER_MAILS } from '../lib/seguros'
 import { CLASES_VIDEO, esPedidoEdicion, llevaFotos, duracionDePedido, materialDePedidos, semaforo as semaforoEd, hoyCero as hoyCeroEd, fechaSugerida as fechaSugeridaEd, parseFechaAR as parseFechaAREd, estaCerrado as estaCerradoEd, limpiarPedido as limpiarPedidoEd, nombrePieza as nombrePiezaEd, COLOR_SEM as COLOR_SEM_ED } from '../lib/edicion'
+import { tarifarioDe } from '../lib/tarifarios'
 import { MULT_MARGEN, itemsDePresu, opcionesDePresu, presuDesglosado, desglosarPrecio, recalcularTotales } from '../lib/desglose'
 import { acuerdosVigentes, avisoJornada, esJornada, acuerdoPara, monotributosDelMes } from '../lib/acuerdos'
 import { repartoDelMes, previasDelAcuerdo } from '../lib/jornadas'
@@ -92,6 +93,7 @@ const USER_NAME = {
   'lulu@somosmagma.com':        {nombre:'Lulu', nombres:['lulu','lucia'], verTodo:false},
   'tom@somosmagma.com':         {nombre:'Tom',  nombres:['tom','tomi','tomas','tomás'], verTodo:false},
   'dani@somosmagma.com':        {nombre:'Dani', nombres:['dani','daniela'], verTodo:false},
+  'sol@somosmagma.com':         {nombre:'Sol',  nombres:['sol'], verTodo:false},
   'admin@somosmagma.com':       {nombre:'Flor', nombres:['flor'], verTodo:true, admin:true},
 }
 
@@ -162,7 +164,7 @@ export default function V2() {
   // 'proyectos' ya no es una solapa: es una vista de Trabajos. Los links de antes (dashboard,
   // facturación, búsquedas recientes guardadas) siguen andando: el nav conserva de dónde venía.
   const modReal = m => m==='proyectos' ? 'presupuestos' : m
-  const goTo = (m, opts) => { setMod(modReal(m)); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
+  const goTo = (m, opts) => { if(!puede(modReal(m))) return; setMod(modReal(m)); setNav(opts?{mod:m,...(typeof opts==='string'?{filtro:opts}:opts)}:null) }
   const goSearch = (m, q) => { setMod(modReal(m)); setNav({mod:m, q}) }
   const clearNav = () => setNav(null)
   const [showSearch,setShowSearch] = useState(false)
@@ -332,7 +334,7 @@ export default function V2() {
             : <ErrorBoundary key={mod} onReload={()=>load(true)}>{
               mod==='dashboard' ? <Dashboard data={data} goTo={goTo} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : (mod==='presupuestos'||mod==='proyectos') ? <Trabajos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
-            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!!modulos} goTo={goTo} mail={mail}/>
+            : mod==='calendario' ? <Calendario data={data} onRefresh={()=>load(true)} showToast={showToast} soloVer={!puede('presupuestos')} goTo={goTo} mail={mail}/>
             : mod==='edicion' ? <Edicion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
@@ -461,10 +463,13 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const mesACobrar = diaHoy>=15 ? mesActual : mesActual-1
   const proxPagoFecha = new Date(anioActual, diaHoy>=15?mesActual-1:mesActual-2, 15)
   const esPagada = p => { const e=String(p['Estado']||p['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(p['Monto Pagado'])>0 }
+  // El monotributo y las horas extra de quien tiene acuerdo se pagan el 5 con el mínimo, no el 15.
+  const conAcuerdo=new Set(monotributosDelMes(data.acuerdos||[], mesACobrar<1?12:mesACobrar, mesACobrar<1?anioActual-1:anioActual).map(m=>canonKey(canonStaff(m.persona))))
+  const esDelPagoDel5 = p => { const sv=String(p['Servicio']||''); return /monotributo/i.test(sv) || (/horas extra/i.test(sv) && conAcuerdo.has(canonKey(canonStaff(p['Freelancer']||'')))) }
   const staffAPagar = pagosStaff.filter(p=>{
     const m=String(p['Mes Referencia']||p['Mes']||'').toLowerCase()
     const esMes = m.includes(String(mesACobrar).padStart(2,'0'))||m.includes(MESES[(mesACobrar+11)%12])
-    return esMes && !esPagada(p)
+    return esMes && !esPagada(p) && !esDelPagoDel5(p)
   })
   const totalAPagar = staffAPagar.reduce((s,p)=>s+parseMonto(p['Monto Adeudado']||p['Monto']||p['Total'])+parseMonto(p['Viáticos']||p['Viaticos']),0)
 
@@ -1732,6 +1737,20 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const ctIncompleto=!!ctExist && (!sinErr(ctExist['Mail']) || !sinErr(ctExist['Teléfono']))
   const ctMostrar=ctNuevo||ctIncompleto
   // precargar datos del contacto existente para completar lo que falte
+  // Tarifario del cliente (lib/tarifarios.js): al elegir Austral en un presu nuevo y vacío se cargan
+  // los servicios de siempre y el ajuste que lleva el total al precio pactado ($400.000).
+  const [tarifaAplicada,setTarifaAplicada]=useState('')
+  useEffect(()=>{
+    const t=tarifarioDe(form.agencia)
+    if(isRep || !t || tarifaAplicada===t.nombre) return
+    if(peds.some(p=>p.svc.trim()||(parseFloat(p.precio)||0)>0)) return   // ya cargó algo: no se lo piso
+    const nuevos=t.pedidos.map((x,i)=>({id:Date.now()+i, svc:x.svc, precio:String(x.precio), cant:1, feeAg:true, manual:false, adicional:false, precioCliente:''}))
+    const sub=t.pedidos.reduce((s,x)=>s+x.precio,0), fe=sub*MULT_MARGEN
+    const sinAjuste=(sub+fe+(form.gan?fe*0.35:0)+(form.iibb?fe*0.04:0))*(1+(parseFloat(form.interes)||0)/100)
+    const aj=Math.round(t.total-sinAjuste)
+    setPeds(nuevos); setForm(f=>({...f, tajuste:aj<0?'-1':'1', ajuste:String(Math.abs(aj))})); setTarifaAplicada(t.nombre)
+    showToast&&showToast(`Tarifario ${form.agencia.trim()}: ${t.pedidos.map(x=>x.svc).join(' + ')} · total ${fmt(t.total)}`)
+  /* eslint-disable-next-line */ },[form.agencia])
   useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:sinErr(c['Mail']),telefono:sinErr(c['Teléfono']),cargo:sinErr(c['Cargo']),cuit:sinErr(c['Cuit'])}) /* eslint-disable-next-line */ },[form.contacto])
 
   const svcs=getSvcs(data)
@@ -3186,13 +3205,15 @@ function semEvento(fechaEvento){
 
 function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   const fc=data.facturacion||[], cuentas=data.cuentas||[]
-  const fcReal=fc.filter(esFacturaReal)  // cobranza solo sobre facturas reales (con número/emisión)
+  // Cobranza solo sobre facturas reales (con número/emisión) y vivas: una anulada con nota de crédito queda en el
+  // sheet para el contador pero ya no se debe (antes por eso se borraba la fila).
+  const fcReal=fc.filter(f=>esFacturaReal(f) && !/^ANULADA/i.test(String(f['Nro de Factura']||'').trim()))
   const hoy=new Date()
   const presus=data.presupuestos||[]
   // Fecha del evento por N° de presupuesto (las facturas reales a veces no la tienen en su fila)
   const eventoByNum={}; ;[...(data.proyectos||[]),...presus].forEach(p=>{ const n=String(p['N° presupuesto']||p['Columna 1']||'').trim(); const fe=p['Fecha Evento']; if(n&&fe&&!eventoByNum[n]) eventoByNum[n]=fe })
   const evDe=f=>f['Fecha Evento']||eventoByNum[String(f['N° Presupuesto']||'').trim()]||''
-  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null), [editarFechas,setEditarFechas]=useState(null), [reclamo,setReclamo]=useState(null)
+  const [q,setQ]=useState(''), [filt,setFilt]=useState('todas'), [mesF,setMesF]=useState('todos'), [cobrando,setCobrando]=useState(null), [nuevaF,setNuevaF]=useState(false), [nuevaFsel,setNuevaFsel]=useState(null), [yaModal,setYaModal]=useState(null), [mailFactura,setMailFactura]=useState(null), [editarFechas,setEditarFechas]=useState(null), [reclamo,setReclamo]=useState(null), [anulando,setAnulando]=useState(null)
 
   // Quién debe plata, agrupado — para reclamar de una todo lo de un mismo cliente
   const agenciasPendientes=(()=>{
@@ -3286,17 +3307,9 @@ function msgUpload(j, base='PDF subido ✓'){
   return base
 }
 
-// Anular/borrar una factura (errores, nota de crédito, duplicados)
-  async function borrarFactura(f){
-    const numF=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
-    if(!window.confirm(`Anular/borrar esta factura?\n#${numF} · ${f['Proyecto']||f['Cliente']||''} · ${fmt(total)}\n\nÚsalo para errores, notas de crédito o duplicados. ¿Seguro?`)) return
-    const post=forzar=>fetch('/api/factura-borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(numF), monto:total, fila:f.__row, forzar})}).then(r=>r.json())
-    try{ let j=await post(false)
-      if(j.requiereForzar){ if(!window.confirm(j.error+'\n\n¿Borrar igual?')) return; j=await post(true) }
-      if(!j.ok){ showToast(j.error||'Error','err'); return }
-      showToast('Factura anulada ✓'); if(onRefresh) onRefresh()
-    }catch(e){ showToast('Error de conexión','err') }
-  }
+// Anular una factura: con nota de crédito (queda en el sheet como ANULADA, con la NC) o
+// borrarla si fue un error de carga y nunca se emitió. Ver AnularFacturaModal.
+  function borrarFactura(f){ setAnulando(f) }
 
   // Fecha de referencia de la deuda: vencimiento si hay; si no (filas viejas migradas
   // sin vencimiento), usamos la fecha del evento, o la de emisión como último recurso.
@@ -3655,7 +3668,7 @@ function msgUpload(j, base='PDF subido ✓'){
             {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>}
             <button onClick={()=>subirPDF(f)} style={{...miniBtn, padding:'6px 8px'}} title={f['Factura']?'Reemplazar el PDF de la factura':'Subir PDF de la factura'}>{f['Factura']?'↻':'⬆'}</button>
             <button onClick={()=>goTo&&goTo('proyectos',{q:String(num)})} style={{...miniBtn, padding:'6px 9px'}} title="Abrir el proyecto">Proyecto</button>
-            <button onClick={()=>borrarFactura(f)} style={{...miniBtn, padding:'6px 9px', color:T.brand, borderColor:`${T.brand}55`}} title="Anular/borrar esta factura (error, nota de crédito, duplicado)">✕</button>
+            <button onClick={()=>borrarFactura(f)} style={{...miniBtn, padding:'6px 9px', color:T.brand, borderColor:`${T.brand}55`}} title="Anular esta factura (nota de crédito) o borrarla si fue un error de carga">✕</button>
           </span>
           {/* Trabajo facturado en parte: franja debajo de la fila con cuánto va, cuánto falta y el
               botón para cargar la otra factura con el saldo ya puesto. Va acá porque es donde mira
@@ -3677,6 +3690,7 @@ function msgUpload(j, base='PDF subido ✓'){
     {yaModal && <YaCobradaModal x={yaModal} onClose={()=>setYaModal(null)} onConfirm={confirmarYaCobrada}/>}
     {mailFactura && <MailFacturaModal f={mailFactura} onClose={()=>setMailFactura(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {editarFechas && <EditarFechasModal f={editarFechas} onClose={()=>setEditarFechas(null)} onRefresh={onRefresh} showToast={showToast}/>}
+    {anulando && <AnularFacturaModal f={anulando} onClose={()=>setAnulando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} initialExtras={nuevaFextras} onClose={()=>{setNuevaF(false); setNuevaFsel(null); setNuevaFextras([])}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); setNuevaFextras([]); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
   </>
@@ -4325,6 +4339,64 @@ function YaCobradaModal({x, onClose, onConfirm}){
 
 // Editar a mano las fechas de una factura (envío / cobro). Para notas de crédito,
 // facturas consolidadas (Austral) o cualquier corrección. Usa el endpoint genérico factura-editar.
+// Anular una factura mal hecha. Juan, 14/10/2026: "eliminar alguna que esté mal, por nota de crédito".
+// Fiscalmente una factura emitida no se borra: se anula con una NC. La fila queda en FACTURACION
+// como "ANULADA - <nro>" con la NC en COMENTARIOS (y su PDF en Drive), sale de la cobranza, y el
+// trabajo vuelve a "sin facturar" para cargar la buena con el flujo de siempre.
+// Si fue un error de carga (nunca se emitió en AFIP), se borra la fila como antes.
+function AnularFacturaModal({f, onClose, onRefresh, showToast}){
+  const num=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
+  const [modo,setModo]=useState('nc')
+  const [nroNC,setNroNC]=useState(''), [motivo,setMotivo]=useState(''), [pdf,setPdf]=useState(null)
+  const [saving,setSaving]=useState(false)
+  async function confirmar(){
+    setSaving(true)
+    try{
+      if(modo==='error'){
+        const post=forzar=>fetch('/api/factura-borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nroPresupuesto:String(num), monto:total, fila:f.__row, forzar})}).then(r=>r.json())
+        let j=await post(false)
+        if(j.requiereForzar){ if(!window.confirm(j.error+'\n\n¿Borrar igual?')){ setSaving(false); return } j=await post(true) }
+        if(!j.ok){ showToast(j.error||'Error','err'); setSaving(false); return }
+        showToast(`#${num} · factura borrada ✓`)
+      } else {
+        if(pdf && pdf.size>3*1024*1024){ showToast('El PDF pasa los 3 MB','err'); setSaving(false); return }
+        const base64=pdf ? await new Promise((ok,mal)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(',')[1]); r.onerror=mal; r.readAsDataURL(pdf) }) : ''
+        const r=await fetch('/api/factura-anular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presupuestoNum:String(num), fila:f.__row, motivo, nroNC, pdf: pdf?{nombre:pdf.name, tipo:pdf.type, base64}:null})})
+        const j=await r.json(); if(!j.ok){ showToast(j.error||'Error','err'); setSaving(false); return }
+        showToast(`#${num} · factura anulada con NC ✓ — el trabajo vuelve a "sin facturar"`)
+      }
+      onClose(); if(onRefresh) onRefresh()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  const inp={width:'100%', fontSize:14, color:T.ink, border:`1px solid ${T.border}`, borderRadius:10, padding:'9px 12px', outline:'none', boxSizing:'border-box'}
+  const lbl={fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6, display:'block'}
+  const opcion=(id,titulo,sub)=><label key={id} style={{display:'flex', gap:10, alignItems:'flex-start', padding:'10px 12px', border:`1px solid ${modo===id?T.ink:T.border}`, borderRadius:10, cursor:'pointer', marginBottom:8}}>
+    <input type="radio" checked={modo===id} onChange={()=>setModo(id)} style={{marginTop:3}}/>
+    <span><span style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{titulo}</span><span style={{display:'block', fontSize:12, color:T.ink3, marginTop:2, lineHeight:1.4}}>{sub}</span></span>
+  </label>
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.35)', zIndex:900, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'60px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:460, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.15)'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Anular factura</div><div style={{fontSize:12, color:T.ink3, marginTop:2, fontFamily:MONO}}>#{num} · {f['Proyecto']||f['Cliente']||''} · {f['Nro de Factura']||'sin N°'} · {fmt(total)}</div></div>
+      <div style={{padding:'18px 22px'}}>
+        {opcion('nc','Se hizo una nota de crédito','La factura queda en el sheet como ANULADA con la NC, sale de lo que se debe y el trabajo vuelve a "sin facturar" para cargar la correcta.')}
+        {opcion('error','Fue un error de carga','Nunca se emitió en AFIP (duplicada, mal cargada): se borra la fila.')}
+        {modo==='nc' && <div style={{marginTop:10}}>
+          <label style={lbl}>N° de la nota de crédito</label>
+          <input value={nroNC} onChange={e=>setNroNC(e.target.value)} placeholder="0001-00000012" style={{...inp, fontFamily:MONO, marginBottom:12}}/>
+          <label style={lbl}>PDF de la nota de crédito (opcional)</label>
+          <input type="file" accept="application/pdf,image/*" onChange={e=>setPdf(e.target.files?.[0]||null)} style={{fontSize:12.5, marginBottom:12}}/>
+          <label style={lbl}>Por qué</label>
+          <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej: iba sin IVA, monto mal, otra razón social" style={inp}/>
+        </div>}
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'flex-end', gap:8}}>
+        <button onClick={onClose} style={{padding:'9px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving} onClick={confirmar} style={{padding:'9px 16px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'wait':'pointer'}}>{saving?'Guardando…':modo==='nc'?'Anular con NC':'Borrar la fila'}</button>
+      </div>
+    </div>
+  </div>
+}
+
 function EditarFechasModal({f, onClose, onRefresh, showToast}){
   const num=f['N° Presupuesto']
   const [env,setEnv]=useState(f['Fecha enviada']||'')
@@ -4559,6 +4631,21 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     personas[gk].trabajos.push({ nro:'', proyecto:`Monotributo ${MESES_LARGO[mesIdx-1].toLowerCase()} (acuerdo)`, cliente:'', agencia:'', fechaEvento:'', pedido:'🧾 Monotributo', precio:m.monto, key:'mono|'+gk+'|'+mesHX, monotributo:true })
     personas[gk].total+=m.monto
   })
+  // Ajustes del monotributo cargados a mano en PAGOS_STAFF (servicio "🧾 Monotributo (…)", ej. la diferencia de
+  // septiembre de Lucho cuando su categoría resultó más cara de lo que decía ACUERDOS). Se muestran como una línea más
+  // del mes, pagada o no según la fila.
+  pagosPersistidos.forEach(r=>{
+    const sv=String(r['Servicio']||'').trim(); if(!/^🧾 Monotributo \(/.test(sv) || norm(r['Mes Referencia']||r['Mes'])!==norm(mesLabel)) return
+    const staff=canonStaff(r['Freelancer']||''), gk=canonKey(staff), monto=parseMonto(r['Monto Adeudado']); if(!staff||!(monto>0)) return
+    if(!personas[gk]) personas[gk]={nombre:staff, trabajos:[], total:0, totalPagado:0, totalPendiente:0, viaticos:0, pendFee:0, pendViat:0}
+    if(personas[gk].trabajos.some(t=>t.pedido===sv)) return
+    personas[gk].trabajos.push({ nro:'', proyecto:r['Proyecto']||sv, cliente:'', agencia:'', fechaEvento:'', pedido:sv, precio:monto, key:'mono|'+gk+'|'+mesHX+'|'+sv, monotributo:true })
+    personas[gk].total+=monto
+  })
+  // Lo que va con el pago del 5 (Sofi, 14/10/2026): quien tiene acuerdo con mínimo cobra el 5 su "sueldo"
+  // y con eso se le pagan el monotributo y las horas extra. No va en el mail del 15 (que pide factura) ni en
+  // el total del 15 del dashboard. Las jornadas que pasan el mínimo sí van el 15.
+  Object.values(personas).forEach(p=>{ if(p.trabajos.some(t=>t.monotributo)) p.trabajos.forEach(t=>{ if(t.monotributo||t.horasExtra) t.tanda5=true }) })
   // Contar filas PAGADAS por (freelancer|N°|servicio) para manejar trabajos idénticos repetidos
   const esPagRow=r=>{ const e=String(r['Estado']||r['Pagado']||'').toUpperCase(); return ['PAGADO','SÍ','SI','TRUE'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   // Clave INCLUYE el mes de referencia: un pago de mayo no debe marcar como pagado un trabajo de junio.
@@ -4578,10 +4665,18 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     const uv=usedV[k]||0; usedV[k]=uv+1
     t.viaticos=(t.key in viatLocal)?viatLocal[t.key]:((viatByKey[k]||[])[uv]||0)
     t.aPagar=t.precio+t.viaticos   // lo que se le paga por este trabajo (sin IVA): honorario + viáticos
+    // Monotributo ya pagado: vale lo que se pagó (PAGOS_STAFF), no el monto de hoy en ACUERDOS.
+    if(t.monotributo && pag){ const r=pagosPersistidos.find(r=>esPagRow(r) && keyDe(r)===k); const m=r?parseMonto(r['Monto Adeudado']||r['Monto Pagado']):0; if(m>0 && m!==t.precio){ p.total+=m-t.precio; t.precio=m } }
+    t.aPagar=t.precio+t.viaticos
     t.pagado=pag; p.total+=t.viaticos; p.viaticos+=t.viaticos
     if(pag) p.totalPagado+=t.aPagar; else { p.totalPendiente+=t.aPagar; p.pendFee+=t.precio; p.pendViat+=t.viaticos }
   }) })
 
+  // "9 trabajos · + monotributo · 2 h extra": el número cuenta coberturas (persona + N° + día, igual que el
+  // Reparto del mes), no líneas. Antes el monotributo y las horas extra sumaban: Lucho daba 10 acá y 9 arriba.
+  const resumenTrabajos=p=>{ const reales=p.trabajos.filter(t=>!t.monotributo&&!t.horasExtra), n=new Set(reales.map(t=>t.nro+'|'+t.fechaEvento)).size
+    const hx=p.trabajos.filter(t=>t.horasExtra).reduce((s,t)=>s+t.horasExtra,0)
+    return [`${n} trabajo${n===1?'':'s'}`, p.trabajos.some(t=>t.monotributo)?'+ monotributo':'', hx?`${String(hx).replace('.',',')} h extra`:''].filter(Boolean).join(' · ') }
   let lista=Object.values(personas).sort((a,b)=>b.total-a.total)
   lista=lista.filter(p=>{ const mq=!q||norm(p.nombre).includes(norm(q)); const mf=filtro==='todos'||(filtro==='pend'&&p.totalPendiente>0)||(filtro==='pag'&&p.totalPendiente===0); return mq&&mf })
 
@@ -4755,7 +4850,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
         return <div key={i} style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
           <div onClick={()=>setOpen(abierto?null:persona.nombre)} style={{display:'flex', alignItems:'center', gap:14, padding:'14px 18px', cursor:'pointer'}}>
             <span style={{width:7,height:7,borderRadius:7,background:estado.c, flexShrink:0}}/>
-            <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{persona.trabajos.length} trabajos · {estado.l}</div></div>
+            <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{resumenTrabajos(persona)} · {estado.l}</div></div>
             <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}{persona.viaticos>0&&<span style={{color:T.warn}}> · {fmt(persona.viaticos)} viáticos</span>}</div></div>
             <div style={{display:'flex', gap:7, alignItems:'center', flexShrink:0}}>
               {persona.totalPendiente>0
@@ -4774,7 +4869,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
             {ordenCrono(persona.trabajos).map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
               <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
                 <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
-                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}
+                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{t.tanda5&&!t.pagado&&<span style={{fontSize:10.5, color:T.warn, fontWeight:600, marginLeft:6}}>va con el pago del 5</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}
                   {clienteAgenciaDe(t) && <div style={{fontSize:11.5, color:T.ink2, marginTop:1}}>{clienteAgenciaDe(t)}</div>}</div>
                 {/* Viáticos: un campo en cada trabajo. Si se carga se suma al pago; vacío = 0. Pagado: solo se muestra. */}
                 {t.pagado
@@ -6812,7 +6907,7 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
   const [saving,setSaving]=useState(false)
   const [facturarA,setFacturarA]=useState(FACTURAR_OPC.find(e=>/somos magma/i.test(e))||FACTURAR_OPC[0])
   const PRECARGADOS=['admin@somosmagma.com','juan@somosmagma.com','sofi@somosmagma.com']
-  const pend=ordenCrono(persona.trabajos.filter(t=>!t.pagado))
+  const pend=ordenCrono(persona.trabajos.filter(t=>!t.pagado && !t.tanda5))   // lo del 5 (monotributo, horas extra del acuerdo) no lleva factura ni va en este mail
   const items=pend.map(renglonMailStaff).join('\n')
   const tot=pend.reduce((s,t)=>s+t.precio+(t.viaticos||0),0)
   const nombre=String(persona.nombre).split(' ')[0]

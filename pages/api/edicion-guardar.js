@@ -4,7 +4,7 @@
 
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza, esPedidoFoto } from '../../lib/edicion'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { darFinalesAlStaff } from '../../lib/finales'
 import { mailsDelStaff } from '../../lib/finales'
@@ -101,7 +101,12 @@ export default async function handler(req, res) {
     if (String(campos.Estado || '').trim() === 'Para revisar'
         && !String(campos['Link pre-entrega'] || '').trim()
         && !String(actual[cE('Link pre-entrega')] || '').trim()) {
-      const v = await ultimaVersion({ sheets, SHEET_ID, num: String(actual[cE('N° presupuesto')] || '').trim() })
+      const numPieza = String(actual[cE('N° presupuesto')] || '').trim()
+      const fPieza = Object.fromEntries(hE.map((k, i) => [k, actual[i]]))
+      // Los links que ya usan las otras piezas del mismo trabajo no se pueden repetir.
+      const usados = rows.slice(1).filter(x => String(x[cE('N° presupuesto')] || '').trim() === numPieza && String(x[cE('ID')] || '').trim() !== String(id).trim())
+        .map(x => String(x[cE('Link pre-entrega')] || '').trim()).filter(Boolean)
+      const v = await ultimaVersion({ sheets, SHEET_ID, num: numPieza, pieza: nombrePieza(fPieza), esFoto: esPedidoFoto(fPieza.Entregable), usados })
       if (v?.link) {
         data.push({ range: `EDICION!${colLetra(cE('Link pre-entrega'))}${sheetRow}`, values: [[v.link]] })
         cambios.push(`Link pre-entrega: encontrado solo (${v.nombre})`)

@@ -30,6 +30,17 @@ function filtrarPorModulos(data, modulos, soloLoSuyo) {
     out.agencias = (data.agencias || []).map(a => ({ Nombre: a.Nombre, 'Drive Recursos': a['Drive Recursos'] || '' }))
     out.clientes = (data.clientes || []).map(c => ({ Nombre: c.Nombre, 'Drive Recursos': c['Drive Recursos'] || '' }))
   }
+  // Trabajos (un PM, ej. Sol): los presupuestos y proyectos enteros, con precios, porque los arma.
+  // Lo que NO va: pagos al staff, gastos, caja, tarjetas, socios, sueldos. Del RRHH, sin datos bancarios.
+  if (modulos.includes('presupuestos')) {
+    Object.assign(out, {
+      presupuestos: data.presupuestos, proyectos: data.proyectos, contactos: data.contactos, acuerdos: data.acuerdos,
+      disponibilidad: data.disponibilidad, seguros: data.seguros, facturacion: data.facturacion, edicion: data.edicion,
+      rrhh: (data.rrhh || []).map(r => { const o = {}; Object.keys(r).forEach(k => { if (!/cbu|alias|banco/i.test(k)) o[k] = r[k] }); return o }),
+    })
+  }
+  if (modulos.includes('agencias') || modulos.includes('presupuestos')) { out.agencias = data.agencias; out.contactos = data.contactos }
+  if (modulos.includes('clientes') || modulos.includes('presupuestos')) out.clientes = data.clientes
   return out
 }
 

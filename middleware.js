@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { modulosDe, PAGINAS_PARCIALES } from './lib/roles'
+import { modulosDe, paginasDe } from './lib/roles'
 
 // Rutas públicas (no requieren sesión)
 const PUBLIC_PATHS = [
@@ -59,7 +59,7 @@ export async function middleware(req) {
   // (/v1, /semana, /presupuesto…) le quedan fuera. Los endpoints los filtra
   // requireAuth; acá cerramos las páginas.
   const modulos = modulosDe(token.email)
-  if (modulos && !pathname.startsWith('/api/') && !PAGINAS_PARCIALES.includes(pathname)) {
+  if (modulos && !pathname.startsWith('/api/') && !paginasDe(modulos).includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url))
   }
 

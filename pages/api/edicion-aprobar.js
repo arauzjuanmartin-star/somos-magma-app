@@ -20,7 +20,7 @@
 import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, aAR, SUB_PRE, SUB_FIN } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, aAR, SUB_PRE, SUB_FIN, esPedidoFoto } from '../../lib/edicion'
 import { abrirParaTodos } from '../../lib/drive'
 
 const colLetra = c => { let s='', n=c+1; while(n>0){ n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26) } return s }
@@ -69,6 +69,23 @@ export default async function handler(req, res) {
     const drive = getDrive()
     let finales = null, aviso = []
 
+    // Freno (14/10/2026, Pani Feroz): el link puede estar mal (la búsqueda automática vieja
+    // puso una foto del fotógrafo en 4 videos). Antes de mover algo a Finales, que es lo que
+    // ve el cliente: no puede ser una foto si la pieza es un video (ni al revés), ni un
+    // archivo que también está linkeado en otra pieza del trabajo.
+    let archivo = null
+    if (fileId) {
+      try { archivo = (await drive.files.get({ fileId, fields: 'name,mimeType', supportsAllDrives: true })).data } catch (e) {}
+      const esFoto = esPedidoFoto(actual[cE('Entregable')])
+      const mime = String(archivo?.mimeType || '')
+      const otra = rows.slice(1).find(x => String(x[cE('N° presupuesto')] || '').trim() === num && String(x[cE('ID')] || '').trim() !== String(id).trim() && idDeLink(x[cE('Link pre-entrega')]) === fileId)
+      const problema = otra ? `el link de pre-entrega ("${archivo?.name || 'archivo'}") es el mismo que el de la pieza ${String(otra[cE('ID')]).trim()}`
+        : (!esFoto && /^image\//.test(mime)) ? `el link de pre-entrega es una foto ("${archivo?.name}") y la pieza es un video`
+        : (esFoto && /^video\//.test(mime)) ? `el link de pre-entrega es un video ("${archivo?.name}") y la pieza es de fotos`
+        : ''
+      if (problema) return res.status(409).json({ error: `No apruebo: ${problema}. Corregí el link en "Links y vueltas" y volvé a aprobar.` })
+    }
+
     if (carpetaEntrega) {
       const buscar = async nombre => {
         const q = `'${carpetaEntrega}' in parents and mimeType='application/vnd.google-apps.folder' and name='${nombre}' and trashed=false`
@@ -87,6 +104,7 @@ export default async function handler(req, res) {
       return res.json({
         ok: true, preview: true,
         moverArchivo: !!(fileId && finales),
+        archivo: archivo?.name || null,
         sinLink: !linkPre,
         sinCarpeta: !carpetaEntrega,
         finales: finales?.webViewLink || null,
