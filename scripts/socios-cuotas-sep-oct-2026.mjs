@@ -12,6 +12,8 @@ const ESCRIBIR = process.argv.includes('--escribir')
 const filas = [
   ['4/9/2026','Sofi','Magma→Socio','Cuota Santander compartido (50% que le toca a Sofi)',345746.06,'Santander Sofi','#810-03510008128/6 cuota 12/18','pagada 3/9/2026 · el otro 50% es deuda propia de Magma','Cronograma PRESTAMOS · faltaba cargar (15/10)','ARS'],
   ['4/10/2026','Sofi','Magma→Socio','Cuota Santander compartido (50% que le toca a Sofi)',342191.88,'Galicia Sofi','#810-03510008128/6 cuota 13/18','pagada 5/10/2026 · el otro 50% es deuda propia de Magma','Cronograma PRESTAMOS · faltaba cargar (15/10)','ARS'],
+  // segundo pago de septiembre de la Visa Galicia de Sofi: figura en el resumen (cierre 24/09) y Juan confirmó el 15/10 que salió de plata de Magma
+  ['3/9/2026','Sofi','Magma→Socio','Pago tarjeta Visa Galicia (personal de Sofi)',1300000,'','Visa Galicia resumen cierre 24/09/2026 · pago 03/09','pagado con plata de Magma (Juan 15/10)','Resumen Visa Galicia · faltaba cargar (15/10)','ARS'],
 ]
 
 const SM = (await sheets.spreadsheets.values.get({ spreadsheetId: ID, range: 'SOCIOS_MOVIMIENTOS!A:J' })).data.values || []

@@ -5411,16 +5411,50 @@ function CuentaSocios({showToast}){
             <button onClick={()=>setMov({socio:s.nombre, tipo:'saco'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>Sacó plata</button>
             <button onClick={()=>setMov({socio:s.nombre, tipo:'puso'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>Puso plata</button>
           </div>
-          <button onClick={()=>setAbierto(abierto===s.nombre?null:s.nombre)} style={{marginTop:8, fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>{abierto===s.nombre?'Ocultar detalle':'Ver detalle ›'}</button>
-          {abierto===s.nombre && <div style={{marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.ink3, display:'grid', gap:2}}>
-            <div style={{fontWeight:700, color:T.ink2, marginBottom:1}}>Extras sin cobrar, por mes</div>
-            {Object.entries(s.extrasPorMes).sort((a,b)=>a[0]-b[0]).map(([m,v])=><div key={m} style={{display:'flex', justifyContent:'space-between'}}><span>{MES[m]}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}
-            <div style={{fontWeight:700, color:T.ink2, margin:'5px 0 1px'}}>Tarjeta personal, por mes</div>
-            {Object.entries(s.tarjPorMes).sort((a,b)=>a[0]-b[0]).map(([m,v])=><div key={m} style={{display:'flex', justifyContent:'space-between'}}><span>{MES[m]}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}
-          </div>}
+          <button onClick={()=>setAbierto(abierto===s.nombre?null:s.nombre)} style={{marginTop:8, fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>{abierto===s.nombre?'Ocultar movimientos':'Ver cada movimiento ›'}</button>
         </div> })}
     </div>
+    {abierto && (()=>{ const s=d.socios.find(x=>x.nombre===abierto); return s?.movimientosPorMes && <MovimientosSocio socio={s} onClose={()=>setAbierto(null)}/> })()}
     {mov && <MovimientoSocio {...mov} onClose={()=>setMov(null)} onHecho={async()=>{ setMov(null); await cargar() }} showToast={showToast}/>}
+  </div>
+}
+
+// Cada movimiento de un socio, mes por mes, con el saldo al cierre de cada mes (lib/socios.mjs → movimientosPorMes).
+// Para que Juan y Sofi chequeen línea por línea: qué se cargó, cuándo, quién lo cargó y de qué solapa sale.
+// La tarjeta personal va agrupada por mes (son decenas de consumos) y se despliega con un clic.
+function MovimientosSocio({socio, onClose}){
+  const [tarjAbierta,setTarjAbierta]=useState({})
+  const TIPO={sueldo:['Sueldo',T.pos], extra:['Extra',T.pos], puso:['Puso',T.pos], saco:['Sacó',T.brand], tarjeta:['Tarjeta',T.brand]}
+  const signo=v=>(v>=0?'+':'–')+fmt(Math.abs(v))
+  const Fila=({l})=><div style={{display:'grid', gridTemplateColumns:'78px 62px 1fr auto', gap:8, alignItems:'baseline', padding:'4px 0', borderTop:`1px solid ${T.border}`, fontSize:11.5}}>
+    <span style={{fontFamily:MONO, color:T.ink3}}>{l.fecha||'—'}</span>
+    <span style={{fontSize:10, fontWeight:700, color:TIPO[l.tipo][1], textTransform:'uppercase', letterSpacing:.3}}>{TIPO[l.tipo][0]}</span>
+    <span style={{color:T.ink2, minWidth:0}}>{l.concepto||'(sin concepto)'}{l.origen && <span style={{color:T.ink3, fontSize:10.5}}> · {l.origen}</span>}</span>
+    <span style={{fontFamily:MONO, fontWeight:600, color:l.monto>=0?T.pos:T.brand, whiteSpace:'nowrap'}}>{signo(l.monto)}</span>
+  </div>
+  return <div style={{margin:'0 18px 16px', border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 14px', background:T.surface}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, marginBottom:4}}>
+      <div style={{fontSize:13, fontWeight:700, color:T.ink}}>Movimientos de {socio.nombre}</div>
+      <button onClick={onClose} style={{fontSize:11, color:T.ink3, background:'none', border:'none', cursor:'pointer'}}>Cerrar ✕</button>
+    </div>
+    <div style={{fontSize:11, color:T.ink3, marginBottom:8}}>Verde suma a favor de {socio.nombre}, rojo es plata que ya sacó. El saldo de cada mes arrastra el de los anteriores.</div>
+    {socio.movimientosPorMes.map(m=>{ const tarj=m.lineas.filter(l=>l.tipo==='tarjeta'), resto=m.lineas.filter(l=>l.tipo!=='tarjeta'), tTot=tarj.reduce((s,l)=>s+l.monto,0)
+      return <div key={m.mes} style={{marginTop:10}}>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, padding:'5px 8px', borderRadius:6, background:T.surfaceAlt, fontSize:12, fontWeight:700, color:T.ink}}>
+          <span style={{textTransform:'capitalize'}}>{m.nombreMes}</span>
+          <span style={{fontFamily:MONO, fontWeight:600, color:T.ink2}}>mes {signo(m.neto)} · saldo <b style={{color:m.saldoAlCierre>=0?T.pos:T.brand}}>{signo(m.saldoAlCierre)}</b></span>
+        </div>
+        {resto.map((l,i)=><Fila key={i} l={l}/>)}
+        {tarj.length>0 && <>
+          <div onClick={()=>setTarjAbierta(a=>({...a,[m.mes]:!a[m.mes]}))} style={{display:'grid', gridTemplateColumns:'78px 62px 1fr auto', gap:8, padding:'4px 0', borderTop:`1px solid ${T.border}`, fontSize:11.5, cursor:'pointer'}}>
+            <span/>
+            <span style={{fontSize:10, fontWeight:700, color:T.brand, textTransform:'uppercase', letterSpacing:.3}}>Tarjeta</span>
+            <span style={{color:T.brand, fontWeight:600}}>{tarj.length} consumo{tarj.length===1?'':'s'} personal{tarj.length===1?'':'es'} con tarjeta de Magma {tarjAbierta[m.mes]?'▾':'›'}</span>
+            <span style={{fontFamily:MONO, fontWeight:600, color:T.brand}}>{signo(tTot)}</span>
+          </div>
+          {tarjAbierta[m.mes] && <div style={{paddingLeft:12}}>{tarj.map((l,i)=><Fila key={i} l={l}/>)}</div>}
+        </>}
+      </div> })}
   </div>
 }
 
