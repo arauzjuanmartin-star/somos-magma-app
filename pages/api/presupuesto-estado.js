@@ -52,7 +52,9 @@ export default async function handler(req, res) {
       const tipo = String(rg.tipo || '').toLowerCase()
       const monto = Math.round(Number(rg.monto) || 0)
       const ref = String(rg.ref || '').trim()
-      const valido = (tipo === 'sena' && monto > 0) || (tipo === 'oc' && ref !== '')
+      // "excepcion": aprobar sin seña ni OC con un motivo escrito (Juan, 20/10/2026, Tic Tac de noviembre:
+      // "tiene que haber una salvedad"). Aprueba igual y queda en Resguardo = "Excepción" con motivo y quién.
+      const valido = (tipo === 'sena' && monto > 0) || ((tipo === 'oc' || tipo === 'excepcion') && ref !== '')
       if (precio > 0 && !yaTiene) {
         // La condición de cobro de la agencia (es quien paga) o, si no tiene, del cliente (lib/condicion-cobro.js).
         // Vacía = Seña 30%. "Cuenta corriente" y "OC después" aprueban sin pedir nada y lo dejan anotado igual,
@@ -89,8 +91,9 @@ export default async function handler(req, res) {
     // 🔒 Dejar escrito el resguardo (ver arriba). Best-effort: la aprobación ya pasó el candado.
     if (resguardoEscrito) {
       const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
-      const etiqueta = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.etiqueta : resguardoEscrito.tipo === 'sena' ? 'Seña' : 'OC'
-      const detalle = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.detalle : resguardoEscrito.tipo === 'sena' ? resguardoEscrito.monto : resguardoEscrito.ref
+      const etiqueta = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.etiqueta : resguardoEscrito.tipo === 'sena' ? 'Seña' : resguardoEscrito.tipo === 'excepcion' ? 'Excepción' : 'OC'
+      const detalle = resguardoEscrito.tipo === 'condicion' ? resguardoEscrito.detalle : resguardoEscrito.tipo === 'sena' ? resguardoEscrito.monto
+        : resguardoEscrito.tipo === 'excepcion' ? `${resguardoEscrito.ref}${mail ? ' · ' + mail : ''}` : resguardoEscrito.ref
       try {
         if (iResg > -1) {
           await sheets.spreadsheets.values.update({
@@ -119,6 +122,7 @@ export default async function handler(req, res) {
         const detLog = resguardoEscrito.tipo === 'condicion' ? `${resguardoEscrito.etiqueta} · ${resguardoEscrito.detalle} · sin pedir nada`
           : resguardoEscrito.tipo === 'sena'
           ? `Seña $${resguardoEscrito.monto.toLocaleString('es-AR')}${resguardoEscrito.ref ? ' · ' + resguardoEscrito.ref : ''} · ${resguardoEscrito.fecha}`
+          : resguardoEscrito.tipo === 'excepcion' ? `Excepción sin seña ni OC · ${resguardoEscrito.ref} · ${resguardoEscrito.fecha}`
           : `OC ${resguardoEscrito.ref} · ${resguardoEscrito.fecha}`
         await sheets.spreadsheets.values.append({
           spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',

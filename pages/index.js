@@ -2220,7 +2220,7 @@ function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
   const num=presu['Columna 1'], total=parseMonto(presu['Precio Final']), sena30=Math.round(total*0.3)
   const [tipo,setTipo]=useState(esOC(condicion)?'oc':'sena'), [monto,setMonto]=useState(sena30), [ref,setRef]=useState(''), [copiado,setCopiado]=useState(false)
   const [fecha,setFecha]=useState(()=>new Date().toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}))
-  const ok = tipo==='sena' ? Number(monto)>0 : ref.trim()!==''
+  const ok = tipo==='sena' ? Number(monto)>0 : ref.trim()!==''   // OC: el número · excepción: el motivo
   const pedido=`Hola! Para dejar reservada la fecha${presu['Fecha Evento']?' del '+presu['Fecha Evento']:''} necesitamos la seña del 30% del presupuesto #${num}: ${fmt(sena30)} + IVA. Con la transferencia confirmamos el equipo. Gracias!`
   async function copiar(){ try{ await navigator.clipboard.writeText(pedido); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }catch(e){} }
   const inp={width:'100%', padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:13.5, background:T.surface, color:T.ink, boxSizing:'border-box', marginTop:4}
@@ -2235,12 +2235,16 @@ function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
       </div>
       <div style={{padding:'18px 22px'}}>
         <div style={{fontSize:12, color:condicion?T.ink2:T.warn, marginBottom:8}}>{condicion ? `Condición de ${presu['Agencia']||presu['Cliente']}: ${condicion}` : `${presu['Agencia']||presu['Cliente']||'Este cliente'} no tiene condición de cobro cargada: rige Seña 30%. Se cambia en Agencias.`}</div>
-        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>¿Cómo está resguardado el cobro? Sin seña ni orden de compra el trabajo no se aprueba ni se agenda.</div>
+        <div style={{fontSize:13, color:T.ink2, marginBottom:12}}>¿Cómo está resguardado el cobro? Si no hay seña ni orden de compra, se puede aprobar como excepción con un motivo.</div>
         <div style={{display:'flex', gap:8}}>
           {opcion('sena','Seña cobrada','El 30% ya entró')}
           {opcion('oc','Orden de compra','El cliente mandó la OC (agencias a 60/90 días)')}
         </div>
-        {tipo==='sena' ? <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+        <div style={{display:'flex', marginTop:8}}>{opcion('excepcion','Aprobar sin seña (excepción)','Solo esta vez, con motivo. Queda anotado quién y por qué')}</div>
+        {tipo==='excepcion' ? <div style={{marginTop:14}}>
+            <label style={lab}>Motivo (obligatorio)<input id="resg-motivo" value={ref} onChange={e=>setRef(e.target.value)} placeholder="cliente de confianza, paga a la entrega, lo decidió Juan…" style={inp}/></label>
+          </div>
+        : tipo==='sena' ? <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
             <label style={lab}>Monto cobrado (sugerido: 30% de {fmt(total)})<input id="resg-monto" type="number" value={monto} onChange={e=>setMonto(e.target.value)} style={inp}/></label>
             <label style={lab}>Fecha<input id="resg-fecha" value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></label>
             <label style={{...lab, gridColumn:'1 / -1'}}>Cómo entró (opcional)<input id="resg-ref" value={ref} onChange={e=>setRef(e.target.value)} placeholder="transferencia BBVA, efectivo…" style={inp}/></label>
