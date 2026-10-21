@@ -38,6 +38,10 @@ const ESCRIBIR = args.includes('--escribir')
 const SOLO_LOCAL = args.includes('--local')
 const PEDIR_CLAVE = args.includes('--clave')
 
+// Si algo se cuelga (la Mac se duerme a mitad de una subida y la conexión queda muerta), el proceso no termina
+// nunca y launchd no vuelve a dispararlo: pasó del 10/10 al 21/10/2026. A los 30 minutos se corta solo.
+if (ESCRIBIR) setTimeout(() => { console.error(`✗ ${new Date().toISOString()} El backup lleva 30 minutos sin terminar: se corta para que mañana vuelva a correr.`); process.exit(1) }, 30 * 60 * 1000).unref()
+
 const mb = n => (n / 1024 / 1024).toFixed(1).replace('.', ',') + ' MB'
 const IGNORAR = ['.DS_Store', 'node_modules', '.next', '.git', '.fseventsd', '.Trashes', '.Spotlight-V100', '.TemporaryItems']
 
@@ -233,3 +237,4 @@ try {
   await sheets.spreadsheets.values.append({ spreadsheetId: env.SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED', requestBody: { values: [[new Date().toISOString(), 'backup-mac (Mac de Juan)', 'backup', 'DRIVE', nombre, `${mb(peso)} · ${adentro} archivos · ${subido.webViewLink}`]] } })
 } catch (e) { console.error('  (no se pudo anotar en LOG: ' + e.message + ')') }
 console.log('')
+process.exit(0)   // cierra aunque quede alguna conexión abierta de googleapis
