@@ -563,6 +563,35 @@ export default function Presupuesto() {
       //              Courier   = stand-in de Azeret Mono (datos técnicos/destacados)
 
       // ════════════════════════════════════════════════════════════════════
+      // PAGINADO — una sección entra entera en la hoja o pasa completa a la siguiente
+      // ════════════════════════════════════════════════════════════════════
+      const TOPE = H - 16           // de acá para abajo no se escribe (queda el pie "Página x de y")
+      const Y_INICIO_PAG = 34       // primer renglón de las hojas 2+, debajo del encabezado chico
+      const nuevaPagina = () => {
+        doc.addPage()
+        doc.setFillColor(255,255,255); doc.rect(0,0,W,H,'F')
+        if (logoImg) { try { doc.addImage(logoImg, 'PNG', M, 12, 22.5, 10) } catch(e) {} }
+        else { doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(...C.black); doc.text('MAGMA', M, 20) }
+        doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.texto)
+        doc.text('Presu. N°'+(form.nro||'___'), W-M, 19, {align:'right'})
+        if (lineaDivider) { try { doc.addImage(lineaDivider, 'PNG', M, 24, W-M*2, 2.5) } catch(e) {} }
+        else { doc.setDrawColor(...C.black); doc.setLineWidth(0.3); doc.line(M, 26, W-M, 26) }
+        y = Y_INICIO_PAG
+      }
+      // Si la sección no entra en lo que queda de hoja, salta a la siguiente. Si ni en una hoja
+      // vacía entra (lista eterna), solo exige `minimo` (título + primer renglón) y corta entre renglones.
+      const reservar = (alto, minimo = alto) => {
+        if (y + (alto <= TOPE - Y_INICIO_PAG ? alto : minimo) > TOPE) nuevaPagina()
+      }
+      // Alto de un renglón "Título: texto" de condiciones/cláusulas (fuente 8)
+      const altoClausula = c => {
+        doc.setFont('helvetica','bold'); doc.setFontSize(8)
+        const tw = doc.getTextWidth(c.titulo+': ')
+        doc.setFont('helvetica','normal')
+        return (doc.splitTextToSize(c.texto, W-M*2-tw).length - 1) * 3.5 + 4.5
+      }
+
+      // ════════════════════════════════════════════════════════════════════
       // HEADER — Logo izq + Datos cliente der (Courier para mono)
       // ════════════════════════════════════════════════════════════════════
       if (logoImg) {
@@ -656,15 +685,21 @@ export default function Presupuesto() {
         // ── Con precio por ítem ──
         // Mismo bloque de siempre pero con el precio a la derecha. La suma de la columna
         // da el "Valor total" de abajo: si algún día no cierra, el bug está en lib/desglose.js.
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
-        doc.text('El servicio incluye:', M, y); y += 6
-        for (const l of desglose) {
+        doc.setFont('helvetica','normal'); doc.setFontSize(10)
+        const itemsDesg = desglose.map(l => {
           const label = l.cantidad > 1 ? `${l.cantidad} × ${l.nombre}` : l.nombre
           const precioTxt = l.sinPrecio ? 'incluido' : '$' + fmt$(l.precio)
+          const lines = doc.splitTextToSize(label, W-M*2-10-doc.getTextWidth(precioTxt))
+          const alto = (l.cantidad > 1 && !l.sinPrecio) ? lines.length*5 + 4 : lines.length*5
+          return { l, precioTxt, lines, alto }
+        })
+        reservar(6 + itemsDesg.reduce((s,i) => s + i.alto, 0) + 7, 6 + itemsDesg[0].alto)
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
+        doc.text('El servicio incluye:', M, y); y += 6
+        for (const { l, precioTxt, lines, alto } of itemsDesg) {
+          reservar(alto)
           doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
-          const pw = doc.getTextWidth(precioTxt)
           doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F')
-          const lines = doc.splitTextToSize(label, W-M*2-10-pw)
           doc.text(lines, M+5, y)
           if (l.sinPrecio) { doc.setFont('helvetica','italic'); doc.setTextColor(...C.muted) }
           doc.text(precioTxt, W-M, y, {align:'right'})
@@ -682,21 +717,26 @@ export default function Presupuesto() {
         doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y)
         y += 5
       } else if (svcsLimpios.length > 0) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
-        doc.text('El servicio incluye:', M, y); y += 6
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+        doc.setFont('helvetica','normal'); doc.setFontSize(10)
         const svcsMap = {}, orden = []
         for (const s of svcsLimpios) { if (!svcsMap[s]) { svcsMap[s]=0; orden.push(s) } svcsMap[s]++ }
         // Las líneas con el "$" puesto salen con su precio a la derecha; las demás, sin número.
         const precioVisible = {}; desglose.forEach(l => { if (l.visible && !l.sinPrecio) precioVisible[l.nombre] = l.precio })
-        for (const s of orden) {
+        const itemsSvc = orden.map(s => {
           const cant = svcsMap[s]
           const label = cant > 1 ? `${cant} ${s}` : s
           const precioTxt = precioVisible[s] != null ? '$' + fmt$(precioVisible[s]) : ''
           const pw = precioTxt ? doc.getTextWidth(precioTxt) + 3 : 0
+          return { precioTxt, lines: doc.splitTextToSize(label, W-M*2-7-pw) }
+        })
+        reservar(6 + itemsSvc.reduce((s,i) => s + i.lines.length*5, 0) + 6, 6 + itemsSvc[0].lines.length*5)
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...C.black)
+        doc.text('El servicio incluye:', M, y); y += 6
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+        for (const { precioTxt, lines } of itemsSvc) {
+          reservar(lines.length*5)
           // Cuadrado pequeño negro como bullet (manual: figuras geométricas simples)
           doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F')
-          const lines = doc.splitTextToSize(label, W-M*2-7-pw)
           doc.text(lines, M+5, y)
           if (precioTxt) doc.text(precioTxt, W-M, y, {align:'right'})
           y += lines.length * 5
@@ -713,6 +753,7 @@ export default function Presupuesto() {
       if (form.observaciones && form.observaciones.trim()) {
         const obs = doc.splitTextToSize(form.observaciones.trim(), W-M*2-8)
         const obsH = obs.length*4.8 + 9
+        reservar(obsH + 4)
         doc.setFillColor(250,250,250); doc.rect(M, y-3, W-M*2, obsH, 'F')
         doc.setDrawColor(...C.magma); doc.setLineWidth(0.8); doc.line(M, y-3, M, y-3+obsH)
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
@@ -725,6 +766,7 @@ export default function Presupuesto() {
       // ════════════════════════════════════════════════════════════════════
       // VALOR TOTAL — h2 jerarquía
       // ════════════════════════════════════════════════════════════════════
+      reservar(4 + (descMonto > 0 ? 12.5 : 0) + 10)
       y += 4
       // Con descuento: dos renglones chicos arriba (de cuánto se parte y cuánto se baja)
       if (descMonto > 0) {
@@ -756,6 +798,7 @@ export default function Presupuesto() {
       // ADICIONALES OPCIONALES — debajo del total, misma tipografía + total con adicionales
       // ════════════════════════════════════════════════════════════════════
       if ((form.adicionales||[]).length > 0) {
+        reservar(5 + form.adicionales.length*5.5 + 7 + 10)
         doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.azul)
         doc.text('Adicionales opcionales', M, y); y += 5
         doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
@@ -791,18 +834,23 @@ export default function Presupuesto() {
       // TÉRMINOS Y CONDICIONES — manual jerarquía: subtítulo + cuerpo + destacado(mono)
       // ════════════════════════════════════════════════════════════════════
       // Validez
+      doc.setFont('helvetica','normal'); doc.setFontSize(8)
+      const validezTxt = doc.splitTextToSize(clausulas.validez, W-M*2)
+      reservar(4 + validezTxt.length*3.8)
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.magma)
       doc.text('CONDICIONES GENERALES', M, y); y += 4
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.texto)
-      const validezTxt = doc.splitTextToSize(clausulas.validez, W-M*2)
       doc.text(validezTxt, M, y); y += validezTxt.length*3.8 + 4
 
       // Condiciones de Pago
+      const altosPago = clausulas.pago.map(altoClausula)
+      reservar(4 + altosPago.reduce((s,a) => s + a, 0), 4 + (altosPago[0] || 0))
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.magma)
       doc.text('CONDICIONES DE PAGO', M, y); y += 4
       doc.setFontSize(8)
-      for (const p of clausulas.pago) {
-        doc.setFont('helvetica','bold'); doc.setTextColor(...C.black)
+      for (const [i, p] of clausulas.pago.entries()) {
+        reservar(altosPago[i])
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...C.black)
         doc.text(p.titulo+': ', M, y)
         const tw = doc.getTextWidth(p.titulo+': ')
         doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
@@ -815,12 +863,15 @@ export default function Presupuesto() {
 
       // Cláusulas
       const tituloClausulas = form.tipoPresu === 'produccion' ? 'CLÁUSULAS PARA EL COBRO Y LA ENTREGA' : 'CLÁUSULAS DEL SERVICIO'
+      const altosClaus = clausulas.clausulas.map(altoClausula)
+      reservar(4 + altosClaus.reduce((s,a) => s + a, 0), 4 + (altosClaus[0] || 0))
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.magma)
       doc.text(tituloClausulas, M, y); y += 4
 
       doc.setFontSize(8)
-      for (const c of clausulas.clausulas) {
-        doc.setFont('helvetica','bold'); doc.setTextColor(...C.black)
+      for (const [i, c] of clausulas.clausulas.entries()) {
+        reservar(altosClaus[i])
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...C.black)
         doc.text(c.titulo+': ', M, y)
         const tw = doc.getTextWidth(c.titulo+': ')
         doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto)
@@ -830,7 +881,15 @@ export default function Presupuesto() {
         y += 4.5
       }
 
-      if (y > H - 5) console.warn('PDF desbordó la página', y, 'mm de', H)
+      // Pie "Página x de y" solo si hay más de una hoja
+      const totalPags = doc.getNumberOfPages()
+      if (totalPags > 1) {
+        for (let p = 1; p <= totalPags; p++) {
+          doc.setPage(p)
+          doc.setFont('courier','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted)
+          doc.text('Página '+p+' de '+totalPags, W-M, H-9, {align:'right'})
+        }
+      }
 
       // Nombre archivo: Presu-NRO-Agencia-Cliente-Proyecto.pdf (Title Case, sin tildes)
       const titleCase = s => String(s||'')
