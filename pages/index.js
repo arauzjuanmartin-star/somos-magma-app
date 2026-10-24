@@ -3238,6 +3238,10 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Seguimiento de cobranza por agencia: lo que se está tipeando (fecha prometida + nota) antes de guardar,
   // y qué acción de a varias facturas está en curso (para no mandarla dos veces).
   const [promDraft,setPromDraft]=useState({}), [loteBusy,setLoteBusy]=useState('')
+  // Preaviso de vencimiento (lib/preaviso-cobro.js): cuántos tocan hoy, para el cartel de arriba
+  const [preaviso,setPreaviso]=useState(null), [preavisoOpen,setPreavisoOpen]=useState(false)
+  const contarPreavisos=()=>fetch('/api/preaviso-cobro?contar=1').then(r=>r.json()).then(j=>{ if(j.ok) setPreaviso(j) }).catch(()=>{})
+  useEffect(()=>{ contarPreavisos() },[])
   // Al abrir "Nueva factura" desde una agencia con varios trabajos tildados: los que van en la misma factura.
   const [nuevaFextras,setNuevaFextras]=useState([])
   // Pedido de orden de compra (Austral): la agencia para la que está abierto el mail, y por cada
@@ -3431,6 +3435,14 @@ function msgUpload(j, base='PDF subido ✓'){
       <button onClick={()=>setReclamo('')} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13.5, fontWeight:600, cursor:'pointer'}} title="Un solo mail con todas las facturas pendientes de un cliente">✉ Reclamar cuenta</button>
       <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
     </div>
+    {(preaviso?.n>0||preaviso?.resolver>0) && <div onClick={()=>setPreavisoOpen(true)} style={{display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:16, borderRadius:12, border:`1px solid ${T.warn}`, background:T.surfaceAlt, cursor:'pointer'}}>
+      <span style={{fontSize:20}}>📨</span>
+      <span style={{flex:1, fontSize:13.5, color:T.ink}}>
+        {preaviso.n>0 && <><b>{preaviso.n} {preaviso.n===1?'factura está por vencer':'facturas están por vencer'}</b> · {fmt(preaviso.total)} · el aviso al cliente sale de tu mail, con tu firma</>}
+        {preaviso.resolver>0 && <div style={{fontSize:12.5, color:T.warn, fontWeight:600, marginTop:preaviso.n>0?3:0}}>{preaviso.resolver} {preaviso.resolver===1?'factura por vencer no puede avisarse':'facturas por vencer no pueden avisarse'} hasta que la resuelvas (sin mandar, sin N°, anulada)</div>}
+      </span>
+      <span style={{...miniBtn, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>Ver y mandar</span>
+    </div>}
     <div style={{display:'flex', gap:14, marginBottom:20}}>
       <Hero label="Por cobrar" value={fmt(pcTotal)} accent={T.ink} sub={`${noCobradas.length} facturas · saldo real`}
         desglose={[
@@ -3697,6 +3709,16 @@ function msgUpload(j, base='PDF subido ✓'){
     {anulando && <AnularFacturaModal f={anulando} onClose={()=>setAnulando(null)} onRefresh={onRefresh} showToast={showToast}/>}
     {nuevaF && <NuevaFactura pendientes={pendTodos} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={nuevaFsel} initialExtras={nuevaFextras} onClose={()=>{setNuevaF(false); setNuevaFsel(null); setNuevaFextras([])}} onCreada={fMail=>{ setNuevaF(false); setNuevaFsel(null); setNuevaFextras([]); if(fMail) setMailFactura(fMail); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {reclamo!==null && <ReclamoModal agenciasPendientes={agenciasPendientes} inicial={reclamo} onClose={()=>setReclamo(null)} onSent={()=>{ if(onRefresh) onRefresh() }} showToast={showToast}/>}
+    {preavisoOpen && <PreavisoModal onClose={()=>setPreavisoOpen(false)} onSent={()=>{ contarPreavisos(); if(onRefresh) onRefresh() }} showToast={showToast}
+      resolver={(f,que)=>{
+        // Lo que no pudo avisarse se resuelve desde acá: cada caso abre lo que ya existe para eso
+        const fila=fc.find(x=>x.__row===f.fila)
+        if(que==='mandar' && fila){ setPreavisoOpen(false); setMailFactura(fila); return }
+        if(que==='yasalio' && fila){ lote([fila], {'Fc Enviada':true}, `enviada ${f.nroFactura}`, `Fc ${f.nroFactura} marcada como enviada ✓`, x=>({'Fecha enviada':String(x['Fecha emision']||'').trim()||`${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`})).then(ok=>{ if(ok){ contarPreavisos(); setPreavisoOpen(false); setTimeout(()=>setPreavisoOpen(true),0) } }); return }
+        if(que==='reclamar'){ setPreavisoOpen(false); setReclamo({agencia:f.agencia, fila:f.fila, nro:f.nro}); return }
+        // Anulada o sin N°: la fila en la lista, donde se edita
+        setPreavisoOpen(false); setVista('lista'); setFilt('todas'); setQ(f.nroFactura&&!/anulad/i.test(f.nroFactura)?f.nroFactura:String(f.nro))
+      }}/>}
   </>
 }
 
@@ -4164,6 +4186,72 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
         <button onClick={enviar} disabled={saving||!elegidas.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!data)?'default':'pointer', opacity:(saving||!elegidas.length)?0.5:1}}>{saving?'Enviando…':`Enviar reclamo${elegidas.length?' · '+fmtM(totalSel):''}`}</button>
+      </div>
+    </div>
+  </div>
+}
+
+// Preavisos de vencimiento de hoy: todos tildados, Flor mira y manda con un clic. Cada uno sale de admin@ con su
+// nombre y su firma, en el hilo del mail de la factura (pages/api/preaviso-cobro.js).
+function PreavisoModal({ onClose, onSent, showToast, resolver }){
+  const [data,setData]=useState(null), [avisos,setAvisos]=useState([]), [abierto,setAbierto]=useState(null), [saving,setSaving]=useState(false)
+  useEffect(()=>{ let vivo=true; fetch('/api/preaviso-cobro').then(r=>r.json()).then(j=>{ if(!vivo) return
+      if(!j.ok){ showToast(j.error||'Error','err'); onClose(); return }
+      setData(j); setAvisos((j.avisos||[]).map(a=>({...a, sel:true})))
+    }).catch(()=>{ showToast('Error de conexión','err'); onClose() })
+    return ()=>{ vivo=false } /* eslint-disable-next-line */ },[])
+  const elegidos=avisos.filter(a=>a.sel)
+  const cambiar=(i,k,v)=>setAvisos(a=>a.map((x,j)=>j===i?{...x,[k]:v}:x))
+  async function mandar(){
+    setSaving(true)
+    try{ const r=await fetch('/api/preaviso-cobro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({avisos:elegidos})}); const j=await r.json()
+      if(j.error){ showToast(j.error,'err'); setSaving(false); return }
+      if(j.errores?.length) showToast(`Salieron ${j.enviados.length}. Problemas: ${j.errores.join(' · ')}`,'err')
+      else showToast(`${j.enviados.length} ${j.enviados.length===1?'aviso enviado':'avisos enviados'} ✓`)
+      onSent&&onSent(); onClose()
+    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+  }
+  return <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:910, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:640, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
+      <div style={{padding:'18px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Facturas por vencer</div><div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>Sale de {data?.desde||'admin@somosmagma.com'} · en el mismo hilo del mail de la factura</div></div>
+        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 22px'}}>
+        {!data && <div style={{padding:24, textAlign:'center', color:T.ink3, fontSize:13}}>Buscando el mail de cada factura…</div>}
+        {data && !avisos.length && <div style={{fontSize:13, color:T.ink2, padding:'6px 0 12px'}}>Hoy no hay avisos para mandar.</div>}
+        {avisos.map((a,i)=>(
+          <div key={i} style={{border:`1px solid ${a.sel?T.ink:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:10, opacity:a.sel?1:0.55}}>
+            <label style={{display:'flex', alignItems:'center', gap:9, cursor:'pointer'}}>
+              <input type="checkbox" checked={a.sel} onChange={()=>cambiar(i,'sel',!a.sel)}/>
+              <span style={{flex:1, minWidth:0, fontSize:13, color:T.ink}}><b>{a.agencia}</b> · {a.facturas.map(f=>`Fc ${f.nroFactura}`).join(', ')}<div style={{fontSize:11.5, color:T.ink3, marginTop:2}}>vence {a.facturas.map(f=>f.vencimiento).join(', ')} · para {a.to.join(', ')}{a.cc.length?` · cc ${a.cc.join(', ')}`:''}</div></span>
+              <span style={{fontFamily:MONO, fontSize:13, fontWeight:600, color:T.ink, flexShrink:0}}>{fmt(a.total)}</span>
+            </label>
+            <button onClick={()=>setAbierto(abierto===i?null:i)} style={{...miniBtn, padding:'3px 9px', fontSize:11, marginTop:8}}>{abierto===i?'Ocultar el mail':'Ver el mail'}</button>
+            {abierto===i && <div style={{marginTop:8}}>
+              <input value={a.asunto} onChange={e=>cambiar(i,'asunto',e.target.value)} style={{...inpV2, marginBottom:8, fontSize:12.5}}/>
+              <textarea value={a.cuerpo} onChange={e=>cambiar(i,'cuerpo',e.target.value)} rows={14} style={{...inpV2, resize:'vertical', fontFamily:MONO, fontSize:12, lineHeight:1.5}}/>
+            </div>}
+          </div>
+        ))}
+        {data?.fuera?.length>0 && <div style={{fontSize:12, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:'9px 12px', lineHeight:1.55}}>
+          <b style={{color:T.ink}}>Para resolver ({data.fuera.length}) · están por vencer y no se les puede avisar todavía:</b>
+          {data.fuera.map((f,i)=>{
+            const b=(que,txt)=><button onClick={()=>resolver&&resolver(f,que)} style={{...miniBtn, padding:'3px 9px', fontSize:11}}>{txt}</button>
+            return <div key={i} style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', padding:'6px 0', borderTop:i?`1px solid ${T.border}`:'none'}}>
+              <span style={{flex:'1 1 260px', minWidth:0}}>{f.agencia} · {f.nroFactura||`#${f.nro}`} · {f.proyecto} · <b style={{fontFamily:MONO}}>{fmt(f.monto)}</b> · vence {f.vencimiento}<br/><span style={{color:f.tipo==='prometio'?T.ink3:T.warn}}>{f.motivo}</span></span>
+              <span style={{display:'flex', gap:6}}>
+                {f.tipo==='noenviada' && <>{b('mandar','✉ Mandar la factura')}{b('yasalio','Ya salió')}</>}
+                {f.tipo==='sinmail' && b('reclamar','Avisar a mano')}
+                {(f.tipo==='sinnumero'||f.tipo==='anulada') && b('ver',f.tipo==='anulada'?'Ver la factura':'Cargar el N°')}
+              </span>
+            </div>
+          })}
+        </div>}
+      </div>
+      <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
+        <button onClick={mandar} disabled={saving||!elegidos.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!elegidos.length)?'default':'pointer', opacity:(saving||!elegidos.length)?0.5:1}}>{saving?'Enviando…':`Mandar ${elegidos.length} ${elegidos.length===1?'aviso':'avisos'}`}</button>
       </div>
     </div>
   </div>
