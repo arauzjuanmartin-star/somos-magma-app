@@ -57,7 +57,9 @@ export default async function handler(req, res) {
     const { filas } = cruzarExtracto(conClave(leidos), data, { cuenta: nombreCuenta, yaCargadas, canonStaff })
     const destildadas = new Set((Array.isArray(noMarcar) ? noMarcar : []).map(txt))
     // Del más viejo al más nuevo: si dos renglones pagan dos meses del mismo gasto, la "Fecha pago" que queda es la última
-    const aMarcar = filas.filter(x => x.estado === 'marcar' && x.ref && !destildadas.has(x.clave)).sort((p, q) => p.fecha - q.fecha)
+    // Solo los renglones nuevos: uno ya cargado que quedó "para revisar" puede coincidir ahora con una factura emitida
+    // después (el 24/10/2026, $217.800 que pagó Meikin el 30/9 marcaron cobrada una factura de Austral del 20/10).
+    const aMarcar = filas.filter(x => x.estado === 'marcar' && x.ref && !x.yaCargada && !destildadas.has(x.clave)).sort((p, q) => p.fecha - q.fecha)
 
     // ---------- 1. Lo que se marca pagado o cobrado, con la fecha del banco. Un solo batchUpdate.
     const cab = {}
