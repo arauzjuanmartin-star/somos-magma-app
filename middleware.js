@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   '/_next',
   '/favicon.ico',
   '/web.html',  // preview público de la web nueva (para Sofi/equipo, sin login)
+  '/privacidad',  // política de privacidad: Meta la exige pública para publicar la app de WhatsApp
   '/sw.js',          // el service worker de Mi Magma (avisos push): el navegador lo baja sin cookies
   '/manifest.json',  // el ícono y el nombre para "Agregar a pantalla de inicio"
   '/icons',
