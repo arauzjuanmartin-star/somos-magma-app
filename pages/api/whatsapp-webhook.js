@@ -1,15 +1,13 @@
 import crypto from 'crypto'
 import { getSheets } from '../../lib/sheets'
+import { filaWA, agregarFilas, leerWA, responderSiCorresponde } from '../../lib/whatsapp'
 
 // Webhook de WhatsApp Cloud API (Meta).
 //  - GET: handshake de verificación (Meta manda hub.verify_token → devolvemos hub.challenge).
-//  - POST: mensajes entrantes → se guardan en la solapa WHATSAPP.
+//  - POST: mensajes entrantes → se guardan en la solapa WHATSAPP y el bot contesta (lib/whatsapp.js).
 // Ruta PÚBLICA (ver middleware.js). Seguridad: verify_token en el GET + firma X-Hub-Signature-256 en el POST.
-export const config = { api: { bodyParser: false } }
-
-// Lo que escribe alguien de afuera entra como texto, nunca como fórmula: un mensaje que empieza con = + - @
-// se guarda con apóstrofo adelante (Sheets no lo muestra) para que no se ejecute en el Master.
-const plano = v => (/^[=+\-@]/.test(String(v)) ? "'" + v : v)
+// maxDuration: el bot tarda unos segundos en pensar la respuesta; el default de Vercel (10 s) quedaba justo.
+export const config = { api: { bodyParser: false }, maxDuration: 60 }
 
 function readRaw(req) {
   return new Promise((resolve) => { let d = ''; req.on('data', c => (d += c)); req.on('end', () => resolve(d)) })
@@ -38,9 +36,9 @@ export default async function handler(req, res) {
   let body = {}
   try { body = JSON.parse(raw || '{}') } catch (e) {}
 
-  // 3) Extraer mensajes entrantes → filas
+  // 3) Extraer mensajes entrantes → filas. Los avisos de "entregado/leído" (v.statuses) no se guardan.
   try {
-    const filas = []
+    const nuevos = []
     for (const e of (body.entry || [])) {
       for (const ch of (e.changes || [])) {
         const v = ch.value || {}
@@ -55,13 +53,20 @@ export default async function handler(req, res) {
           else if (tipo === 'interactive') texto = m.interactive?.button_reply?.title || m.interactive?.list_reply?.title || '[interactive]'
           else texto = `[${tipo}]`
           const ts = new Date(Number(m.timestamp || Math.floor(Date.now() / 1000)) * 1000)
-          filas.push([ts.toISOString(), ts.toLocaleDateString('es-AR'), ts.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }), 'Entrante', plano(m.from || ''), plano(nombreDe(m.from)), plano(texto), plano(tipo), plano(m.id || ''), 'recibido', 'NO', ''])
+          nuevos.push({ telefono: m.from || '', nombre: nombreDe(m.from), fila: filaWA({ ts, direccion: 'Entrante', telefono: m.from || '', nombre: nombreDe(m.from), mensaje: texto, tipo, wamid: m.id || '', estado: 'recibido' }), wamid: m.id || '' })
         }
       }
     }
-    if (filas.length) {
+    if (nuevos.length) {
       const { sheets, SHEET_ID } = await getSheets()
-      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'WHATSAPP!A:L', valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS', requestBody: { values: filas } })
+      // Meta reintenta si tardamos en contestar: el mismo mensaje puede llegar dos veces. Se guarda y se
+      // contesta una sola vez (por WA Message ID).
+      const vistos = new Set((await leerWA(sheets, SHEET_ID)).map(m => m.wamid).filter(Boolean))
+      const frescos = nuevos.filter(n => !n.wamid || !vistos.has(n.wamid))
+      await agregarFilas(sheets, SHEET_ID, frescos.map(n => n.fila))
+      // Una respuesta por número aunque haya mandado tres mensajes seguidos: el bot lee la charla entera.
+      const porNumero = new Map(frescos.map(n => [n.telefono, n.nombre]))
+      for (const [telefono, nombre] of porNumero) await responderSiCorresponde({ sheets, SHEET_ID, telefono, nombre })
     }
   } catch (err) { console.error('WA webhook procesar:', err) }
 
