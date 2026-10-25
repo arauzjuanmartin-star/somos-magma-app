@@ -345,7 +345,7 @@ function CargarGasto({ datos, inicial, onListo, onVolver }) {
         {error && <div style={{ marginTop: 14, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
         {datos.viendoComo
           ? <p style={{ ...sub, marginTop: 16, lineHeight: 1.5 }}>Estás mirando como equipo: desde acá no se cargan gastos a nombre de otra persona.</p>
-          : <button onClick={mandar} disabled={mandando} style={{ ...boton, marginTop: 18, background: mandando ? T.ink3 : T.brand, borderColor: mandando ? T.ink3 : T.brand, color: '#fff', padding: '14px 12px', fontSize: 15 }}>{mandando ? 'Mandando…' : 'Mandar a administración'}</button>}
+          : <button onClick={mandar} disabled={mandando} style={{ ...boton, marginTop: 18, background: mandando ? T.apagado : T.brand, borderColor: mandando ? T.apagado : T.brand, color: '#fff', padding: '14px 12px', fontSize: 15 }}>{mandando ? 'Mandando…' : 'Mandar a administración'}</button>}
       </>}
   </div>
 }

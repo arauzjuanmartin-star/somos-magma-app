@@ -163,9 +163,10 @@ export default async function handler(req, res) {
       { range: `EDICION!${colLetra(cE('Actualizado'))}${sheetRow}`, values: [[new Date().toISOString()]] },
       { range: `EDICION!${colLetra(cE('Por'))}${sheetRow}`, values: [[mail]] },
     ]
-    if (!String(actual[cE('Fecha entrega')] || '').trim()) {
-      data.push({ range: `EDICION!${colLetra(cE('Fecha entrega'))}${sheetRow}`, values: [[aAR(new Date())]] })
-    }
+    // Siempre la de hoy, aunque ya tuviera: es cuándo le llegó ESTA versión. Antes se
+    // ponía solo la primera vez, y después de una vuelta de cambios "hace N días, vale
+    // un llamado" contaba desde el primer envío (25/10/2026).
+    data.push({ range: `EDICION!${colLetra(cE('Fecha entrega'))}${sheetRow}`, values: [[aAR(new Date())]] })
     if (finales?.webViewLink) {
       data.push({ range: `EDICION!${colLetra(cE('Link entrega'))}${sheetRow}`, values: [[finales.webViewLink]] })
     }

@@ -4,7 +4,7 @@
 
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza, esPedidoFoto } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza, esPedidoFoto, lineaBitacora } from '../../lib/edicion'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { darFinalesAlStaff } from '../../lib/finales'
 import { mailsDelStaff } from '../../lib/finales'
@@ -41,7 +41,12 @@ export default async function handler(req, res) {
   // `campos.Notas` (que es la bitácora entera) porque es lo que se avisa y lo que
   // va destacado arriba del mail. Sin `nota` no sale aviso: editar el textarea a
   // mano no le tiene que mandar un mail a nadie.
-  const { id, campos, borrar, nota } = req.body || {}
+  //
+  // `anteponer`: una nota nueva para la bitácora, sin la cabecera. El servidor le pone
+  // "[dd/mm quien]" y la pega arriba de lo que HAY EN EL SHEET en este momento. Antes el
+  // navegador mandaba la bitácora entera y si dos personas anotaban a la vez, la nota
+  // del primero desaparecía (25/10/2026).
+  const { id, campos, borrar, nota, anteponer } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Falta id' })
   if (!borrar && (!campos || typeof campos !== 'object')) return res.status(400).json({ error: 'Falta id o campos' })
 
@@ -79,9 +84,25 @@ export default async function handler(req, res) {
       return res.json({ ok: true, borrado: true })
     }
 
+    // "Con el cliente" lo pone solamente /api/edicion-aprobar, que además pasa el archivo
+    // a Finales y le da acceso al cliente. Hasta el 25/10/2026 la píldora de estado lo
+    // escribía directo: el sheet decía "Con el cliente" y el cliente no tenía nada.
+    const estadoActual = String(actual[cE('Estado')] || '').trim()
+    if (String(campos?.Estado || '').trim() === 'Con el cliente' && estadoActual !== 'Con el cliente') {
+      return res.status(400).json({ error: 'Al cliente se manda con “Aprobar y mandar” desde la ficha (pasa el archivo a Finales y le da acceso)' })
+    }
+
     const data = []
     const cambios = []
+    let notasNuevas = null
+    if (String(anteponer || '').trim()) {
+      const previas = String(actual[cE('Notas')] || '')
+      notasNuevas = lineaBitacora(mail, anteponer) + (previas.trim() ? '\n' + previas : '')
+      data.push({ range: `EDICION!${colLetra(cE('Notas'))}${sheetRow}`, values: [[notasNuevas]] })
+      cambios.push(`Notas: + "${String(anteponer).trim().slice(0, 80)}"`)
+    }
     for (const [k, v] of Object.entries(campos)) {
+      if (k === 'Notas' && notasNuevas !== null) continue
       if (!EDITABLES.includes(k)) continue
       if (k === 'Entregable' && !esManual) continue   // lo pisaría el sync
       // Sin la columna en el sheet el nombre caería en una celda sin título: mejor avisar.
@@ -159,12 +180,13 @@ export default async function handler(req, res) {
     // manda el del estado, que ya lleva la nota adentro — no van dos mails.
     let aviso = null
     const cambioEstado = !!campos.Estado && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()
-    const hayNota = !!String(nota || '').trim() && String(campos.Notas ?? '') !== String(actual[cE('Notas')] || '')
+    const hayNota = !!String(nota || '').trim() && (notasNuevas !== null || String(campos.Notas ?? '') !== String(actual[cE('Notas')] || ''))
     if (cambioEstado || hayNota) {
       try {
         const fila = {}
         hE.forEach((h, i) => { fila[h] = actual[i] ?? '' })
         Object.assign(fila, campos)
+        if (notasNuevas !== null) fila.Notas = notasNuevas
         const rrhh = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'RRHH!A:D' })).data.values || []
         const hR = rrhh[0] || []
         const lista = rrhh.slice(1).map(r => Object.fromEntries(hR.map((k, i) => [k, r[i]])))

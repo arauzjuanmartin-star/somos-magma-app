@@ -865,7 +865,7 @@ function MotivoEstadoModal({num, estado, saving, onClose, onConfirm}){
       <div style={{padding:'13px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} disabled={saving} style={miniBtn}>Cancelar</button>
         <button onClick={()=>onConfirm(motivo.trim())} disabled={saving||!motivo.trim()}
-          style={{padding:'8px 20px', borderRadius:8, border:'none', background:motivo.trim()?color:T.ink3, color:'#fff', fontSize:12.5, fontWeight:600, cursor:motivo.trim()?'pointer':'default', opacity:saving?0.6:1}}>
+          style={{padding:'8px 20px', borderRadius:8, border:'none', background:motivo.trim()?color:T.apagado, color:'#fff', fontSize:12.5, fontWeight:600, cursor:motivo.trim()?'pointer':'default', opacity:saving?0.6:1}}>
           {saving?'Guardando…':(esDes?'Desaprobar':'Confirmar')}</button>
       </div>
     </div>
@@ -925,7 +925,7 @@ function SeguimientoModal({p, saving, onClose, onConfirm}){
         <span style={{fontSize:11.5, color:T.ink3, marginRight:'auto'}}>Queda en PRESUPUESTOS y en la diaria de mañana.</span>
         <button onClick={onClose} disabled={saving} style={miniBtn}>Cancelar</button>
         <button onClick={()=>onConfirm({proximoPaso:texto, seguirEl:seguirD?fechaDDMMYYYY(seguirD):''})} disabled={saving||!texto}
-          style={{padding:'8px 20px', borderRadius:8, border:'none', background:texto?T.brand:T.ink3, color:'#fff', fontSize:12.5, fontWeight:600, cursor:texto?'pointer':'default', opacity:saving?0.6:1}}>
+          style={{padding:'8px 20px', borderRadius:8, border:'none', background:texto?T.brand:T.apagado, color:'#fff', fontSize:12.5, fontWeight:600, cursor:texto?'pointer':'default', opacity:saving?0.6:1}}>
           {saving?'Guardando…':'Anotar'}</button>
       </div>
     </div>
@@ -2185,7 +2185,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
           <div style={{flex:1}}/>
           {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
           <button onClick={cerrar} style={{padding:'10px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-          <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.ink3, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
+          <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.apagado, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
         </div>
       </div>
     </div>
@@ -4033,7 +4033,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, i
       {sel && <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
         <button onClick={()=>crear(false,false)} disabled={saving||neto<=0} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer', opacity:(saving||neto<=0)?0.5:1}}>Solo crear</button>
-        <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
+        <button onClick={()=>crear(false,true)} disabled={saving||neto<=0} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||neto<=0)?T.apagado:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||neto<=0)?'default':'pointer'}}>{saving?'Procesando…':'Crear y mandar mail'}</button>
       </div>}
     </div>
   </div>
@@ -4376,7 +4376,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
         <span style={{fontSize:11.5, color:T.ink3}}>{seleccionados.length} destinatario{seleccionados.length!==1?'s':''}{adjPDF?' · con factura adjunta':''}</span>
         <div style={{display:'flex', gap:10}}>
           <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-          <button onClick={enviar} disabled={saving||!seleccionados.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||!seleccionados.length)?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!seleccionados.length)?'default':'pointer'}}>{saving?'Enviando…':(adjPDF?'✉ Enviar con la factura':'✉ Enviar')}</button>
+          <button onClick={enviar} disabled={saving||!seleccionados.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:(saving||!seleccionados.length)?T.apagado:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!seleccionados.length)?'default':'pointer'}}>{saving?'Enviando…':(adjPDF?'✉ Enviar con la factura':'✉ Enviar')}</button>
         </div>
       </div>
       </>}
@@ -4423,7 +4423,7 @@ function YaCobradaModal({x, onClose, onConfirm}){
       </div>
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real), yaCobrada, fEnv, fCob)}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.ink3:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
+        <button onClick={()=>{setSaving(true); onConfirm(x, Math.round(real), yaCobrada, fEnv, fCob)}} disabled={saving||real<=0} style={{padding:'9px 20px', borderRadius:9, border:'none', background:(saving||real<=0)?T.apagado:T.pos, color:'#fff', fontSize:13, fontWeight:600, cursor:(saving||real<=0)?'default':'pointer'}}>{saving?'Guardando…':'Confirmar'}</button>
       </div>
     </div>
   </div>
@@ -5583,7 +5583,7 @@ function MovimientoSocio({socio, tipo, onClose, onHecho, showToast}){
       <input value={concepto} onChange={e=>setConcepto(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')guardar()}} placeholder={saco?'Retiro, adelanto, pago de tarjeta…':'VEP, préstamo en efectivo…'} style={{width:'100%', padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:13, margin:'4px 0 16px', outline:'none', background:T.surface, color:T.ink}}/>
       <div style={{display:'flex', gap:8}}>
         <button onClick={onClose} style={{flex:1, padding:'10px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={guardar} disabled={busy} style={{flex:2, padding:'10px', borderRadius:9, border:'none', background:busy?T.ink3:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:busy?'default':'pointer'}}>{busy?'Guardando…':'Registrar'}</button>
+        <button onClick={guardar} disabled={busy} style={{flex:2, padding:'10px', borderRadius:9, border:'none', background:busy?T.apagado:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:busy?'default':'pointer'}}>{busy?'Guardando…':'Registrar'}</button>
       </div>
     </div>
   </div>
@@ -6036,7 +6036,7 @@ function RevisarBanco({data, onRefresh, showToast}){
 
   const chipF=on=>({fontSize:12, fontWeight:600, padding:'6px 12px', borderRadius:20, border:`1px solid ${on?T.ink:T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, cursor:'pointer', whiteSpace:'nowrap'})
   const seg=on=>({fontSize:12.5, fontWeight:on?700:500, padding:'7px 12px', borderRadius:8, border:`1px solid ${on?T.brand:T.border}`, background:on?T.brandSoft:T.surface, color:on?T.brand:T.ink2, cursor:'pointer'})
-  const btnOk=dis=>({fontSize:13, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:dis?T.ink3:T.brand, color:'#fff', cursor:dis?'default':'pointer'})
+  const btnOk=dis=>({fontSize:13, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:dis?T.apagado:T.brand, color:'#fff', cursor:dis?'default':'pointer'})
   const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
   // El nombre de quien pagó o cobró, sin los números de cuenta que le pone el banco adelante. Si el banco no lo dice, el concepto.
   const quienDe=m=>m.detalle.replace(/^CTE\s+\d+\s*/i,'').replace(/^CTA\.(ORIGEN|DESTINO):\s*/i,'').replace(/^[\d-]{6,}\s*/,'').replace(/^[-·\s]+/,'').trim() || m.concepto
@@ -6653,7 +6653,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
     </div>
   </div>
 }
-const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, border:'none', background:disabled?T.ink3:T.brand, color:'#fff', fontSize:13.5, fontWeight:700, cursor:disabled?'default':'pointer'})
+const btnAgregar=disabled=>({width:'100%', padding:'11px', borderRadius:10, border:'none', background:disabled?T.apagado:T.brand, color:'#fff', fontSize:13.5, fontWeight:700, cursor:disabled?'default':'pointer'})
 
 // Editar un gasto ya cargado (concepto, categoría, monto, día, cómo se paga y de qué cuenta). Si ya está pagado y cambia el monto, ajusta la cuenta.
 const MEDIOS_GASTO=['Transferencia','Débito automático','Efectivo','Tarjeta']
@@ -6865,7 +6865,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
           <select value={anio} onChange={e=>setAnio(parseInt(e.target.value))} style={{...inp, width:90}}>{[2025,2026].map(a=><option key={a} value={a}>{a}</option>)}</select>
         </div>
         <input type="file" accept="application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)} style={{marginBottom:16, fontSize:13, color:T.ink2}}/>
-        <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.ink3:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA… puede tardar unos minutos':'Leer PDF'}</button>
+        <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.apagado:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA… puede tardar unos minutos':'Leer PDF'}</button>
         <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
         <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'9px 13px', fontSize:12.5, marginBottom:10, fontWeight:600}}>Leído, todavía NO guardado. Revisalo y tocá “Confirmar y cargar” abajo.</div>
@@ -6909,7 +6909,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
         {yaCargados>0 && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 13px', fontSize:12, marginBottom:12, fontWeight:500, lineHeight:1.5}}>⚠ {tarjeta} de {MESES_LARGO[mes-1]} {anio} ya está cargada ({yaCargados} consumos). Si confirmás, se REEMPLAZAN por los de este PDF. Lo que ya estaba marcado (revisado, de qué trabajo fue) se conserva en los consumos que sigan iguales; si acá un consumo de Magma quedó como personal, o al revés, vale lo de esta pantalla.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>{ if(saving) return; if(window.confirm(`${tarjeta} todavía NO se guardó.\n\nSi volvés para elegir otro PDF, esta lectura se pierde.\n\n¿Volver igual?`)) setData(null) }} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
-          <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.ink3:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
+          <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.apagado:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>
         </div>
       </>}
     </div>
