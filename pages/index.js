@@ -21,13 +21,13 @@ import AvisosChicos from '../components/AvisosChicos'
 import HoraInput from '../components/HoraInput'
 import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
-import { codificarFechas, decodificarFechas, tentativosDe } from '../lib/fechas'
+import { codificarFechas, decodificarFechas, tentativosDe, resumenFechas } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
 import TicketsRevisar from '../components/TicketsRevisar'
 import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe, facturasCandidatas } from '../lib/extracto.mjs'
-import { PMS_ACTIVOS } from '../lib/roles'
+import { PMS_ACTIVOS, mailInternoDe } from '../lib/roles'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -1715,9 +1715,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     desglosar:presuDesglosado(initialData),
     edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
   } : { fp:hoyISO, dias:[], tentativos:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'' })
-  const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''},{id:2,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
+  const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const { data: session } = useSession()
+  const cel = useEsCelular()
   // datos extra para entidades nuevas
   const [ctNew,setCtNew]=useState({mail:'',telefono:'',cargo:'',cuit:''})
   const [agNew,setAgNew]=useState({cuit:'',condIVA:'Responsable Inscripto',mailFact:'',telefono:''})
@@ -1752,6 +1754,46 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     showToast&&showToast(`Tarifario ${form.agencia.trim()}: ${t.pedidos.map(x=>x.svc).join(' + ')} · total ${fmt(t.total)}`)
   /* eslint-disable-next-line */ },[form.agencia])
   useEffect(()=>{ const c=(data?.contactos||[]).find(x=>nrm(x['Nombre'])===nrm(form.contacto)); if(c) setCtNew({mail:sinErr(c['Mail']),telefono:sinErr(c['Teléfono']),cargo:sinErr(c['Cargo']),cuit:sinErr(c['Cuit'])}) /* eslint-disable-next-line */ },[form.contacto])
+
+  // ---- Lo que se completa solo (Juan, 25/10/2026: la app tiene que ser más rápida que el sheet) ----
+  // El PM es el que está cargando. Una sola vez al abrir: si después lo borra, no se lo vuelvo a poner.
+  const pmPuesto=useRef(false)
+  useEffect(()=>{
+    const m=String(session?.user?.email||'').toLowerCase()
+    if(isRep || pmPuesto.current || !m) return
+    pmPuesto.current=true
+    const yo=PMS_ACTIVOS.find(n=>mailInternoDe(n)===m)
+    if(yo) setForm(f=>f.pm?f:{...f, pm:yo})
+  /* eslint-disable-next-line */ },[session])
+  // Al elegir la agencia: si el último trabajo con ella fue directo (cliente = agencia), el
+  // cliente es el mismo; y el contacto, el último que se usó. Solo si el campo está vacío o lo
+  // había puesto la app (`auto`): lo que escribió el PM no se pisa.
+  const ultimoDeAgencia=nombre=>{ const n=nrm(nombre); if(!n) return null; const ps=(data?.presupuestos||[]).filter(p=>nrm(p['Agencia'])===n); return ps[ps.length-1]||null }
+  const auto=useRef({cliente:false, contacto:false})
+  useEffect(()=>{
+    if(isRep) return
+    const ag=form.agencia.trim()
+    const u=/^(sin agencia|directo)/i.test(ag) ? null : ultimoDeAgencia(ag)
+    const directo=!!u && nrm(u['Cliente'])===nrm(ag)
+    const ctUlt=String(u?.['Contacto']||'').trim()
+    setForm(f=>{
+      const ch={}
+      if(!f.cliente.trim() || auto.current.cliente){ ch.cliente=directo?ag:''; auto.current.cliente=directo }
+      if(!f.contacto.trim() || auto.current.contacto){ ch.contacto=ctUlt; auto.current.contacto=!!ctUlt }
+      return Object.keys(ch).some(k=>ch[k]!==f[k]) ? {...f, ...ch} : f
+    })
+  /* eslint-disable-next-line */ },[form.agencia])
+  // "Repetir el último": los servicios y precios del último presu de esta agencia (o cliente).
+  // Solo con la lista de servicios vacía, para no pisar lo que ya se cargó.
+  const ultimoParaRepetir = !isRep && (ultimoDeAgencia(form.agencia) || ((data?.presupuestos||[]).filter(p=>nrm(p['Cliente'])===nrm(form.cliente)&&form.cliente.trim()).pop()||null))
+  const sinServicios = !peds.some(p=>p.svc.trim()||(parseFloat(p.precio)||0)>0)
+  const repetirUltimo=()=>{
+    const u=ultimoParaRepetir; if(!u) return
+    const ls=readPedidosOrig(u); if(!ls.length) return showToast('Ese presupuesto no tiene servicios cargados','err')
+    setPeds(ls.map((p,i)=>({...p, id:Date.now()+i})))
+    setForm(f=>({...f, gan:parseMonto(u['Impuesto a las ganancias'])>0, iibb:parseMonto(u['IIBB'])>0}))
+    showToast(`Cargué los servicios del #${u['Columna 1']} (${u['Proyecto']||'sin proyecto'})`)
+  }
 
   const svcs=getSvcs(data)
   const updPed=(i,ch)=>setPeds(ps=>ps.map((p,j)=>j===i?{...p,...ch}:p))
@@ -1798,6 +1840,14 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   const adicCalc=adicList.map(p=>{ const costo=parseFloat(p.precio)||0; const man=parseFloat(p.precioCliente)||0; const precioCliente=man>0?man:Math.round(costo*factor); const margen=precioCliente-costo; const margenPct=precioCliente>0?(margen/precioCliente)*100:0; return {svc:p.svc,costo,precioCliente,margen,margenPct} })
   const costoBase=baseList.reduce((s,p)=>s+(parseFloat(p.precio)||0)*cantDe(p),0)
   const margenBase=total-costoBase, margenBasePct=total>0?(margenBase/total)*100:0
+  // Lo que queda para Magma = precio − lo que se paga afuera (la misma "Ganancia Magma" del
+  // resto de la app, ver gananciaPresu). Al presupuestar todavía no hay staff, así que la
+  // EDICIÓN cuenta siempre como de Magma salvo que se marque freelance (Juan, 25/10/2026).
+  // Antes acá restaba todo: #2437 Grower Things decía "Margen −22% · bajo" y a Magma le
+  // quedaban $230.000 de $450.000. Solo se muestra: al sheet va lo mismo que antes.
+  const esDeMagma=p=>esPedidoEdicion(p.svc) && !p.freelance
+  const costoAfuera=baseList.reduce((s,p)=>esDeMagma(p)?s:s+(parseFloat(p.precio)||0)*cantDe(p),0)
+  const quedaMagma=total-costoAfuera, quedaPct=total>0?(quedaMagma/total)*100:0
 
   // ---- Desglose por ítem: lo que va a ver el cliente, acá y no recién en el PDF ----
   // Se arma con las MISMAS líneas que van al sheet (la cantidad ya expandida) y contra
@@ -1840,8 +1890,11 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   if(isRep && !String(form.motivo||'').trim())falta.push('motivo')
   const puedeGuardar = falta.length===0 && !saving
 
-  async function guardar(){
+  // `pdfWin`: la pestaña del PDF, abierta en el mismo clic ("Crear y abrir el PDF") para
+  // que el navegador no la bloquee; se le pone la dirección cuando el sheet devuelve el número.
+  async function guardar(pdfWin){
     setSaving(true)
+    const cerrarPdf=()=>{ try{ pdfWin&&pdfWin.close() }catch(e){} }
     // fechas
     // El tipo (dia/rango/multi) sale solo de los días elegidos — ver lib/fechas.js
     const { fechaEvento:fechaEventoOut, tipo:tipoFechas, adicionales:fechasAdic, cant:cantFechas } = codificarFechas(form.dias, form.tentativos)
@@ -1884,7 +1937,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     try{
       const r=await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j=await r.json()
-      if(!j.ok){ showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
+      if(!j.ok){ cerrarPdf(); showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
+      if(pdfWin) try{ pdfWin.location.href=`/presupuesto?nro=${encodeURIComponent(j.numero)}` }catch(e){}
       if(j.aviso) showToast(j.aviso,'err')   // p. ej. falta la columna "Precio visible" en el sheet
       // Represupuestar: marcar el original como REPRESUPUESTADO (con motivo)
       // `nuevo` va para que las tareas de Edición del original pasen al número nuevo
@@ -1899,7 +1953,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       if(clNuevo){ try{ await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.cliente})}) }catch(e){} }
       limpiarBorrador()
       showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
-    }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
+    }catch(e){ cerrarPdf(); showToast('Error de conexión','err'); setSaving(false) }
   }
 
   // ---- Que no se pierda lo cargado ----
@@ -1947,246 +2001,334 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     limpiarBorrador(); onClose && onClose()
   }
 
-  const colP = (lbl,key,opts)=> <div style={{flex:1, minWidth:opts?.min||140}}><label style={lblV2}>{lbl}</label>{opts?.list?<><input list={opts.list} value={form[key]} onChange={e=>upd(key,e.target.value)} placeholder={opts.ph||''} style={inpV2}/>{opts.datalist}</>:<input type={opts?.type||'text'} value={form[key]} onChange={e=>upd(key,e.target.value)} placeholder={opts?.ph||''} style={inpV2}/>}</div>
+  // ---- La pantalla (rediseño 25/10/2026, DESIGN.md "El escritorio de producción") ----
+  // Cuatro pasos en el orden en que se piensa un presu: Quién → Qué → Cuándo → Precio.
+  // Lo que casi nunca se toca (impuestos, plazo, brief del editor, observaciones) va
+  // plegado con su resumen a la vista. Botón principal en tinta: el rojo es para lo atrasado.
+  const [verCal,setVerCal]=useState(false)
+  const [abiertos,setAbiertos]=useState({cond:false, brief:false, obs:!!String(initialData?.['Observaciones']||'').trim()})
+  const [opcLinea,setOpcLinea]=useState(null)   // id de la línea con las opciones abiertas
+  const [verCt,setVerCt]=useState(false)
+  const [cierre,setCierre]=useState(null)       // lo que se está escribiendo en "Cerrar el precio en"
+  const plegar=k=>setAbiertos(a=>({...a,[k]:!a[k]}))
+  const aplicarCierre=()=>{ const n=parseInt(String(cierre??'').replace(/[^\d]/g,''))||0; if(n>0 && n!==Math.round(total)) fijarTotal(n); setCierre(null) }
+  const crearYAbrirPdf=()=>{ if(!puedeGuardar) return; const w=window.open('about:blank','_blank'); guardar(w) }
+  const alTeclado=e=>{ if(e.key==='Enter' && (e.metaKey||e.ctrlKey) && puedeGuardar){ e.preventDefault(); guardar() } }
 
-  return <div onClick={cerrar} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'32px 20px'}}>
-    <div onClick={e=>e.stopPropagation()} style={{width:'100%', maxWidth:900, background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
-      <div style={{padding:'18px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, background:T.surface, borderRadius:'16px 16px 0 0', zIndex:2}}>
-        <div style={{fontSize:17, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'}</div>
-        <button onClick={cerrar} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+  const lblP={display:'block', fontSize:12.5, fontWeight:500, color:T.ink2, marginBottom:5}
+  const inpP={...inpV2, background:T.surface, border:`1px solid ${T.campo}`, fontSize:14, padding:'9px 11px'}
+  const ayudaP={fontSize:12.5, color:T.ink2, marginTop:4, lineHeight:1.4}
+  const secP={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', padding:cel?'14px 14px':'16px 18px', marginBottom:12}
+  const linkP={fontSize:13.5, color:T.ink, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', textDecoration:'underline', textUnderlineOffset:3}
+  const paso=(n,titulo,der)=> <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:12}}>
+    <span style={{width:20, height:20, borderRadius:20, background:T.ink, color:'#fff', fontSize:12, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>{n}</span>
+    <span style={{fontSize:13.5, fontWeight:700, color:T.ink}}>{titulo}</span>
+    <div style={{flex:1}}/>{der}
+  </div>
+  const campo=(lbl,key,opts={})=> <div style={{flex:opts.flex||1, minWidth:opts.min||(cel?'100%':140)}}>
+    <label style={lblP}>{lbl}</label>
+    <input list={opts.list} value={form[key]} onChange={e=>{ if(opts.auto) auto.current[opts.auto]=false; upd(key,e.target.value) }} placeholder={opts.ph||''} style={inpP}/>
+    {opts.datalist}
+    {opts.ayuda && <div style={ayudaP}>{opts.ayuda}</div>}
+  </div>
+  const plegable=(k,titulo,resumen,hijos)=> <div style={{background:abiertos[k]?T.surface:T.surfaceAlt, borderRadius:12, marginBottom:8, boxShadow:abiertos[k]?'0 2px 10px rgba(0,0,0,0.05)':'none'}}>
+    <button type="button" onClick={()=>plegar(k)} aria-expanded={!!abiertos[k]} style={{width:'100%', display:'flex', alignItems:'center', gap:10, padding:'11px 16px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', textAlign:'left'}}>
+      <span style={{fontSize:14, fontWeight:600, color:T.ink}}>{titulo}</span>
+      <span style={{flex:1}}/>
+      <span style={{fontSize:13, color:T.ink2}}>{resumen}</span>
+      <span style={{fontSize:11, color:T.ink2}}>{abiertos[k]?'▲':'▼'}</span>
+    </button>
+    {abiertos[k] && <div style={{padding:'2px 16px 16px'}}>{hijos}</div>}
+  </div>
+
+  const plazoTxt={'0':'Contado','15':'15 días','30':'30 días','60':'60 días'}[form.plazo]||'Contado'
+  const impTxt=form.gan&&form.iibb?'con Ganancias e IIBB':!form.gan&&!form.iibb?'sin Ganancias ni IIBB':form.gan?'con Ganancias, sin IIBB':'con IIBB, sin Ganancias'
+  const resumenCond=[plazoTxt, impTxt, (parseFloat(form.interes)||0)?`interés ${form.interes}%`:'', form.desglosar?'precio por ítem':''].filter(Boolean).join(' · ')
+  const preguntasBrief=[form.edClase, form.edFormato, form.edGrafica].filter(x=>String(x||'').trim()).length
+  const sinAj=Math.round(totalSinAjuste)
+  const txtAjuste = ajMto<0 ? `Descuento de ${fmt(-ajMto)} sobre ${fmt(sinAj)} (−${sinAj>0?Math.round(-ajMto/sinAj*100):0}%)`
+    : ajMto>0 ? `Recargo de ${fmt(ajMto)} sobre ${fmt(sinAj)}` : 'Sin descuento ni recargo'
+  const sem=semaforo(quedaPct)
+  const fechasTxt=(form.dias||[]).length ? resumenFechas(form.dias, form.tentativos) : ''
+
+  return <div onClick={cerrar} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:cel?'0':'32px 20px'}}>
+    <div onClick={e=>e.stopPropagation()} onKeyDown={alTeclado} role="dialog" aria-label={isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'} style={{width:'100%', maxWidth:860, background:T.bg, borderRadius:cel?0:16, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content', minHeight:cel?'100%':undefined}}>
+      <div style={{padding:cel?'14px 16px':'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', gap:10, alignItems:'center', position:'sticky', top:0, background:T.surface, borderRadius:cel?0:'16px 16px 0 0', zIndex:2, flexWrap:'wrap'}}>
+        <div style={{fontSize:18, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'}</div>
+        <div style={{flex:1}}/>
+        {ultimoParaRepetir && sinServicios && <button type="button" onClick={repetirUltimo} title={`Carga los servicios y precios del #${ultimoParaRepetir['Columna 1']} · ${ultimoParaRepetir['Proyecto']||''}`} style={{padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer'}}>↺ Repetir el último de {String(ultimoParaRepetir['Cliente']||ultimoParaRepetir['Agencia']||'').trim()}</button>}
+        <button type="button" onClick={cerrar} aria-label="Cerrar" style={{border:'none', background:'transparent', fontSize:24, color:T.ink2, cursor:'pointer', lineHeight:1, padding:'0 4px'}}>×</button>
       </div>
 
-      <div style={{padding:'20px 24px'}}>
-        {recuperado && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:'10px 13px', marginBottom:14}}>
-          <span style={{fontSize:12.5, color:T.ink2, flex:1}}>Recuperamos el presupuesto que habías dejado a medio cargar.</span>
-          <button onClick={empezarDeCero} style={{padding:'5px 11px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, cursor:'pointer'}}>Empezar de cero</button>
+      <div style={{padding:cel?'14px 12px 4px':'18px 22px 6px'}}>
+        {recuperado && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'10px 14px', marginBottom:12}}>
+          <span style={{fontSize:13.5, color:T.ink2, flex:1}}>Recuperamos el presupuesto que habías dejado a medio cargar.</span>
+          <button type="button" onClick={empezarDeCero} style={{padding:'6px 12px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, cursor:'pointer'}}>Empezar de cero</button>
         </div>}
-        {isRep && <div style={{background:T.brandSoft, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 14px', marginBottom:16}}>
-          <div style={{fontSize:12, color:T.ink2, marginBottom:8}}>Se crea una <strong>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
-          <label style={{...lblV2, color:T.brand}}>Motivo del represupuesto *</label>
+        {isRep && <div style={secP}>
+          <div style={{fontSize:13.5, color:T.ink2, marginBottom:10, lineHeight:1.45}}>Se crea una <strong style={{color:T.ink}}>versión nueva</strong> (en EN ESPERA) con estos datos editables. El original <strong style={{color:T.ink}}>#{initialData['Columna 1']}</strong> queda marcado como REPRESUPUESTADO.</div>
+          <label style={{...lblP, color:T.ink, fontWeight:600}}>Motivo del represupuesto</label>
           {/* Chips = motivos comparables entre sí. Escritos a mano cada uno sale distinto
               y después no se puede agrupar para ver por qué se rehacen los presus. */}
           <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:8}}>
             {MOTIVOS_REPRESUPUESTADO.map(m=>{ const sel=form.motivo===m
-              return <button key={m} type="button" onClick={()=>upd('motivo', sel?'':m)} style={{padding:'5px 11px', borderRadius:20, fontSize:11.5, cursor:'pointer', border:`1px solid ${sel?T.brand:T.border}`, background:sel?T.brandSoft:T.surface, color:sel?T.brand:T.ink2, fontWeight:sel?600:400}}>{m}</button>
+              return <button key={m} type="button" onClick={()=>upd('motivo', sel?'':m)} style={{padding:'6px 12px', borderRadius:999, fontSize:13, cursor:'pointer', border:`1px solid ${sel?T.ink:T.campo}`, background:sel?T.ink:T.surface, color:sel?'#fff':T.ink, fontWeight:sel?600:400}}>{m}</button>
             })}
           </div>
-          <input value={form.motivo||''} onChange={e=>upd('motivo',e.target.value)} placeholder="Ej: cambio de scope, ajuste de precios, nuevo pedido del cliente…" style={{...inpV2, borderColor:form.motivo?T.border:T.brand}} autoFocus/>
+          <input value={form.motivo||''} onChange={e=>upd('motivo',e.target.value)} placeholder="O escribilo: cambio de scope, ajuste de precios…" style={{...inpP, borderStyle:form.motivo?'solid':'dashed', borderColor:form.motivo?T.campo:T.ink3}} autoFocus/>
           <div style={{display:'flex', justifyContent:'flex-end', marginTop:10}}>
-            <button onClick={async()=>{
+            <button type="button" onClick={async()=>{
               if(!form.motivo||!form.motivo.trim()){ showToast('Poné el motivo primero (ej: duplicado)','err'); return }
               if(!window.confirm(`Marcar #${initialData['Columna 1']} como REPRESUPUESTADO sin crear uno nuevo.\nUsalo si la versión nueva ya está cargada aparte.\n\n¿Confirmás?`)) return
               try{ const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:initialData['Columna 1'], estado:'REPRESUPUESTADO', motivo:form.motivo})}); const j=await r.json(); if(j.error){showToast(j.error,'err');return} showToast(`#${initialData['Columna 1']} marcado como represupuestado`); onGuardado&&onGuardado() }
               catch(e){ showToast('Error de conexión','err') }
-            }} style={{padding:'7px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontWeight:500, cursor:'pointer'}}>Ya lo cargué aparte — marcar este sin crear uno nuevo →</button>
+            }} style={{padding:'7px 12px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, cursor:'pointer'}}>Ya lo cargué aparte: marcar este sin crear uno nuevo →</button>
           </div>
         </div>}
-        {/* Datos */}
-        <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
-          {colP('Agencia (quién paga)','agencia',{list:'np-ag', ph:'Directo si no hay', datalist:<datalist id="np-ag">{ags.map(a=><option key={a} value={a}/>)}</datalist>})}
-          {colP('Cliente / Marca','cliente',{list:'np-cl', datalist:<datalist id="np-cl">{clis.map(a=><option key={a} value={a}/>)}</datalist>})}
-        </div>
-        <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
-          {colP('Proyecto','proyecto',{min:200})}
-          {colP('Contacto','contacto',{list:'np-ct', datalist:<datalist id="np-ct">{cts.map(a=><option key={a} value={a}/>)}</datalist>})}
-          {colP('PM','pm',{list:'np-pm', min:110, datalist:<datalist id="np-pm">{pms.map(a=><option key={a} value={a}/>)}</datalist>})}
-        </div>
-        {/* Entidades nuevas → completar datos (se guardan al crear el presu) */}
-        {agNueva && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px', marginBottom:12}}>
-          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>🏢 Agencia nueva: "{form.agencia}" — completá sus datos (se guarda)</div>
-          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-            <div style={{flex:'1 1 130px'}}><label style={lblV2}>CUIT</label><input value={agNew.cuit} onChange={e=>setAgNew(a=>({...a,cuit:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 150px'}}><label style={lblV2}>Cond. IVA</label><input value={agNew.condIVA} onChange={e=>setAgNew(a=>({...a,condIVA:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 160px'}}><label style={lblV2}>Mail facturación</label><input value={agNew.mailFact} onChange={e=>setAgNew(a=>({...a,mailFact:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={agNew.telefono} onChange={e=>setAgNew(a=>({...a,telefono:e.target.value}))} style={inpV2}/></div>
-          </div>
-        </div>}
-        {ctMostrar && <div style={{background:T.warnSoft, border:`1px solid ${T.warn}40`, borderRadius:10, padding:'12px 14px', marginBottom:12}}>
-          <div style={{fontSize:12, fontWeight:600, color:T.warn, marginBottom:8}}>☎ {ctNuevo?`Contacto nuevo: "${form.contacto}" — completá sus datos`:`A "${form.contacto}" le faltan datos — completalos`} (se guarda)</div>
-          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-            <div style={{flex:'1 1 160px'}}><label style={lblV2}>Mail</label><input value={ctNew.mail} onChange={e=>setCtNew(c=>({...c,mail:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Teléfono</label><input value={ctNew.telefono} onChange={e=>setCtNew(c=>({...c,telefono:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 130px'}}><label style={lblV2}>Cargo</label><input value={ctNew.cargo} onChange={e=>setCtNew(c=>({...c,cargo:e.target.value}))} style={inpV2}/></div>
-            <div style={{flex:'1 1 130px'}}><label style={lblV2}>CUIT</label><input value={ctNew.cuit} onChange={e=>setCtNew(c=>({...c,cuit:e.target.value}))} style={inpV2}/></div>
-          </div>
-        </div>}
-        {clNuevo && <div style={{fontSize:11.5, color:T.warn, fontWeight:600, marginBottom:12, marginTop:-2}}>🎯 Cliente nuevo: "{form.cliente}" — se guarda automáticamente al crear el presu.</div>}
-        {/* Fecha */}
-        <div style={{marginBottom:18}}>
-          <label style={lblV2}>Fechas del evento</label>
-          <CampoFechas dias={form.dias} tentativos={form.tentativos} onChange={(d,t)=>setForm(f=>({...f, dias:d, tentativos:t}))}/>
-        </div>
 
-        {/* Servicios */}
-        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
-          <div style={{fontSize:12.5, fontWeight:600, color:T.ink}}>Servicios</div>
-          <div style={{flex:1}}/>
-          <label title="El cliente ve cuánto sale cada servicio, no sólo el total. Se guarda en el presu y el PDF sale así." style={{display:'flex', gap:6, alignItems:'center', fontSize:11.5, fontWeight:form.desglosar?600:400, color:form.desglosar?T.pos:T.ink2, cursor:'pointer'}}>
-            <input type="checkbox" checked={!!form.desglosar} onChange={e=>upd('desglosar',e.target.checked)} style={{cursor:'pointer'}}/>
-            Mostrar precio por ítem al cliente
-          </label>
-        </div>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 48px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 6px'}}>
-          <span>Servicio</span><span style={{textAlign:'right'}}>Costo c/u</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'center'}}>Fee</span><span style={{textAlign:'center'}} title="El cliente ve el precio de ESTA línea (viáticos, rental…) aunque el resto del presu vaya sin precios. El precio final no cambia.">Ver $</span><span/>
-        </div>
-        {peds.map((p,i)=> !p.adicional && (()=>{ const n=cantDe(p), costo=parseFloat(p.precio)||0; return (
-          <div key={p.id} style={{marginBottom:7}}>
-            <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px 58px 60px 48px 36px', gap:8, alignItems:'center'}}>
-              <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" style={inpV2}/>
-              <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-              {/* 3 cápsulas = poner 3 acá, no cargar la misma línea tres veces */}
-              <input type="number" min="1" max={MAX_SLOTS} value={p.cant ?? 1} onChange={e=>updPed(i,{cant:e.target.value})} title="Cuántos de este servicio" style={{...inpV2, textAlign:'center', fontFamily:MONO, padding:'8px 4px', color:n>1?T.brand:T.ink, fontWeight:n>1?600:400}}/>
-              <input type="checkbox" checked={p.feeAg} onChange={e=>updPed(i,{feeAg:e.target.checked})} title="Aplica fee Magma" style={{justifySelf:'center', cursor:'pointer'}}/>
-              {/* "$" de una línea sola: el cliente ve ese precio (viáticos, rental) sin abrir el resto */}
-              <input type="checkbox" checked={!!form.desglosar||!!p.verPrecio} disabled={!!form.desglosar} onChange={e=>updPed(i,{verPrecio:e.target.checked})} title={form.desglosar?'Con "Mostrar precio por ítem" ya salen todos con precio':'El cliente ve el precio de esta línea aunque el resto vaya cerrado'} style={{justifySelf:'center', cursor:form.desglosar?'default':'pointer', accentColor:T.pos}}/>
-              <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+        {/* 1 · Quién */}
+        <div style={secP}>
+          {paso(1,'Quién')}
+          <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:12}}>
+            {campo('Agencia (quién paga)','agencia',{list:'np-ag', ph:'Directo si no hay', datalist:<datalist id="np-ag">{ags.map(a=><option key={a} value={a}/>)}</datalist>})}
+            {campo('Cliente / marca','cliente',{list:'np-cl', auto:'cliente', datalist:<datalist id="np-cl">{clis.map(a=><option key={a} value={a}/>)}</datalist>,
+              ayuda: auto.current.cliente && form.cliente===form.agencia.trim() ? 'Directo: igual que la agencia' : clNuevo ? 'Cliente nuevo: se guarda al crear el presupuesto' : null})}
+          </div>
+          <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
+            {campo('Proyecto','proyecto',{min:cel?'100%':200})}
+            {campo('Contacto','contacto',{list:'np-ct', auto:'contacto', datalist:<datalist id="np-ct">{cts.map(a=><option key={a} value={a}/>)}</datalist>,
+              ayuda: ctIncompleto && !ctNuevo
+                ? <button type="button" onClick={()=>setVerCt(v=>!v)} style={{...linkP, fontSize:12.5, padding:0, color:T.warn}}>Le faltan datos: completarlos {verCt?'▲':'▼'}</button>
+                : auto.current.contacto ? 'El último de esta agencia' : null})}
+            {campo('PM','pm',{list:'np-pm', flex:0.6, min:cel?'100%':110, datalist:<datalist id="np-pm">{pms.map(a=><option key={a} value={a}/>)}</datalist>,
+              ayuda: form.pm && mailInternoDe(form.pm)===String(session?.user?.email||'').toLowerCase() ? 'Sos vos' : null})}
+          </div>
+          {/* Entidades nuevas → completar datos (se guardan al crear el presu) */}
+          {agNueva && <div style={{background:T.warnSoft, borderRadius:10, padding:'12px 14px', marginTop:12}}>
+            <div style={{fontSize:13, fontWeight:600, color:T.warn, marginBottom:8}}>Agencia nueva: "{form.agencia}". Completá sus datos (se guardan al crear)</div>
+            <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+              <div style={{flex:'1 1 130px'}}><label style={lblP}>CUIT</label><input value={agNew.cuit} onChange={e=>setAgNew(a=>({...a,cuit:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 150px'}}><label style={lblP}>Condición de IVA</label><input value={agNew.condIVA} onChange={e=>setAgNew(a=>({...a,condIVA:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 160px'}}><label style={lblP}>Mail de facturación</label><input value={agNew.mailFact} onChange={e=>setAgNew(a=>({...a,mailFact:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 130px'}}><label style={lblP}>Teléfono</label><input value={agNew.telefono} onChange={e=>setAgNew(a=>({...a,telefono:e.target.value}))} style={inpP}/></div>
             </div>
-            {n>1 && costo>0 && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>{n} × {fmt(costo)} = <strong style={{color:T.ink2}}>{fmt(costo*n)}</strong> de costo · van {n} líneas al sheet y {n} tareas al tablero de Edición</div>}
-            {(form.desglosar||p.verPrecio) && (p.svc.trim()||costo>0) && <div style={{fontSize:10.5, marginTop:3, paddingLeft:2, color:costo>0?T.pos:T.warn}}>
-              {costo>0
-                ? <>El cliente ve <strong>{fmt(precioItem[p.id]||0)} + IVA</strong>{n>1?<span style={{color:T.ink3}}> · {fmt(Math.round((precioItem[p.id]||0)/n))} c/u</span>:null}{!form.desglosar && <span style={{color:T.ink3}}> · solo esta línea sale con precio, el resto no</span>}</>
-                : <>Sin costo cargado — en el PDF sale listado sin precio</>}
-            </div>}
-          </div>
-        )})())}
-        <datalist id="np-svc">{svcs.map(s=><option key={s.n} value={s.n}/>)}</datalist>
-        <div style={{display:'flex', gap:14, alignItems:'center'}}>
-          <button onClick={()=>addPed(false)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Agregar servicio</button>
-          <button onClick={()=>setSvcNew({nombre:'',precio:'',fee:true})} style={{fontSize:12, color:T.brand, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0'}}>+ Crear servicio nuevo</button>
+          </div>}
+          {(ctNuevo || (ctIncompleto && verCt)) && <div style={{background:T.warnSoft, borderRadius:10, padding:'12px 14px', marginTop:12}}>
+            <div style={{fontSize:13, fontWeight:600, color:T.warn, marginBottom:8}}>{ctNuevo?`Contacto nuevo: "${form.contacto}". Completá sus datos`:`Datos de "${form.contacto}"`} (se guardan al crear)</div>
+            <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+              <div style={{flex:'1 1 160px'}}><label style={lblP}>Mail</label><input value={ctNew.mail} onChange={e=>setCtNew(c=>({...c,mail:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 130px'}}><label style={lblP}>Teléfono</label><input value={ctNew.telefono} onChange={e=>setCtNew(c=>({...c,telefono:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 130px'}}><label style={lblP}>Cargo</label><input value={ctNew.cargo} onChange={e=>setCtNew(c=>({...c,cargo:e.target.value}))} style={inpP}/></div>
+              <div style={{flex:'1 1 130px'}}><label style={lblP}>CUIT</label><input value={ctNew.cuit} onChange={e=>setCtNew(c=>({...c,cuit:e.target.value}))} style={inpP}/></div>
+            </div>
+          </div>}
         </div>
-        {svcNew && <div style={{border:`1px solid ${T.brand}`, borderRadius:8, padding:12, marginTop:8, background:T.surfaceAlt}}>
-          <div style={{fontSize:11, fontWeight:600, color:T.ink2, marginBottom:8}}>SERVICIO NUEVO — queda guardado para todos los presupuestos</div>
-          <div style={{display:'grid', gridTemplateColumns:'1.5fr 130px', gap:8, marginBottom:8}}>
-            <input value={svcNew.nombre} onChange={e=>setSvcNew(s=>({...s,nombre:e.target.value}))} placeholder="Ej: Locución" style={inpV2} autoFocus/>
-            <input type="number" value={svcNew.precio} onChange={e=>setSvcNew(s=>({...s,precio:e.target.value}))} placeholder="precio" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-          </div>
-          <label style={{display:'flex', gap:6, alignItems:'center', fontSize:12, color:T.ink2, marginBottom:10, cursor:'pointer'}}>
-            <input type="checkbox" checked={svcNew.fee} onChange={e=>setSvcNew(s=>({...s,fee:e.target.checked}))} style={{cursor:'pointer'}}/>
-            Aplica fee Magma <span style={{color:T.ink3}}>(destildar si es un costo que se pasa tal cual: viáticos, rental…)</span>
-          </label>
-          <div style={{display:'flex', gap:8}}>
-            <button onClick={guardarSvc} disabled={svcSaving} style={{fontSize:12, padding:'6px 14px', borderRadius:6, border:'none', background:T.brand, color:'#fff', cursor:svcSaving?'wait':'pointer'}}>{svcSaving?'Guardando…':'Guardar'}</button>
-            <button onClick={()=>setSvcNew(null)} style={{fontSize:12, padding:'6px 14px', borderRadius:6, border:`1px solid ${T.border}`, background:'transparent', color:T.ink2, cursor:'pointer'}}>Cancelar</button>
-          </div>
-        </div>}
 
-        {/* Adicionales opcionales */}
-        {adicList.length>0 && <>
-          <div style={{fontSize:12.5, fontWeight:600, color:T.ink, margin:'14px 0 6px'}}>Adicionales opcionales <span style={{fontWeight:400, color:T.ink3}}>(no suman al total principal)</span></div>
-          <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 110px 36px', gap:8, fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 5px'}}>
-            <span>Adicional</span><span style={{textAlign:'right'}}>Costo (tuyo)</span><span style={{textAlign:'right'}}>Precio cliente</span><span/>
-          </div>
-          {peds.map((p,i)=> p.adicional && (()=>{ const costo=parseFloat(p.precio)||0, man=parseFloat(p.precioCliente)||0, cli=man>0?man:Math.round(costo*factor); return (
-            <div key={p.id} style={{marginBottom:8}}>
-              <div style={{display:'grid', gridTemplateColumns:'1.5fr 110px 110px 36px', gap:8, alignItems:'center'}}>
-                <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Adicional" style={inpV2}/>
-                <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="costo" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-                <input type="number" value={p.precioCliente} onChange={e=>updPed(i,{precioCliente:e.target.value})} placeholder="auto" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
-                <button onClick={()=>delPed(i)} style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:16}}>×</button>
+        {/* 2 · Qué se vende */}
+        <div style={secP}>
+          {paso(2,'Qué se vende')}
+          {!cel && <div style={{display:'grid', gridTemplateColumns:'1fr 64px 128px 136px 34px 30px', gap:8, fontSize:12.5, color:T.ink2, padding:'0 2px 6px', borderBottom:`1px solid ${T.border}`, marginBottom:8}}>
+            <span>Servicio</span><span style={{textAlign:'center'}}>Cant.</span><span style={{textAlign:'right'}}>Costo c/u</span><span>Quién lo hace</span><span/><span/>
+          </div>}
+          {peds.map((p,i)=> !p.adicional && (()=>{ const n=cantDe(p), costo=parseFloat(p.precio)||0, edicion=esPedidoEdicion(p.svc), abierta=opcLinea===p.id; return (
+            <div key={p.id} style={{padding:'4px 0 8px', borderBottom:`1px solid ${T.surfaceAlt}`, marginBottom:4}}>
+              <div style={{display:'grid', gridTemplateColumns:cel?'1fr 56px 110px':'1fr 64px 128px 136px 34px 30px', gap:8, alignItems:'center'}}>
+                <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" aria-label="Servicio" style={{...inpP, gridColumn:cel?'1 / -1':undefined}}/>
+                {/* 3 cápsulas = poner 3 acá, no cargar la misma línea tres veces */}
+                <input type="number" min="1" max={MAX_SLOTS} value={p.cant ?? 1} onChange={e=>updPed(i,{cant:e.target.value})} aria-label="Cantidad" title="Cuántos de este servicio" style={{...inpP, textAlign:'center', fontFamily:MONO, padding:'9px 4px', fontWeight:n>1?700:400}}/>
+                <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" aria-label="Costo por unidad" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                {p.svc.trim()
+                  ? edicion
+                    ? <button type="button" onClick={()=>updPed(i,{freelance:!p.freelance})} title="La edición la hace Magma salvo que la marques freelance. Solo cambia lo que ves en el margen." style={{justifySelf:'start', padding:'4px 11px', borderRadius:999, fontSize:12.5, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${p.freelance?T.campo:T.posSoft}`, background:p.freelance?T.surface:T.posSoft, color:p.freelance?T.ink2:T.pos, fontWeight:p.freelance?400:600}}>{p.freelance?'Freelance':'Lo hace Magma'}</button>
+                    : <span style={{justifySelf:'start', padding:'4px 11px', borderRadius:999, fontSize:12.5, border:`1px solid ${T.campo}`, color:T.ink2, whiteSpace:'nowrap'}}>De afuera</span>
+                  : <span/>}
+                <button type="button" onClick={()=>setOpcLinea(abierta?null:p.id)} aria-label="Opciones de la línea" aria-expanded={abierta} title="Fee Magma y precio a la vista" style={{border:'none', background:abierta?T.surfaceAlt:'transparent', borderRadius:8, color:T.ink2, cursor:'pointer', fontSize:16, height:32}}>⋯</button>
+                <button type="button" onClick={()=>delPed(i)} aria-label="Sacar esta línea" style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:18}}>×</button>
               </div>
-              <div style={{fontSize:10.5, color:T.ink3, marginTop:3, paddingLeft:2}}>En el PDF el cliente ve: <strong style={{color:T.brand}}>{fmt(cli)} + IVA</strong>{man<=0?' (auto, con tu margen — escribí un precio cliente para fijarlo)':''}</div>
+              {(!p.feeAg || (p.verPrecio&&!form.desglosar)) && !abierta && <div style={{...ayudaP, paddingLeft:2}}>{[!p.feeAg&&'Sin fee Magma (se pasa al costo)', p.verPrecio&&!form.desglosar&&'El cliente ve el precio de esta línea'].filter(Boolean).join(' · ')}</div>}
+              {abierta && <div style={{display:'flex', gap:18, flexWrap:'wrap', background:T.surfaceAlt, borderRadius:10, padding:'10px 12px', marginTop:8}}>
+                <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13.5, color:T.ink, cursor:'pointer'}}>
+                  <input type="checkbox" checked={p.feeAg} onChange={e=>updPed(i,{feeAg:e.target.checked})}/> Lleva fee Magma <span style={{color:T.ink2}}>(sacalo en viáticos, rental…)</span>
+                </label>
+                {/* "$" de una línea sola: el cliente ve ese precio (viáticos, rental) sin abrir el resto */}
+                <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13.5, color:form.desglosar?T.ink2:T.ink, cursor:form.desglosar?'default':'pointer'}}>
+                  <input type="checkbox" checked={!!form.desglosar||!!p.verPrecio} disabled={!!form.desglosar} onChange={e=>updPed(i,{verPrecio:e.target.checked})}/> El cliente ve el precio de esta línea {form.desglosar && <span style={{color:T.ink2}}>(ya salen todos: "precio por ítem" en Condiciones)</span>}
+                </label>
+              </div>}
+              {n>1 && costo>0 && <div style={{...ayudaP, paddingLeft:2}}>{n} × {fmt(costo)} = <strong style={{color:T.ink}}>{fmt(costo*n)}</strong> · van {n} líneas al sheet{edicion?` y ${n} tareas al tablero de Edición`:''}</div>}
+              {(form.desglosar||p.verPrecio) && (p.svc.trim()||costo>0) && <div style={{...ayudaP, paddingLeft:2}}>
+                {costo>0
+                  ? <>El cliente ve <strong style={{color:T.ink}}>{fmt(precioItem[p.id]||0)} + IVA</strong>{n>1?<> · {fmt(Math.round((precioItem[p.id]||0)/n))} c/u</>:null}</>
+                  : <>Sin costo cargado: en el PDF sale listado sin precio</>}
+              </div>}
             </div>
           )})())}
-        </>}
-        <button onClick={()=>addPed(true)} style={{fontSize:12, color:T.ink2, background:'transparent', border:'none', cursor:'pointer', padding:'4px 0', marginLeft:adicList.length>0?0:12}}>+ Agregar adicional opcional</button>
+          <datalist id="np-svc">{svcs.map(s=><option key={s.n} value={s.n}/>)}</datalist>
+          <div style={{display:'flex', gap:18, alignItems:'center', flexWrap:'wrap', marginTop:6}}>
+            <button type="button" onClick={()=>addPed(false)} style={linkP}>+ Agregar servicio</button>
+            <button type="button" onClick={()=>addPed(true)} style={linkP}>+ Opcional para el cliente</button>
+            <button type="button" onClick={()=>setSvcNew({nombre:'',precio:'',fee:true})} style={{...linkP, color:T.ink2}}>+ Servicio que no está en la lista</button>
+          </div>
+          {svcNew && <div style={{border:`1px solid ${T.campo}`, borderRadius:10, padding:12, marginTop:10, background:T.surfaceAlt}}>
+            <div style={{fontSize:13, fontWeight:600, color:T.ink, marginBottom:8}}>Servicio nuevo <span style={{fontWeight:400, color:T.ink2}}>· queda guardado para todos los presupuestos</span></div>
+            <div style={{display:'grid', gridTemplateColumns:cel?'1fr':'1.5fr 130px', gap:8, marginBottom:8}}>
+              <input value={svcNew.nombre} onChange={e=>setSvcNew(s=>({...s,nombre:e.target.value}))} placeholder="Ej: Locución" aria-label="Nombre del servicio" style={inpP} autoFocus/>
+              <input type="number" value={svcNew.precio} onChange={e=>setSvcNew(s=>({...s,precio:e.target.value}))} placeholder="precio" aria-label="Precio" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+            </div>
+            <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink, marginBottom:10, cursor:'pointer'}}>
+              <input type="checkbox" checked={svcNew.fee} onChange={e=>setSvcNew(s=>({...s,fee:e.target.checked}))}/>
+              Lleva fee Magma <span style={{color:T.ink2}}>(destildar si es un costo que se pasa tal cual: viáticos, rental…)</span>
+            </label>
+            <div style={{display:'flex', gap:8}}>
+              <button type="button" onClick={guardarSvc} disabled={svcSaving} style={{fontSize:13, padding:'7px 14px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontWeight:600, cursor:svcSaving?'wait':'pointer'}}>{svcSaving?'Guardando…':'Guardar servicio'}</button>
+              <button type="button" onClick={()=>setSvcNew(null)} style={{fontSize:13, padding:'7px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, cursor:'pointer'}}>Cancelar</button>
+            </div>
+          </div>}
 
-        {/* Opciones de cálculo */}
-        <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', margin:'18px 0', paddingTop:16, borderTop:`1px solid ${T.border}`}}>
-          <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer'}}><input type="checkbox" checked={form.gan} onChange={e=>upd('gan',e.target.checked)}/> Ganancias 35%</label>
-          <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer'}}><input type="checkbox" checked={form.iibb} onChange={e=>upd('iibb',e.target.checked)}/> IIBB 4%</label>
-          <div><label style={lblV2}>Plazo</label><select value={form.plazo} onChange={e=>upd('plazo',e.target.value)} style={{...inpV2, width:'auto'}}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
-          <div style={{width:90}}><label style={lblV2}>Interés %</label><input type="number" value={form.interes} onChange={e=>upd('interes',e.target.value)} style={{...inpV2, textAlign:'right'}}/></div>
-          <div><label style={lblV2}>Ajuste</label><select value={form.tajuste} onChange={e=>upd('tajuste',e.target.value)} style={{...inpV2, width:'auto'}}><option value="1">Recargo</option><option value="-1">Descuento</option></select></div>
-          <div style={{width:120}}><label style={lblV2}>Monto ajuste</label><input type="number" value={form.ajuste} onChange={e=>upd('ajuste',e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/></div>
-          <div style={{width:100}}><label style={{...lblV2, color:T.warn}}>Desc. % cliente</label><input type="number" value={form.descPct} onChange={e=>aplicarDescPct(e.target.value)} placeholder="ej 15" style={{...inpV2, textAlign:'right', borderColor:T.warn}}/></div>
+          {/* Adicionales opcionales */}
+          {adicList.length>0 && <div style={{marginTop:14, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
+            <div style={{fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:8}}>Opcionales para el cliente <span style={{fontWeight:400, color:T.ink2}}>· no suman al precio final</span></div>
+            {!cel && <div style={{display:'grid', gridTemplateColumns:'1fr 120px 120px 30px', gap:8, fontSize:12.5, color:T.ink2, padding:'0 2px 5px'}}>
+              <span>Opcional</span><span style={{textAlign:'right'}}>Costo (tuyo)</span><span style={{textAlign:'right'}}>Precio cliente</span><span/>
+            </div>}
+            {peds.map((p,i)=> p.adicional && (()=>{ const costo=parseFloat(p.precio)||0, man=parseFloat(p.precioCliente)||0, cli=man>0?man:Math.round(costo*factor); return (
+              <div key={p.id} style={{marginBottom:8}}>
+                <div style={{display:'grid', gridTemplateColumns:cel?'1fr 1fr 30px':'1fr 120px 120px 30px', gap:8, alignItems:'center'}}>
+                  <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Opcional" aria-label="Opcional" style={{...inpP, gridColumn:cel?'1 / -1':undefined}}/>
+                  <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="costo" aria-label="Costo" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                  <input type="number" value={p.precioCliente} onChange={e=>updPed(i,{precioCliente:e.target.value})} placeholder="auto" aria-label="Precio cliente" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                  <button type="button" onClick={()=>delPed(i)} aria-label="Sacar este opcional" style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:18}}>×</button>
+                </div>
+                <div style={{...ayudaP, paddingLeft:2}}>En el PDF el cliente ve <strong style={{color:T.ink}}>{fmt(cli)} + IVA</strong>{man<=0?' (con tu margen; escribí un precio cliente para fijarlo)':''}</div>
+              </div>
+            )})())}
+          </div>}
         </div>
 
-        {/* Horario fácil + ubicación */}
-        <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', marginBottom:12}}>
-          <div><label style={lblV2}>Horario del evento</label>
-            <div style={{display:'flex', gap:8, alignItems:'center'}}>
-              <HoraInput value={form.horaIni} onChange={v=>upd('horaIni',v)} style={{...inpV2, width:88}}/>
-              <span style={{fontSize:13, color:T.ink3}}>a</span>
-              <HoraInput value={form.horaFin} onChange={v=>upd('horaFin',v)} style={{...inpV2, width:88}}/>
+        {/* 3 · Cuándo y dónde */}
+        <div style={secP}>
+          {paso(3,'Cuándo y dónde')}
+          <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-start'}}>
+            <div style={{flex:1.3, minWidth:cel?'100%':220}}>
+              <label style={lblP}>Fecha</label>
+              <button type="button" onClick={()=>setVerCal(v=>!v)} aria-expanded={verCal} style={{...inpP, textAlign:'left', cursor:'pointer', display:'flex', gap:8, alignItems:'center', borderStyle:fechasTxt?'solid':'dashed', borderColor:fechasTxt?T.campo:T.ink3, color:fechasTxt?T.ink:T.ink3}}>
+                <span style={{flex:1}}>{fechasTxt||'Falta definir'}</span><span style={{fontSize:12.5, color:T.ink2}}>{verCal?'Listo ▲':'Calendario ▼'}</span>
+              </button>
+            </div>
+            <div style={{flex:0.8, minWidth:cel?'100%':170}}>
+              <label style={lblP}>Horario</label>
+              <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                <HoraInput value={form.horaIni} onChange={v=>upd('horaIni',v)} style={{...inpP, width:'100%'}}/>
+                <span style={{fontSize:13, color:T.ink2}}>a</span>
+                <HoraInput value={form.horaFin} onChange={v=>upd('horaFin',v)} style={{...inpP, width:'100%'}}/>
+              </div>
+            </div>
+            <div style={{flex:1.2, minWidth:cel?'100%':200}}>
+              <label style={lblP} title="El contacto del lugar queda igual al Contacto; si es otro, se cambia en el Calendar.">Ubicación</label>
+              <input value={form.ubicacion} onChange={e=>upd('ubicacion',e.target.value)} placeholder="Falta definir" style={inpP}/>
             </div>
           </div>
-          <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={form.ubicacion} onChange={e=>upd('ubicacion',e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
+          {verCal && <div style={{marginTop:12}}>
+            <CampoFechas dias={form.dias} tentativos={form.tentativos} onChange={(d,t)=>setForm(f=>({...f, dias:d, tentativos:t}))}/>
+          </div>}
         </div>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:10}}>El contacto del lugar queda igual al Contacto; si es otro, se cambia en el Calendar.</div>
+
+        {/* 4 · Precio */}
+        <div style={secP}>
+          {paso(4,'Precio')}
+          <div style={{display:'flex', gap:22, flexWrap:'wrap', alignItems:'flex-end'}}>
+            <div><div style={{fontSize:12.5, color:T.ink2}}>Se paga afuera</div><div style={{fontSize:17, fontWeight:600, fontFamily:MONO}}>{fmt(costoAfuera)}</div></div>
+            <div><div style={{fontSize:12.5, color:T.ink2}}>Queda para Magma</div>
+              <div style={{fontSize:17, fontWeight:600}}><span style={{fontFamily:MONO, color:quedaMagma<0?T.brand:T.ink}}>{quedaMagma<0?'−':''}{fmt(quedaMagma)}</span> {total>0 && <span style={{fontSize:13.5, color:sem.c}}>{Math.round(quedaPct)}% · {sem.l}</span>}</div></div>
+            <div style={{flex:1}}/>
+            <div style={{textAlign:'right'}}><div style={{fontSize:12.5, color:T.ink2}}>Precio final</div>
+              <div style={{fontSize:28, fontWeight:700, color:T.ink}}><span style={{fontFamily:MONO}}>{fmt(total)}</span> <span style={{fontSize:14, fontWeight:400, color:T.ink2}}>+ IVA</span></div></div>
+          </div>
+          <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginTop:14}}>
+            <div style={{flex:'0 1 200px', minWidth:160}}>
+              <label style={lblP}>Cerrar el precio en</label>
+              <input value={cierre ?? fmt(total)} onChange={e=>setCierre(e.target.value)} onFocus={e=>e.target.select()} onBlur={aplicarCierre} onKeyDown={e=>{ if(e.key==='Enter' && !e.metaKey && !e.ctrlKey){ e.preventDefault(); aplicarCierre() } }} style={{...inpP, fontFamily:MONO}}/>
+            </div>
+            <div style={{flex:'0 0 auto'}}>
+              <label style={lblP}>o un descuento de</label>
+              <div style={{display:'flex', alignItems:'center', gap:6}}><input type="number" value={form.descPct} onChange={e=>aplicarDescPct(e.target.value)} placeholder="0" aria-label="Descuento en porcentaje" style={{...inpP, width:72, textAlign:'right'}}/><span style={{fontSize:14, color:T.ink2}}>%</span></div>
+            </div>
+            <div style={{flex:'1 1 220px', fontSize:13.5, color:T.ink2, paddingBottom:10}}>{txtAjuste}</div>
+          </div>
+          {(opcRedondeo.length>0 || !!ajMto) && <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginTop:8}}>
+            {opcRedondeo.length>0 && <span style={{fontSize:12.5, color:T.ink2}}>Redondear a</span>}
+            {opcRedondeo.map(v=><button type="button" key={v} onClick={()=>fijarTotal(v)} title={`Precio final ${fmt(v)}: la diferencia va al ajuste`} style={{padding:'5px 11px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13, fontFamily:MONO, cursor:'pointer'}}>{fmt(v)}</button>)}
+            {!!ajMto && <button type="button" onClick={()=>setForm(f=>({...f, ajuste:'0', descPct:''}))} title="Sacar el ajuste y volver al precio calculado" style={{...linkP, fontSize:13, color:T.ink2, marginLeft:4}}>↺ Sin ajuste</button>}
+          </div>}
+          {/* Las cuentas, para quien quiera ver de dónde sale el número. Es lo que va al sheet. */}
+          <div style={{fontSize:12.5, color:T.ink2, marginTop:12, paddingTop:10, borderTop:`1px solid ${T.surfaceAlt}`, lineHeight:1.6}}>
+            {[`Costo ${fmt(subtotal)}`, fee>0&&`fee Magma ${fmt(fee)}`, form.gan&&`Ganancias ${fmt(gan)}`, form.iibb&&`IIBB ${fmt(iibb)}`, !!intMto&&`interés ${fmt(intMto)}`, !!ajMto&&`ajuste ${fmtS(ajMto)}`].filter(Boolean).join(' · ')}
+            {adicList.length>0 && <> · + {fmt(adicCalc.reduce((s,a)=>s+a.precioCliente,0))} en opcionales</>}
+            {form.desglosar && <> · precio abierto: los ítems suman {fmt(Object.values(precioItem).reduce((s,v)=>s+v,0))}</>}
+            {!form.desglosar && hayVerPrecio && <> · con precio a la vista: {baseList.filter(p=>p.verPrecio&&p.svc.trim()).map(p=>p.svc).join(', ')}</>}
+          </div>
+        </div>
+
+        {plegable('cond','Condiciones',resumenCond, <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end'}}>
+          <label style={{display:'flex', gap:7, alignItems:'center', fontSize:14, color:T.ink, cursor:'pointer', paddingBottom:10}}><input type="checkbox" checked={form.gan} onChange={e=>upd('gan',e.target.checked)}/> Ganancias 35%</label>
+          <label style={{display:'flex', gap:7, alignItems:'center', fontSize:14, color:T.ink, cursor:'pointer', paddingBottom:10}}><input type="checkbox" checked={form.iibb} onChange={e=>upd('iibb',e.target.checked)}/> IIBB 4%</label>
+          <div><label style={lblP}>Plazo de pago</label><select value={form.plazo} onChange={e=>upd('plazo',e.target.value)} style={{...inpP, width:'auto', cursor:'pointer'}}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="60">60 días</option></select></div>
+          <div style={{width:96}}><label style={lblP}>Interés %</label><input type="number" value={form.interes} onChange={e=>upd('interes',e.target.value)} style={{...inpP, textAlign:'right'}}/></div>
+          <label title="El cliente ve cuánto sale cada servicio, no sólo el total. Se guarda en el presu y el PDF sale así." style={{display:'flex', gap:7, alignItems:'center', fontSize:14, color:T.ink, cursor:'pointer', paddingBottom:10}}>
+            <input type="checkbox" checked={!!form.desglosar} onChange={e=>upd('desglosar',e.target.checked)}/> Mostrar precio por ítem al cliente
+          </label>
+        </div>)}
+
         {/* Brief de edición — sólo si el presu lleva post. Es el momento en que estás
             hablando con el cliente: después nadie vuelve a preguntar y el editor termina
             averiguándolo por WhatsApp. Nada es obligatorio: lo que falte se completa en
             el tablero de Edición. Duración y material salen solos del presupuesto. */}
-        {hayEdicion && <div style={{border:`1px solid ${T.border}`, borderRadius:10, padding:'12px 14px', marginBottom:14, background:T.surfaceAlt}}>
-          <div style={{fontSize:12.5, fontWeight:600, color:T.ink, marginBottom:3}}>El video que hay que editar</div>
-          <div style={{fontSize:11.5, color:T.ink3, marginBottom:10, lineHeight:1.45}}>
-            Se lo preguntás al cliente ahora y le llega solo al editor. {briefDerivado && <span>Del presu ya sale: <strong style={{color:T.ink2}}>{briefDerivado}</strong>.</span>}
+        {hayEdicion && plegable('brief','El video que hay que editar', preguntasBrief===3?'respondido':`${3-preguntasBrief} ${3-preguntasBrief===1?'pregunta':'preguntas'} para el editor`, <>
+          <div style={{fontSize:13, color:T.ink2, marginBottom:10, lineHeight:1.45}}>
+            Se lo preguntás al cliente ahora y le llega solo al editor. {briefDerivado && <span>Del presu ya sale: <strong style={{color:T.ink}}>{briefDerivado}</strong>.</span>}
           </div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:10}}>
             <div>
-              <label style={lblV2}>Qué clase de video es</label>
-              <select value={form.edClase} onChange={e=>upd('edClase',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
-                <option value="">— a definir —</option>
+              <label style={lblP}>Qué clase de video es</label>
+              <select value={form.edClase} onChange={e=>upd('edClase',e.target.value)} style={{...inpP, cursor:'pointer'}}>
+                <option value="">Falta definir</option>
                 {CLASES_VIDEO.map(c=><option key={c.id} value={c.label}>{c.label}</option>)}
               </select>
             </div>
             <div>
-              <label style={lblV2}>Formato</label>
-              <select value={form.edFormato} onChange={e=>upd('edFormato',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
-                <option value="">— a definir —</option>
+              <label style={lblP}>Formato</label>
+              <select value={form.edFormato} onChange={e=>upd('edFormato',e.target.value)} style={{...inpP, cursor:'pointer'}}>
+                <option value="">Falta definir</option>
                 {['Vertical (redes sociales)','Horizontal (YouTube / TV)','Los dos'].map(o=><option key={o} value={o}>{o}</option>)}
               </select>
             </div>
             {/vertical|los dos/i.test(form.edFormato) && <div>
-              <label style={lblV2}>¿Dónde se publica?</label>
-              <select value={form.edRed} onChange={e=>upd('edRed',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
-                <option value="">— a definir —</option>
+              <label style={lblP}>¿Dónde se publica?</label>
+              <select value={form.edRed} onChange={e=>upd('edRed',e.target.value)} style={{...inpP, cursor:'pointer'}}>
+                <option value="">Falta definir</option>
                 {['Instagram','TikTok','YouTube Shorts','LinkedIn','Varias'].map(o=><option key={o} value={o}>{o}</option>)}
               </select>
             </div>}
             <div>
-              <label style={lblV2}>¿Lleva gráfica del cliente?</label>
-              <select value={form.edGrafica} onChange={e=>upd('edGrafica',e.target.value)} style={{...inpV2, cursor:'pointer'}}>
-                <option value="">— a definir —</option>
+              <label style={lblP}>¿Lleva gráfica del cliente?</label>
+              <select value={form.edGrafica} onChange={e=>upd('edGrafica',e.target.value)} style={{...inpP, cursor:'pointer'}}>
+                <option value="">Falta definir</option>
                 {['Sí','No','A definir'].map(o=><option key={o} value={o}>{o}</option>)}
               </select>
             </div>
           </div>
-        </div>}
-        <label style={lblV2}>Observaciones (salen en el PDF)</label>
-        <textarea value={form.observaciones} onChange={e=>upd('observaciones',e.target.value)} rows={2} style={{...inpV2, resize:'vertical'}}/>
+        </>)}
+
+        {plegable('obs','Observaciones para el PDF', String(form.observaciones||'').trim() ? (String(form.observaciones).trim().slice(0,40)+(String(form.observaciones).trim().length>40?'…':'')) : 'vacío',
+          <textarea value={form.observaciones} onChange={e=>upd('observaciones',e.target.value)} rows={3} aria-label="Observaciones para el PDF" placeholder="Salen en el PDF, debajo de los servicios" style={{...inpP, resize:'vertical', lineHeight:1.5}}/>)}
       </div>
 
-      {/* Resumen + guardar (sticky bottom) */}
-      <div style={{position:'sticky', bottom:0, background:T.surfaceAlt, borderTop:`1px solid ${T.border}`, borderRadius:'0 0 16px 16px', padding:'14px 24px'}}>
-        <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'center', marginBottom:12}}>
-          <Mini label="Subtotal" val={fmt(subtotal)}/>
-          {fee>0&&<Mini label="Fee Magma" val={fmt(fee)} color={T.pos}/>}
-          {form.gan&&<Mini label="Ganancias 35%" val={fmt(gan)}/>}
-          {form.iibb&&<Mini label="IIBB 4%" val={fmt(iibb)}/>}
-          {!!intMto&&<Mini label="Interés" val={fmt(intMto)}/>}
-          {!!ajMto&&<Mini label="Ajuste" val={fmtS(ajMto)} color={ajMto<0?T.brand:T.ink}/>}
-          <div style={{flex:1}}/>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>Precio final</div>
-            <div style={{fontSize:26, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(total)}</div>
-            {(opcRedondeo.length>0 || !!ajMto) && <div style={{display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center', marginTop:6}}>
-              <span style={{fontSize:10.5, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, fontWeight:600}}>Redondear a</span>
-              {opcRedondeo.map(v=><button key={v} onClick={()=>fijarTotal(v)} title={`Precio final ${fmt(v)} — la diferencia va al ajuste`} style={{padding:'4px 9px', borderRadius:6, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontFamily:MONO, cursor:'pointer'}}>{fmt(v)}</button>)}
-              {!!ajMto && <button onClick={()=>setForm(f=>({...f, ajuste:'0', descPct:''}))} title="Sacar el ajuste y volver al precio calculado" style={{padding:'4px 8px', borderRadius:6, border:'none', background:'transparent', color:T.ink3, fontSize:11.5, cursor:'pointer'}}>↺ sin ajuste</button>}
-            </div>}
-          </div>
-        </div>
-        <div style={{display:'flex', alignItems:'center', gap:14}}>
-          <span style={{fontSize:12, color:semaforo(margenBasePct).c, fontWeight:600}}>Margen {Math.round(margenBasePct)}% · {semaforo(margenBasePct).l}</span>
-          {form.desglosar && <span style={{fontSize:11.5, color:T.pos}}>Precio abierto · los ítems suman {fmt(Object.values(precioItem).reduce((s,v)=>s+v,0))}</span>}
-          {!form.desglosar && hayVerPrecio && <span style={{fontSize:11.5, color:T.pos}}>Con precio a la vista: {baseList.filter(p=>p.verPrecio&&p.svc.trim()).map(p=>p.svc).join(', ')}</span>}
-          {adicList.length>0 && <span style={{fontSize:11.5, color:T.ink3}}>+ {fmt(adicCalc.reduce((s,a)=>s+a.precioCliente,0))} en adicionales</span>}
-          <div style={{flex:1}}/>
-          {falta.length>0 && <span style={{fontSize:12, color:T.warn}}>Falta: {falta.join(', ')}</span>}
-          <button onClick={cerrar} style={{padding:'10px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-          <button onClick={guardar} disabled={!puedeGuardar} style={{padding:'10px 24px', borderRadius:9, border:'none', background:puedeGuardar?T.brand:T.apagado, color:'#fff', fontSize:13.5, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
-        </div>
+      {/* Guardar (fijo abajo) */}
+      <div style={{position:'sticky', bottom:0, background:T.surface, borderTop:`1px solid ${T.border}`, borderRadius:cel?0:'0 0 16px 16px', padding:cel?'12px 14px':'14px 22px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+        <span style={{fontSize:13, color:falta.length?T.warn:T.ink2, fontWeight:falta.length?600:400, flex:'1 1 200px'}}>{falta.length ? `Falta: ${falta.join(', ')}` : (cel ? '' : '⌘ + Enter crea')}</span>
+        <button type="button" onClick={cerrar} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:14, cursor:'pointer'}}>Cancelar</button>
+        <button type="button" onClick={crearYAbrirPdf} disabled={!puedeGuardar} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:puedeGuardar?T.ink:T.ink3, fontSize:14, cursor:puedeGuardar?'pointer':'default'}}>Crear y abrir el PDF</button>
+        <button type="button" onClick={()=>guardar()} disabled={!puedeGuardar} style={{padding:'10px 20px', borderRadius:10, border:'none', background:puedeGuardar?T.ink:T.apagado, color:'#fff', fontSize:14, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
       </div>
     </div>
   </div>
@@ -7204,6 +7346,9 @@ function Shell({children}){
       ::-webkit-scrollbar-thumb { background:#D8D4CD; border-radius:8px; }
       ::-webkit-scrollbar-track { background:transparent; }
       select, input, button { font-family:inherit; }
+      /* Foco visible con teclado en toda la app. Los estilos inline traen outline:none
+         (inpV2 y otros) y sin esto Tab no mostraba en qué campo estabas (25/10/2026). */
+      input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline:2px solid ${T.ink} !important; outline-offset:1px; }
     `}</style>
     {children}
   </>

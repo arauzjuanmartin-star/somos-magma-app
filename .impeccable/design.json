@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T05:30:00-03:00",
+  "title": "Design System: SOMOS MAGMA App",
+  "extensions": {
+    "colorMeta": {
+      "magma-red": { "role": "primary", "displayName": "Rojo Magma", "tonalRamp": ["#3D0A10", "#6B111C", "#9A1A28", "#CE2637", "#E0505E", "#EC8790", "#F5BCC1", "#FBEAEC"] },
+      "ink": { "role": "neutral", "displayName": "Tinta", "tonalRamp": ["#1A1917", "#2E2C29", "#45423D", "#5E5A53", "#6B645C", "#8C877F", "#C4BFB6", "#ECE9E4"] },
+      "paper": { "role": "neutral", "displayName": "Papel", "tonalRamp": ["#CFCAC2", "#DCD8D1", "#E9E6E1", "#ECE9E4", "#F3EFE9", "#F6F4F1", "#FBFAF8", "#FFFFFF"] },
+      "positive": { "role": "secondary", "displayName": "Verde confirmado", "tonalRamp": ["#0A2E1E", "#0F4A30", "#136142", "#17784E", "#2E9A69", "#6CC097", "#B3E0C9", "#E7F3EC"] },
+      "caution": { "role": "secondary", "displayName": "Ámbar de espera", "tonalRamp": ["#33220A", "#5A3C08", "#76500A", "#8F5E0A", "#B07712", "#D9A24A", "#EDD09A", "#F8EFDC"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Frase de hoy", "purpose": "La frase del panel Hoy y el título de una ficha." },
+      "title": { "displayName": "Cabecera de tarjeta", "purpose": "Cliente o trabajo arriba de cada tarjeta." },
+      "body": { "displayName": "Texto de trabajo", "purpose": "Renglones de piezas, personas, notas." },
+      "label": { "displayName": "Etiqueta", "purpose": "Botones, títulos de campo, contadores." },
+      "data": { "displayName": "Dato", "purpose": "Números de presupuesto, montos y fechas en columnas." }
+    },
+    "shadows": [
+      { "name": "tarjeta", "value": "0 2px 10px rgba(0,0,0,0.05)", "purpose": "Tarjetas de trabajo y panel Hoy sobre el papel." },
+      { "name": "emergente", "value": "0 16px 50px rgba(0,0,0,0.18)", "purpose": "Modales y paneles que tapan la pantalla." }
+    ],
+    "breakpoints": [
+      { "name": "celular", "value": "760px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "La acción del renglón o la tarjeta. Uno solo a la vista.",
+      "html": "<button class=\"ds-btn-pri\">Revisar</button>",
+      "css": ".ds-btn-pri{background:#1A1917;color:#fff;border:none;border-radius:10px;padding:8px 16px;font:600 12.5px Archivo,system-ui,sans-serif;cursor:pointer;transition:background .15s} .ds-btn-pri:hover{background:#45423D} .ds-btn-pri:focus-visible{outline:2px solid #1A1917;outline-offset:2px}"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Alternativa al principal: cancelar, pedir cambios.",
+      "html": "<button class=\"ds-btn-sec\">Pedir cambios</button>",
+      "css": ".ds-btn-sec{background:#fff;color:#1A1917;border:1px solid #ECE9E4;border-radius:10px;padding:8px 16px;font:500 12.5px Archivo,system-ui,sans-serif;cursor:pointer} .ds-btn-sec:hover{background:#F6F4F1} .ds-btn-sec:focus-visible{outline:2px solid #1A1917;outline-offset:2px}"
+    },
+    {
+      "name": "Botón confirmar",
+      "kind": "button",
+      "refersTo": "button-confirm",
+      "description": "El paso que manda algo afuera o cierra.",
+      "html": "<button class=\"ds-btn-ok\">Aprobar y mandar al cliente</button>",
+      "css": ".ds-btn-ok{background:#17784E;color:#fff;border:none;border-radius:10px;padding:11px 18px;font:600 13px Archivo,system-ui,sans-serif;cursor:pointer} .ds-btn-ok:hover{background:#136142} .ds-btn-ok:focus-visible{outline:2px solid #17784E;outline-offset:2px}"
+    },
+    {
+      "name": "Panel Hoy",
+      "kind": "custom",
+      "refersTo": "today-panel",
+      "description": "Arriba de cada módulo: qué te toca y por dónde empezar.",
+      "html": "<div class=\"ds-hoy\"><b>Hoy te toca revisar 11 piezas</b> <span>· 7 están atrasadas</span><div class=\"ds-hoy-t\"><span class=\"ds-chip\">Empezar por Pocho (11 días)</span><span class=\"ds-chip\">Pani Feroz · 4 piezas</span></div></div>",
+      "css": ".ds-hoy{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.05);font-family:Archivo,system-ui,sans-serif;color:#1A1917} .ds-hoy b{font-size:18px} .ds-hoy span{color:#6B645C} .ds-hoy-t{display:flex;gap:10px;margin-top:12px} .ds-chip{background:#F3EFE9;color:#1A1917;border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer} .ds-chip:hover{background:#ECE9E4}"
+    },
+    {
+      "name": "Tarjeta de trabajo",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Un trabajo con sus piezas; plazo a la derecha, un botón por renglón.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-top\"><b>Pocho <span>· Empresas Familiares #2370</span></b><em>● 11 días atrasado</em></div><div class=\"ds-card-row\"><span>Recap con testimonios</span><span class=\"ds-quien\">Daniela</span><button class=\"ds-btn-pri\">Revisar</button></div></div>",
+      "css": ".ds-card{background:#fff;border-radius:14px;padding:16px 20px;box-shadow:0 2px 10px rgba(0,0,0,.05);font-family:Archivo,system-ui,sans-serif;color:#1A1917} .ds-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:16px} .ds-card-top span{font-weight:400;color:#5E5A53} .ds-card-top em{font-style:normal;color:#CE2637;font-weight:600;font-size:14px} .ds-card-row{display:flex;align-items:center;gap:14px;padding:9px 0;border-top:1px solid #ECE9E4;font-size:14.5px} .ds-card-row>span:first-child{flex:1} .ds-quien{color:#5E5A53} .ds-btn-pri{background:#1A1917;color:#fff;border:none;border-radius:10px;padding:8px 16px;font:600 12.5px Archivo,sans-serif;cursor:pointer}"
+    },
+    {
+      "name": "Campo",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de texto; vacío y obligatorio lleva borde punteado.",
+      "html": "<input class=\"ds-input\" placeholder=\"Falta definir\">",
+      "css": ".ds-input{background:#fff;color:#1A1917;border:1px dashed #6B645C;border-radius:8px;padding:9px 12px;font:400 14px Archivo,system-ui,sans-serif} .ds-input::placeholder{color:#6B645C} .ds-input:focus-visible{outline:2px solid #1A1917;outline-offset:1px;border-style:solid}"
+    },
+    {
+      "name": "Pestañas",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Vistas de un módulo; la activa con subrayado tinta.",
+      "html": "<nav class=\"ds-tabs\"><a class=\"on\">Lista</a><a>Tablero</a><a>Cómo trabajamos</a></nav>",
+      "css": ".ds-tabs{display:flex;gap:4px;border-bottom:1px solid #ECE9E4;font-family:Archivo,system-ui,sans-serif} .ds-tabs a{padding:10px 14px 9px;font-size:13px;font-weight:500;color:#5E5A53;border-bottom:2px solid transparent;cursor:pointer} .ds-tabs a:hover{color:#1A1917} .ds-tabs a.on{font-weight:700;color:#1A1917;border-bottom-color:#1A1917}"
+    },
+    {
+      "name": "Marca de urgente",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Prioridad urgente; contorno, nunca bloque rojo.",
+      "html": "<span class=\"ds-urg\">↑ URGENTE</span>",
+      "css": ".ds-urg{font:700 10px Archivo,system-ui,sans-serif;letter-spacing:.3px;color:#1A1917;border:1px solid #1A1917;border-radius:4px;padding:1px 6px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El escritorio de producción",
+    "overview": "La app es la mesa de trabajo del productor. Lo que hay que hacer hoy está arriba y a mano; lo demás queda guardado, a un clic. Cada pantalla abre con una frase que dice qué te toca y por dónde empezar. Debajo, cada trabajo es una tarjeta blanca con aire, letra cómoda y un solo botón de acción a la vista. Se ve menos por pantalla a propósito: se lee sin esfuerzo.",
+    "keyCharacteristics": [
+      "Lo de hoy primero, en palabras, no en números sueltos.",
+      "Una tarjeta por trabajo, un botón de acción por renglón.",
+      "Papel cálido de fondo y tarjetas blancas encima.",
+      "Color solo con significado: rojo = atrasado, ámbar = esperando demasiado, verde = confirmar o cerrar.",
+      "Letra cómoda: el texto de trabajo va a 14,5 px; nada importante por debajo de 12,5 px."
+    ],
+    "rules": [
+      { "name": "The Red Means Late Rule", "body": "El rojo Magma en la pantalla significa \"atrasado\" o \"roto\". Si algo es rojo y no está atrasado, está mal.", "section": "colors" },
+      { "name": "The Readable Gray Rule", "body": "Ningún texto más claro que tinta suave (#6B645C). Para algo \"menos importante\", achicá o bajá el peso, no lo aclares.", "section": "colors" },
+      { "name": "The 12.5 Floor Rule", "body": "Nada que haya que leer para trabajar va por debajo de 12,5 px. El 10,5 px de hoy queda solo para marcas mínimas (\"MAGMA\", \"↑ URGENTE\").", "section": "typography" },
+      { "name": "The Paper Desk Rule", "body": "La profundidad es papel sobre una mesa: blanco sobre papel cálido, sombra mínima. Sin bordes gruesos de color al costado y sin sombras duras.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do abrir cada módulo con el panel Hoy: una frase que dice qué te toca.",
+      "Do poner un solo botón principal (tinta) por tarjeta; el resto, secundario o dentro de la ficha.",
+      "Do escribir el estado en palabras (\"hace 17 días con el cliente\"), no solo con color.",
+      "Do usar Azeret Mono para números de presupuesto, montos y fechas en columnas.",
+      "Do mostrar \"Falta definir\" donde falta un dato, con borde punteado."
+    ],
+    "donts": [
+      "Don't usar el rojo Magma para botones, pestañas, etiquetas o avisos que no sean atraso o error.",
+      "Don't poner texto más claro que #6B645C ni texto de trabajo por debajo de 12,5 px.",
+      "Don't usar bordes gruesos de color al costado de tarjetas o renglones para marcar estado.",
+      "Don't mostrar todo junto: lo que está esperando o terminado va plegado abajo.",
+      "Don't dejar un campo vacío sin decir nada, ni con \"[completar]\"."
+    ]
+  }
+}
