@@ -766,7 +766,7 @@ const ESTADOS_DOT = {
   'EN CURSO':{c:T.pos,l:'En curso'},
   'ENTREGADO':{c:T.ink3,l:'Entregado'},
   'EN ESPERA':{c:T.warn,l:'En espera'},
-  'DESAPROBADO':{c:T.brand,l:'Desaprobado'},
+  'DESAPROBADO':{c:T.ink3,l:'Desaprobado'},   // perdido no es atrasado: gris, no rojo
   'REPRESUPUESTADO':{c:T.ink3,l:'Represup.'},
 }
 const estadoInfo = e => ESTADOS_DOT[String(e||'').toUpperCase()] || {c:T.warn,l:e||'—'}
@@ -936,9 +936,9 @@ function SegChip({p, onClick, corto}){
   const s = segDe(p)
   const fmtDM = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
   const label = s.toca ? (s.nunca ? (corto?`📞 ${s.dPre??'?'}d`:`📞 sin llamar · ${s.dPre??'?'}d`) : (corto?`📞 ${s.dUlt}d`:`📞 hace ${s.dUlt}d`))
-    : s.seguir ? `⏳ ${fmtDM(s.seguir)}` : `✓ ${s.dUlt}d`
+    : s.seguir ? `⏳ ${fmtDM(s.seguir)}` : s.nunca ? (corto?`enviado · ${s.dPre??'?'}d`:`enviado hace ${s.dPre??'?'}d`) : `✓ ${s.dUlt}d`
   const title = s.toca ? (s.nunca ? `Nadie lo llamó desde que se mandó (hace ${s.dPre} días). Clic para anotar que hablaste.` : `Último contacto hace ${s.dUlt} días${s.paso?`: ${s.paso}`:''}. Clic para anotar.`)
-    : s.seguir ? `Seguir el ${fechaDDMMYYYY(s.seguir)}${s.paso?` · ${s.paso}`:''}` : `Hablaste hace ${s.dUlt} días${s.paso?`: ${s.paso}`:''}`
+    : s.seguir ? `Seguir el ${fechaDDMMYYYY(s.seguir)}${s.paso?` · ${s.paso}`:''}` : s.nunca ? `Se mandó hace ${s.dPre} días y todavía nadie llamó. Toca llamar al día ${DIAS_SEGUIMIENTO}.` : `Hablaste hace ${s.dUlt} días${s.paso?`: ${s.paso}`:''}`
   return <span onClick={e=>{e.stopPropagation(); onClick()}} title={title} style={{display:'inline-flex', alignItems:'center', justifyContent:'flex-end', gap:4, fontSize:11.5, fontFamily:MONO, padding:'3px 8px', borderRadius:20, cursor:'pointer', whiteSpace:'nowrap',
     background:s.toca?T.brandSoft:T.surfaceAlt, color:s.toca?T.brand:T.ink2, border:`1px solid ${s.toca?T.brand+'55':T.border}`, fontWeight:s.toca?600:500}}>{label}</span>
 }
@@ -1037,11 +1037,16 @@ function AnalisisMotivos({presus, esDesaprobado}){
 //
 // El sheet NO cambia: PRESUPUESTOS y PROYECTOS siguen siendo dos solapas y cada bloque
 // escribe donde escribía (lo cotizado → PRESUPUESTOS, producción → PROYECTOS).
-const VISTAS_TRABAJOS = [['todos','Todos'],['esp','En espera'],['prod','En producción'],['sinstaff','Sin staff'],['sinfact','Sin facturar'],['des','Caídos'],['rep','Represup.']]
+// Arranca en "Activos" (en espera + en producción): en "Todos" la mitad eran caídos y
+// represupuestados (411 de 826 al 26/10/2026). Esos tres quedan en "Cerrados ▾".
+const VISTAS_TRABAJOS = [['activos','Activos'],['esp','En espera'],['prod','En producción'],['sinstaff','Sin staff'],['sinfact','Sin facturar'],['des','Caídos'],['rep','Represup.'],['todos','Todos']]
+const VISTAS_CERRADAS = ['des','rep','todos']
 // Con qué filtro llegan los links de antes (dashboard, facturación, buscador) y a qué vista van.
 const VISTA_DE_FILTRO = {ap:'prod', cur:'prod', ok:'prod', pendiente:'sinstaff'}
 const VISTAS_DE_PRODUCCION = ['prod','sinstaff','sinfact']
-const GRID_TRABAJOS = '88px 1.6fr 1fr 104px 78px 96px 56px 124px'
+// Staff, Factura y Drive eran tres columnas de puntitos: ahora es una sola, "Lo que sigue",
+// que dice en palabras qué le falta al trabajo. Las carpetas de Drive están en la ficha.
+const GRID_TRABAJOS = '96px 1.7fr 1fr 112px 200px 128px'
 
 function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const cel = useEsCelular()
@@ -1053,8 +1058,9 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const rrhhNames=[...new Set(rrhh.map(r=>r['Nombre Apellido']||r['Nombre']).filter(Boolean))].sort()
   const serviciosConocidos=[...new Set([...getSvcs(data).map(s=>s.n), ...(data.listado?.servicios||[])])].filter(Boolean).sort()
   // La vista en la que cada uno dejó la lista queda en su navegador (es cómo mira, no un dato).
-  const [vista,setVistaSt]=useState(()=>{ try{ const g=window.localStorage.getItem('trabajos-vista'); return VISTAS_TRABAJOS.some(v=>v[0]===g)?g:'todos' }catch(e){ return 'todos' } })
-  const elegirVista=v=>{ setVistaSt(v); setOpen(null); try{ window.localStorage.setItem('trabajos-vista', v) }catch(e){} }
+  // Clave nueva ('trabajos-vista2'): con la vieja, quien tenía "Todos" guardado (era el default) no veía el cambio.
+  const [vista,setVistaSt]=useState(()=>{ try{ const g=window.localStorage.getItem('trabajos-vista2'); return VISTAS_TRABAJOS.some(v=>v[0]===g)?g:'activos' }catch(e){ return 'activos' } })
+  const elegirVista=v=>{ setVistaSt(v); setOpen(null); setSoloLlamar(false); try{ window.localStorage.setItem('trabajos-vista2', v) }catch(e){} }
   const [q,setQ]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [tab,setTab]=useState('prod'), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
   const [motivoModal,setMotivoModal]=useState(null), [motivoSaving,setMotivoSaving]=useState(false)
   // Seguimiento comercial: el presupuesto al que se le anota "hablé con el cliente", y el filtro "📞 Por llamar" de En espera
@@ -1093,7 +1099,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, cambios:{'Es Adicional':nuevoEsAdic, 'Precio Final':Math.round(nuevoTotal), 'Total':Math.round(nuevoTotal), ...(extras||{})}})})
       const r=await fetch('/api/presupuesto-estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, estado:'APROBADO', noCalendar:true, resguardo: resgPend?.num===id ? resgPend.r : undefined})})
       const j=await r.json(); if(j.error){ showToast(j.error,'err'); setAprobSaving(false); return }
-      showToast(`#${id} aprobado`); setAprobAdic(null); setAprobSaving(false)
+      showToast(`#${id} aprobado · cargá el staff`); setAprobAdic(null); setAprobSaving(false); setTab('prod')
       if(onRefresh) onRefresh()
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num:id, accion:'aprobar'})}).catch(()=>{})
     }catch(e){ showToast('Error de conexión','err'); setAprobSaving(false) }
@@ -1128,7 +1134,10 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       if(j.error){ showToast(j.error,'err'); setRows(rs=>rs.map(rr=>(String(rr['Columna 1'])===String(id)?{...rr,Estado:actual}:rr)))
         if(j.sinResguardo){ const p=rows.find(rr=>String(rr['Columna 1'])===String(id)); if(p) setResg(p) }   // el servidor lo exige: pedirlo
         return }
-      showToast(`#${id} → ${estadoInfo(nuevo).l}`)
+      showToast(nuevo==='APROBADO' ? `#${id} aprobado · cargá el staff` : `#${id} → ${estadoInfo(nuevo).l}`)
+      // Aprobar y cargar el staff son un solo gesto: el trabajo queda abierto en Producción,
+      // que aparece en cuanto el refresh trae su fila de PROYECTOS.
+      if(nuevo==='APROBADO') setTab('prod')
       if(onRefresh) onRefresh()  // refresca datos globales: producción/Facturación/Calendar quedan sincronizados
       // Calendar en segundo plano
       const accion = nuevo==='APROBADO'?'aprobar':(nuevo==='DESAPROBADO'||nuevo==='REPRESUPUESTADO')?'borrar':'pendiente'
@@ -1163,7 +1172,8 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const pms=[...new Set(items.map(pmDe).filter(Boolean))].sort()
   const anios=[...new Set(items.map(it=>(dato(it,'Fecha Evento')||dato(it,'Fecha Presupuesto')).split('/')[2]).filter(Boolean))].sort().reverse()
 
-  const enVista=(it,v)=> v==='esp' ? it.est==='EN ESPERA'
+  const enVista=(it,v)=> v==='activos' ? it.est==='EN ESPERA'||['APROBADO','EN CURSO','ENTREGADO'].includes(it.est)
+    : v==='esp' ? it.est==='EN ESPERA'
     : v==='prod' ? ['APROBADO','EN CURSO','ENTREGADO'].includes(it.est)
     : v==='sinstaff' ? !!it.proy&&(!tieneStaff(it.proy)||noPuedenDeTrab(it.proy).length>0)
     : v==='sinfact' ? !!it.proy&&!facsDe(it.num).length
@@ -1185,6 +1195,10 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const tocaLlamar=it=>{ if(!it.p||it.est!=='EN ESPERA') return false; const fe=parseFechaAny(it.p['Fecha Evento']); return !!fe && fe>=hoy0 && segDe(it.p).toca }
   const porLlamar=vista==='esp' ? filtered.filter(tocaLlamar) : []
   if(vista==='esp' && soloLlamar) filtered=porLlamar
+  // ---- Hoy: qué le toca al equipo, en una frase (DESIGN.md, panel Hoy). Mismos criterios
+  // que las vistas y que la diaria de las 8: nada nuevo que aprender.
+  const llamarHoy=base.filter(tocaLlamar).map(it=>{ const s=segDe(it.p); return {it, d:s.nunca?s.dPre:s.dUlt} }).sort((a,b)=>(b.d||0)-(a.d||0))
+  const masViejo=llamarHoy[0]
   // En producción importa qué viene: lo próximo arriba, después lo que ya pasó (como estaba Proyectos).
   if(VISTAS_DE_PRODUCCION.includes(vista)) filtered=[...filtered].sort((a,b)=>{ const fa=parseD(dato(a,'Fecha Evento'))?.getTime()||0, fb=parseD(dato(b,'Fecha Evento'))?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
 
@@ -1198,16 +1212,33 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     if(nuevo==='APROBADO' && necesitaResguardo(p, data.agencias, data.clientes)) return setResg(p)   // 🔒 seña u OC primero
     return nuevo==='REPRESUPUESTADO' ? setRepresu(p) : nuevo==='DESAPROBADO' ? setMotivoModal({num:id, estado:'DESAPROBADO', actual:p['Estado']}) : (nuevo==='APROBADO' && presuTieneOpciones(p)) ? setAprobAdic(p) : cambiarEstado(id, nuevo, p['Estado']) }
 
+  const chipHoy={padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer', fontFamily:'inherit'}
+  const hayHoy=llamarHoy.length||cuenta.sinstaff||cuenta.sinfact
   return <>
-    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:22, gap:12}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Trabajos</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>{filtered.length} de {items.length} · del presupuesto a la factura, en una sola lista</div></div>
-      <button onClick={()=>setNuevo(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap'}}>+ Nuevo presupuesto</button>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, gap:12}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Trabajos</h1>
+      <button onClick={()=>setNuevo(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap'}}>+ Nuevo presupuesto</button>
+    </div>
+
+    {/* Hoy */}
+    <div style={{background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', padding:cel?'14px':'16px 18px', marginBottom:16}}>
+      {hayHoy
+        ? <div style={{fontSize:cel?15.5:17, lineHeight:1.4, color:T.ink}}>
+            <strong>Hoy: {llamarHoy.length ? `${llamarHoy.length} ${llamarHoy.length===1?'presupuesto':'presupuestos'} para llamar` : 'nadie para llamar'}</strong>
+            <span style={{color:T.ink2}}>{[masViejo&&masViejo.d!=null&&` · el más viejo hace ${masViejo.d} días`, cuenta.sinstaff&&` · ${cuenta.sinstaff} ${cuenta.sinstaff===1?'trabajo':'trabajos'} sin staff`, cuenta.sinfact&&` · ${cuenta.sinfact} sin facturar`].filter(Boolean).join('')}</span>
+          </div>
+        : <div style={{fontSize:17, fontWeight:700, color:T.ink}}>Hoy: nada pendiente ✓</div>}
+      {hayHoy ? <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:11}}>
+        {masViejo && <button type="button" style={chipHoy} title="Ver los presupuestos para llamar, el más viejo primero" onClick={()=>{ elegirVista('esp'); setSoloLlamar(true) }}>📞 Llamar: {dato(masViejo.it,'Cliente')||dato(masViejo.it,'Agencia')||'#'+masViejo.it.num} ({masViejo.d} d)</button>}
+        {!!cuenta.sinstaff && <button type="button" style={chipHoy} onClick={()=>elegirVista('sinstaff')}>Cargar staff ({cuenta.sinstaff})</button>}
+        {!!cuenta.sinfact && <button type="button" style={chipHoy} onClick={()=>elegirVista('sinfact')}>Facturar ({cuenta.sinfact})</button>}
+      </div> : null}
     </div>
 
     {/* Filtros */}
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:16}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar N°, cliente, proyecto, agencia, PM…"
-        style={{flex:'1 1 260px', minWidth:200, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
+        style={{flex:'1 1 260px', minWidth:200, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:14}}/>
       <select value={pm} onChange={e=>setPm(e.target.value)} style={selectStyle}><option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}</select>
       <select value={anio} onChange={e=>setAnio(e.target.value)} style={selectStyle}><option value="todos">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
       <select value={mes} onChange={e=>setMes(e.target.value)} style={selectStyle}><option value="todos">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
@@ -1218,14 +1249,20 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       ? <select value={vista} onChange={e=>elegirVista(e.target.value)} style={{...selectStyle, width:'100%', marginBottom:14, padding:'10px 11px', fontSize:13}}>
           {VISTAS_TRABAJOS.map(([k,l])=><option key={k} value={k}>{l} ({cuenta[k]})</option>)}
         </select>
-      : <div style={{display:'flex', gap:7, marginBottom:14, flexWrap:'wrap'}}>
-          {VISTAS_TRABAJOS.map(([k,l])=>(
+      : <div style={{display:'flex', gap:7, marginBottom:14, flexWrap:'wrap', alignItems:'center'}}>
+          {VISTAS_TRABAJOS.filter(([k])=>!VISTAS_CERRADAS.includes(k)).map(([k,l])=>(
             <button key={k} onClick={()=>elegirVista(k)} style={{
-              padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer',
+              padding:'7px 13px', borderRadius:20, fontSize:13.5, fontWeight:500, cursor:'pointer',
               border:`1px solid ${vista===k?T.ink:T.border}`,
-              background:vista===k?T.ink:T.surface, color:vista===k?'#fff':T.ink2,
-            }}>{l} <span style={{fontFamily:MONO, opacity:0.65, marginLeft:3}}>{cuenta[k]}</span></button>
+              background:vista===k?T.ink:T.surface, color:vista===k?'#fff':T.ink,
+            }}>{l} <span style={{fontFamily:MONO, fontSize:12.5, opacity:0.7, marginLeft:3}}>{cuenta[k]}</span></button>
           ))}
+          {/* Caídos, represupuestados y todos: se consultan, no se trabajan */}
+          <select value={VISTAS_CERRADAS.includes(vista)?vista:''} onChange={e=>e.target.value&&elegirVista(e.target.value)} aria-label="Ver trabajos cerrados"
+            style={{padding:'7px 12px', borderRadius:20, fontSize:13.5, cursor:'pointer', border:`1px solid ${VISTAS_CERRADAS.includes(vista)?T.ink:T.border}`, background:VISTAS_CERRADAS.includes(vista)?T.ink:T.surface, color:VISTAS_CERRADAS.includes(vista)?'#fff':T.ink}}>
+            <option value="">Cerrados ▾</option>
+            {VISTAS_TRABAJOS.filter(([k])=>VISTAS_CERRADAS.includes(k)).map(([k,l])=><option key={k} value={k}>{l} ({cuenta[k]})</option>)}
+          </select>
         </div>}
 
     {/* El porqué, sobre lo que esté filtrado (año/mes/PM valen) */}
@@ -1233,7 +1270,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
 
     {/* En espera: la lista de llamados del día. Mismo criterio que la diaria de las 8. */}
     {vista==='esp' && <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:12, fontSize:12.5, color:T.ink2}}>
-      <button onClick={()=>setSoloLlamar(v=>!v)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${soloLlamar?T.brand:T.brand+'66'}`, background:soloLlamar?T.brand:T.brandSoft, color:soloLlamar?'#fff':T.brand}}>
+      <button onClick={()=>setSoloLlamar(v=>!v)} style={{padding:'7px 13px', borderRadius:20, fontSize:13.5, fontWeight:600, cursor:'pointer', border:`1px solid ${T.ink}`, background:soloLlamar?T.ink:T.surface, color:soloLlamar?'#fff':T.ink}}>
         📞 Por llamar <span style={{fontFamily:MONO, opacity:0.8, marginLeft:3}}>{porLlamar.length}</span>{porLlamar.length ? <span style={{fontFamily:MONO, opacity:0.8, marginLeft:6}}>{fmt(porLlamar.reduce((s,it)=>s+totalDe(it),0))}</span> : null}
       </button>
       <span style={{color:T.ink3}}>{porLlamar.length ? `Evento por delante y ${DIAS_SEGUIMIENTO} días sin noticias (o llegó la fecha de "Seguir el"). Tocá el 📞 de la fila cuando hables.` : 'Nadie espera un llamado: todos con seguimiento al día ✓'}</span>
@@ -1241,37 +1278,38 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
 
     {/* Tabla */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      {!cel && <div style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>{vista==='esp'?'':'Staff'}</span><span style={{textAlign:'right'}}>{vista==='esp'?'Llamar':'Factura'}</span><span style={{textAlign:'right'}}>{vista==='esp'?'':'Drive'}</span><span style={{textAlign:'right'}}>Estado</span>
+      {!cel && <div style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'10px 18px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontWeight:500, color:T.ink2}}>
+        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Lo que sigue</span><span style={{textAlign:'right'}}>Estado</span>
       </div>}
       {filtered.length===0 && <Empty>Sin resultados</Empty>}
       {filtered.slice(0,200).map((it,i)=>{
         const {p, proy:y, num}=it
         const abierto = open===it.key
         const noPueden = y ? noPuedenDeTrab(y) : []
-        const ok = y&&tieneStaff(y)&&!noPueden.length
         // Con adelanto + saldo el proyecto tiene 2 facturas: mostramos cuántas se cobraron
-        // ("1/2 cobr.") en vez de decir "Cobrada" porque entró la seña.
+        // ("1/2 cobradas") en vez de decir "Cobrada" porque entró la seña.
         const facs=y?facsDe(num):[], cobradas=facs.filter(isCobrada).length
-        const facInfo = !facs.length ? {c:T.brand,l:'Sin fact.'}
-          : facs.length>1 ? {c:cobradas===facs.length?T.pos:T.warn, l:`${cobradas}/${facs.length} cobr.`}
-          : cobradas ? {c:T.pos,l:'Cobrada'} : {c:T.warn,l:'Facturada'}
-        const celdaStaff = y
-          ? <span title={noPueden.length?`Avisó que no puede: ${noPueden.map(l=>l.nombre).join(', ')}. Sigue cargado hasta que pongas a otra persona.`:undefined} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:noPueden.length?T.brand:ok?T.pos:T.warn}}/><span style={{fontSize:11.5, color:noPueden.length?T.brand:T.ink2, fontWeight:noPueden.length?600:400}}>{noPueden.length?`No puede: ${noPueden.map(l=>String(l.nombre).split(' ')[0]).join(', ')}`:cel?(ok?'Staff OK':'Sin staff'):(ok?'OK':'Pend.')}</span></span>
-          : it.est==='APROBADO' ? <span title="Está aprobado pero todavía no tiene fila en PROYECTOS. Si recién lo aprobaste, aparece al actualizar." style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin proyecto</span> : (cel?null:<span/>)
         // Un presupuesto en espera no tiene factura: en esa celda va el seguimiento (📞 cuánto hace que no se habla).
         const enEspera = !!p && it.est==='EN ESPERA'
-        const celdaFac = y
-          ? <span onClick={goTo?e=>{e.stopPropagation(); goTo('facturacion',{q:String(num)})}:undefined} title={goTo?'Ver en Facturación':undefined} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5, cursor:goTo?'pointer':undefined}}><span style={{width:7,height:7,borderRadius:7,background:facInfo.c}}/><span style={{fontSize:11.5, color:T.ink2}}>{facInfo.l}</span></span>
-          : enEspera ? <span style={{display:'flex', justifyContent:'flex-end'}}><SegChip p={p} corto={!cel} onClick={()=>setSeg(p)}/></span>
-          : (cel?null:<span/>)
-        // Las carpetas del proyecto a un clic, sin abrir nada: 📁 crudo, 📸 lo que se le manda al cliente
-        const celdaDrive = y
-          ? <span onClick={e=>e.stopPropagation()} style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6, fontSize:14}}>
-              {y['Drive Crudo'] && <a href={y['Drive Crudo']} target="_blank" rel="noreferrer" title="Crudo (lo que se filmó)" style={{textDecoration:'none'}}>📁</a>}
-              {(y['Drive Finales']||y['Drive Entrega']) && <a href={y['Drive Finales']||y['Drive Entrega']} target="_blank" rel="noreferrer" title={y['Drive Finales']?'Finales: lo que se le manda al cliente':'Carpeta de entrega'} style={{textDecoration:'none'}}>📸</a>}
-              {!y['Drive Crudo'] && !y['Drive Entrega'] && <span title="Sin carpetas en Drive todavía" style={{fontSize:11, color:T.ink3}}>—</span>}
-            </span>
+        // ---- Lo que sigue: una etiqueta en palabras con lo que le falta al trabajo ----
+        // Antes eran tres columnas de puntos (Staff · Factura · Drive) y "Sin fact." salía en
+        // rojo en cualquier aprobado, aunque el evento fuera la semana que viene. Ahora el
+        // color depende de cuánto pasó: rojo recién a los 30 días del evento sin facturar.
+        const feEv=parseD(dato(it,'Fecha Evento')), dEv=feEv ? Math.round((hoy0-new Date(feEv.getFullYear(),feEv.getMonth(),feEv.getDate()))/864e5) : null
+        const etq=(txt,tono,title,onClick)=>{ const st={gris:{background:T.surfaceAlt,color:T.ink2}, verde:{background:T.posSoft,color:T.pos,fontWeight:600}, ambar:{background:T.warnSoft,color:T.warn,fontWeight:600}, rojo:{color:T.brand,fontWeight:600}}[tono]
+          return <span style={{display:'flex', justifyContent:'flex-end'}}><span title={title} onClick={onClick?e=>{e.stopPropagation(); onClick()}:undefined} style={{fontSize:12.5, borderRadius:999, padding:'3px 10px', whiteSpace:'nowrap', cursor:onClick?'pointer':undefined, ...st}}>{txt}</span></span> }
+        const aFact=goTo?()=>goTo('facturacion',{q:String(num)}):undefined
+        const celdaSigue = enEspera ? <span style={{display:'flex', justifyContent:'flex-end'}}><SegChip p={p} corto={!cel} onClick={()=>setSeg(p)}/></span>
+          : y ? ( noPueden.length ? etq(`● No puede: ${noPueden.map(l=>String(l.nombre).split(' ')[0]).join(', ')}`,'rojo',`Avisó que no puede: ${noPueden.map(l=>l.nombre).join(', ')}. Sigue cargado hasta que pongas a otra persona.`)
+            : !tieneStaff(y) ? etq(dEv!=null&&dEv<0 ? `Falta staff · en ${-dEv} d` : 'Falta staff', dEv!=null&&dEv>=-7 ? 'ambar' : 'gris', 'Todavía no se cargó quién lo hace')
+            : facs.length ? etq(facs.length>1 ? `${cobradas}/${facs.length} cobradas` : cobradas ? 'Cobrada' : 'Facturada', cobradas===facs.length ? 'verde' : 'gris', goTo?'Ver en Facturación':undefined, aFact)
+            : dEv==null ? etq('Staff OK','gris')
+            : dEv<0 ? etq(`Staff OK · en ${-dEv} d`,'gris')
+            : dEv===0 ? etq('Evento hoy','gris')
+            : dEv<=15 ? etq('Listo para facturar','verde','El evento ya pasó: se puede facturar',aFact)
+            : dEv<=30 ? etq(`Facturar · hace ${dEv} d`,'ambar',`El evento fue hace ${dEv} días y no hay factura`,aFact)
+            : etq(`● Facturar · hace ${dEv} d`,'rojo',`El evento fue hace ${dEv} días y no hay factura`,aFact) )
+          : it.est==='APROBADO' ? <span title="Está aprobado pero todavía no tiene fila en PROYECTOS. Si recién lo aprobaste, aparece al actualizar." style={{fontSize:12.5, color:T.ink2, textAlign:'right'}}>aprobado · se está armando</span>
           : (cel?null:<span/>)
         const celdaEstado = p
           ? <EstadoSelect value={p['Estado']} onChange={nuevo=>onEstado(it,nuevo)}/>
@@ -1280,30 +1318,30 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
         const dosCaras = !!(p&&y), tabActual = dosCaras ? tab : (y?'prod':'coti')
         return <div key={it.key+'_'+i}>
           {cel
-            ? <div onClick={()=>abrirFila(it)} style={{padding:'12px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', background:abierto?T.surfaceAlt:'transparent'}}>
+            ? <div onClick={()=>abrirFila(it)} role="button" tabIndex={0} aria-expanded={abierto} onKeyDown={e=>{ if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){ e.preventDefault(); abrirFila(it) } }} style={{padding:'12px 14px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', background:abierto?T.surfaceAlt:'transparent'}}>
                 <div style={{display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline'}}>
                   <span style={{fontSize:13.5, fontWeight:600, color:T.ink, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{proyecto}</span>
                   <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(totalDe(it))}</span>
                 </div>
                 <div style={{fontSize:12, color:T.ink2, marginTop:2}}>{dato(it,'Fecha Evento')||'—'} · {dato(it,'Cliente')||dato(it,'Agencia')||'—'} · #{num}</div>
-                <div style={{display:'flex', gap:12, alignItems:'center', marginTop:7, flexWrap:'wrap'}}>{celdaEstado}{celdaStaff}{celdaFac}{celdaDrive}</div>
+                <div style={{display:'flex', gap:12, alignItems:'center', marginTop:7, flexWrap:'wrap'}}>{celdaEstado}{celdaSigue}</div>
               </div>
-            : <div onClick={()=>abrirFila(it)} style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:13}}
+            : <div onClick={()=>abrirFila(it)} role="button" tabIndex={0} aria-expanded={abierto} onKeyDown={e=>{ if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){ e.preventDefault(); abrirFila(it) } }} style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:abierto?T.surfaceAlt:'transparent', fontSize:14}}
                 onMouseEnter={e=>{if(!abierto)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierto)e.currentTarget.style.background='transparent'}}>
-                <span style={{fontSize:12, color:T.ink2}}>{dato(it,'Fecha Evento')||'—'}</span>
+                <span style={{fontSize:13, fontFamily:MONO, color:T.ink2}}>{dato(it,'Fecha Evento')||'—'}</span>
                 <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{proyecto}</span>
                 <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:10}}>{dato(it,'Cliente')||'—'}</span>
                 <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmt(totalDe(it))}</span>
-                {celdaStaff}{celdaFac}{celdaDrive}{celdaEstado}
+                {celdaSigue}{celdaEstado}
               </div>}
           {/* Un trabajo aprobado tiene dos caras: lo que se cotizó y cómo se produce. Antes
               eran dos solapas y había que buscar el número dos veces. */}
           {abierto && dosCaras && <div style={{display:'flex', gap:0, background:T.surfaceAlt, borderTop:`1px solid ${T.border}`, padding:'0 18px'}}>
             {[['prod','Producción','staff · Drive · margen'],['coti','Lo cotizado','servicios · precio · PDF']].map(([k,l,s])=>(
-              <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tabActual===k?700:500, color:tabActual===k?T.ink:T.ink2, borderBottom:`2px solid ${tabActual===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{s}</span>}</button>
+              <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:14, fontWeight:tabActual===k?700:500, color:tabActual===k?T.ink:T.ink2, borderBottom:`2px solid ${tabActual===k?T.ink:'transparent'}`}}>{l}</button>
             ))}
           </div>}
-          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null}/>}
+          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null} onAprobar={enEspera?()=>onEstado(it,'APROBADO'):null} onPerdido={enEspera?()=>onEstado(it,'DESAPROBADO'):null}/>}
           {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} seguros={data.seguros||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
@@ -1329,13 +1367,14 @@ function EstadoSelect({value, onChange}){
   return <span onClick={e=>e.stopPropagation()} style={{display:'inline-flex', alignItems:'center', gap:6, justifyContent:'flex-end'}}>
     <span style={{width:7,height:7,borderRadius:7,background:info.c,flexShrink:0}}/>
     <select value={ESTADOS_DOT[cur]?cur:''} onChange={e=>onChange(e.target.value)}
-      title="Cambiar estado"
-      style={{border:'none', background:'transparent', color:T.ink2, fontSize:12, cursor:'pointer', outline:'none', WebkitAppearance:'none', MozAppearance:'none', appearance:'none', textAlign:'right'}}>
+      title="Cambiar estado" aria-label="Estado"
+      style={{border:'none', background:'transparent', color:T.ink, fontSize:13, cursor:'pointer', WebkitAppearance:'none', MozAppearance:'none', appearance:'none', textAlign:'right', paddingRight:2}}>
       {!ESTADOS_DOT[cur] && <option value="">{info.l}</option>}
       {/* "En curso" y "Entregado" no se ofrecen: no los usa nadie (0 de 712 al 20/9/2026) y
           cualquier estado que no sea Aprobado saca el trabajo de PROYECTOS. */}
       {Object.keys(ESTADOS_DOT).filter(k=>!['EN CURSO','ENTREGADO'].includes(k)||k===cur).map(k=><option key={k} value={k}>{ESTADOS_DOT[k].l}</option>)}
     </select>
+    <span aria-hidden="true" style={{fontSize:10, color:T.ink2, marginLeft:-2}}>▾</span>
   </span>
 }
 
@@ -1520,7 +1559,7 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   </div>
 }
 
-function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSeguimiento}){
+function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSeguimiento, onAprobar, onPerdido}){
   const servicios=[]
   for(let j=1;j<=MAX_SLOTS;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
@@ -1541,17 +1580,17 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSegu
     </div>}
     {/* Seguimiento comercial: solo mientras está en espera. Cuánto hace que no se habla y qué sigue. */}
     {onSeguimiento && (()=>{ const s=segDe(p)
-      return <div style={{marginTop:12, padding:'10px 13px', borderRadius:9, background:s.toca?T.brandSoft:T.surface, border:`1px solid ${s.toca?T.brand+'55':T.border}`, fontSize:12.5, color:T.ink2, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+      return <div style={{marginTop:12, padding:'10px 13px', borderRadius:10, background:s.toca?T.warnSoft:T.surface, border:`1px solid ${s.toca?T.warn+'40':T.border}`, fontSize:13.5, color:T.ink2, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
         <span style={{flex:1, minWidth:200}}>
-          {s.nunca ? <><strong style={{color:s.toca?T.brand:T.ink, fontWeight:600}}>Nadie lo llamó desde que se mandó</strong>{s.dPre!==null?` (hace ${s.dPre} días)`:''}.</>
-            : <><span style={{color:T.ink3}}>Último contacto:</span> <strong style={{color:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.ultimo)}</strong> (hace {s.dUlt} días){s.paso?<> · {s.paso}</>:null}{s.seguir?<> · <span style={{color:T.ink3}}>seguir el</span> <strong style={{color:s.toca?T.brand:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.seguir)}</strong></>:null}</>}
-          {s.toca && !s.nunca && <span style={{color:T.brand, fontWeight:600}}> · toca llamar</span>}
+          {s.nunca ? <><strong style={{color:s.toca?T.warn:T.ink, fontWeight:600}}>Nadie lo llamó desde que se mandó</strong>{s.dPre!==null?` (hace ${s.dPre} días)`:''}.</>
+            : <><span style={{color:T.ink3}}>Último contacto:</span> <strong style={{color:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.ultimo)}</strong> (hace {s.dUlt} días){s.paso?<> · {s.paso}</>:null}{s.seguir?<> · <span style={{color:T.ink3}}>seguir el</span> <strong style={{color:s.toca?T.warn:T.ink, fontWeight:600}}>{fechaDDMMYYYY(s.seguir)}</strong></>:null}</>}
+          {s.toca && !s.nunca && <span style={{color:T.warn, fontWeight:600}}> · toca llamar</span>}
         </span>
-        <button onClick={e=>{e.stopPropagation(); onSeguimiento()}} style={{...miniBtn, background:s.toca?T.brand:T.surface, color:s.toca?'#fff':T.ink2, border:`1px solid ${s.toca?T.brand:T.border}`, fontWeight:600}}>📞 Hablé con el cliente</button>
+        <button onClick={e=>{e.stopPropagation(); onSeguimiento()}} style={{...miniBtn, fontSize:13, background:T.surface, color:T.ink, border:`1px solid ${s.toca?T.ink:T.border}`, fontWeight:600}}>📞 Hablé con el cliente</button>
       </div> })()}
     <div style={{display:'flex', gap:32, padding:'14px 0', flexWrap:'wrap'}}>
       {[['N°',id],['Agencia',p['Agencia']],['Carga',p['Fecha Presupuesto']],['Contacto',p['Contacto']],['PM',p['PM Interno']],['Horario',p['Horario']],['Ubicación',p['Ubicación']]].filter(x=>x[1]).map(([k,v])=>(
-        <div key={k}><div style={{fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:3}}>{v}</div></div>
+        <div key={k}><div style={{fontSize:12.5, color:T.ink2}}>{k}</div><div style={{fontSize:14, color:T.ink, marginTop:2}}>{v}</div></div>
       ))}
     </div>
     <div style={{display:'flex', gap:20, alignItems:'flex-start', flexWrap:'wrap'}}>
@@ -1560,22 +1599,28 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSegu
           ? <div style={{padding:'14px 16px', fontSize:12.5, color:T.ink3}}>Sin servicios detallados</div>
           : servicios.map((s,i)=>(
             <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'9px 16px', borderTop:i===0?'none':`1px solid ${T.border}`}}>
-              <span style={{fontSize:12.5, color:T.ink2}}>{s.nombre}</span>
-              <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink}}>{fmt(s.precio)}</span>
+              <span style={{fontSize:14, color:T.ink}}>{s.nombre}</span>
+              <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink}}>{fmt(s.precio)}</span>
             </div>
           ))}
       </div>
-      <div style={{flex:'0 0 220px', minWidth:200}}>
+      <div style={{flex:'0 0 260px', minWidth:220}}>
         <ResumenLine label="Subtotal servicios" value={fmt(subtotal)}/>
         <ResumenLine label="Margen Magma / dif." value={fmt(fee)} color={T.ink2}/>
         <div style={{display:'flex', justifyContent:'space-between', padding:'12px 0 0', marginTop:8, borderTop:`1px solid ${T.border}`}}>
           <span style={{fontSize:13, fontWeight:600, color:T.ink}}>Precio final</span>
-          <span style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.brand}}>{fmt(total)}</span>
+          <span style={{fontSize:16, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(total)}</span>
         </div>
-        <div style={{display:'flex', gap:8, marginTop:14}}>
-          <button onClick={onEdit} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Editar datos</button>
-          <button onClick={onRepresupuestar} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Represupuestar</button>
-          <a href={`/presupuesto?nro=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer" style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontWeight:500, textDecoration:'none'}}>Ver PDF →</a>
+        {/* En espera, lo que sigue es aprobar (o darlo por perdido). Antes la única puerta
+            era el texto "En espera" de la columna Estado, que era un desplegable escondido. */}
+        {onAprobar && <div style={{display:'flex', gap:8, marginTop:14}}>
+          <button onClick={onAprobar} style={{flex:2, padding:'10px', borderRadius:10, border:'none', background:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer'}}>✓ Aprobar</button>
+          {onPerdido && <button onClick={onPerdido} style={{flex:'1 0 auto', padding:'10px 12px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:14, cursor:'pointer', whiteSpace:'nowrap'}}>Lo perdimos</button>}
+        </div>}
+        <div style={{display:'flex', gap:8, marginTop:onAprobar?8:14}}>
+          <button onClick={onEdit} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:onAprobar?`1px solid ${T.border}`:'none', background:onAprobar?T.surface:T.ink, color:onAprobar?T.ink:'#fff', fontSize:13, fontWeight:600, cursor:'pointer'}}>Editar</button>
+          <button onClick={onRepresupuestar} style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:600, cursor:'pointer'}}>Represupuestar</button>
+          <a href={`/presupuesto?nro=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer" style={{flex:1, textAlign:'center', padding:'8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, fontWeight:500, textDecoration:'none'}}>PDF →</a>
         </div>
         <button onClick={onEliminar} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.ink3, fontSize:12, fontWeight:500, cursor:'pointer'}}
           onMouseEnter={e=>{e.currentTarget.style.color=T.brand; e.currentTarget.style.borderColor=T.brand}}
@@ -2358,7 +2403,11 @@ function FilaOpcion({marcado, nombre, precio, esAdic, onToggle}){
 // Un presupuesto en $0 o que ya tiene resguardo (col Resguardo de PRESUPUESTOS) no vuelve a pedirlo.
 // Con "Cuenta corriente" u "OC después" (condición de la agencia o del cliente) no se pide nada: el servidor lo anota solo.
 const necesitaResguardo = (p, agencias, clientes) => parseMonto(p['Precio Final'])>0 && !String(p['Resguardo']||'').trim() && !sinPedir(condicionDe(p, agencias, clientes))
+// Esc cierra los modales de aprobar (antes había que ir al mouse)
+const useEscCierra = onClose => useEffect(()=>{ const h=e=>{ if(e.key==='Escape') onClose&&onClose() }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h) /* eslint-disable-next-line */ },[])
+
 function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
+  useEscCierra(onClose)
   const num=presu['Columna 1'], total=parseMonto(presu['Precio Final']), sena30=Math.round(total*0.3)
   const [tipo,setTipo]=useState(esOC(condicion)?'oc':'sena'), [monto,setMonto]=useState(sena30), [ref,setRef]=useState(''), [copiado,setCopiado]=useState(false)
   const [fecha,setFecha]=useState(()=>new Date().toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}))
@@ -2408,6 +2457,7 @@ function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
   </div>
 }
 function AprobarAdicionalesModal({presu, onClose, onConfirm, saving}){
+  useEscCierra(onClose)
   const desglosado=presuDesglosado(presu)
   const items=itemsDePresu(presu)
   const opts=opcionesDePresu(presu)
@@ -2950,8 +3000,11 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   const addRow=()=>setItems(it=>[...it,{pedido:'',quien:'',precio:0}])
   const delRow=i=>setItems(it=>it.length>1?it.filter((_,j)=>j!==i):[{pedido:'',quien:'',precio:0}])
 
-  let fl=0,mg=0; items.forEach(s=>{ if(!s.quien)return; const v=Number(s.precio)||0; if(s.quien==='Somos Magma')mg+=v; else fl+=v })
-  const fee=total-fl-mg
+  // Una línea sin nadie asignado todavía cuesta lo que dice (misma regla que gananciaPresu /
+  // costoStaffProyecto). Antes no sumaba: antes de cargar a Sofi, #2437 decía 100% de ganancia.
+  // esMagma y no ==='Somos Magma': "somos magma" en minúscula contaba como freelancer.
+  let fl=0,mg=0,pend=0; items.forEach(s=>{ const v=Number(s.precio)||0; if(!String(s.quien||'').trim()){ if(s.pedido) pend+=v; return } if(esMagma(s.quien))mg+=v; else fl+=v })
+  const fee=total-fl-mg-pend
   const sinAsignar=items.filter(s=>s.pedido&&!s.quien).length
   // 🛡 Seguro de accidentes personales: qué se pidió ya para este trabajo (solapa SEGUROS, una fila por persona)
   const [seguroModal,setSeguroModal]=useState(false)
@@ -3006,7 +3059,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   return <div style={{padding:'14px 18px 18px', background:T.surfaceAlt, borderTop:`1px solid ${T.border}`}}>
     <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       {[['N°',num],['Agencia',p['Agencia']],['Cliente',p['Cliente']],['Evento',p['Fecha Evento']]].filter(x=>x[1]).map(([k,v])=>(
-        <div key={k}><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:2}}>{v}</div></div>
+        <div key={k}><div style={{fontSize:12.5, color:T.ink2}}>{k}</div><div style={{fontSize:13, color:T.ink, marginTop:2}}>{v}</div></div>
       ))}
       <div style={{flex:1}}/>
       {onEditarDatos && <button onClick={onEditarDatos} style={{...miniBtn, alignSelf:'center'}}>Editar datos (fecha, etc)</button>}
@@ -3025,24 +3078,24 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     {porFecha && <div style={{fontSize:11.5, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:'8px 11px', marginBottom:10, lineHeight:1.45}}>
       Este trabajo tiene <strong>{fechasProyecto.length} fechas</strong>. Poné qué día va cada uno: es lo que después le llega en el mail y lo que dice cuánto pagarle por jornada.
     </div>}
-    <div style={{display:'grid', gridTemplateColumns:GRID_STAFF, gap:10, fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, padding:'0 2px 8px'}}>
+    <div style={{display:'grid', gridTemplateColumns:GRID_STAFF, gap:10, fontSize:12.5, fontWeight:500, color:T.ink2, padding:'0 2px 8px'}}>
       <span>Servicio</span><span>Quién lo hace</span>{porFecha&&<span>Qué día</span>}<span style={{textAlign:'right'}}>Monto</span><span/>
     </div>
     {items.map((s,i)=>(
       <div key={i} style={{display:'grid', gridTemplateColumns:GRID_STAFF, gap:10, marginBottom:8, alignItems:'start'}}>
         <div>
           <input list="v2-svcs" value={s.pedido} onChange={e=>upd(i,'pedido',e.target.value)} placeholder="Servicio" style={inpV2}/>
-          {esSvcNuevo(s.pedido) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
+          {esSvcNuevo(s.pedido) && <span style={{fontSize:12.5, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>+ servicio nuevo</span>}
         </div>
         <div>
           <input list={dlStaff} autoComplete="off" value={s.quien} onChange={e=>setQuien(i,e.target.value)} placeholder="Freelancer o Somos Magma" style={{...inpV2, borderColor:s.pedido&&!s.quien?T.warn:(esFreelancerNuevo(s.quien)?T.warn:T.border)}}/>
           {avisos[i] && (avisos[i].soloContador
-            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:10.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · ninguno de sus arreglos cubre este trabajo: el monto va a mano':''}</span>
-            : <span title={avisos[i].alcance} style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
+            ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:12.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · ninguno de sus arreglos cubre este trabajo: el monto va a mano':''}</span>
+            : <span title={avisos[i].alcance} style={{fontSize:12.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
                 {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
               </span>)}
-          {respuestas[i] && <span style={{fontSize:10.5, fontWeight:600, display:'block', marginTop:3, color:respuestas[i].tono}}>{respuestas[i].texto}</span>}
-          {esFreelancerNuevo(s.quien) && <span style={{fontSize:10, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
+          {respuestas[i] && <span style={{fontSize:12.5, fontWeight:600, display:'block', marginTop:3, color:respuestas[i].tono}}>{respuestas[i].texto}</span>}
+          {esFreelancerNuevo(s.quien) && <span style={{fontSize:12.5, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
         </div>
         {porFecha && <select value={s.fecha||''} onChange={e=>upd(i,'fecha',e.target.value)} style={{...inpV2, cursor:'pointer', borderColor:s.quien&&!s.fecha?T.warn:T.border}}>
           <option value="">— sin día —</option>
@@ -3070,10 +3123,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
     {/* Gastos de este trabajo: lo que se pagó aparte del staff (alquiler de equipos, auto, nafta). Se anotan desde
         Caja → "¿Pagaste algo?", eligiendo el trabajo. Acá se ven y se restan de la ganancia. */}
     {(p.__gastos||[]).length>0 && <div style={{marginTop:14, paddingTop:12, borderTop:`1px solid ${T.border}`}}>
-      <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, marginBottom:4}}>Gastos de este trabajo · {fmt(p.__gastoTotal)}</div>
+      <div style={{fontSize:13, fontWeight:600, color:T.ink, marginBottom:4}}>Gastos de este trabajo · {fmt(p.__gastoTotal)}</div>
       {p.__gastos.map((g,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:12, padding:'6px 0', borderTop:k===0?'none':`1px solid ${T.border}`, fontSize:12.5}}>
         <span style={{minWidth:0}}><span style={{color:T.ink}}>{g.concepto}</span><span style={{color:T.ink3}}>{[g.rubro, g.fecha, g.cuenta].filter(Boolean).map(x=>` · ${x}`).join('')}</span></span>
-        <span style={{fontFamily:MONO, color:T.brand, whiteSpace:'nowrap'}}>−{fmt(g.monto)}</span>
+        <span style={{fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>−{fmt(g.monto)}</span>
       </div>)}
     </div>}
     {(()=>{ const gastosT=p.__gastoTotal||0, ganancia=fee+mg-gastosT; const margenPct=total>0?Math.round((ganancia/total)*100):0; const sem=semaforo(margenPct); return (
@@ -3081,14 +3134,15 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       <Mini label="Presupuestado" val={fmt(total)}/>
       <Mini label="Freelance" val={fmt(fl)}/>
       <Mini label="Somos Magma" val={fmt(mg)} color={T.pos}/>
+      {pend>0 && <Mini label="A asignar" val={fmt(pend)} color={T.warn}/>}
       <Mini label="Fee Magma" val={fmt(fee)} color={fee<0?T.brand:T.ink}/>
-      {gastosT>0 && <Mini label="Gastos del trabajo" val={'−'+fmt(gastosT)} color={T.brand}/>}
+      {gastosT>0 && <Mini label="Gastos del trabajo" val={'−'+fmt(gastosT)}/>}
       <Mini label="Ganancia Magma" val={(ganancia<0?'−':'')+fmt(ganancia)} color={ganancia<0?T.brand:T.pos}/>
-      <div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Margen</div><div style={{fontSize:14, fontFamily:MONO, color:sem.c, marginTop:2}}>{margenPct}% · {sem.l}</div><div style={{fontSize:9, color:T.ink3, marginTop:1}}>{gastosT>0?'fee + Somos Magma − gastos':'fee + Somos Magma'}</div></div>
+      <div title={gastosT>0?'fee + Somos Magma − gastos':'fee + Somos Magma'}><div style={{fontSize:12.5, color:T.ink2}}>Margen</div><div style={{fontSize:14, marginTop:2, color:sem.c, fontWeight:600}}>{margenPct}% · {sem.l}</div></div>
       <div style={{flex:1}}/>
-      {sinAsignar>0&&<span style={{fontSize:12, color:T.warn, fontWeight:500}}>{sinAsignar} sin asignar</span>}
+      {sinAsignar>0&&<span style={{fontSize:13, color:T.warn, fontWeight:600}}>{sinAsignar} sin asignar</span>}
       <button onClick={()=>setSeguroModal(true)} title="Mail a La Segunda con los datos de quienes van (nombre, DNI, nacimiento) para el certificado de accidentes personales. Queda anotado en SEGUROS." style={{...miniBtn, padding:'8px 14px', fontWeight:600, color:segurosTrabajo.length?T.pos:T.ink2, borderColor:segurosTrabajo.length?T.pos:T.border}}>🛡 {segurosTrabajo.length?'Seguro pedido':'Pedir seguro'}</button>
-      <button onClick={guardar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
+      <button onClick={guardar} disabled={saving} style={{padding:'10px 20px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar staff'}</button>
     </div> )})()}
     {freel && <FreelancerModal nombre={freel} datos={{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreel(null)} onSaved={()=>{ setFreel(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {seguroModal && <PedirSeguroModal p={p} num={num} presu={presu} items={items} rrhh={rrhh} rrhhNames={rrhhNames} clientes={clientes} seguros={seguros} onClose={()=>setSeguroModal(false)} onSent={()=>{ setSeguroModal(false); if(onRefresh) onRefresh() }} showToast={showToast}/>}
