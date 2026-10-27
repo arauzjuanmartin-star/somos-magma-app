@@ -27,7 +27,7 @@ import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
 import TicketsRevisar from '../components/TicketsRevisar'
 import { leerExtracto, unirExtractos, cruzarExtracto, yaCargadasDe, facturasCandidatas } from '../lib/extracto.mjs'
-import { PMS_ACTIVOS, mailInternoDe } from '../lib/roles'
+import { PMS_ACTIVOS, mailInternoDe, verPlata } from '../lib/roles'
 
 /* ============================================================
    PROTOTIPO DE REDISEÑO — /v2
@@ -426,6 +426,7 @@ function TeamMails(){
 function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const [verCuentas,setVerCuentas]=useState(false)
   const [editSaldos,setEditSaldos]=useState(false)  // "Actualizar saldos" adentro de "ver cuentas"
+  const [verTop,setVerTop]=useState(false)
   const [cobrando,setCobrando]=useState(null)  // cobrar directo desde el dashboard
   const [facturando,setFacturando]=useState(null)  // facturar directo desde el dashboard
   const hoy = new Date()
@@ -505,7 +506,8 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
   const rentabilidadMes = ganMagmaMes
 
   // --- Conversión + ticket ---
-  const presusMes = pr.filter(p=>esDelMes(p['Fecha Presupuesto'],mesActual,anioActual))
+  const fechaFlex = v => { const t=String(v||'').trim(), m=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : parseD(t) }
+  const presusMes = pr.filter(p=>{ const d=fechaFlex(p['Fecha Presupuesto']); return !!d && d.getMonth()+1===mesActual && d.getFullYear()===anioActual })
   const apMes = presusMes.filter(isAprobado).length
   const espMes = presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA').length
   const desMes = presusMes.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
@@ -576,192 +578,122 @@ function Dashboard({data, goTo, onRefresh, showToast, mail}){
     {nombre:'Juan', nombres:['juan']},
   ].filter(m=>!m.nombres.some(n=>misNombres.includes(n))).map(m=>({...m, t:_tareasDe(m.nombres)})).filter(m=>m.t.n>0) : []
 
+  // ======== Rediseño 27/10/2026 ========
+  // La plata sale de los MISMOS cálculos que Caja, Facturación y Pagos Staff (antes el dashboard tenía los suyos y
+  // no coincidían: "a pagar staff 15/10 $13,8M" contaba octubre con la fecha de septiembre). La ven solo Juan, Sofi y Flor.
+  const plata = verPlata(mail)
+  const cHoy = plata ? calcularCaja(data,{hoy, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS}) : null
+  const cProx = plata ? calcularCaja(data,{hoy, mes:mesActual===12?1:mesActual+1, anio:mesActual===12?anioActual+1:anioActual, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS}) : null
+  const stAtrasado = cHoy ? cHoy.items.find(x=>String(x.id).startsWith('ST:') && !x.pagado && x.monto>0) : null   // freelancers del mes pasado
+  const stProx = cProx ? cProx.items.find(x=>String(x.id).startsWith('ST:') && x.monto>0) : null                  // los de este mes, el 15 que viene
+  const freelAtrasado = stAtrasado && diaHoy>15
+  const tareas = plata ? (tareasDeHoy(data,cHoy).tareas||[]).filter(x=>x.tono==='entra'||x.tono==='alerta') : []
+  const porCobrarC = cHoy ? cHoy.cobros.reduce((s,x)=>s+x.saldo,0) : 0, vencidoC = cHoy ? cHoy.cobros.filter(x=>x.vencida).reduce((s,x)=>s+x.saldo,0) : 0
+  const cuentasPesosC = cHoy ? cHoy.cuentas.filter(x=>x.activa&&!x.usd) : []
+  const cuentaVieja = (()=>{ let peor=null, dias=-1; cuentasPesos.forEach(c=>{ const d=ultimoChequeoCuenta(c), n=d?Math.floor((hoy-d)/864e5):999; if(n>dias){ dias=n; peor=c } }); return peor&&dias>2 ? {nombre:String(peor['Nombre']||'').trim(), dias} : null })()
+  const fmtMill = v => v>=1e6 ? `$${(v/1e6).toLocaleString('es-AR',{maximumFractionDigits:1})}M` : fmt(v)
+  // Lo tuyo: solo lo vigente (antes contaba toda la historia: "108 proyectos a tu cargo").
+  const hace120 = new Date(hoy.getTime()-120*864e5)
+  const misParaFacturar = misSinFacturar.filter(p=>{ const fe=parseD(p['Fecha Evento']); return fe && fe>=hace120 })
+  const sinStaff14 = proyectos.filter(p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return false; const d=Math.floor((fe-hoy)/864e5); return d>=-1 && d<=14 && !_tieneStaff(p) })
+  // El equipo sale de PMS_ACTIVOS; lo que quedó a nombre de alguien que ya no es PM es "sin dueño".
+  const activos = PMS_ACTIVOS.map(n=>n.toLowerCase())
+  const _vig = (es) => { const prj=proyectos.filter(es)
+    return { ss:prj.filter(p=>{ const fe=parseD(p['Fecha Evento']); if(!fe) return false; const d=Math.floor((fe-hoy)/864e5); return d>=-1 && d<=14 && !_tieneStaff(p) }).length,
+      sf:prj.filter(p=>{ const fe=parseD(p['Fecha Evento']); return fe && fe<=hoy && fe>=hace120 && !facByNro[String(p['N° presupuesto']||'').trim()] }).length,
+      pc:porCobrar.filter(f=>{ const proy=proyByNro[String(f['N° Presupuesto']||'').trim()]; return proy && es(proy) }).length } }
+  const equipoV = plata ? PMS_ACTIVOS.filter(n=>!misNombres.includes(n.toLowerCase())).map(n=>({nombre:n, t:_vig(p=>String(p['PM']||'').trim().toLowerCase()===n.toLowerCase())})).filter(m=>m.t.ss||m.t.sf||m.t.pc) : []
+  const sinDueno = plata ? (()=>{ const otros={}; proyectos.forEach(p=>{ const pm=String(p['PM']||'').trim(); if(pm && !activos.includes(pm.toLowerCase())) otros[pm]=true })
+    const nombres=Object.keys(otros); const es=p=>{ const pm=String(p['PM']||'').trim(); return !!pm && !activos.includes(pm.toLowerCase()) }
+    return {nombres, t:_vig(es)} })() : null
+  const tarjeta = {background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const chip = {padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer', fontFamily:'inherit'}
+  const lbl = {fontSize:13, color:T.ink2, margin:'18px 4px 8px'}
+  const fila = {display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, width:'100%', padding:'11px 0', border:'none', borderTop:`1px solid ${T.border}`, background:'transparent', fontFamily:'inherit', fontSize:14, color:T.ink, textAlign:'left'}
+  // Hoy: lo urgente de la empresa (socios y Flor) o lo tuyo (PM), en una frase.
+  const frases = plata ? [
+    freelAtrasado && {t:`pagar ${MESES_LARGO[(mesActual+10)%12].toLowerCase()} a ${stAtrasado.partes?.length||''} ${stAtrasado.partes?.length===1?'freelancer':'freelancers'}`, rojo:`● venció el 15/${mesActual}`, chip:`Pagos Staff · ${fmtMill(stAtrasado.monto)}`, ir:()=>goTo&&goTo('pagos')},
+    ...tareas.slice(0,3).map(x=>({t:x.titulo.charAt(0).toLowerCase()+x.titulo.slice(1), rojo:x.tono==='alerta'?'':null, chip:x.ir.label, ir:()=>{ const d=x.ir.donde; if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else goTo&&goTo('egresos') }})),
+    sinStaff14.length>0 && {t:`${sinStaff14.length} ${sinStaff14.length===1?'rodaje':'rodajes'} de los próximos 14 días sin staff`, chip:`Rodajes sin staff (${sinStaff14.length})`, ir:()=>goTo&&goTo('proyectos','pendiente')},
+  ].filter(Boolean) : [
+    misSinStaff.length>0 && {t:`${misSinStaff.length} ${misSinStaff.length===1?'rodaje tuyo':'rodajes tuyos'} de los próximos 14 días sin staff`, chip:'Asignar staff', ir:()=>goTo&&goTo('proyectos','pendiente')},
+  ].filter(Boolean)
+
   return <>
-    <PageHead title="Dashboard" sub={`${MESES_LARGO[mesActual-1]} ${anioActual} · hoy ${diaHoy}`}/>
+    <div style={{display:'flex', alignItems:'baseline', gap:12, marginBottom:14, flexWrap:'wrap'}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>{yo?`Hola, ${yo.nombre}`:'Inicio'}</h1>
+      <span style={{fontSize:14, color:T.ink2}}>{['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][hoy.getDay()]} {diaHoy} de {MESES_LARGO[mesActual-1].toLowerCase()}</span>
+    </div>
     <MailAlert/>
     <RespuestasFreelancerAlert data={data} goTo={goTo}/>
 
-    {/* MI ESPACIO — tus proyectos a cargo + tus tareas (según quién se logueó) */}
-    {misProy.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
-      <CardHead>Tu espacio · {yo?.nombre} <span style={{fontWeight:400, color:T.ink3}}>· {misProy.length} proyectos a tu cargo</span></CardHead>
-      <div style={{display:'flex', borderTop:`1px solid ${T.border}`}}>
-        {[
-          {n:misSinStaff.length, l:'sin staff (≤14 días)', to:'proyectos', filtro:'pendiente', c:T.brand},
-          {n:misSinFacturar.length, l:'para facturar', to:'facturacion', filtro:undefined, c:T.brand},
-          {n:misPorCobrar.length, l:'por cobrar', to:'facturacion', filtro:'pendiente', c:T.warn},
-        ].map((t,i)=>(
-          <div key={i} onClick={()=>t.n>0&&goTo&&goTo(t.to,t.filtro)} style={{flex:1, padding:'14px 16px', borderLeft:i>0?`1px solid ${T.border}`:'none', cursor:t.n>0?'pointer':'default', textAlign:'center'}}
-            onMouseEnter={e=>{if(t.n>0)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-            <div style={{fontSize:26, fontWeight:700, fontFamily:MONO, color:t.n>0?t.c:T.ink3}}>{t.n}</div>
-            <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{t.l}</div>
-          </div>
-        ))}
-      </div>
-    </div>}
+    {/* HOY: en una frase, con atajos al lugar donde se hace (no repite los botones de cada módulo) */}
+    <div style={{...tarjeta, padding:'16px 18px', marginTop:12}}>
+      {frases.length
+        ? <><div style={{fontSize:17, lineHeight:1.4, color:T.ink}}><strong>Hoy: {frases[0].t}</strong>{frases[0].rojo && <span style={{color:T.brand, fontWeight:600}}> · {frases[0].rojo}</span>}
+              {frases.length>1 && <span style={{color:T.ink2}}> · {frases.slice(1).map(f=>f.t).join(' · ')}</span>}</div>
+            <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:11}}>{frases.slice(0,4).map((f,k)=><button key={k} type="button" style={chip} onClick={f.ir}>{f.chip}</button>)}</div></>
+        : <div style={{fontSize:17, fontWeight:700, color:T.ink}}>Hoy: nada urgente ✓</div>}
+    </div>
 
-    {/* EL EQUIPO — oversight para dueños: pendientes de cada PM */}
-    {equipo.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginTop:14}}>
-      <CardHead>El equipo · pendientes de cada uno</CardHead>
-      <div style={{display:'grid', gridTemplateColumns:'1.3fr 90px 100px 90px', padding:'8px 18px', fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, borderTop:`1px solid ${T.border}`}}>
-        <span>PM</span><span style={{textAlign:'center'}}>sin staff</span><span style={{textAlign:'center'}}>para facturar</span><span style={{textAlign:'center'}}>por cobrar</span>
+    {/* LO TUYO: lo vigente del que entró */}
+    {misProy.length>0 && <>
+      <div style={lbl}>Lo tuyo</div>
+      <div style={{...tarjeta, padding:'2px 18px'}}>
+        {[{n:misSinStaff.length, l:'Rodajes sin staff, próximos 14 días', to:'proyectos', f:'pendiente', c:T.warn},
+          {n:misParaFacturar.length, l:'Trabajos hechos sin facturar', to:'facturacion', f:{agF:'facturar'}},
+          {n:misPorCobrar.length, l:'Facturas por cobrar', to:'facturacion', f:undefined}].map((x,k)=>
+          <button key={k} type="button" onClick={()=>goTo&&goTo(x.to,x.f)} style={{...fila, borderTop:k?fila.borderTop:'none', cursor:'pointer'}}>
+            <span>{x.l}</span><span style={{fontFamily:MONO, fontWeight:600, color:x.n>0?(x.c||T.ink):T.ink2}}>{x.n}</span></button>)}
       </div>
-      {equipo.map((m,i)=>(
-        <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 90px 100px 90px', padding:'10px 18px', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
-          <span style={{color:T.ink, fontWeight:600}}>{m.nombre} <span style={{fontWeight:400, color:T.ink3, fontSize:11.5}}>· {m.t.n} proy</span></span>
-          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.ss>0?T.brand:T.ink3}}>{m.t.ss}</span>
-          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.sf>0?T.brand:T.ink3}}>{m.t.sf}</span>
-          <span style={{textAlign:'center', fontFamily:MONO, fontWeight:600, color:m.t.pc>0?T.warn:T.ink3}}>{m.t.pc}</span>
-        </div>
-      ))}
-    </div>}
+    </>}
 
+    {/* EL EQUIPO y lo que quedó sin dueño (solo socios y Flor) */}
+    {plata && (equipoV.length>0 || sinDueno?.nombres.length>0) && <>
+      <div style={lbl}>El equipo</div>
+      <div style={{...tarjeta, padding:'2px 18px'}}>
+        {equipoV.map((m,k)=><div key={m.nombre} style={{...fila, borderTop:k?fila.borderTop:'none'}}><span><strong>{m.nombre}</strong> <span style={{color:T.ink2}}>· {[m.t.ss&&`${m.t.ss} sin staff`, m.t.sf&&`${m.t.sf} para facturar`, m.t.pc&&`${m.t.pc} por cobrar`].filter(Boolean).join(' · ')}</span></span></div>)}
+        {sinDueno?.nombres.length>0 && (sinDueno.t.ss||sinDueno.t.sf||sinDueno.t.pc) ? <div style={{...fila, borderTop:equipoV.length?fila.borderTop:'none'}}><span><strong>Sin dueño</strong> <span style={{color:T.ink2}}>(a nombre de {sinDueno.nombres.slice(0,3).join(', ')}{sinDueno.nombres.length>3?'…':''}) · {[sinDueno.t.ss&&`${sinDueno.t.ss} sin staff`, sinDueno.t.sf&&`${sinDueno.t.sf} para facturar`, sinDueno.t.pc&&`${sinDueno.t.pc} por cobrar`].filter(Boolean).join(' · ')}</span></span><span style={{fontSize:13, color:T.warn, fontWeight:600, whiteSpace:'nowrap'}}>hay que repartirlo</span></div> : null}
+      </div>
+    </>}
     {yo && yo.verTodo && <TeamMails/>}
 
-    {/* HERO — los 3 números que mirás todos los días (clickeables) */}
-    <div style={{display:'flex', gap:14}}>
-      <div style={{flex:1, cursor:'pointer'}} onClick={()=>setVerCuentas(v=>!v)} title="Ver detalle por cuenta">
-        <Hero label="Disponible real"
-          value={fmtS(totalDisponible)}
-          sub={`En caja ${fmtS(totalCaja)} · reservado ${fmt(totalReservado)} · `} subStrong={verCuentas?'ocultar ▲':saldosViejos?(diasChequeo==null?'saldos sin chequear ▼':`saldos de hace ${diasChequeo} días ▼`):'ver cuentas ▼'} subStrongColor={!verCuentas&&saldosViejos?T.warn:T.ink3}/>
+    {/* LA PLATA en una línea por tema, con las cuentas de Caja, Facturación y Pagos Staff */}
+    {plata && <>
+      <div style={lbl}>La plata</div>
+      <div style={{...tarjeta, padding:'14px 18px', fontSize:14.5, color:T.ink2, lineHeight:1.8}}>
+        <div>En las cuentas <strong style={{fontFamily:MONO, color:cHoy.totales.cajaHoy<0?T.brand:T.ink}}>{fmtS(cHoy.totales.cajaHoy)}</strong>{cuentaVieja && <span> · el saldo de {cuentaVieja.nombre} es de hace {cuentaVieja.dias===999?'mucho':`${cuentaVieja.dias} días`}</span>}
+          {' · '}<button type="button" onClick={()=>setVerCuentas(v=>v===true?false:true)} aria-expanded={verCuentas===true} style={{border:'none', background:'none', padding:0, color:T.ink, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', fontSize:14, fontFamily:'inherit'}}>{verCuentas===true?'ocultar cuentas':'ver cuentas'}</button></div>
+        <div>Por cobrar <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(porCobrarC)}</strong>{vencidoC>0 && <> · <span style={{color:T.brand, fontWeight:600}}>● {fmtMill(vencidoC)} vencido</span></>} · <button type="button" onClick={()=>goTo&&goTo('facturacion')} style={{border:'none', background:'none', padding:0, color:T.ink, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', fontSize:14, fontFamily:'inherit'}}>Facturación</button></div>
+        <div>Freelancers{stAtrasado ? <>: {MESES_LARGO[(mesActual+10)%12].toLowerCase()} <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(stAtrasado.monto)}</strong>{freelAtrasado && <span style={{color:T.brand, fontWeight:600}}> atrasado</span>}</> : <>: {MESES_LARGO[(mesActual+10)%12].toLowerCase()} pagado ✓</>}{stProx && <> · {MESES_LARGO[mesActual-1].toLowerCase()} ≈ <strong style={{fontFamily:MONO, color:T.ink}}>{fmtMill(stProx.monto)}</strong> el 15/{mesActual===12?1:mesActual+1}</>}</div>
       </div>
-      <div style={{flex:1, cursor:'pointer'}} onClick={()=>goTo&&goTo('facturacion', atrasadas30.length>0?'atrasadas':undefined)}>
-        <Hero label="Por cobrar"
-          value={fmt(totalPorCobrar)}
-          accent={atrasadas30.length>0?T.brand:T.ink}
-          sub={`${porCobrar.length} facturas · `}
-          subStrong={atrasadas30.length>0?`${atrasadas30.length} atrasadas +30d →`:'al día →'}
-          subStrongColor={atrasadas30.length>0?T.brand:T.pos}/>
-      </div>
-      <div style={{flex:1, cursor:'pointer'}} onClick={()=>goTo&&goTo('pagos')}>
-        <Hero label={`A pagar staff · ${proxPagoFecha.getDate()}/${proxPagoFecha.getMonth()+1}`}
-          value={fmt(totalAPagar)}
-          sub={`${staffAPagar.length} freelancers · `} subStrong="ver →" subStrongColor={T.ink3}/>
-      </div>
-    </div>
-    {verCuentas && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'14px 18px', marginTop:12}}>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
-        <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3}}>Plata por cuenta</div>
-        {!editSaldos && <button style={{...miniBtn, ...(saldosViejos?{borderColor:T.warn, color:T.warn}:{})}} onClick={()=>setEditSaldos(true)}>Actualizar saldos</button>}
-      </div>
-      {editSaldos
-        ? <SaldosEditor cuentas={cuentasActivas} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/>
-        : <>
-          {cuentasActivas.filter(c=>!esCuentaUsd(c) || parseMonto(c['Saldo USD'])>0).map((c,i)=>{ const saldo=parseMonto(c['Saldo actual']); const usd=parseMonto(c['Saldo USD']); const chq=ultimoChequeoCuenta(c); const enUsd=esCuentaUsd(c); return (
-            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
-              <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div><div style={{fontSize:11, color:T.ink3}}>{[c['Banco']&&c['Banco']!=='—'?c['Banco']:null, enUsd?null:chq?`chequeado ${chq.getDate()}/${chq.getMonth()+1}`:'nunca chequeado'].filter(Boolean).join(' · ')}</div></div>
-              <div style={{textAlign:'right'}}>{enUsd
-                ? <div style={{fontSize:13.5, fontFamily:MONO, color:T.ink}}>USD {fmt(usd)}</div>
-                : <><div style={{fontSize:13.5, fontFamily:MONO, color:saldo<0?T.brand:T.ink}}>{fmtS(saldo)}</div>{usd>0&&<div style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>USD {fmt(usd)}</div>}</>}</div>
-            </div>
-          )})}
-          <div style={{display:'flex', justifyContent:'space-between', padding:'10px 0 0', marginTop:6, borderTop:`1px solid ${T.border}`}}>
-            <span style={{fontSize:12.5, color:T.ink2}}>En caja</span><span style={{fontSize:13.5, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmtS(totalCaja)}</span>
-          </div>
-          {totalReservado>0 && <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.warn}}>Reservado (IVA/imp.)</span><span style={{fontSize:13, fontFamily:MONO, color:T.warn}}>-{fmt(totalReservado)}</span></div>}
-          <div style={{display:'flex', justifyContent:'space-between', padding:'4px 0'}}><span style={{fontSize:12.5, color:T.ink2, fontWeight:600}}>Disponible real</span><span style={{fontSize:14, fontFamily:MONO, fontWeight:700, color:totalDisponible<0?T.brand:T.pos}}>{fmtS(totalDisponible)}</span></div>
-          <div style={{fontSize:11, color:saldosViejos?T.warn:T.ink3, marginTop:8}}>{diasChequeo==null
-            ? 'Hay cuentas que nunca se chequearon contra el banco. Mirá el home banking y cargá los saldos con "Actualizar saldos".'
-            : saldosViejos
-              ? `Último chequeo contra el banco hace ${diasChequeo} días. Los cobros y pagos de la app lo van moviendo, pero el banco es el que manda: actualizalo.`
-              : `Chequeado contra el banco ${diasChequeo===0?'hoy':'ayer'}. Cada cobro o pago que cargás en la app lo va moviendo solo.`}</div>
-        </>}
-    </div>}
+      {verCuentas===true && <div style={{...tarjeta, padding:'12px 18px', marginTop:10}}>
+        {editSaldos
+          ? <SaldosEditor cuentas={cuentasActivas} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/>
+          : <>{cuentasActivas.filter(c=>!esCuentaUsd(c) || parseMonto(c['Saldo USD'])>0).map((c,k)=>{ const saldo=parseMonto(c['Saldo actual']), usd=parseMonto(c['Saldo USD']), chq=ultimoChequeoCuenta(c), enUsd=esCuentaUsd(c); return (
+              <div key={k} style={{...fila, borderTop:k?fila.borderTop:'none'}}>
+                <span>{c['Nombre']}<span style={{display:'block', fontSize:12.5, color:T.ink2}}>{enUsd?'dólares':chq?`chequeado ${chq.getDate()}/${chq.getMonth()+1}`:'nunca chequeado'}</span></span>
+                <span style={{fontFamily:MONO, color:!enUsd&&saldo<0?T.brand:T.ink}}>{enUsd?`USD ${fmt(usd)}`:fmtS(saldo)}</span></div>) })}
+            <div style={{display:'flex', justifyContent:'flex-end', paddingTop:10}}><button style={{...miniBtn, fontSize:13}} onClick={()=>setEditSaldos(true)}>Actualizar saldos</button></div></>}
+      </div>}
 
-    {/* ESTE MES */}
-    <SectionTitle>{MESES_LARGO[mesActual-1]} · este mes</SectionTitle>
-    <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-      <Stat label="Cobrado" value={fmt(ingresosMes)} color={T.pos} sub="plata que entró este mes"/>
-      {pctATiempo!=null && <Stat label="Cobrado a tiempo" value={pctATiempo+'%'} color={pctATiempo>=70?T.pos:T.brand} sub={`pagadas dentro de 30 días (objetivo). Hoy tardan ${diasPromCobro} días en promedio · ${facMedibles.length} fact.`}/>}
-      <Stat label="Facturado (eventos)" value={fmt(facMesTotales)} sub="valor de los trabajos de este mes"/>
-      <Stat label="Pagos staff" value={fmt(pagosStaffMes)} sub="staff de eventos de este mes (sin Somos Magma)"/>
-      <Stat label="Ganancia Magma" value={fmtS(rentabilidadMes)} color={rentabilidadMes>=0?T.pos:T.brand} sub="precio − staff de afuera − gastos del trabajo (impuestos y Somos Magma adentro)"/>
-      <Stat label="Conversión" value={tasaConversion+'%'} sub={`${apMes} aprob. de ${denom} presus del mes`}/>
-      <Stat label="Ticket prom." value={fmt(ticketPromedio)} sub={`${eventosMes} ${eventosMes===1?'evento aprobado':'eventos aprobados'} este mes`}/>
-    </div>
-
-    {/* PIPELINE */}
-    <SectionTitle>El mes pasado, este, y lo que viene</SectionTitle>
-    <div style={{display:'flex', gap:12}}>
-      {pipeline.map((p,i)=>(
-        <div key={i} style={{flex:1, background:p.esActual?T.brandSoft:T.surface, border:`1px solid ${p.esActual?T.brand:T.border}`, borderRadius:12, padding:'16px 18px'}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
-            <span style={{fontSize:12.5, fontWeight:p.esActual?700:600, color:p.esActual?T.brand:T.ink}}>{MESES_LARGO[p.m-1]}{p.esActual?' · hoy':''}</span>
-            <span style={{fontSize:11, color:T.ink3}}>{p.cant} aprob.</span>
-          </div>
-          <div style={{fontSize:22, fontWeight:600, fontFamily:MONO, color:T.ink, marginTop:10}}>{fmtM(p.fact)}</div>
-          <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>{p.esPasado?'facturado':'facturación esperada'}</div>
-          <div style={{fontSize:13, fontWeight:600, fontFamily:MONO, color:T.pos, marginTop:10}}>{fmtM(p.gan)} <span style={{fontSize:11, fontWeight:400, color:T.ink3, fontFamily:'inherit'}}>ganancia neta</span></div>
-        </div>
-      ))}
-    </div>
-
-    {/* DOS COLUMNAS: atención + alertas */}
-    <div style={{display:'flex', gap:14, marginTop:28, alignItems:'flex-start'}}>
-      <div style={{flex:1.4, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <CardHead>Cobros atrasados</CardHead>
-        {atrasadas30.length===0
-          ? <Empty>Sin cobros atrasados +30 días 🎉</Empty>
-          : atrasadas30.slice(0,8).map((f,i)=>(
-            <div key={i} onClick={()=>goTo&&goTo('facturacion','atrasadas')}
-              style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer'}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceAlt} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:13, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Cliente']||f['Agencia']||'—'}</div>
-                <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||''}</div>
-              </div>
-              <div style={{textAlign:'right', flexShrink:0, marginLeft:12, display:'flex', alignItems:'center', gap:10}}>
-                <div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(f.monto)}</div>
-                <div style={{fontSize:11, color:T.brand, fontWeight:600}}>{f.diasDesdeEvento}d</div></div>
-                <button onClick={e=>{e.stopPropagation(); setCobrando(f)}} title="Registrar el cobro sin salir del Dashboard" style={{fontSize:11, padding:'5px 12px', borderRadius:7, border:'none', background:T.pos, color:'#fff', fontWeight:700, cursor:'pointer', flexShrink:0}}>Cobrar</button>
-              </div>
-            </div>
-          ))}
-      </div>
-
-      <div style={{flex:1, display:'flex', flexDirection:'column', gap:14}}>
-        <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <CardHead>Listo para facturar</CardHead>
-          {parafacturar.length===0
-            ? <Empty>Nada pendiente de facturar 🎉</Empty>
-            : parafacturar.slice(0,6).map((x,i)=>(
-              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:13, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Cliente']||x.p['Agencia']||'—'}</div>
-                  <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||''}</div>
-                </div>
-                <div style={{display:'flex', alignItems:'center', gap:9, flexShrink:0}}>
-                  <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(x.pendiente)}</span>
-                  <button onClick={()=>setFacturando(x)} title="Crear la factura sin salir del Dashboard" style={{fontSize:11, padding:'5px 12px', borderRadius:7, border:'none', background:T.brand, color:'#fff', fontWeight:700, cursor:'pointer'}}>Facturar</button>
-                </div>
-              </div>
-            ))}
-        </div>
-        <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <CardHead>Necesita atención</CardHead>
-          {alertas.length===0
-            ? <Empty>Todo en orden ✓</Empty>
-            : alertas.map((a,i)=>(
-              <div key={i} onClick={()=>a.to&&goTo&&goTo(a.to,a.filtro)} style={{display:'flex', gap:10, alignItems:'flex-start', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:a.to?'pointer':'default'}}
-                onMouseEnter={e=>{if(a.to)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                <span style={{width:7,height:7,borderRadius:7,marginTop:5,flexShrink:0,background:a.sev==='brand'?T.brand:T.warn}}/>
-                <span style={{fontSize:12.5, color:T.ink2, lineHeight:1.4, flex:1}}>{a.txt}</span>
-                {a.to && <span style={{fontSize:12, color:T.ink3}}>→</span>}
-              </div>
-            ))}
-        </div>
-        <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <CardHead>Top clientes {anioActual}</CardHead>
-          {topClientes.map(([c,m],i)=>(
-            <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'9px 18px', borderTop:`1px solid ${T.border}`}}>
-              <span style={{fontSize:12.5, color:T.ink}}>{c}</span>
-              <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink2}}>{fmtM(m)}</span>
-            </div>
-          ))}
+      {/* CÓMO VAMOS: el mes y la tira de meses */}
+      <div style={lbl}>Cómo vamos</div>
+      <div style={{...tarjeta, padding:'14px 18px'}}>
+        <div style={{fontSize:14.5, color:T.ink2, lineHeight:1.7}}>{MESES_LARGO[mesActual-1]}: vendido <strong style={{fontFamily:MONO, color:T.ink}}>{fmtMill(facMesTotales)}</strong> · ganancia <strong style={{fontFamily:MONO, color:rentabilidadMes<0?T.brand:T.pos}}>{fmtMill(rentabilidadMes)}</strong> · conversión <strong style={{fontFamily:MONO, color:T.ink}}>{tasaConversion}%</strong> <span>({apMes} de {denom} presus del mes)</span>{eventosMes>0 && <> · ticket promedio <strong style={{fontFamily:MONO, color:T.ink}}>{fmtMill(ticketPromedio)}</strong></>}
+          {pctATiempo!=null && <div style={{fontSize:13.5}}>Los clientes pagan en promedio a {diasPromCobro} días · {pctATiempo}% dentro de los 30</div>}</div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:8, marginTop:12}}>
+          {pipeline.map((p,k)=><div key={k} style={{background:p.esActual?T.surface:T.surfaceAlt, border:`1px solid ${p.esActual?T.ink:'transparent'}`, borderRadius:10, padding:'10px 12px'}}>
+            <div style={{fontSize:13, color:T.ink, fontWeight:p.esActual?700:500}}>{MESES_LARGO[p.m-1]}{p.esActual?' · este':''}</div>
+            <div style={{fontFamily:MONO, fontSize:16, fontWeight:600, color:T.ink, marginTop:3}}>{fmtM(p.fact)}</div>
+            <div style={{fontSize:12.5, color:T.ink2}}>{p.cant} aprob. · ganancia {fmtM(p.gan)}</div>
+          </div>)}
         </div>
       </div>
-    </div>
-  {cobrando && <CobroModal f={cobrando} cuentas={cuentas} onClose={()=>setCobrando(null)} onRefresh={onRefresh} showToast={showToast}/>}
-  {facturando && <NuevaFactura pendientes={parafacturar} agencias={data.agencias||[]} contactos={data.contactos||[]} initialSel={facturando} onClose={()=>setFacturando(null)} onCreada={()=>{ setFacturando(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
+      <button type="button" onClick={()=>setVerTop(!verTop)} aria-expanded={verTop} style={{...tarjeta, width:'100%', border:'none', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'13px 18px', marginTop:10, fontSize:14, color:T.ink2, cursor:'pointer', fontFamily:'inherit'}}>
+        <span>Top clientes {anioActual}</span><span>{verTop?'▲':'▼'}</span></button>
+      {verTop && <div style={{...tarjeta, padding:'2px 18px', marginTop:6}}>{topClientes.map(([cl,m],k)=><div key={k} style={{...fila, borderTop:k?fila.borderTop:'none'}}><span>{cl}</span><span style={{fontFamily:MONO, color:T.ink2}}>{fmtM(m)}</span></div>)}</div>}
+    </>}
   </>
 }
 
