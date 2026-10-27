@@ -3464,6 +3464,8 @@ function Facturacion({data, onRefresh, showToast, nav, clearNav, goTo}){
   // Seguimiento de cobranza por agencia: lo que se está tipeando (fecha prometida + nota) antes de guardar,
   // y qué acción de a varias facturas está en curso (para no mandarla dos veces).
   const [promDraft,setPromDraft]=useState({}), [loteBusy,setLoteBusy]=useState('')
+  // "⋯" de cada renglón: las acciones que no son la principal (rediseño 27/10/2026)
+  const [masDe,setMasDe]=useState(null)
   // Preaviso de vencimiento (lib/preaviso-cobro.js): cuántos tocan hoy, para el cartel de arriba
   const [preaviso,setPreaviso]=useState(null), [preavisoOpen,setPreavisoOpen]=useState(false)
   const contarPreavisos=()=>fetch('/api/preaviso-cobro?contar=1').then(r=>r.json()).then(j=>{ if(j.ok) setPreaviso(j) }).catch(()=>{})
@@ -3622,7 +3624,7 @@ function msgUpload(j, base='PDF subido ✓'){
     if(!ql) return true
     return tiene(a.nombre) || a.razones.some(tiene) || a.deben.some(f=>[f['Nro de Factura'],f['N° Presupuesto'],f['Cliente'],f['Proyecto']].some(tiene)) || a.sinFact.some(x=>[x.p['Columna 1'],x.p['Proyecto'],x.p['Cliente']].some(tiene))
   })
-  const AGF=[['todas',`Todas (${agLista.length})`],['vencido',`Con algo vencido (${agLista.filter(a=>a.vencido>0).length})`],['facturar',`Con algo para facturar (${agLista.filter(a=>a.sinFact.length).length})`],['sinenviar',`Con facturas sin enviar (${agLista.filter(a=>a.sinEnviar.length).length})`]]
+  const AGF=[['todas','Todas',agLista.length],['vencido','Para reclamar',agLista.filter(a=>a.vencido>0).length],['facturar','Para facturar',agLista.filter(a=>a.sinFact.length).length],['sinenviar','Sin enviar',agLista.filter(a=>a.sinEnviar.length).length]]
   // Si paga en fecha o cuántos días tarde: solo con 3 cobros medidos o más, con menos no dice nada.
   const comoPaga=a=>a.atrasos.length<3?'':(a.atraso<=0?'suele pagar en fecha':`suele pagar ${a.atraso} días tarde`)
 
@@ -3655,71 +3657,89 @@ function msgUpload(j, base='PDF subido ✓'){
 
   const FILTROS=[['todas','Todas'],['porcobrar','Por cobrar'],['parcial','Parciales'],['cobrada','Cobradas'],['sinenviar',`Sin enviar (${sinEnviarLista.length})`],['sinfacturar',`Sin facturar (${pendientes.length})`],['futuros',`Futuros (${pendFuturos.length})`]]
 
+  // ---- Hoy: qué le toca a administración, en una frase (DESIGN.md, panel Hoy) ----
+  const agReclamar=agLista.filter(a=>a.vencido>0), agFacturar=agLista.filter(a=>a.sinFact.length), agMandar=agLista.filter(a=>a.sinEnviar.length)
+  const topMandar=[...agMandar].sort((x,y)=>y.sinEnviar.length-x.sinEnviar.length)[0], topFacturar=[...agFacturar].sort((x,y)=>y.sinFactMonto-x.sinFactMonto)[0]
+  const abrirAg=(nombre,filtro)=>{ setVista('agencias'); setQ(''); if(filtro) setAgF(filtro); setAgOpen(o=>({...o,[nombre]:true})) }
+  const fmtMill=v=>v>=1e6?`$${(v/1e6).toLocaleString('es-AR',{maximumFractionDigits:1})}M`:fmt(v)
+  const chipHoy={padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer', fontFamily:'inherit'}
+  const hayHoy=agReclamar.length||pendientes.length||sinEnviarLista.length
   return <>
-    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Facturación</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>{filtrada.length} de {fc.length} · {pendientes.length} sin facturar</div></div>
-      <button onClick={()=>setReclamo('')} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13.5, fontWeight:600, cursor:'pointer'}} title="Un solo mail con todas las facturas pendientes de un cliente">✉ Reclamar cuenta</button>
-      <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap'}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3, flex:1}}>Facturación</h1>
+      <button onClick={()=>setReclamo('')} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:14, fontWeight:500, cursor:'pointer'}} title="Un solo mail con todas las facturas pendientes de un cliente">✉ Reclamar cuenta</button>
+      <button onClick={()=>setNuevaF(true)} style={{padding:'10px 18px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer'}}>+ Nueva factura</button>
     </div>
-    {(preaviso?.n>0||preaviso?.resolver>0) && <div onClick={()=>setPreavisoOpen(true)} style={{display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:16, borderRadius:12, border:`1px solid ${T.warn}`, background:T.surfaceAlt, cursor:'pointer'}}>
-      <span style={{fontSize:20}}>📨</span>
-      <span style={{flex:1, fontSize:13.5, color:T.ink}}>
-        {preaviso.n>0 && <><b>{preaviso.n} {preaviso.n===1?'factura está por vencer':'facturas están por vencer'}</b> · {fmt(preaviso.total)} · el aviso al cliente sale de tu mail, con tu firma</>}
-        {preaviso.resolver>0 && <div style={{fontSize:12.5, color:T.warn, fontWeight:600, marginTop:preaviso.n>0?3:0}}>{preaviso.resolver} {preaviso.resolver===1?'factura por vencer no puede avisarse':'facturas por vencer no pueden avisarse'} hasta que la resuelvas (sin mandar, sin N°, anulada)</div>}
-      </span>
-      <span style={{...miniBtn, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>Ver y mandar</span>
-    </div>}
-    <div style={{display:'flex', gap:14, marginBottom:20}}>
-      <Hero label="Por cobrar" value={fmt(pcTotal)} accent={T.ink} sub={`${noCobradas.length} facturas · saldo real`}
-        desglose={[
-          {l:'Vencido', v:fmt(vencidasMonto), c:vencidasMonto>0?T.brand:T.ink3},
-          {l:'Vence esta semana', v:fmt(pcPorVencer), c:pcPorVencer>0?T.warn:T.ink3},
-          {l:'En plazo', v:fmt(pcEnPlazo), c:T.ink2},
-        ]}/>
-      <Hero label="Por facturar" value={fmt(porFacturarTotal)} accent={T.warn} sub={`${pendientes.length} trabajos ya hechos sin factura`}
-        desglose={montoFuturos>0?[{l:`+ ${pendFuturos.length} trabajos futuros · ver para facturar por adelantado`, v:fmt(montoFuturos), c:T.ink3, onClick:()=>setFilt('futuros')}]:null}/>
+    {/* Hoy: reclamar, facturar, mandar. Antes eran dos números grandes y había que abrir agencia por agencia. */}
+    <div style={{background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', padding:cel?'14px':'16px 18px', marginBottom:10}}>
+      {hayHoy
+        ? <div style={{fontSize:cel?15.5:17, lineHeight:1.4, color:T.ink}}>
+            <strong>Hoy: {agReclamar.length?`reclamar a ${agReclamar.length} ${agReclamar.length===1?'agencia':'agencias'}`:pendientes.length?`facturar ${pendientes.length} ${pendientes.length===1?'trabajo':'trabajos'}`:`mandar ${sinEnviarLista.length} ${sinEnviarLista.length===1?'factura':'facturas'}`}</strong>
+            <span style={{color:T.ink2}}>{[agReclamar.length&&pendientes.length&&` · facturar ${pendientes.length} ${pendientes.length===1?'trabajo':'trabajos'}`, (agReclamar.length||pendientes.length)&&sinEnviarLista.length&&` · mandar ${sinEnviarLista.length} ${sinEnviarLista.length===1?'factura':'facturas'}`].filter(Boolean).join('')}</span>
+          </div>
+        : <div style={{fontSize:17, fontWeight:700, color:T.ink}}>Hoy: nada pendiente ✓</div>}
+      {(hayHoy||preaviso?.n>0) ? <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:11}}>
+        {agReclamar[0] && <button type="button" style={chipHoy} onClick={()=>abrirAg(agReclamar[0].nombre,'vencido')}>Reclamar a {agReclamar[0].nombre} · {fmtMill(agReclamar[0].vencido)}</button>}
+        {topFacturar && <button type="button" style={chipHoy} onClick={()=>abrirAg(topFacturar.nombre,'facturar')}>Facturar {topFacturar.nombre} ({topFacturar.sinFact.length})</button>}
+        {topMandar && <button type="button" style={chipHoy} onClick={()=>abrirAg(topMandar.nombre,'sinenviar')}>Mandar {topMandar.nombre} ({topMandar.sinEnviar.length})</button>}
+        {preaviso?.n>0 && <button type="button" style={chipHoy} onClick={()=>setPreavisoOpen(true)}>📨 Avisar {preaviso.n} por vencer</button>}
+      </div> : null}
     </div>
+    <p style={{fontSize:13.5, color:T.ink2, margin:'0 4px 16px', lineHeight:1.6}}>
+      Por cobrar <strong style={{fontFamily:MONO, color:T.ink}}>{fmtMill(pcTotal)}</strong>{vencidasMonto>0 && <> (<span style={{color:T.brand, fontWeight:600}}>● {fmtMill(vencidasMonto)} vencido</span>{pcPorVencer>0?` · ${fmtMill(pcPorVencer)} vence esta semana`:''})</>}
+      {' · '}Por facturar <strong style={{fontFamily:MONO, color:T.ink}}>{fmtMill(porFacturarTotal)}</strong> sin IVA
+      {montoFuturos>0 && <> · <button type="button" onClick={()=>{ setVista('lista'); setFilt('futuros') }} style={{border:'none', background:'transparent', padding:0, cursor:'pointer', fontFamily:'inherit', fontSize:13.5, color:T.ink2, textDecoration:'underline', textUnderlineOffset:3}}>+ {fmtMill(montoFuturos)} de {pendFuturos.length} trabajos futuros</button></>}
+    </p>
+    {preaviso?.resolver>0 && <div onClick={()=>setPreavisoOpen(true)} style={{fontSize:13, color:T.warn, fontWeight:600, margin:'-8px 4px 14px', cursor:'pointer'}}>{preaviso.resolver} {preaviso.resolver===1?'factura por vencer no puede avisarse':'facturas por vencer no pueden avisarse'} hasta que la resuelvas (sin mandar, sin N°, anulada) →</div>}
     <div style={{display:'flex', marginBottom:16, borderBottom:`1px solid ${T.border}`}}>
-      {[['agencias','Por agencia','qué debe y qué falta facturarle a cada una'],['lista','Lista','todas las facturas, una por una']].map(([k,l,s])=>
-        <button key={k} onClick={()=>setVista(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:vista===k?700:500, color:vista===k?T.ink:T.ink2, borderBottom:`2px solid ${vista===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{s}</span>}</button>)}
+      {[['agencias','Por agencia'],['lista','Facturas']].map(([k,l])=>
+        <button key={k} onClick={()=>setVista(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:14, fontWeight:vista===k?700:500, color:vista===k?T.ink:T.ink2, borderBottom:`2px solid ${vista===k?T.ink:'transparent'}`}}>{l}</button>)}
     </div>
     {vista==='agencias' && (<>
     <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar agencia, cliente, proyecto, N°…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar agencia, cliente, proyecto, N°…" style={{flex:'1 1 240px', minWidth:190, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:14}}/>
     </div>
     <div style={{display:'flex', gap:7, marginBottom:14, flexWrap:'wrap'}}>
-      {AGF.map(([k,l])=><button key={k} onClick={()=>setAgF(k)} style={{padding:'6px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${agF===k?T.ink:T.border}`, background:agF===k?T.ink:T.surface, color:agF===k?'#fff':T.ink2}}>{l}</button>)}
+      {AGF.map(([k,l,n])=><button key={k} aria-pressed={agF===k} onClick={()=>setAgF(k)} style={{padding:'7px 13px', borderRadius:20, fontSize:13.5, fontWeight:500, cursor:'pointer', border:`1px solid ${agF===k?T.ink:T.border}`, background:agF===k?T.ink:T.surface, color:agF===k?'#fff':T.ink}}>{l} <span style={{fontFamily:MONO, fontSize:12.5, opacity:0.7}}>{n}</span></button>)}
     </div>
-    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      {!cel && <div style={{display:'grid', gridTemplateColumns:'minmax(0,1.6fr) 125px 125px 125px 22px', gap:10, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
-        <span>Agencia</span><span style={{textAlign:'right'}}>Vencido</span><span style={{textAlign:'right'}}>En plazo</span><span style={{textAlign:'right'}}>Falta facturar</span><span/>
-      </div>}
-      {agFiltradas.length===0 && <Empty>Ninguna agencia con ese filtro</Empty>}
+    <div>
+      {agFiltradas.length===0 && <div style={{background:T.surface, borderRadius:14, padding:24, textAlign:'center', color:T.ink2, fontSize:14}}>Ninguna agencia con ese filtro</div>}
       {agFiltradas.map((a,i)=>{
         const ab=!!agOpen[a.nombre], paga=comoPaga(a)
-        const Num=({l,v,c})=><span style={{textAlign:cel?'left':'right', minWidth:0}}>{cel && <span style={{display:'block', fontSize:9.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>{l}</span>}<span style={{fontFamily:MONO, fontSize:13, fontWeight:v>0?600:400, color:v>0?c:T.ink3}}>{v>0?fmt(v):'—'}</span></span>
         // El reclamo sale por razón social: si lo vencido es de varias, un botón por cada una.
         const razonesVenc=[...new Set(a.venc.map(claveAg))].filter(Boolean)
         // La fecha que prometió: verde si todavía no llegó, roja si ya pasó y sigue debiendo.
         const prom=a.promProx, promPaso=!!prom && prom<hoy0
         const promTodas=a.nProm===a.deben.length && new Set(a.deben.map(f=>String(f['Prometió pagar']||'').trim())).size===1
-        return <div key={a.nombre} style={{borderTop:i===0?'none':`1px solid ${T.border}`}}>
-          <div onClick={()=>setAgOpen(o=>({...o,[a.nombre]:!ab}))} style={{display:'grid', gridTemplateColumns:cel?'repeat(3,minmax(0,1fr))':'minmax(0,1.6fr) 125px 125px 125px 22px', gap:10, padding:'13px 18px', alignItems:'center', cursor:'pointer', background:ab?T.surfaceAlt:'transparent'}}>
-            <span style={{minWidth:0, gridColumn:cel?'1 / -1':'auto'}}>
-              <span style={{display:'block', fontSize:14, fontWeight:600, color:T.ink}}>{a.nombre}{a.razones.length>1 && <span style={{fontSize:10.5, fontWeight:600, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, padding:'2px 8px', borderRadius:20, marginLeft:8}}>{a.razones.length} razones sociales</span>}</span>
-              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2}}>{[a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:'', a.sinFact.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:'', paga].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}{prom && <span style={{color:promPaso?T.brand:T.pos, fontWeight:600}}> · {promTodas?'prometió pagar el':`${a.nProm} de ${a.deben.length} con fecha prometida, la próxima el`} {prom.getDate()}/{prom.getMonth()+1}{promPaso?' y no entró':''}</span>}</span>
+        // El botón de la tarjeta es lo más urgente de la agencia: reclamar lo vencido, mandar lo
+        // que no salió o facturar lo hecho. Si hay varias cosas, abre la agencia.
+        const accion = a.vencido>0 ? (razonesVenc.length===1 ? {l:'Reclamar', fn:()=>setReclamo(razonesVenc[0])} : {l:'Reclamar', fn:()=>setAgOpen(o=>({...o,[a.nombre]:true}))})
+          : a.sinEnviar.length ? (a.sinEnviar.length===1 ? {l:'Mandar', fn:()=>setMailFactura(a.sinEnviar[0])} : {l:`Mandar ${a.sinEnviar.length}`, fn:()=>setAgOpen(o=>({...o,[a.nombre]:true}))})
+          : a.sinFact.length ? (a.sinFact.length===1 ? {l:'Facturar', fn:()=>{ setNuevaFsel(a.sinFact[0]); setNuevaF(true) }} : {l:`Facturar ${a.sinFact.length}`, fn:()=>setAgOpen(o=>({...o,[a.nombre]:true}))})
+          : null
+        return <div key={a.nombre} style={{background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', marginBottom:10, overflow:'hidden'}}>
+          <div onClick={()=>setAgOpen(o=>({...o,[a.nombre]:!ab}))} role="button" tabIndex={0} aria-expanded={ab} onKeyDown={e=>{ if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){ e.preventDefault(); setAgOpen(o=>({...o,[a.nombre]:!ab})) } }}
+            style={{display:'flex', flexWrap:'wrap', gap:'8px 14px', padding:cel?'12px 14px':'13px 16px', alignItems:'center', cursor:'pointer'}}>
+            <span style={{minWidth:0, flex:'1 1 240px'}}>
+              <span style={{display:'block', fontSize:16, fontWeight:700, color:T.ink}}>{a.nombre}{a.razones.length>1 && <span style={{fontSize:10.5, fontWeight:600, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, padding:'2px 8px', borderRadius:20, marginLeft:8}}>{a.razones.length} razones sociales</span>}</span>
+              <span style={{display:'block', fontSize:13, color:T.ink2, marginTop:2}}>{[paga||(a.deben.length?`${a.deben.length} ${a.deben.length===1?'factura':'facturas'} sin cobrar`:''), a.sinFact.length&&!a.deben.length?`${a.sinFact.length} ${a.sinFact.length===1?'trabajo':'trabajos'} sin facturar`:''].filter(Boolean).join(' · ')}{a.sinEnviar.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {a.sinEnviar.length} sin enviar</span>}{prom && <span style={{color:promPaso?T.brand:T.pos, fontWeight:600}}> · {promTodas?'prometió pagar el':`${a.nProm} de ${a.deben.length} con fecha prometida, la próxima el`} {prom.getDate()}/{prom.getMonth()+1}{promPaso?' y no entró':''}</span>}</span>
             </span>
-            <Num l="Vencido" v={a.vencido} c={T.brand}/><Num l="En plazo" v={a.enPlazo} c={T.ink}/><Num l="Falta facturar" v={a.sinFactMonto} c={T.warn}/>
-            {!cel && <span style={{fontSize:10, color:T.ink3, textAlign:'right'}}>{ab?'▼':'▶'}</span>}
+            {/* El estado en palabras. "Para facturar" es sin IVA; lo que debe, con IVA: por eso no se suman. */}
+            <span style={{textAlign:cel?'left':'right', fontSize:13.5, lineHeight:1.5}}>
+              {a.vencido>0 && <span style={{display:'block', color:T.brand, fontWeight:600}}>● {fmt(a.vencido)} vencido</span>}
+              <span style={{display:'block'}}>{[a.enPlazo>0&&<span key="p" style={{color:T.ink2}}>{fmt(a.enPlazo)} en plazo</span>, a.sinFactMonto>0&&<span key="f" style={{color:T.warn, fontWeight:600}} title="sin IVA">{fmt(a.sinFactMonto)} para facturar</span>].filter(Boolean).reduce((acc,x,k)=>k?[...acc,<span key={'s'+k} style={{color:T.ink2}}> · </span>,x]:[x],[])}</span>
+            </span>
+            {accion && <button type="button" onClick={e=>{ e.stopPropagation(); accion.fn() }} style={{padding:'9px 16px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap'}}>{accion.l}</button>}
+            <span aria-hidden="true" style={{fontSize:12, color:T.ink2, width:12, textAlign:'center'}}>{ab?'▲':'▼'}</span>
           </div>
-          {ab && <div style={{padding:cel?'4px 14px 14px':'4px 18px 16px', background:T.bg, borderTop:`1px dashed ${T.border}`}}>
+          {ab && <div style={{padding:cel?'4px 14px 14px':'4px 16px 16px', borderTop:`1px solid ${T.border}`}}>
             {(razonesVenc.length>0 || a.sinEnviar.length>0) && <div style={{display:'flex', gap:8, flexWrap:'wrap', padding:'12px 0 2px'}}>
-              {razonesVenc.map(k=><button key={k} onClick={()=>setReclamo(k)} style={{padding:'8px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer'}} title="Un solo mail con todo lo vencido de esta razón social">✉ Reclamar lo vencido{razonesVenc.length>1?` · ${k.includes(' - (')?k.split(' - (')[1].replace(/\)\s*$/,''):k}`:''}</button>)}
+              {razonesVenc.map(k=><button key={k} onClick={()=>setReclamo(k)} style={{padding:'8px 14px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}} title="Un solo mail con todo lo vencido de esta razón social">✉ Reclamar lo vencido{razonesVenc.length>1?` · ${k.includes(' - (')?k.split(' - (')[1].replace(/\)\s*$/,''):k}`:''}</button>)}
               {/* Facturas que salieron por fuera de la app (mail directo, WhatsApp): se marcan todas juntas en vez de entrar una por una. */}
               {a.sinEnviar.length>0 && <button disabled={!!loteBusy} onClick={async()=>{ const n=a.sinEnviar.length, hoyStr=`${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`
                 if(!window.confirm(`¿Marcar como ENVIADAS ${n===1?'la factura':`las ${n} facturas`} de ${a.nombre} que ${n===1?'figura':'figuran'} sin enviar?\n\nUsalo solo si ya ${n===1?'salió':'salieron'} por fuera de la app (mail directo, WhatsApp). Como fecha de envío queda la de emisión de cada factura.`)) return
                 await lote(a.sinEnviar, {'Fc Enviada':true}, `enviadas ${a.nombre}`, `${a.nombre}: ${n} ${n===1?'factura marcada como enviada':'facturas marcadas como enviadas'} ✓`, f=>({'Fecha enviada':String(f['Fecha emision']||'').trim()||hoyStr})) }}
-                style={{padding:'8px 14px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12.5, fontWeight:600, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}} title="Si ya salieron por mail directo o WhatsApp, se marcan todas de una">Ya salieron: marcar {a.sinEnviar.length===1?'1 como enviada':`las ${a.sinEnviar.length} como enviadas`}</button>}
+                style={{padding:'8px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13.5, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}} title="Si ya salieron por mail directo o WhatsApp, se marcan todas de una">Ya salieron: marcar {a.sinEnviar.length===1?'1 como enviada':`las ${a.sinEnviar.length} como enviadas`}</button>}
             </div>}
             {/* La misma fecha para varias facturas de una: sirve cuando entra todo junto (Telefe, un trabajo en tres
                 facturas). Se aplica a lo vencido de la agencia, o a todo lo que debe si no tiene nada vencido.
@@ -3735,26 +3755,33 @@ function msgUpload(j, base='PDF subido ✓'){
                 <input value={notaV} onChange={e=>escribir({nota:e.target.value})} onKeyDown={e=>{ if(e.key==='Enter'&&cambio) guardar() }} placeholder="Con quién hablaste y qué dijo" style={{flex:'1 1 220px', minWidth:160, padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
                 {cambio && <button disabled={!!loteBusy} onClick={guardar} style={{padding:'7px 14px', borderRadius:8, border:'none', background:T.ink, color:'#fff', fontSize:12.5, fontWeight:700, cursor:loteBusy?'default':'pointer', opacity:loteBusy?0.6:1}}>{loteBusy?'Guardando…':'Guardar'}</button>}
               </div> })()}
-            {a.deben.length>0 && <div style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, margin:'14px 0 2px'}}>Te debe · {fmt(a.vencido+a.enPlazo)}</div>}
+            {a.deben.length>0 && <div style={{fontSize:13, color:T.ink2, margin:'14px 0 2px'}}>Te debe · <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(a.vencido+a.enPlazo)}</strong> con IVA</div>}
             {[...a.deben].sort((x,y)=>(diffVenc(x)??99)-(diffVenc(y)??99)).map((f,j)=>{ const d=diffVenc(f), r=fechaRef(f), dd=r?`${r.d.getDate()}/${r.d.getMonth()+1}`:'', lbl=!r?'sin fecha':r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida', tot=parseMonto(f['Precio FINAL']), k=claveAg(f)
               // La fecha que prometió para ESTA factura (cada una tiene la suya) y el editor que se abre en la fila.
               const pf=parseD(f['Prometió pagar']), pfPaso=!!pf && pf<hoy0, notaF=String(f['Nota cobranza']||'').trim(), keyP='f'+f.__row, drP=promDraft[keyP]
               const cerrarP=()=>setPromDraft(o=>{ const n={...o}; delete n[keyP]; return n })
               const guardarP=async fecha=>{ const ok=await lote([f], {'Prometió pagar':deISO(fecha), 'Nota cobranza':String(drP?.nota||'').trim()}, `promesa #${f['N° Presupuesto']}`, fecha?`#${f['N° Presupuesto']}: prometió pagar el ${deISO(fecha)} ✓`:`#${f['N° Presupuesto']}: fecha prometida borrada ✓`); if(ok) cerrarP() }
-              return <div key={'d'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
-                <span style={{fontSize:11.5, fontWeight:d!=null&&d<0?700:500, color:d!=null&&d<0?T.brand:d!=null&&d<7?T.warn:T.ink2, gridColumn:cel?'1 / -1':'auto'}}>{d!=null&&d<0?`${-d}d atrasada`:d===0?'vence hoy':`${lbl} ${dd}`}</span>
+              const env=enviadaF(f), kM='d'+f.__row, abM=masDe===kM
+              return <div key={'d'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'128px minmax(0,1fr) 116px 96px 34px', gap:10, padding:'10px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:14}}>
+                <span style={{fontSize:13, fontWeight:d!=null&&d<0?700:500, color:d!=null&&d<0?T.brand:d!=null&&d<7?T.warn:T.ink2, gridColumn:cel?'1 / -1':'auto'}}>{d!=null&&d<0?`● ${-d} d atrasada`:d===0?'vence hoy':`${lbl} ${dd}`}</span>
                 <span style={{minWidth:0}}>
                   <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
-                  <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{f['N° Presupuesto']}{f['Cliente']?` · ${f['Cliente']}`:''}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}{a.razones.length>1&&k.includes(' - (')?` · ${k.split(' - (')[1].replace(/\)\s*$/,'')}`:''}{!enviadaF(f) && <span style={{color:T.warn, fontWeight:700}}> · SIN ENVIAR</span>}</span>
+                  <span style={{display:'block', fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{f['N° Presupuesto']}{f['Cliente']?` · ${f['Cliente']}`:''}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}{a.razones.length>1&&k.includes(' - (')?` · ${k.split(' - (')[1].replace(/\)\s*$/,'')}`:''}{!env && <span style={{color:T.warn, fontWeight:600}}> · sin enviar</span>}{pf && <span style={{color:pfPaso?T.brand:T.pos, fontWeight:600}}> · prometió {pf.getDate()}/{pf.getMonth()+1}{pfPaso?', no entró':''}</span>}</span>
                 </span>
-                <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink, fontWeight:600}}>{fmt(saldoF(f))}{saldoF(f)<tot && <span style={{display:'block', fontSize:10, color:T.ink3, fontWeight:400}}>de {fmt(tot)}</span>}</span>
-                <span style={{display:'flex', gap:5, justifyContent:'flex-end', gridColumn:cel?'1 / -1':'auto'}}>
-                  <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>
-                  <button onClick={()=>setReclamo({agencia:k, fila:f.__row, nro:String(f['N° Presupuesto']||'').trim()})} style={{...miniBtn, padding:'6px 9px', ...(d!=null&&d<0?{color:T.brand, borderColor:`${T.brand}66`, fontWeight:600}:{})}} title="Reclamar esta factura por mail (junto con lo demás que deba)">Reclamar</button>
-                  {hayPromesa && <button onClick={()=>drP?cerrarP():setPromDraft(o=>({...o,[keyP]:{fecha:aISO(f['Prometió pagar']), nota:notaF}}))} style={{...miniBtn, padding:'6px 9px', ...(pf?{color:pfPaso?T.brand:T.pos, borderColor:`${pfPaso?T.brand:T.pos}66`, fontWeight:600}:{})}} title={pf?`Prometió pagar esta factura el ${f['Prometió pagar']}${notaF?` · ${notaF}`:''}. Tocá para cambiarlo.`:'Anotar la fecha que prometió para ESTA factura'}>{pf?`Prometió ${pf.getDate()}/${pf.getMonth()+1}`:'Prometió…'}</button>}
-                  <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar la factura por mail (desde la app)">✉</button>
-                  {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, padding:'6px 8px'}} title="Ver PDF de la factura">📎</a>}
-                </span>
+                <span style={{textAlign:'right', fontFamily:MONO, fontSize:13.5, color:T.ink, fontWeight:600}}>{fmt(saldoF(f))}{saldoF(f)<tot && <span style={{display:'block', fontSize:12, color:T.ink2, fontWeight:400}}>de {fmt(tot)}</span>}</span>
+                {/* Un solo botón, el que toca: si no salió, mandarla; si salió, cobrarla. El resto en "⋯". */}
+                {env
+                  ? <button onClick={()=>setCobrando(f)} style={{padding:'7px 12px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13.5, cursor:'pointer'}}>Cobrar</button>
+                  : <button onClick={()=>setMailFactura(f)} style={{padding:'7px 12px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}} title="Mandar la factura por mail (desde la app)">Mandar</button>}
+                <button onClick={()=>setMasDe(abM?null:kM)} aria-label="Más acciones" aria-expanded={abM} style={{border:'none', background:abM?T.surfaceAlt:'transparent', borderRadius:8, height:32, cursor:'pointer', color:T.ink2, fontSize:16}}>⋯</button>
+                {abM && <div style={{gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'8px 10px', borderRadius:10, background:T.surfaceAlt}}>
+                  {!env && <button onClick={()=>{ setMasDe(null); setCobrando(f) }} style={{...miniBtn, fontSize:13}}>Cobrar</button>}
+                  <button onClick={()=>{ setMasDe(null); setReclamo({agencia:k, fila:f.__row, nro:String(f['N° Presupuesto']||'').trim()}) }} style={{...miniBtn, fontSize:13}} title="Reclamar esta factura por mail (junto con lo demás que deba)">Reclamar</button>
+                  {hayPromesa && <button onClick={()=>{ setMasDe(null); drP?cerrarP():setPromDraft(o=>({...o,[keyP]:{fecha:aISO(f['Prometió pagar']), nota:notaF}})) }} style={{...miniBtn, fontSize:13}} title="Anotar la fecha que prometió para ESTA factura">{pf?'Cambiar la fecha prometida':'Prometió pagar el…'}</button>}
+                  {env && <button onClick={()=>{ setMasDe(null); setMailFactura(f) }} style={{...miniBtn, fontSize:13}}>Mandar de nuevo</button>}
+                  {f['Factura'] && <a href={f['Factura']} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:13, textDecoration:'none'}}>Ver el PDF</a>}
+                  <button onClick={()=>{ setMasDe(null); subirPDF(f) }} style={{...miniBtn, fontSize:13}}>{f['Factura']?'Cambiar el PDF':'Subir el PDF'}</button>
+                </div>}
                 {drP && <div style={{gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'9px 11px', borderRadius:9, background:T.surfaceAlt}}>
                   <span style={{fontSize:12, color:T.ink2, fontWeight:600}}>Esta factura: prometió pagar el</span>
                   <input type="date" value={drP.fecha} onChange={e=>setPromDraft(o=>({...o,[keyP]:{...o[keyP], fecha:e.target.value}}))} style={{padding:'6px 9px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:'inherit', outline:'none'}}/>
@@ -3765,27 +3792,29 @@ function msgUpload(j, base='PDF subido ✓'){
                 </div>}
               </div> })}
             {a.sinFact.length>0 && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', margin:'16px 0 4px'}}>
-              <span style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Falta facturar · {fmt(a.sinFactMonto)} sin IVA</span>
+              <span style={{fontSize:13, color:T.ink2}}>Falta facturar · <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(a.sinFactMonto)}</strong> sin IVA</span>
               {/* Una factura para varios trabajos (caso Austral: una orden de compra, una factura). Los de
                   Comunicación van en otra orden de compra, así que se ofrecen aparte. Se juntan por razón social. */}
               {(()=>{ const esCom=x=>/comunicaci/i.test(String(x.p['Cliente']||'')), orden=[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias)
                 const tandas={}; orden.forEach(x=>{ const k=claveAg(x.p)+(esCom(x)?'|com':''); (tandas[k]=tandas[k]||[]).push(x) })
-                return Object.values(tandas).filter(g=>g.length>1).map((g,k)=><button key={k} onClick={()=>{ setNuevaFsel(g[0]); setNuevaFextras(g.slice(1).map(x=>String(x.p['Columna 1']||'').trim())); setNuevaF(true) }} style={{...miniBtn, background:T.ink, color:'#fff', border:'none', padding:'6px 12px', fontWeight:600}} title="Una sola factura que cubre todos estos trabajos. En el formulario podés destildar los que no van.">Facturar juntos {esCom(g[0])?'los de Comunicación':''} · {g.length} trabajos · {fmt(g.reduce((t,x)=>t+x.pendiente,0))}</button>) })()}
+                return Object.values(tandas).filter(g=>g.length>1).map((g,k)=><button key={k} onClick={()=>{ setNuevaFsel(g[0]); setNuevaFextras(g.slice(1).map(x=>String(x.p['Columna 1']||'').trim())); setNuevaF(true) }} style={{...miniBtn, fontSize:13, padding:'6px 12px', fontWeight:600, color:T.ink}} title="Una sola factura que cubre todos estos trabajos. En el formulario podés destildar los que no van.">Facturar juntos {esCom(g[0])?'los de Comunicación':''} · {g.length} trabajos · {fmt(g.reduce((t,x)=>t+x.pendiente,0))}</button>) })()}
               {/* Clientes que no reciben la factura por mail (Austral): primero se les pide que carguen los trabajos en su sistema. */}
               <button onClick={()=>setPedirOC(a)} style={{...miniBtn, padding:'6px 12px', fontWeight:600}} title="Mail con la lista de trabajos hechos para que el cliente los cargue en su sistema de cobro. Queda anotado qué se pidió y cuándo.">✉ Pedir orden de compra{(()=>{ const n=a.sinFact.filter(x=>ocDe[String(x.p['Columna 1']||'').trim()]).length; return n?` · ${n} ya ${n===1?'pedida':'pedidas'}`:'' })()}</button>
             </div>}
             {[...a.sinFact].sort((x,y)=>semEvento(y.p['Fecha Evento']).dias-semEvento(x.p['Fecha Evento']).dias).map((x,j)=>{ const fi=semEvento(x.p['Fecha Evento'])
-              return <div key={'s'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'118px minmax(0,1fr) 112px auto', gap:10, padding:'9px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
-                <span style={{fontSize:11.5, fontWeight:fi.dias>30?700:500, color:fi.c, gridColumn:cel?'1 / -1':'auto'}}>{fi.fecha==='s/f'?'sin fecha':`evento ${fi.fecha}`}{fi.dias>0?` · hace ${fi.dias}d`:''}</span>
+              const kS='s'+String(x.p['Columna 1']||j), abS=masDe===kS
+              return <div key={'s'+j} style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr) auto':'128px minmax(0,1fr) 116px 96px 34px', gap:10, padding:'10px 0', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:14}}>
+                <span style={{fontSize:13, fontWeight:fi.dias>30?700:400, color:fi.dias>30?T.brand:fi.dias>15?T.warn:T.ink2, gridColumn:cel?'1 / -1':'auto'}}>{fi.fecha==='s/f'?'sin fecha':fi.dias>0?`${fi.dias>30?'● ':''}evento hace ${fi.dias} d`:`evento ${fi.fecha}`}</span>
                 <span style={{minWidth:0}}>
                   <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
-                  <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']}{x.p['Cliente']?` · ${x.p['Cliente']}`:''}{x.facturado>0?` · ya facturado ${fmt(x.facturado)} (${Math.round(x.facturado/x.neto*100)}%)`:''}{(()=>{ const oc=ocDe[String(x.p['Columna 1']||'').trim()]; if(!oc) return null; const dd=Math.round((hoy0-oc.d)/864e5); return <span style={{color:dd>7?T.warn:T.ink2, fontWeight:600}}> · orden de compra pedida el {oc.fecha}{dd>0?` (hace ${dd}d)`:''}</span> })()}</span>
+                  <span style={{display:'block', fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']}{x.p['Cliente']?` · ${x.p['Cliente']}`:''}{x.facturado>0?` · ya facturado ${fmt(x.facturado)} (${Math.round(x.facturado/x.neto*100)}%)`:''}{(()=>{ const oc=ocDe[String(x.p['Columna 1']||'').trim()]; if(!oc) return null; const dd=Math.round((hoy0-oc.d)/864e5); return <span style={{color:dd>7?T.warn:T.ink2, fontWeight:600}}> · orden de compra pedida el {oc.fecha}{dd>0?` (hace ${dd}d)`:''}</span> })()}</span>
                 </span>
-                <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.warn, fontWeight:600}}>{fmt(x.pendiente)}</span>
-                <span style={{display:'flex', gap:5, justifyContent:'flex-end', gridColumn:cel?'1 / -1':'auto'}}>
-                  <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Crear factura real (con número y mail)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
-                  <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya está ✓</button>
-                </span>
+                <span style={{textAlign:'right', fontFamily:MONO, fontSize:13.5, color:T.ink, fontWeight:600}}>{fmt(x.pendiente)}</span>
+                <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{padding:'7px 12px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Crear factura real (con número y mail)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
+                <button onClick={()=>setMasDe(abS?null:kS)} aria-label="Más acciones" aria-expanded={abS} style={{border:'none', background:abS?T.surfaceAlt:'transparent', borderRadius:8, height:32, cursor:'pointer', color:T.ink2, fontSize:16}}>⋯</button>
+                {abS && <div style={{gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'8px 10px', borderRadius:10, background:T.surfaceAlt}}>
+                  <button onClick={()=>{ setMasDe(null); setYaModal(x) }} style={{...miniBtn, fontSize:13}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya la facturé por fuera</button>
+                </div>}
               </div> })}
           </div>}
         </div>
@@ -3805,27 +3834,27 @@ function msgUpload(j, base='PDF subido ✓'){
       <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink2, fontWeight:600}}>{fmt(filt==='sinfacturar'?sumPend:filt==='futuros'?sumFut:sumFiltrada)}</span>
     </div>
     {(filt==='sinfacturar'||filt==='todas') && (<>
-    {filt==='todas' && <div style={{margin:'4px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Sin facturar · {pendOrdenados.length} · {fmt(sumPend)}</div>}
+    {filt==='todas' && <div style={{margin:'4px 0 10px', fontSize:12.5, fontWeight:700, letterSpacing:0.3, textTransform:'uppercase', color:T.ink2}}>Sin facturar · {pendOrdenados.length} · {fmt(sumPend)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      {sinFactAtrasados>0 && <div style={{background:T.brandSoft, color:T.brand, padding:'9px 18px', fontSize:12, fontWeight:600, borderBottom:`1px solid ${T.border}`}}>⚠ {sinFactAtrasados} {sinFactAtrasados===1?'proyecto con evento pasado hace +30 días sin facturar':'proyectos con evento pasado hace +30 días sin facturar'}</div>}
-      <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 200px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      {sinFactAtrasados>0 && <div style={{background:T.warnSoft, color:T.warn, padding:'9px 18px', fontSize:13, fontWeight:600, borderBottom:`1px solid ${T.border}`}}>⚠ {sinFactAtrasados} {sinFactAtrasados===1?'proyecto con evento pasado hace +30 días sin facturar':'proyectos con evento pasado hace +30 días sin facturar'}</div>}
+      <div style={{display:'grid', gridTemplateColumns:'140px 1.5fr 110px 200px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:12, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {pendOrdenados.length===0 && <Empty>Nada sin facturar 🎉</Empty>}
       {pendOrdenados.slice(0,200).map((x,i)=>{ const fi=semEvento(x.p['Fecha Evento']); return (
-        <div key={i} style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 200px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        <div key={i} style={{display:'grid', gridTemplateColumns:'140px 1.5fr 110px 200px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:fi.c, flexShrink:0}}/><span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:fi.dias>30?700:500}}>{fi.fecha}</span></span>
-            <span style={{fontSize:9.5, color:fi.c, fontWeight:fi.dias>30?700:500}}>{fi.l}</span>
+            <span style={{fontSize:12.5, color:fi.c, fontWeight:fi.dias>30?700:500}}>{fi.l}</span>
           </span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
-            {x.facturado>0 && <span style={{display:'flex', alignItems:'center', gap:7, marginTop:4, fontSize:11, color:T.warn, fontWeight:600}}><BarraFacturado pct={x.facturado/x.neto*100}/>ya facturado {fmt(x.facturado)} · {Math.round(x.facturado/x.neto*100)}% del trabajo</span>}
+            <span style={{display:'block', fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
+            {x.facturado>0 && <span style={{display:'flex', alignItems:'center', gap:7, marginTop:4, fontSize:12.5, color:T.warn, fontWeight:600}}><BarraFacturado pct={x.facturado/x.neto*100}/>ya facturado {fmt(x.facturado)} · {Math.round(x.facturado/x.neto*100)}% del trabajo</span>}
           </span>
-          <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.brand, fontWeight:600}}>{fmt(x.pendiente)}</span>
+          <span style={{textAlign:'right', fontFamily:MONO, fontSize:13.5, color:T.ink, fontWeight:600}}>{fmt(x.pendiente)}</span>
           <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
-            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Crear factura real (con número y mail)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
+            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.ink, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Crear factura real (con número y mail)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
             <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya está ✓</button>
           </span>
         </div>
@@ -3835,27 +3864,27 @@ function msgUpload(j, base='PDF subido ✓'){
     {/* Los trabajos con evento futuro viven en su propio filtro, pero cuando BUSCÁS algo
         tienen que aparecer igual: si no, buscás "casamiento" y parece que no existe. */}
     {(filt==='futuros' || (filt==='todas' && q.trim() && futOrdenados.length>0)) && (<>
-    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Trabajos futuros · {futOrdenados.length} · {fmt(sumFut)}</div>}
+    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:12.5, fontWeight:700, letterSpacing:0.3, textTransform:'uppercase', color:T.ink2}}>Trabajos futuros · {futOrdenados.length} · {fmt(sumFut)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       <div style={{background:T.surfaceAlt, color:T.ink2, padding:'9px 18px', fontSize:12, borderBottom:`1px solid ${T.border}`}}>Trabajos aprobados cuyo evento todavía no pasó. Facturalos solo si el cliente te lo pide por adelantado.</div>
-      <div style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 200px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'140px 1.5fr 110px 200px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:12, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Pendiente</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {futOrdenados.length===0 && <Empty>No hay trabajos futuros pendientes de facturar</Empty>}
       {futOrdenados.slice(0,200).map((x,i)=>{ const fi=semEvento(x.p['Fecha Evento']); return (
-        <div key={i} style={{display:'grid', gridTemplateColumns:'110px 1.5fr 110px 200px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
+        <div key={i} style={{display:'grid', gridTemplateColumns:'140px 1.5fr 110px 200px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:T.ink3, flexShrink:0}}/><span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, fontWeight:500}}>{fi.fecha}</span></span>
-            <span style={{fontSize:9.5, color:T.ink3}}>en {-fi.dias}d</span>
+            <span style={{fontSize:12.5, color:T.ink3}}>en {-fi.dias}d</span>
           </span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{x.p['Proyecto']||x.p['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
-            {x.facturado>0 && <span style={{display:'flex', alignItems:'center', gap:7, marginTop:4, fontSize:11, color:T.warn, fontWeight:600}}><BarraFacturado pct={x.facturado/x.neto*100}/>ya facturado {fmt(x.facturado)} · {Math.round(x.facturado/x.neto*100)}% del trabajo</span>}
+            <span style={{display:'block', fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>#{x.p['Columna 1']} · {[x.p['Cliente'],x.p['Agencia']].filter(Boolean).join(' · ')}</span>
+            {x.facturado>0 && <span style={{display:'flex', alignItems:'center', gap:7, marginTop:4, fontSize:12.5, color:T.warn, fontWeight:600}}><BarraFacturado pct={x.facturado/x.neto*100}/>ya facturado {fmt(x.facturado)} · {Math.round(x.facturado/x.neto*100)}% del trabajo</span>}
           </span>
           <span style={{textAlign:'right', fontFamily:MONO, fontSize:12.5, color:T.ink2, fontWeight:600}}>{fmt(x.pendiente)}</span>
           <span style={{display:'flex', justifyContent:'flex-end', gap:5}}>
-            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.brand, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Facturar por adelantado (el evento todavía no pasó)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
+            <button onClick={()=>{setNuevaFsel(x); setNuevaF(true)}} style={{...miniBtn, background:T.ink, color:'#fff', border:'none', padding:'6px 10px'}} title={x.facturado>0?'Cargar la factura del saldo: viene con el monto que falta ya puesto':'Facturar por adelantado (el evento todavía no pasó)'}>{x.facturado>0?'Facturar saldo':'Facturar'}</button>
             <button onClick={()=>setYaModal(x)} style={{...miniBtn, padding:'6px 10px'}} title="Ya la facturaste por fuera de la app. La registra sin tocar saldos (adentro tildás si también la cobraste)">Ya está ✓</button>
           </span>
         </div>
@@ -3863,9 +3892,9 @@ function msgUpload(j, base='PDF subido ✓'){
     </div>
     </>)}
     {filt!=='sinfacturar' && filt!=='futuros' && (<>
-    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
+    {filt==='todas' && <div style={{margin:'20px 0 10px', fontSize:12.5, fontWeight:700, letterSpacing:0.3, textTransform:'uppercase', color:T.ink2}}>Facturas · {filtrada.length} · {fmt(sumFiltrada)}</div>}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-      <div style={{display:'grid', gridTemplateColumns:'90px minmax(0,1.2fr) 105px 150px 390px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3}}>
+      <div style={{display:'grid', gridTemplateColumns:'90px minmax(0,1.2fr) 105px 150px 390px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:12, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
         <span>Evento</span><span>Proyecto</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Estado</span><span style={{textAlign:'right'}}>Acción</span>
       </div>
       {filtrada.length===0&&<Empty>Sin resultados</Empty>}
@@ -3874,11 +3903,11 @@ function msgUpload(j, base='PDF subido ✓'){
         return <div key={i} style={{display:'grid', gridTemplateColumns:'90px minmax(0,1.2fr) 105px 150px 390px', padding:'12px 18px', borderTop:i===0?'none':`1px solid ${T.border}`, alignItems:'center', fontSize:13}}>
           <span style={{display:'flex', flexDirection:'column', gap:1, minWidth:0}}>
             <span style={{display:'flex', alignItems:'center', gap:5}}><span style={{width:7,height:7,borderRadius:7,background:info.c, flexShrink:0}}/><span style={{fontSize:12, fontFamily:MONO, color:T.ink, fontWeight:d!=null&&d<0?700:500}}>{(()=>{const ev=parseD(evDe(f)); return ev?`${ev.getDate()}/${ev.getMonth()+1}`:'—'})()}</span></span>
-            <span style={{fontSize:9.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
+            <span style={{fontSize:12.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{info.l}</span>
           </span>
           <span style={{minWidth:0, paddingRight:10}}>
             <span style={{display:'block', color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{f['Proyecto']||f['Cliente']||'—'}</span>
-            <span style={{display:'block', fontSize:11, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
+            <span style={{display:'block', fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{[f['Cliente'],f['Agencia']].filter(Boolean).join(' · ')}{f['Nro de Factura']?` · ${f['Nro de Factura']}`:''}</span>
           </span>
           {/* Total CON IVA en grande: es el número que Flor cruza contra lo que entra al banco.
               El neto va chico abajo, solo si la factura lleva IVA. Antes la columna mostraba el
@@ -3886,23 +3915,23 @@ function msgUpload(j, base='PDF subido ✓'){
           {(()=>{ const tot=parseMonto(f['Precio FINAL']), net=parseMonto(f['Precio SIN IVA']), ivaF=parseMonto(f['IVA']), cob=parseMonto(f['Monto cobrado'])
             return <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:1, minWidth:0}}>
               <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink, fontWeight:600}} title={ivaF>0?'Total con IVA':'Total (sin IVA)'}>{fmt(tot||net)}</span>
-              {ivaF>0 && tot>0 && <span style={{fontSize:10, color:T.ink3, fontFamily:MONO}}>neto {fmt(net)}</span>}
-              {cob>0 && !isCobrada(f) && <span style={{fontSize:10, color:T.warn, fontFamily:MONO, fontWeight:600}}>falta {fmt(saldoF(f))}</span>}
+              {ivaF>0 && tot>0 && <span style={{fontSize:12.5, color:T.ink3, fontFamily:MONO}}>neto {fmt(net)}</span>}
+              {cob>0 && !isCobrada(f) && <span style={{fontSize:12.5, color:T.warn, fontFamily:MONO, fontWeight:600}}>falta {fmt(saldoF(f))}</span>}
             </span> })()}
           <span style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2}}>
             <span style={{display:'flex', alignItems:'center', gap:6}}><span style={{width:7,height:7,borderRadius:7,background:info.c}}/><span style={{fontSize:12, color:T.ink2}}>{info.l}</span></span>
-            {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:11, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
+            {!isCobrada(f) && (()=>{ const r=fechaRef(f); if(!r) return null; const dd=`${r.d.getDate()}/${r.d.getMonth()+1}`; const lbl=r.src==='vence'?'vence':r.src==='evento'?'evento':'emitida'; const dtxt=d!=null?(d<0?`${Math.abs(d)}d atrasada`:d===0?'hoy':`en ${d}d`):''; return <span style={{fontSize:12.5, color:info.c, fontWeight:d!=null&&d<0?700:500}}>{lbl} {dd}{dtxt?` · ${dtxt}`:''}</span> })()}
             {/* ¿Salió para el cliente? Cargar el PDF no es enviarlo. */}
             {enviadaF(f)
-              ? <span style={{fontSize:10.5, color:T.ink3}} title="La factura ya salió para el cliente">✉ enviada{f['Fecha enviada']?` ${f['Fecha enviada']}`:''}</span>
-              : !isCobrada(f) && <span style={{fontSize:10.5, color:T.warn, fontWeight:700}} title={f['Factura']?'La factura está cargada pero todavía no se mandó al cliente':'Todavía no se mandó al cliente'}>{f['Factura']?'📎 cargada · SIN ENVIAR':'✉ SIN ENVIAR'}</span>}
+              ? <span style={{fontSize:12.5, color:T.ink3}} title="La factura ya salió para el cliente">✉ enviada{f['Fecha enviada']?` ${f['Fecha enviada']}`:''}</span>
+              : !isCobrada(f) && <span style={{fontSize:12.5, color:T.warn, fontWeight:700}} title={f['Factura']?'La factura está cargada pero todavía no se mandó al cliente':'Todavía no se mandó al cliente'}>{f['Factura']?'📎 cargada · SIN ENVIAR':'✉ SIN ENVIAR'}</span>}
           </span>
           {/* 8 botones en una factura sin cobrar y con PDF: en 340px no entraban y "Cobrar" tapaba el estado */}
           <span style={{display:'flex', gap:5, justifyContent:'flex-end', flexWrap:'wrap'}}>
             {!isCobrada(f) && <button onClick={()=>setCobrando(f)} style={{...miniBtn, background:T.pos, color:'#fff', border:'none', padding:'6px 9px'}}>Cobrar</button>}
             {/* Reclamar desde la fila: abre el reclamo de cuenta de ese cliente con ESTA factura ya tildada
                 (más lo vencido que tenga). Antes había que ir al botón de arriba y buscar el cliente. */}
-            {!isCobrada(f) && <button onClick={()=>setReclamo({agencia:String(f['Agencia']||f['Cliente']||'').trim(), fila:f.__row, nro:String(num||'').trim()})} style={{...miniBtn, padding:'6px 9px', ...(['vencida','reclamar'].includes(e)?{color:T.brand, borderColor:`${T.brand}66`, fontWeight:600}:{})}} title="Reclamar esta factura por mail (junto con lo demás que deba este cliente)">Reclamar</button>}
+            {!isCobrada(f) && <button onClick={()=>setReclamo({agencia:String(f['Agencia']||f['Cliente']||'').trim(), fila:f.__row, nro:String(num||'').trim()})} style={{...miniBtn, padding:'6px 9px', ...(['vencida','reclamar'].includes(e)?{color:T.ink, borderColor:T.ink, fontWeight:600}:{})}} title="Reclamar esta factura por mail (junto con lo demás que deba este cliente)">Reclamar</button>}
             <button onClick={()=>setMailFactura(f)} style={{...miniBtn, padding:'6px 8px'}} title="Mandar factura por mail (desde la app)">✉</button>
             <button onClick={()=>setEditarFechas(f)} style={{...miniBtn, padding:'6px 8px'}} title="Editar a mano fecha de envío y de cobro (notas de crédito, facturas consolidadas)">📅</button>
             {/* Si ya hay PDF se puede VER y también REEMPLAZAR: antes, con un PDF mal subido
@@ -4048,7 +4077,7 @@ function PedirOCModal({agencia, trabajos, ocDe, agencias=[], contactos=[], onClo
       <div style={{padding:'16px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>
         <span style={{flex:1, fontSize:11.5, color:T.ink3}}>Queda anotado en la solapa OC_PEDIDOS.</span>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={enviar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13, fontWeight:700, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Enviando…':`Mandar el pedido · ${elegidos.length} ${elegidos.length===1?'trabajo':'trabajos'}`}</button>
+        <button onClick={enviar} disabled={saving} style={{padding:'9px 20px', borderRadius:9, border:'none', background:T.ink, color:'#fff', fontSize:13, fontWeight:700, cursor:saving?'default':'pointer', opacity:saving?0.6:1}}>{saving?'Enviando…':`Mandar el pedido · ${elegidos.length} ${elegidos.length===1?'trabajo':'trabajos'}`}</button>
       </div>
     </div>
   </div>
@@ -4411,7 +4440,7 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
       </div>
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={enviar} disabled={saving||!elegidas.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!data)?'default':'pointer', opacity:(saving||!elegidas.length)?0.5:1}}>{saving?'Enviando…':`Enviar reclamo${elegidas.length?' · '+fmtM(totalSel):''}`}</button>
+        <button onClick={enviar} disabled={saving||!elegidas.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.ink, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!data)?'default':'pointer', opacity:(saving||!elegidas.length)?0.5:1}}>{saving?'Enviando…':`Enviar reclamo${elegidas.length?' · '+fmtM(totalSel):''}`}</button>
       </div>
     </div>
   </div>
@@ -4420,6 +4449,7 @@ function ReclamoModal({ agenciasPendientes, inicial, onClose, onSent, showToast 
 // Preavisos de vencimiento de hoy: todos tildados, Flor mira y manda con un clic. Cada uno sale de admin@ con su
 // nombre y su firma, en el hilo del mail de la factura (pages/api/preaviso-cobro.js).
 function PreavisoModal({ onClose, onSent, showToast, resolver }){
+  useEscCierra(onClose)
   const [data,setData]=useState(null), [avisos,setAvisos]=useState([]), [abierto,setAbierto]=useState(null), [saving,setSaving]=useState(false)
   useEffect(()=>{ let vivo=true; fetch('/api/preaviso-cobro').then(r=>r.json()).then(j=>{ if(!vivo) return
       if(!j.ok){ showToast(j.error||'Error','err'); onClose(); return }
@@ -4477,7 +4507,7 @@ function PreavisoModal({ onClose, onSent, showToast, resolver }){
       </div>
       <div style={{padding:'14px 22px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={mandar} disabled={saving||!elegidos.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.brand, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!elegidos.length)?'default':'pointer', opacity:(saving||!elegidos.length)?0.5:1}}>{saving?'Enviando…':`Mandar ${elegidos.length} ${elegidos.length===1?'aviso':'avisos'}`}</button>
+        <button onClick={mandar} disabled={saving||!elegidos.length} style={{padding:'9px 22px', borderRadius:9, border:'none', background:T.ink, color:'#fff', fontSize:13.5, fontWeight:600, cursor:(saving||!elegidos.length)?'default':'pointer', opacity:(saving||!elegidos.length)?0.5:1}}>{saving?'Enviando…':`Mandar ${elegidos.length} ${elegidos.length===1?'aviso':'avisos'}`}</button>
       </div>
     </div>
   </div>
@@ -4611,6 +4641,7 @@ function MailFacturaModal({ f, onClose, onSent, showToast }){
 }
 
 function YaCobradaModal({x, onClose, onConfirm}){
+  useEscCierra(onClose)
   const presupuestado=Math.round(x.pendiente)
   const [monto,setMonto]=useState(String(presupuestado))
   const [saving,setSaving]=useState(false)
@@ -4663,6 +4694,7 @@ function YaCobradaModal({x, onClose, onConfirm}){
 // trabajo vuelve a "sin facturar" para cargar la buena con el flujo de siempre.
 // Si fue un error de carga (nunca se emitió en AFIP), se borra la fila como antes.
 function AnularFacturaModal({f, onClose, onRefresh, showToast}){
+  useEscCierra(onClose)
   const num=f['N° Presupuesto'], total=parseMonto(f['Precio FINAL'])
   const [modo,setModo]=useState('nc')
   const [nroNC,setNroNC]=useState(''), [motivo,setMotivo]=useState(''), [pdf,setPdf]=useState(null)
@@ -4716,6 +4748,7 @@ function AnularFacturaModal({f, onClose, onRefresh, showToast}){
 }
 
 function EditarFechasModal({f, onClose, onRefresh, showToast}){
+  useEscCierra(onClose)
   const num=f['N° Presupuesto']
   const [env,setEnv]=useState(f['Fecha enviada']||'')
   const [cob,setCob]=useState(f['Fecha cobro']||'')
@@ -4753,13 +4786,14 @@ function EditarFechasModal({f, onClose, onRefresh, showToast}){
       </div>
       <div style={{display:'flex', gap:10, padding:'0 22px 20px'}}>
         <button onClick={onClose} style={{...miniBtn, flex:1, padding:'11px'}}>Cancelar</button>
-        <button onClick={guardar} disabled={saving} style={{...miniBtn, flex:2, padding:'11px', background:T.brand, color:'#fff', border:'none', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
+        <button onClick={guardar} disabled={saving} style={{...miniBtn, flex:2, padding:'11px', background:T.ink, color:'#fff', border:'none', opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
       </div>
     </div>
   </div>
 }
 
 function CobroModal({f, hermanas=[], cuentas, onClose, onRefresh, showToast}){
+  useEscCierra(onClose)
   const total=parseMonto(f['Precio FINAL'])
   const netoF=parseMonto(f['Precio SIN IVA']), ivaF=parseMonto(f['IVA'])   // el total ya es CON IVA; el desglose es para cruzar con el banco
   const cuentaOpts=[...new Set((cuentas||[]).map(c=>c['Nombre']).filter(Boolean))]
