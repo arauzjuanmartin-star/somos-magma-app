@@ -4894,6 +4894,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
   const [q,setQ]=useState(''), [filtro,setFiltro]=useState('todos'), [open,setOpen]=useState(null), [override,setOverride]=useState({}), [freelEdit,setFreelEdit]=useState(null), [mailModal,setMailModal]=useState(null)
   const [cuentaPago,setCuentaPago]=useState(()=>cuentaOpts.find(c=>/bbva|somos magma/i.test(c))||cuentaOpts[0]||'')
   const [staffModalPS,setStaffModalPS]=useState(null)
+  const [verPagados,setVerPagados]=useState(false), [verReparto,setVerReparto]=useState(false)
   const [selPay,setSelPay]=useState({})  // key -> {persona, t} : selección para pagar en tanda
   const [ivaPersona,setIvaPersona]=useState({})  // nombre -> true : pagar +21% IVA (puntual, para RI que factura con IVA)
   // Viáticos por trabajo: lo recién guardado (hasta que vuelve el refresh) y lo que se está tipeando.
@@ -4913,7 +4914,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       setSavedAdj(s=>({...s,[m.uid]:j.link})); showToast(`Factura guardada en Drive ✓${j.filas?` · linkeada a ${p?p.nombre:m.nombre}`:''}`); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') } setSavingAdj(s=>{const n={...s};delete n[m.uid];return n}) }
   useEffect(()=>{ if(nav?.mod==='pagos'&&nav.q){ setQ(nav.q); setFiltro('todos'); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
-  useEffect(()=>{ setSelPay({}) },[mesIdx,anio])  // cambiar de mes limpia la selección
+  useEffect(()=>{ setSelPay({}); setVerPagados(false); setOpen(null); setQ('') },[mesIdx,anio])  // cambiar de mes limpia la selección
   useEffect(()=>{ cargarRespuestas() /* eslint-disable-next-line */ },[])  // respuestas de freelancers al abrir el módulo
 
   // proyectos del mes/año por Fecha Evento
@@ -5146,111 +5147,171 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
     input.click()
   }
 
-  return <>
-    <PageHead title="Pagos Staff" sub={`${MESES_LARGO[mesIdx-1]} ${anio} · ${lista.length} freelancers`}/>
-    <div style={{display:'flex', gap:14, marginBottom:20}}>
-      <Hero label="Pendiente de pago" value={fmt(totalPend)} accent={totalPend>0?T.brand:T.pos} sub={totalViatPend>0?`este mes · incl. ${fmt(totalViatPend)} de viáticos`:'este mes'}/>
-      <Hero label="Ya pagado" value={fmt(totalPag)} sub="este mes" subStrong="" />
-    </div>
-    {/* Respuestas de freelancers a los mails de pago (lee la casilla admin@somosmagma.com) */}
-    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
-      <div style={{padding:'11px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:((resumenResp&&resumenResp.enviados>0)||(respuestas&&respuestas.length))?`1px solid ${T.border}`:'none'}}>
-        <span style={{fontSize:13, fontWeight:700, color:T.ink}}>📨 Respuestas de freelancers{respuestas&&respuestas.length?` · ${respuestas.filter(m=>!m.leido).length} sin leer`:''}</span>
-        <button onClick={cargarRespuestas} disabled={loadingResp} style={{fontSize:11.5, padding:'4px 10px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink3, cursor:loadingResp?'default':'pointer'}}>{loadingResp?'Buscando…':'↻ Actualizar'}</button>
-      </div>
-      {resumenResp && resumenResp.enviados>0 && <div style={{padding:'8px 18px', fontSize:11.5, color:T.ink2, background:T.surfaceAlt, borderBottom:(respuestas&&respuestas.length)?`1px solid ${T.border}`:'none'}}><b style={{fontFamily:MONO}}>{resumenResp.enviados}</b> mails enviados · <b style={{color:T.pos}}>{resumenResp.respondieron}</b> respondieron · <b style={{color:T.warn}}>{resumenResp.sinResponder}</b> sin responder{resumenResp.sinGuardar>0?` · 📎 ${resumenResp.sinGuardar} sin guardar`:''}</div>}
-      {respuestas && respuestas.length===0 && !loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Sin respuestas todavía. Cuando un freelancer conteste el mail de pago, aparece acá.</div>}
-      {respuestas===null && loadingResp && <div style={{padding:'10px 18px', fontSize:12, color:T.ink3}}>Buscando respuestas en admin@somosmagma.com…</div>}
-      {(respuestas||[]).map((m,i)=><div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none'}}>
-        <span style={{width:7, height:7, borderRadius:7, background:m.leido?'transparent':T.brand, flexShrink:0}}/>
-        <span style={{flex:1, minWidth:0}}>
-          <span style={{fontSize:13, color:T.ink, fontWeight:m.leido?500:700}}>{m.nombre}{m.adjunto && <span title="Adjuntó factura" style={{marginLeft:7}}>📎</span>}</span>
-          <div style={{fontSize:11.5, color:T.ink3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{m.asunto}</div>
-        </span>
-        {m.adjunto && (savedAdj[m.uid]
-          ? <a href={savedAdj[m.uid]} target="_blank" rel="noreferrer" style={{...miniBtn, color:T.pos, borderColor:T.pos, fontSize:11.5}}>📄 en Drive ✓</a>
-          : <button onClick={()=>guardarAdjunto(m)} disabled={!!savingAdj[m.uid]} style={{...miniBtn, fontSize:11.5, cursor:savingAdj[m.uid]?'default':'pointer'}}>{savingAdj[m.uid]?'Guardando…':'⬇ Guardar en Drive'}</button>)}
-        <a href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:('+m.asunto+')')}`} target="_blank" rel="noreferrer" title="Abrir en Gmail" style={{fontSize:12, color:T.ink3, textDecoration:'none', whiteSpace:'nowrap'}}>Gmail ↗</a>
-        <span style={{fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>{m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):''}</span>
-      </div>)}
-    </div>
-    <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:14}}>
-      <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
-      <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:120, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
-      <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a) }} style={navBtn}>→</button>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{flex:'1 1 200px', minWidth:160, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
-      {[['todos','Todos'],['pend','Pendientes'],['pag','Pagados']].map(([k,l])=><button key={k} onClick={()=>setFiltro(k)} style={{padding:'7px 13px', borderRadius:20, fontSize:12, fontWeight:500, cursor:'pointer', border:`1px solid ${filtro===k?T.ink:T.border}`, background:filtro===k?T.ink:T.surface, color:filtro===k?'#fff':T.ink2}}>{l}</button>)}
-    </div>
-    <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:14}}>
-      <span style={{fontSize:12.5, color:T.ink2, fontWeight:500}}>Pagás desde:</span>
-      <select value={cuentaPago} onChange={e=>setCuentaPago(e.target.value)} style={{...selectStyle, minWidth:180}}>{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>
-      <span style={{fontSize:11.5, color:T.ink3}}>queda registrado en cada pago</span>
-    </div>
-
-    {/* Cómo se repartió el mes que estás pagando. Sigue al selector de arriba. */}
-    <RepartoStaff proyectos={proyectos} rrhh={rrhh} mes={mesIdx} anio={anio} onPersona={n=>setQ(n)}
-      titulo={`Reparto de ${MESES_LARGO[mesIdx-1]}`}/>
-
-    <div style={{display:'flex', flexDirection:'column', gap:10}}>
-      {lista.length===0&&<Empty>Sin freelancers con trabajos este mes</Empty>}
-      {lista.map((persona,i)=>{
-        const abierto=open===persona.nombre, datos=rrhhByName[persona.nombre.trim()]||{}
-        const estado = persona.totalPendiente===0 ? {c:T.pos,l:'Pagado'} : persona.totalPagado>0 ? {c:T.warn,l:'Parcial'} : {c:T.brand,l:'Pendiente'}
-        const nrosP=new Set(persona.trabajos.map(t=>String(t.nro).trim()))
-        let mailEnv=false, facturaURL=''
-        pagosPersistidos.forEach(r=>{ if(norm(r['Freelancer'])===norm(persona.nombre)&&nrosP.has(String(r['N° Presupuesto']||'').trim())){ if(String(r['Mail Enviado']||'').trim())mailEnv=true; if(String(r['Factura']||'').trim())facturaURL=r['Factura'] } })
-        return <div key={i} style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <div onClick={()=>setOpen(abierto?null:persona.nombre)} style={{display:'flex', alignItems:'center', gap:14, padding:'14px 18px', cursor:'pointer'}}>
-            <span style={{width:7,height:7,borderRadius:7,background:estado.c, flexShrink:0}}/>
-            <div style={{flex:1, minWidth:0}}><div style={{fontSize:14, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>{persona.nombre}{mailEnv&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>✉ enviado</span>}{facturaURL&&<span style={{fontSize:10, fontWeight:600, color:T.pos, background:T.posSoft, padding:'1px 7px', borderRadius:10}}>📄 factura</span>}</div><div style={{fontSize:11.5, color:T.ink3}}>{resumenTrabajos(persona)} · {estado.l}</div></div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:persona.totalPendiente>0?T.brand:T.ink2}}>{fmt(persona.totalPendiente)}</div><div style={{fontSize:11, color:T.ink3}}>de {fmt(persona.total)}{persona.viaticos>0&&<span style={{color:T.warn}}> · {fmt(persona.viaticos)} viáticos</span>}</div></div>
-            <div style={{display:'flex', gap:7, alignItems:'center', flexShrink:0}}>
-              {persona.totalPendiente>0
-                ? <button onClick={e=>{e.stopPropagation();pagarTodo(persona)}} style={{padding:'8px 16px', borderRadius:9, border:'none', background:T.pos, color:'#fff', fontSize:12.5, fontWeight:600, cursor:'pointer'}}>{conIvaDe(persona)?'Pagar todo +IVA':'Pagar todo'}</button>
-                : <span style={{padding:'8px 8px', fontSize:12, color:T.pos, fontWeight:600}}>✓ Pagado</span>}
-              {persona.totalPagado>0 && <button onClick={e=>{e.stopPropagation();deshacerTodo(persona)}} title="Volver atrás todos los pagos de esta persona este mes" style={{padding:'8px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, fontWeight:500, cursor:'pointer'}}>↩ Deshacer</button>}
+  // ---- Qué falta pagar, dicho arriba (DESIGN.md, panel Hoy). Rediseño 27/10/2026. ----
+  // Mail y factura de cada persona: salen de las filas de PAGOS_STAFF de sus trabajos del mes.
+  const docsDe=persona=>{ const nrosP=new Set(persona.trabajos.map(t=>String(t.nro).trim())); let mailEnv=false, facturaURL=''
+    pagosPersistidos.forEach(r=>{ if(norm(r['Freelancer'])===norm(persona.nombre)&&nrosP.has(String(r['N° Presupuesto']||'').trim())){ if(String(r['Mail Enviado']||'').trim())mailEnv=true; if(String(r['Factura']||'').trim())facturaURL=r['Factura'] } })
+    return {mailEnv, facturaURL} }
+  const todas=Object.values(personas).map(x=>({...x, ...docsDe(x)}))
+  const pendientesP=todas.filter(x=>x.totalPendiente>0).sort((a,b)=>b.totalPendiente-a.totalPendiente)
+  const pagadosP=todas.filter(x=>x.totalPendiente===0)
+  const coincide=x=>!q||norm(x.nombre).includes(norm(q))
+  const conFactura=pendientesP.filter(x=>x.facturaURL), sinFactura=pendientesP.filter(x=>!x.facturaURL&&x.mailEnv), sinMail=pendientesP.filter(x=>!x.facturaURL&&!x.mailEnv)
+  // El mes se paga el 15 del mes siguiente: pasado eso, lo que falta está atrasado.
+  const diaPago=new Date(anio, mesIdx, 15), hoyD=new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diasAtraso=Math.round((hoyD-diaPago)/86400000)
+  const fmtMill=v=>v>=1e6?`$${(v/1e6).toLocaleString('es-AR',{maximumFractionDigits:1})}M`:fmt(v)
+  const chipHoy={padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer', fontFamily:'inherit'}
+  const tarjeta={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const plural=(n,a,b)=>`${n} ${n===1?a:b}`
+  const fila=(persona)=>{
+        const abierto=open===persona.nombre, datos=rrhhByName[persona.nombre.trim()]||{}, {mailEnv, facturaURL}=persona
+        const pend=persona.totalPendiente>0
+        // El estado en palabras: lo que hace falta para poder pagar.
+        const est = !pend ? {c:T.pos, l:'✓ Pagado'}
+          : persona.totalPagado>0 ? {c:T.warn, l:`Pagado en parte · falta ${fmt(persona.totalPendiente)}`}
+          : facturaURL ? {c:T.pos, l:'✓ Mandó factura'}
+          : mailEnv ? {c:T.warn, l:'Mail enviado, sin factura'}
+          : {c:T.warn, l:'Falta mandarle el mail'}
+        const btnNegro={padding:'9px 16px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap'}
+        const btnBlanco={padding:'9px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:14, cursor:'pointer', whiteSpace:'nowrap'}
+        const lblPagar=conIvaDe(persona)?'Pagar +IVA':'Pagar'
+        const toggle=()=>setOpen(abierto?null:persona.nombre)
+        return <div key={persona.nombre} style={{...tarjeta, marginBottom:10, overflow:'hidden'}}>
+          <div onClick={toggle} role="button" tabIndex={0} aria-expanded={abierto} onKeyDown={e=>{ if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){ e.preventDefault(); toggle() } }}
+            style={{display:'flex', alignItems:'center', gap:'8px 14px', flexWrap:'wrap', padding:'13px 16px', cursor:'pointer'}}>
+            <div style={{flex:'1 1 220px', minWidth:0}}>
+              <div style={{fontSize:16, fontWeight:700, color:T.ink}}>{persona.nombre}</div>
+              <div style={{fontSize:13, marginTop:3}}><span style={{color:est.c, fontWeight:600}}>{est.l}</span><span style={{color:T.ink2}}> · {resumenTrabajos(persona)}</span></div>
             </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:14, fontFamily:MONO, fontWeight:600, color:pend?T.ink:T.ink2}}>{fmt(pend?persona.totalPendiente:persona.total)}</div>
+              {(pend&&persona.totalPendiente!==persona.total || persona.viaticos>0) && <div style={{fontSize:12.5, color:T.ink2}}>{pend&&persona.totalPendiente!==persona.total?`de ${fmt(persona.total)}`:''}{persona.viaticos>0?`${pend&&persona.totalPendiente!==persona.total?' · ':''}incl. ${fmt(persona.viaticos)} viáticos`:''}</div>}
+            </div>
+            {/* Un botón, el que toca: si falta el mail, mandarlo; si no, pagar (negro si ya facturó). */}
+            {pend && (!facturaURL && !mailEnv
+              ? <button onClick={e=>{e.stopPropagation(); setMailModal({persona, datos})}} style={btnNegro}>Mandar mail</button>
+              : <button onClick={e=>{e.stopPropagation(); pagarTodo(persona)}} style={facturaURL?btnNegro:btnBlanco} title={facturaURL?'':'Todavía no mandó la factura'}>{lblPagar}</button>)}
+            <span aria-hidden="true" style={{fontSize:12, color:T.ink2, width:12, textAlign:'center'}}>{abierto?'▲':'▼'}</span>
           </div>
-          {abierto && <div style={{borderTop:`1px solid ${T.border}`, background:T.surfaceAlt, padding:'12px 18px 16px'}}>
-            <div style={{display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start', padding:'4px 0 12px', marginBottom:8, borderBottom:`1px solid ${T.border}`}}>
-              {[['Rubro',datos['Rubro']],['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=><div key={k}><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>{k}</div><div style={{fontSize:12, color:T.ink, fontFamily:MONO, marginTop:2}}>{v}</div></div>)}
+          {abierto && <div style={{borderTop:`1px solid ${T.border}`, padding:'12px 16px 16px'}}>
+            <div style={{display:'flex', gap:'10px 20px', flexWrap:'wrap', alignItems:'flex-start', padding:'4px 0 12px', marginBottom:8, borderBottom:`1px solid ${T.border}`}}>
+              {[['Rubro',datos['Rubro']],['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=><div key={k}><div style={{fontSize:12.5, color:T.ink2}}>{k}</div><div style={{fontSize:13, color:T.ink, fontFamily:MONO, marginTop:2}}>{v}</div></div>)}
               <div style={{flex:1}}/>
-              <button onClick={()=>setFreelEdit({nombre:persona.nombre, datos})} style={{...miniBtn, alignSelf:'center'}}>{datos&&Object.keys(datos).length?'✎ Editar datos':'+ Completar datos'}</button>
+              <button onClick={()=>setFreelEdit({nombre:persona.nombre, datos})} style={{...miniBtn, fontSize:13, alignSelf:'center'}}>{datos&&Object.keys(datos).length?'✎ Editar datos':'+ Completar datos'}</button>
             </div>
-            {persona.totalPendiente>0 && <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Tildá los trabajos que vas a pagar (podés mezclar varias personas) y dale <strong style={{color:T.pos}}>Pagar seleccionados</strong> abajo. Cada tanda puede ir a una cuenta distinta.</div>}
+            {pend && persona.trabajos.filter(t=>!t.pagado).length>1 && <div style={{fontSize:13, color:T.ink2, marginBottom:6}}>Para pagar solo algunos trabajos, tildalos (podés mezclar personas) y pagalos desde la barra de abajo.</div>}
             {ordenCrono(persona.trabajos).map((t,j)=>{ const seleccionado=!!selPay[t.key]; return (
-              <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', opacity:t.pagado?0.55:1, background:seleccionado?T.posSoft:'transparent', borderRadius:seleccionado?7:0, margin:seleccionado?'0 -8px':0, paddingLeft:seleccionado?8:0, paddingRight:seleccionado?8:0}}>
-                <input type="checkbox" checked={t.pagado||seleccionado} onChange={()=>{ if(t.pagado) togglePago(persona,t,false); else toggleSel(persona,t) }} style={{cursor:'pointer'}} title={t.pagado?'Pagado — destildá para desmarcar':'Tildá para incluir en el pago'}/>
-                <div style={{flex:1, minWidth:0}}><span style={{fontSize:12.5, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:11.5, color:T.ink3}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.pagado&&<span style={{fontSize:10.5, color:T.pos, marginLeft:6}}>✓ pagado</span>}{t.tanda5&&!t.pagado&&<span style={{fontSize:10.5, color:T.warn, fontWeight:600, marginLeft:6}}>va con el pago del 5</span>}{seleccionado&&!t.pagado&&<span style={{fontSize:10.5, color:T.pos, fontWeight:600, marginLeft:6}}>a pagar</span>}
-                  {clienteAgenciaDe(t) && <div style={{fontSize:11.5, color:T.ink2, marginTop:1}}>{clienteAgenciaDe(t)}</div>}</div>
+              <div key={j} style={{display:'flex', alignItems:'center', gap:12, padding:'8px 0', borderTop:j?`1px solid ${T.border}`:'none', background:seleccionado?T.surfaceAlt:'transparent'}}>
+                {t.pagado
+                  ? <span style={{width:16, color:T.pos, fontWeight:700, textAlign:'center'}} aria-label="pagado">✓</span>
+                  : <input type="checkbox" checked={seleccionado} onChange={()=>toggleSel(persona,t)} style={{cursor:'pointer', width:16, height:16}} aria-label={`Elegir ${t.pedido} para pagar`}/>}
+                <div style={{flex:1, minWidth:0, opacity:t.pagado?0.7:1}}><span style={{fontSize:14, color:T.ink}}>{t.pedido}</span> <span style={{fontSize:13, color:T.ink2}}>· {t.proyecto} {t.fechaEvento?`· ${t.fechaEvento}`:''}</span>{t.tanda5&&!t.pagado&&<span style={{fontSize:12.5, color:T.warn, fontWeight:600, marginLeft:6}}>va con el pago del 5</span>}
+                  {clienteAgenciaDe(t) && <div style={{fontSize:12.5, color:T.ink2, marginTop:1}}>{clienteAgenciaDe(t)}</div>}</div>
                 {/* Viáticos: un campo en cada trabajo. Si se carga se suma al pago; vacío = 0. Pagado: solo se muestra. */}
                 {t.pagado
-                  ? (t.viaticos>0 ? <span style={{fontSize:11, color:T.ink3, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
-                  : t.monotributo ? null : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:11, color:T.ink3, whiteSpace:'nowrap'}}>viáticos
-                      <input value={viatDraft[t.key]!==undefined?viatDraft[t.key]:(t.viaticos?String(t.viaticos):'')} onChange={e=>setViatDraft(d=>({...d,[t.key]:e.target.value}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" inputMode="numeric" style={{width:76, padding:'4px 7px', borderRadius:6, border:`1px solid ${t.viaticos>0?T.warn:T.border}`, background:T.surface, color:T.ink, fontSize:12, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
+                  ? (t.viaticos>0 ? <span style={{fontSize:12.5, color:T.ink2, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
+                  : t.monotributo ? null : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:12.5, color:T.ink2, whiteSpace:'nowrap'}}>viáticos
+                      <input value={viatDraft[t.key]!==undefined?viatDraft[t.key]:(t.viaticos?String(t.viaticos):'')} onChange={e=>setViatDraft(d=>({...d,[t.key]:e.target.value}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" inputMode="numeric" style={{width:84, padding:'5px 8px', borderRadius:6, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13, fontFamily:MONO, textAlign:'right'}}/>
                     </label>}
-                <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmt(t.precio)}{t.viaticos>0&&<span style={{fontSize:11, color:T.warn}}> +{fmt(t.viaticos)}</span>}</span>
-                <button onClick={()=>{ if(t.monotributo){ showToast('El monto del monotributo se cambia en la solapa ACUERDOS'); return } const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Corregir montos o agregar líneas en el proyecto" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:13, padding:'0 2px'}}>✎</button>
+                <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmt(t.precio)}{t.viaticos>0&&<span style={{fontSize:12.5, color:T.ink2}}> +{fmt(t.viaticos)}</span>}</span>
+                {t.pagado
+                  ? <button onClick={()=>togglePago(persona,t,false)} style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:12.5, textDecoration:'underline', textUnderlineOffset:3, padding:0}} title="Vuelve a pendiente y devuelve la plata a la cuenta">deshacer</button>
+                  : <button onClick={()=>{ if(t.monotributo){ showToast('El monto del monotributo se cambia en la solapa ACUERDOS'); return } const proy=proyByNum[String(t.nro).trim()]; if(proy) setStaffModalPS({proy, presu:presuByNumPS[String(t.nro).trim()]}); else showToast('No encuentro el proyecto','err') }} title="Corregir montos o agregar líneas en el proyecto" aria-label="Editar staff del proyecto" style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:14, padding:'0 2px'}}>✎</button>}
               </div>
             )})}
-            {persona.totalPendiente>0 && <div style={{marginTop:10, padding:'9px 11px', borderRadius:8, background:conIvaDe(persona)?T.brandSoft:T.surface, border:`1px solid ${conIvaDe(persona)?T.brand+'40':T.border}`}}>
-              <label style={{display:'flex', gap:8, alignItems:'center', fontSize:12.5, color:T.ink2, cursor:'pointer', fontWeight:600}}>
+            {pend && <div style={{marginTop:10, padding:'9px 11px', borderRadius:10, background:conIvaDe(persona)?T.surfaceAlt:T.surface, border:`1px solid ${T.border}`}}>
+              <label style={{display:'flex', gap:8, alignItems:'center', fontSize:13.5, color:T.ink, cursor:'pointer', fontWeight:600}}>
                 <input type="checkbox" checked={conIvaDe(persona)} onChange={e=>setIvaPersona(s=>({...s,[persona.nombre]:e.target.checked}))}/>
-                Pagar con IVA (+21%) <span style={{fontWeight:400, color:T.ink3}}>— si te factura como Responsable Inscripto</span>
+                Pagar con IVA (+21%) <span style={{fontWeight:400, color:T.ink2}}>— si te factura como Responsable Inscripto</span>
               </label>
-              {conIvaDe(persona) && <div style={{fontSize:12, color:T.ink2, marginTop:7, fontFamily:MONO}}>neto {fmt(persona.pendFee)} + IVA 21% {fmt(Math.round(persona.pendFee*0.21))}{persona.pendViat>0&&<> + viáticos {fmt(persona.pendViat)} (sin IVA)</>} = <b style={{color:T.brand}}>{fmt(Math.round(persona.pendFee*1.21)+persona.pendViat)}</b></div>}
+              {conIvaDe(persona) && <div style={{fontSize:13, color:T.ink2, marginTop:7, fontFamily:MONO}}>neto {fmt(persona.pendFee)} + IVA 21% {fmt(Math.round(persona.pendFee*0.21))}{persona.pendViat>0&&<> + viáticos {fmt(persona.pendViat)} (sin IVA)</>} = <b style={{color:T.ink}}>{fmt(Math.round(persona.pendFee*1.21)+persona.pendViat)}</b></div>}
             </div>}
-            <div style={{display:'flex', justifyContent:'flex-end', gap:6, marginTop:10, flexWrap:'wrap'}}>
-              <button onClick={()=>copiarDesc(persona)} style={miniBtn}>📋 Copiar mensaje</button>
-              <button onClick={()=>setMailModal({persona, datos:rrhhByName[persona.nombre.trim()]||{}})} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>✉ Mandar mail</button>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, flexWrap:'wrap'}}>
+              {persona.totalPagado>0 && <button onClick={()=>deshacerTodo(persona)} style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:13, textDecoration:'underline', textUnderlineOffset:3, padding:0}} title="Vuelven a pendiente y se devuelve la plata a la cuenta">Deshacer todos los pagos de {MESES_LARGO[mesIdx-1].toLowerCase()}</button>}
+              <div style={{flex:1}}/>
+              <button onClick={()=>copiarDesc(persona)} style={{...miniBtn, fontSize:13}}>Copiar mensaje</button>
+              {pend && <button onClick={()=>setMailModal({persona, datos})} style={{...miniBtn, fontSize:13}}>{mailEnv?'Mandar el mail de nuevo':'Mandar mail'}</button>}
               {facturaURL
-                ? <a href={facturaURL} target="_blank" rel="noreferrer" style={{...miniBtn, color:T.pos, borderColor:T.pos}}>📄 Ver factura</a>
-                : <button onClick={()=>subirFactura(persona)} style={miniBtn}>⬆ Subir factura</button>}
+                ? <a href={facturaURL} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:13}}>Ver factura</a>
+                : <button onClick={()=>subirFactura(persona)} style={{...miniBtn, fontSize:13}}>Subir factura</button>}
             </div>
           </div>}
         </div>
-      })}
+  }
+  const pendVis=pendientesP.filter(coincide), pagVis=pagadosP.filter(coincide)
+  return <>
+    <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap'}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3, flex:1}}>Pagos Staff</h1>
+      <button aria-label="Mes anterior" onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a) }} style={navBtn}>←</button>
+      <span style={{fontSize:15, fontWeight:700, color:T.ink, minWidth:140, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
+      <button aria-label="Mes siguiente" onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a) }} style={navBtn}>→</button>
     </div>
+    {/* Hoy: a cuántos falta pagar y qué traba cada pago. Antes eran dos números grandes y la lista mezclada. */}
+    <div style={{...tarjeta, padding:'16px 18px', marginBottom:10}}>
+      {pendientesP.length
+        ? <>
+          <div style={{fontSize:17, color:T.ink, lineHeight:1.4}}><strong>Falta pagarle a {plural(pendientesP.length,'persona','personas')} · <span style={{fontFamily:MONO}}>{fmt(totalPend)}</span></strong>
+            {diasAtraso>0 ? <span style={{color:T.brand, fontWeight:600}}> · ● {plural(diasAtraso,'día','días')} atrasado</span> : null}</div>
+          <div style={{fontSize:14, color:T.ink2, marginTop:4}}>{[diasAtraso>0?`se pagaba el 15/${mesIdx===12?1:mesIdx+1}`:`se paga el 15/${mesIdx===12?1:mesIdx+1}`, conFactura.length&&`${conFactura.length} ya ${conFactura.length===1?'mandó':'mandaron'} factura`, sinFactura.length&&`${sinFactura.length} ${sinFactura.length===1?'tiene':'tienen'} el mail y no ${sinFactura.length===1?'facturó':'facturaron'}`, sinMail.length&&`${sinMail.length} sin mail`, totalViatPend>0&&`incluye ${fmt(totalViatPend)} de viáticos`].filter(Boolean).join(' · ')}</div>
+          <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:11}}>
+            {conFactura[0] && <button type="button" style={chipHoy} onClick={()=>pagarTodo(conFactura[0])}>Pagar a {conFactura[0].nombre.split(' ').slice(0,2).join(' ')} · {fmtMill(conFactura[0].totalPendiente)}{conIvaDe(conFactura[0])?' +IVA':''}</button>}
+            {sinMail[0] && <button type="button" style={chipHoy} onClick={()=>setMailModal({persona:sinMail[0], datos:rrhhByName[sinMail[0].nombre.trim()]||{}})}>Mandar el mail a {sinMail[0].nombre.split(' ').slice(0,2).join(' ')}</button>}
+            {sinFactura.length>0 && <button type="button" style={chipHoy} onClick={()=>setOpen(sinFactura[0].nombre)}>Ver quién no facturó ({sinFactura.length})</button>}
+          </div>
+        </>
+        : <div style={{fontSize:17, fontWeight:700, color:T.ink}}>{todas.length?`${MESES_LARGO[mesIdx-1]}: todo pagado ✓`:`${MESES_LARGO[mesIdx-1]}: sin trabajos de freelancers`}</div>}
+    </div>
+    <div style={{display:'flex', alignItems:'center', gap:'6px 10px', flexWrap:'wrap', fontSize:13.5, color:T.ink2, margin:'0 4px 16px'}}>
+      <span>Ya pagado <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(totalPag)}</strong>{totalPag>0?` a ${plural(todas.filter(x=>x.totalPagado>0).length,'persona','personas')}`:''}</span>
+      <span>·</span>
+      <label style={{display:'flex', alignItems:'center', gap:6}}>Pagás desde
+        <select value={cuentaPago} onChange={e=>setCuentaPago(e.target.value)} style={{...selectStyle, minWidth:170, fontSize:13.5}} title="Queda registrado en cada pago">{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>
+      </label>
+      <div style={{flex:1}}/>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" aria-label="Buscar freelancer" style={{flex:'0 1 240px', minWidth:160, padding:'8px 12px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:14}}/>
+    </div>
+
+    {pendVis.length>0 && <div style={{fontSize:13, color:T.ink2, margin:'0 4px 8px'}}>Falta pagar</div>}
+    {pendVis.map(fila)}
+
+    {/* Respuestas de freelancers a los mails de pago (lee la casilla admin@somosmagma.com) */}
+    {((respuestas&&respuestas.length)||loadingResp||(resumenResp&&resumenResp.enviados>0)) ? <div style={{...tarjeta, overflow:'hidden', margin:'6px 0 10px'}}>
+      <div style={{padding:'11px 16px', display:'flex', alignItems:'center', gap:10}}>
+        <span style={{fontSize:14, fontWeight:700, color:T.ink, flex:1}}>Respuestas al mail de pago{respuestas&&respuestas.filter(m=>!m.leido).length?` · ${respuestas.filter(m=>!m.leido).length} sin leer`:''}</span>
+        {resumenResp && resumenResp.enviados>0 && <span style={{fontSize:13, color:T.ink2}}>{resumenResp.respondieron} de {resumenResp.enviados} respondieron{resumenResp.sinGuardar>0?` · ${resumenResp.sinGuardar} factura${resumenResp.sinGuardar===1?'':'s'} sin guardar`:''}</span>}
+        <button onClick={cargarRespuestas} disabled={loadingResp} style={{...miniBtn, fontSize:13, cursor:loadingResp?'default':'pointer'}}>{loadingResp?'Buscando…':'↻ Actualizar'}</button>
+      </div>
+      {(respuestas||[]).map((m,i)=><div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderTop:`1px solid ${T.border}`}}>
+        <span style={{width:7, height:7, borderRadius:7, background:m.leido?'transparent':T.ink, flexShrink:0}} aria-label={m.leido?undefined:'sin leer'}/>
+        <span style={{flex:1, minWidth:0}}>
+          <span style={{fontSize:14, color:T.ink, fontWeight:m.leido?500:700}}>{m.nombre}{m.adjunto && <span style={{marginLeft:7, fontSize:12.5, color:T.ink2, fontWeight:400}}>· adjuntó factura</span>}</span>
+          <div style={{fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{m.asunto}</div>
+        </span>
+        {m.adjunto && (savedAdj[m.uid]
+          ? <a href={savedAdj[m.uid]} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:13, color:T.pos}}>En Drive ✓</a>
+          : <button onClick={()=>guardarAdjunto(m)} disabled={!!savingAdj[m.uid]} style={{...miniBtn, fontSize:13, background:T.ink, color:'#fff', border:'none', cursor:savingAdj[m.uid]?'default':'pointer'}}>{savingAdj[m.uid]?'Guardando…':'Guardar en Drive'}</button>)}
+        <a href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:('+m.asunto+')')}`} target="_blank" rel="noreferrer" title="Abrir en Gmail" style={{fontSize:13, color:T.ink2, textDecoration:'none', whiteSpace:'nowrap'}}>Gmail ↗</a>
+        <span style={{fontSize:12.5, color:T.ink2, whiteSpace:'nowrap', fontFamily:MONO}}>{m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}):''}</span>
+      </div>)}
+    </div> : null}
+
+    {pagVis.length>0 && <>
+      <div style={{fontSize:13, color:T.ink2, margin:'14px 4px 8px'}}>Ya pagados</div>
+      {(verPagados||q||!pendientesP.length)
+        ? pagVis.map(fila)
+        : <button type="button" onClick={()=>setVerPagados(true)} aria-expanded={false} style={{...tarjeta, width:'100%', border:'none', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'13px 16px', fontSize:14, color:T.ink2, cursor:'pointer', fontFamily:'inherit', marginBottom:10}}>
+            <span><span style={{color:T.pos, fontWeight:600}}>✓</span> {plural(pagVis.length,'persona pagada del todo','personas pagadas del todo')} · <strong style={{fontFamily:MONO, color:T.ink}}>{fmt(pagVis.reduce((s,x)=>s+x.totalPagado,0))}</strong></span><span>Ver ▼</span></button>}
+    </>}
+    {q && !pendVis.length && !pagVis.length && <div style={{...tarjeta, padding:24, textAlign:'center', color:T.ink2, fontSize:14}}>Nadie se llama "{q}" este mes · <button onClick={()=>setQ('')} style={{border:'none', background:'transparent', color:T.ink, textDecoration:'underline', cursor:'pointer', fontSize:14, padding:0}}>ver todos</button></div>}
+
+    {/* Cómo se repartió el mes: para consultar, no para pagar. Plegado al final. */}
+    {verReparto
+      ? <div style={{marginTop:6}}><RepartoStaff proyectos={proyectos} rrhh={rrhh} mes={mesIdx} anio={anio} onPersona={n=>setQ(n)} titulo={`Reparto de ${MESES_LARGO[mesIdx-1]}`}/>
+          <button onClick={()=>setVerReparto(false)} style={{...miniBtn, fontSize:13, marginTop:8}}>Cerrar el reparto ▲</button></div>
+      : <button type="button" onClick={()=>setVerReparto(true)} aria-expanded={false} style={{...tarjeta, width:'100%', border:'none', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'13px 16px', fontSize:14, color:T.ink2, cursor:'pointer', fontFamily:'inherit', marginTop:6}}>
+          <span>Reparto de {MESES_LARGO[mesIdx-1].toLowerCase()}: quién fue a cuántos trabajos</span><span>Ver ▼</span></button>}
+    {selList.length>0 && <div style={{height:80}}/>}
     {freelEdit && <FreelancerModal nombre={freelEdit.nombre} datos={freelEdit.datos||{}} rubrosConocidos={[...new Set(rrhh.flatMap(r=>String(r['Rubro']||'').split(',').map(s=>s.trim())))].filter(Boolean)} onClose={()=>setFreelEdit(null)} onSaved={()=>{ setFreelEdit(null); if(onRefresh) onRefresh() }} showToast={showToast}/>}
     {mailModal && <MailStaffModal persona={mailModal.persona} datos={mailModal.datos} cuentas={data.cuentas||[]} mesNombre={MESES_LARGO[mesIdx-1]} onClose={()=>setMailModal(null)} onSent={()=>marcarMailEnviado(mailModal.persona)} showToast={showToast}/>}
     {staffModalPS && <div onClick={()=>setStaffModalPS(null)} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:'40px 20px'}}>
@@ -5266,10 +5327,10 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
       <div style={{maxWidth:760, margin:'0 auto', background:T.ink, color:'#fff', borderRadius:14, padding:'12px 16px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', boxShadow:'0 -6px 30px rgba(0,0,0,0.25)', pointerEvents:'auto'}}>
         <div style={{fontSize:13.5}}><strong style={{fontSize:15}}>{selList.length}</strong> {selList.length===1?'trabajo':'trabajos'} · <span style={{fontFamily:MONO, fontWeight:600}}>{fmt(selTotal)}</span></div>
         <div style={{flex:1}}/>
-        <span style={{fontSize:12, opacity:0.7}}>Desde:</span>
+        <span style={{fontSize:13, opacity:0.8}}>Desde:</span>
         <select value={cuentaPago} onChange={e=>setCuentaPago(e.target.value)} style={{padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#fff', fontSize:12.5, outline:'none'}}>{cuentaOpts.length===0&&<option value="">Sin cuentas</option>}{cuentaOpts.map(c=><option key={c} value={c} style={{color:T.ink}}>{c}</option>)}</select>
         <button onClick={()=>setSelPay({})} style={{padding:'8px 12px', borderRadius:8, border:'1px solid rgba(255,255,255,0.25)', background:'transparent', color:'#fff', fontSize:12.5, fontWeight:500, cursor:'pointer'}}>Cancelar</button>
-        <button onClick={pagarSeleccion} style={{padding:'9px 18px', borderRadius:8, border:'none', background:T.pos, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer'}}>Pagar seleccionados</button>
+        <button onClick={pagarSeleccion} style={{padding:'9px 18px', borderRadius:10, border:'none', background:T.surface, color:T.ink, fontSize:14, fontWeight:700, cursor:'pointer'}}>Pagar seleccionados</button>
       </div>
     </div>}
   </>
@@ -7212,7 +7273,7 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
         <label style={lblV2}>Rubro (etiquetas)</label>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
           {rubros.map((r,i)=>(
-            <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:20,background:T.brandSoft,color:T.brand,fontSize:12,fontWeight:600}}>{r}<button onClick={()=>setRubros(rs=>rs.filter((_,j)=>j!==i))} style={{border:'none',background:'transparent',color:T.brand,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>×</button></span>
+            <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:20,background:T.surfaceAlt,color:T.ink,fontSize:13,fontWeight:600}}>{r}<button onClick={()=>setRubros(rs=>rs.filter((_,j)=>j!==i))} style={{border:'none',background:'transparent',color:T.brand,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>×</button></span>
           ))}
           {rubros.length===0 && <span style={{fontSize:12,color:T.ink3}}>Sin rubros todavía</span>}
         </div>
@@ -7227,7 +7288,7 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             {['Activo','Candidato','Inactivo','No llamar'].map(e=>(
               <button key={e} onClick={()=>setForm(f=>({...f,estado:f.estado===e?'':e}))}
-                style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${form.estado===e?T.brand:T.border}`,background:form.estado===e?T.brandSoft:T.surface,color:form.estado===e?T.brand:T.ink2,fontSize:12,fontWeight:form.estado===e?600:500,cursor:'pointer'}}>{e}</button>
+                style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${form.estado===e?T.ink:T.border}`,background:form.estado===e?T.ink:T.surface,color:form.estado===e?'#fff':T.ink2,fontSize:12,fontWeight:form.estado===e?600:500,cursor:'pointer'}}>{e}</button>
             ))}
           </div>
         </div>
@@ -7260,7 +7321,7 @@ function FreelancerModal({nombre, datos={}, rubrosConocidos=[], onClose, onSaved
       </div>
       <div style={{padding:'14px 22px',borderTop:`1px solid ${T.border}`,display:'flex',gap:10,justifyContent:'flex-end'}}>
         <button onClick={onClose} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={guardar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:600,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
+        <button onClick={guardar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.ink,color:'#fff',fontSize:13.5,fontWeight:600,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Guardando…':'Guardar'}</button>
       </div>
     </div>
   </div>
@@ -7284,6 +7345,7 @@ const renglonMailStaff = t => { const nrm=x=>String(x||'').toLowerCase().trim();
   return `- ${diaCorto(t.fechaEvento)?diaCorto(t.fechaEvento)+' · ':''}${t.pedido} — ${t.proyecto}${cli && nrm(cli)!==nrm(t.proyecto)?` · ${cli}`:''}${agDistinta?` (${ag})`:''}: ${fmt(t.precio)}${t.viaticos?` + viáticos ${fmt(t.viaticos)}`:''}` }
 
 function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSent, showToast}){
+  useEscCierra(onClose)
   // Entidades fiscales (a quién factura el freelancer) con sus datos, desde CUENTAS
   const entidades={}; cuentas.forEach(c=>{ const ef=c['Entidad fiscal']; if(ef && !entidades[ef]) entidades[ef]={ titular:c['Titular']||'', datos:c['Datos transferencia adicionales']||'' } })
   const FACTURAR_OPC=Object.keys(entidades).length?Object.keys(entidades):['Somos Magma SRL']
@@ -7356,7 +7418,7 @@ function MailStaffModal({persona, datos={}, cuentas=[], mesNombre, onClose, onSe
         <span style={{fontSize:11,color:T.ink3,marginRight:'auto'}}>Sale de <b>admin@somosmagma.com</b></span>
         <button onClick={()=>{navigator.clipboard?.writeText(cuerpo);showToast('Mensaje copiado')}} style={{padding:'9px 14px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:12.5,fontWeight:500,cursor:'pointer'}}>Copiar</button>
         <button onClick={abrir} style={{padding:'9px 14px',borderRadius:9,border:`1px solid ${T.border}`,background:T.surface,color:T.ink2,fontSize:12.5,fontWeight:500,cursor:'pointer'}}>Abrir en Outlook</button>
-        <button onClick={enviar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.brand,color:'#fff',fontSize:13.5,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Enviando…':'✉ Enviar mail'}</button>
+        <button onClick={enviar} disabled={saving} style={{padding:'9px 22px',borderRadius:9,border:'none',background:T.ink,color:'#fff',fontSize:13.5,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Enviando…':'✉ Enviar mail'}</button>
       </div>
     </div>
   </div>
