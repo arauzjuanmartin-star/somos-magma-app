@@ -20,6 +20,7 @@
 import { google } from 'googleapis'
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
+import { esPM } from '../../lib/roles'
 import { HEADERS_EDICION, IDX_EDICION, aAR, SUB_PRE, SUB_FIN, esPedidoFoto } from '../../lib/edicion'
 import { abrirParaTodos } from '../../lib/drive'
 
@@ -40,6 +41,8 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res)
   if (!auth) return
   const mail = auth.mail
+  // Mandar al cliente (Finales + acceso) es del PM.
+  if (!esPM(mail)) return res.status(403).json({ error: 'Mandar al cliente lo hace el PM' })
 
   const { id, mailsCliente = [], confirmar = false } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Falta el entregable' })

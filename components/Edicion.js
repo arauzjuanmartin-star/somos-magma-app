@@ -18,11 +18,11 @@ import {
   limpiarPedido, parseFechaAR, aAR, aISO, fechaSugerida, hoyCero, diasEntre,
   CAMPOS_PIEZA, CAMPOS_BRIEF, briefLleno, briefTotal, piezaLlena, piezaTotal,
   textoPedirBrief, textoParaElEditor, briefsAdjuntos, esperaAlPM, esperaAlCliente, ES_MAGMA, esPedidoEdicion,
-  esPedidoFoto, llevaFotos, nombrePieza, lineaBitacora, notasDeBitacora,
+  esPedidoFoto, llevaFotos, nombrePieza, lineaBitacora, notasDeBitacora, editorPuedeMover,
 } from '../lib/edicion'
 import FotosProyecto from './FotosProyecto'
 import { quienSoy, esMio } from '../lib/quien-soy'
-import { PMS_ACTIVOS } from '../lib/roles'
+import { PMS_ACTIVOS, esPM } from '../lib/roles'
 
 // Lo que cada uno elige (ver solo lo suyo, qué secciones deja abiertas) queda en
 // su navegador. No va al sheet: es cómo le gusta mirar a cada uno, no un dato.
@@ -467,6 +467,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // no quedó escrito es peor que no mostrarlo.
   async function guardar(id, campos, extra) {
     const f = filas.find(x => x.ID === id)
+    if (campos.Estado !== undefined && f && !esPM(mail) && !extra?.deshacer && String(f.Estado || '').trim() !== campos.Estado && !editorPuedeMover(f.Estado, campos.Estado)) {
+      return showToast('Ese paso lo mueve el PM. Vos podés empezar a editar y subir la versión para revisar.', 'err')
+    }
     if (campos.Estado !== undefined && !extra?.paso && f) {
       const p = puertaEstado(f, campos.Estado)
       if (p.nada) return
@@ -1344,9 +1347,9 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
       </div>
       <div>
         <label style={lbl}>Prioridad</label>
-        <select value={prioridad} onChange={e => setPrioridad(e.target.value)} style={{ ...inp, width: '100%', cursor: 'pointer' }}>
-          {PRIORIDADES.map(x => <option key={x} value={x}>{x}</option>)}
-        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: T.ink, cursor: 'pointer', minHeight: 36 }}>
+          <input type="checkbox" checked={prioridad === 'Urgente'} onChange={e => setPrioridad(e.target.checked ? 'Urgente' : 'Normal')} style={{ width: 17, height: 17, accentColor: T.ink }} /> Urgente
+        </label>
       </div>
       <div>
         <label style={lbl}>Entregar el</label>
@@ -1888,7 +1891,7 @@ function BriefAdjunto({ f, showToast, onRefresh }) {
 
 // Lo que hay que hacer con la pieza AHORA, con su botón (en Para revisar y Con el
 // cliente están los paneles de siempre: aprobar con Drive y el OK del cliente).
-function ProximoPaso({ f, guardar }) {
+function ProximoPaso({ f, guardar, soyPM = true }) {
   const e = estadoDe(f.Estado), ed = String(f.Editor || '').trim()
   const quien = ed ? primerNombre(ed) : 'El editor'
   const cfg = e === 'Sin material' ? { txt: 'Falta que llegue el material.', btn: 'Llegó el material', a: 'Material listo' }
@@ -1901,7 +1904,7 @@ function ProximoPaso({ f, guardar }) {
   return <div style={{ background: T.surface, borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', padding: '14px 16px', marginBottom: 14 }}>
     <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 4 }}>Próximo paso</div>
     <div style={{ fontSize: 15.5, color: T.ink, lineHeight: 1.4, marginBottom: cfg.btn ? 12 : 0 }}>{cfg.txt}</div>
-    {cfg.btn && <button onClick={() => guardar(f.ID, { Estado: cfg.a })} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>{cfg.btn}</button>}
+    {cfg.btn && (soyPM || editorPuedeMover(f.Estado, cfg.a)) && <button onClick={() => guardar(f.ID, { Estado: cfg.a })} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>{cfg.btn}</button>}
   </div>
 }
 
@@ -1950,9 +1953,17 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     </div>
 
     {/* Lo que hay que hacer AHORA va primero; el resto son secciones que se abren. */}
-    {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
-    {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
-    {!esperaAlPM(f.Estado) && !esperaAlCliente(f.Estado) && <ProximoPaso f={f} guardar={guardar} />}
+    {/* Aprobar y el OK del cliente son del PM: quien solo edita ve en qué está y de quién depende. */}
+    {(esperaAlPM(f.Estado) || esperaAlCliente(f.Estado)) && !esPM(mail)
+      ? <div style={{ background: T.surface, borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', padding: '14px 16px', marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 4 }}>Próximo paso</div>
+          <div style={{ fontSize: 15.5, color: T.ink, lineHeight: 1.4 }}>{esperaAlPM(f.Estado) ? `Espera el OK de ${String(f.PM || '').trim() || 'el PM'}.` : `Lo tiene el cliente. Lo sigue ${String(f.PM || '').trim() || 'el PM'}.`}</div>
+        </div>
+      : <>
+        {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
+        {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
+      </>}
+    {!esperaAlPM(f.Estado) && !esperaAlCliente(f.Estado) && <ProximoPaso f={f} guardar={guardar} soyPM={esPM(mail)} />}
 
     <div role="tablist" aria-label="Secciones de la ficha" style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${T.border}`, margin: '4px 0 14px' }}>
       {tabBtn('ahora', 'Ahora')}
@@ -1987,9 +1998,10 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
       <div>
         <label style={lbl}>Prioridad</label>
-        <select value={String(f.Prioridad || 'Normal')} onChange={e => guardar(f.ID, { Prioridad: e.target.value })} style={{ ...inp, width: '100%', cursor: 'pointer', color: COLOR_PRIO[String(f.Prioridad || 'Normal')] || T.ink, fontWeight: String(f.Prioridad) === 'Urgente' ? 700 : 400 }}>
-          {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
+        {/* Urgente sí o no (27/10/2026): el resto lo ordena la fecha. "Baja" se lee como no urgente. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: T.ink, cursor: 'pointer', minHeight: 36 }}>
+          <input type="checkbox" checked={String(f.Prioridad || '').trim() === 'Urgente'} onChange={e => guardar(f.ID, { Prioridad: e.target.checked ? 'Urgente' : 'Normal' })} style={{ width: 17, height: 17, accentColor: T.ink }} /> Urgente
+        </label>
       </div>
       <div>
         <label style={lbl}>PM · quién responde</label>

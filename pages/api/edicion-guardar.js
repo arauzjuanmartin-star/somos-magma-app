@@ -4,7 +4,8 @@
 
 import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
-import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza, esPedidoFoto, lineaBitacora } from '../../lib/edicion'
+import { HEADERS_EDICION, IDX_EDICION, estaCerrado, aAR, CAMPOS_BRIEF, CAMPOS_PIEZA, CONTADOR_DE, nombrePieza, esPedidoFoto, lineaBitacora, editorPuedeMover } from '../../lib/edicion'
+import { esPM } from '../../lib/roles'
 import { armarAviso, armarAvisoNota, mandarAviso } from '../../lib/edicion-avisos'
 import { darFinalesAlStaff } from '../../lib/finales'
 import { mailsDelStaff } from '../../lib/finales'
@@ -93,6 +94,16 @@ export default async function handler(req, res) {
     const estadoActual = String(actual[cE('Estado')] || '').trim()
     if (String(campos?.Estado || '').trim() === 'Con el cliente' && estadoActual !== 'Con el cliente') {
       return res.status(400).json({ error: 'Al cliente se manda con “Aprobar y mandar” desde la ficha (pasa el archivo a Finales y le da acceso)' })
+    }
+
+    // Quien no es PM mueve solo sus pasos (empezar a editar, subir la versión). Deshacer el
+    // "empezar a editar" también le corresponde: vuelve a Material listo sin avisar a nadie.
+    const estadoNuevoPedido = String(campos?.Estado ?? '').trim()
+    if (campos?.Estado !== undefined && estadoNuevoPedido !== estadoActual && !esPM(mail)) {
+      const vuelta = deshacer && estadoNuevoPedido === 'Material listo' && estadoActual === 'Editando'
+      if (!vuelta && !editorPuedeMover(estadoActual, estadoNuevoPedido)) {
+        return res.status(403).json({ error: 'Ese paso lo mueve el PM. Vos podés empezar a editar y subir la versión para revisar.' })
+      }
     }
 
     const data = []
