@@ -251,7 +251,11 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   function salirFicha() {
     const id = abierto
     setEnfoque(false); setAbierto(null); setVolverA(null); setCola(null)
-    if (id) setScrollA(id)   // el tablero vuelve parado en la fila de la que salió
+    // El tablero vuelve parado en la fila de la que salió. Salvo que la hayas cerrado:
+    // ya está en Terminados, abajo de todo, y la pantalla te llevaba hasta ahí
+    // ("que no pase más eso", Sofi 27/10/2026). Ahí se queda arriba, en lo abierto.
+    const f = id && filas.find(x => x.ID === id)
+    if (f && !estaCerrado(f.Estado)) setScrollA(id)
   }
   // Esc cierra la ficha, como el registro expandido de Airtable.
   useEffect(() => {
