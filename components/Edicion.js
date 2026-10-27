@@ -71,6 +71,9 @@ const leTocaA = f => {
   if (e === 'Con el cliente') return { quien: 'Cliente', sigue: pm }
   return { quien: ed ? ed.split(' ')[0] : 'Sin asignar', falta: !ed, completo: ed }
 }
+// Qué versión es: la primera que sube el editor es la v1 y cada vuelta de cambios
+// (interna o del cliente) lleva a una nueva. Sale de las rondas, no se guarda aparte.
+const versionDe = f => 1 + (parseInt(f['Rondas internas']) || 0) + (parseInt(f['Rondas cliente']) || 0)
 const MarcaUrgente = () => <span title="Prioridad urgente" style={{ fontSize: 10, fontWeight: 700, color: T.ink, border: `1px solid ${T.ink}`, padding: '1px 6px', borderRadius: 4, letterSpacing: 0.3, whiteSpace: 'nowrap', flexShrink: 0 }}>↑ URGENTE</span>
 // La lista se parte por QUIÉN TIENE LA PELOTA, igual que las columnas del Tablero.
 // Juan, 4/10/2026, mirando CeraVe (11 renglones iguales, todos en rojo): "sigue
@@ -155,14 +158,24 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // 'lista' | 'columnas' | 'info'. Lista y Tablero son DOS FORMAS DE MIRAR los mismos
   // trabajos (como las vistas de Airtable): comparten "Lo mío", el buscador, los
   // filtros y los chips de plazo. La elegida queda en el navegador de cada uno.
-  const [vista, setVistaSt] = useState('lista')
-  useEffect(() => { if (recordado('ed-vista') === 'columnas') setVistaSt('columnas') }, [])
+  // 'hoy' es la de entrada (propuesta de Sofi): lo de cada uno, en orden de qué hacer.
+  const [vista, setVistaSt] = useState('hoy')
+  useEffect(() => { const v = recordado('ed-vista'); if (['hoy', 'lista', 'columnas'].includes(v)) setVistaSt(v) }, [])
   const setVista = v => { setVistaSt(v); if (v !== 'info') recordar('ed-vista', v) }
   // La FICHA: un trabajo solo en pantalla, sin el resto del tablero alrededor.
   // Dani, 17/9/2026: en Airtable "hacía click en la tarea y se me abría una pág
   // solita con esa tarea sin ver las demás". `abierto` dice cuál, `enfoque` dice
   // que se ve sola. (Abierto sin enfoque = desplegada en la lista: lo recién creado.)
   const [enfoque, setEnfoque] = useState(false)
+  // "Revisar 4" desde Hoy: la ficha muestra "Revisando 1 de 4" y, cuando el sheet
+  // confirmó el OK o el pedido de cambios, pasa sola a la siguiente.
+  const [cola, setCola] = useState(null)
+  // Ficha de cliente (liviana): se abre tocando el nombre del cliente en Hoy o en la lista.
+  const [clienteSel, setClienteSel] = useState(null)
+  // Lista: agrupar por Estado (quién tiene la pelota, como siempre), Cliente, Agencia o Nada.
+  const [agruparPor, setAgruparSt] = useState('estado')
+  useEffect(() => { const v = recordado('ed-agrupar'); if (['estado', 'cliente', 'agencia', 'nada'].includes(v)) setAgruparSt(v) }, [])
+  const setAgrupar = v => { setAgruparSt(v); recordar('ed-agrupar', v) }
   const [volverA, setVolverA] = useState(null)    // 'calendario' si vino de ahí
   // "Lo mío": lo que edito o lo que respondo como PM. Queda recordado por navegador.
   const [soloMio, setSoloMio] = useState(false)
@@ -237,7 +250,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   }
   function salirFicha() {
     const id = abierto
-    setEnfoque(false); setAbierto(null); setVolverA(null)
+    setEnfoque(false); setAbierto(null); setVolverA(null); setCola(null)
     if (id) setScrollA(id)   // el tablero vuelve parado en la fila de la que salió
   }
   // Esc cierra la ficha, como el registro expandido de Airtable.
@@ -466,12 +479,24 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const enPantalla = extra?.anteponer ? { ...campos, Notas: lineaBitacora(mail, extra.anteponer) + (String(f?.Notas || '').trim() ? '\n' + f.Notas : '') } : campos
     setLocal(l => ({ ...l, [id]: { ...(l[id] || {}), ...enPantalla } }))
     if (campos.Estado !== undefined) setTocados(t => new Set(t).add(id))
-    if (campos.Estado !== undefined && !extra?.paso && f) showToast(`${nombrePieza(f)} → ${campos.Estado}`)
+    const prevEstado = f ? String(f.Estado || '').trim() : ''
+    // Solo si el paso nuevo no manda mail y el de antes no era un cierre (volver a Terminado
+    // repetiría la entrega). Las rondas no se vuelven a sumar: el servidor lo sabe por `deshacer`.
+    const deshacible = campos.Estado !== undefined && !extra?.paso && !extra?.deshacer && f && ['Editando', 'Sin material'].includes(campos.Estado) && prevEstado !== campos.Estado && !estaCerrado(prevEstado)
+    if (campos.Estado !== undefined && !extra?.paso && f && !deshacible) showToast(`${nombrePieza(f)} → ${campos.Estado}`)
     const volver = () => setLocal(l => ({ ...l, [id]: antes }))
     try {
       const r = await fetch('/api/edicion-guardar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, campos, ...(extra || {}) }) })
       const j = await r.json()
       if (!j.ok) { volver(); return showToast(`${j.error || 'No se pudo guardar'} — no quedó guardado`, 'err') }
+      // "Deshacer" recién cuando el sheet confirmó, y solo donde no salió ningún mail.
+      if (deshacible) showToast(`${nombrePieza(f)} → ${campos.Estado}`, 'ok', { label: 'Deshacer', fn: () => guardar(id, { Estado: prevEstado }, { paso: true, deshacer: true }) })
+      if (extra?.deshacer) showToast(`Deshecho: volvió a ${campos.Estado}`)
+      // En la cola de revisión, salió de "Para revisar" y quedó escrito: a la siguiente.
+      if (cola && cola.includes(id) && campos.Estado !== undefined && campos.Estado !== 'Para revisar') {
+        const sig = cola[cola.indexOf(id) + 1]
+        if (sig) { setAbierto(sig); setEnfoque(true) } else { salirFicha(); showToast(`Listo: revisaste ${cola.length === 1 ? 'la pieza' : `las ${cola.length}`} ✓`) }
+      }
       if (j.aviso?.avisado) showToast(`Le llegó el mail a ${nombreDe(j.aviso.avisado)} ✓`)
       else if (extra?.nota) showToast('Anotado, pero no salió mail: nadie asignado o sin mail en RRHH', 'err')
       // Al cerrar la pieza, el staff del trabajo pasa a ver la carpeta Finales desde Mi Magma.
@@ -636,9 +661,130 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const gs = sec === 'listo' ? armarGrupos(items).reverse() : armarGrupos(items)
     if (cel) return gs.map(g => <Grupo key={sec + g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} />)
     return <div style={{ ...card, overflow: 'hidden' }}>
-      {gs.map((g, i) => <Bloque key={sec + g.num} g={g} primero={i === 0} conAccion={sec === 'revisar' || sec === 'cliente'} ctx={ctx} />)}
+      {gs.map((g, i) => <Bloque key={sec + g.num} g={g} primero={i === 0} conAccion={sec === 'revisar' || sec === 'cliente' || sec === 'grupo'} ctx={ctx} />)}
     </div>
   }
+
+  // El nombre de un cliente abre su ficha (definido antes de Hoy, que lo usa).
+  const BotonCliente = ({ nombre, children }) => <button type="button" onClick={e => { e.stopPropagation(); setClienteSel(nombre) }} title={`Todo lo de ${nombre} en edición`}
+    style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', font: 'inherit', textAlign: 'left', textDecoration: 'underline', textDecorationColor: T.campo, textUnderlineOffset: 3 }}>{children || nombre}</button>
+
+  // ------------------------------------------------------------ Hoy
+  // Lo de quien entra, en orden de qué hacer (propuesta de Sofi, 24/10/2026). Si es PM:
+  // esperan su OK, perseguir al cliente, trabados, falta material. Si edita: cambios
+  // para hacer, para editar, esperando material. Una fila por trabajo con sus piezas.
+  const hoyNodo = (() => {
+    if (vista !== 'hoy') return null
+    const esPM = f => { const pm = norm(f.PM).trim(); return !!pm && (yo.pms || []).includes(pm) }
+    const esEd = f => !!yo.editor && canonStaff(String(f.Editor || '').trim()) === yo.editor
+    const nq = norm(q.trim())
+    const mias = filas.filter(f => !estaCerrado(f.Estado) && (esPM(f) || esEd(f)) && (!nq || norm([f['N° presupuesto'], f.Cliente, f.Agencia, f.Proyecto, f.Nombre, f.Entregable].join(' ')).includes(nq)))
+    const e = f => estadoDe(f.Estado)
+    const diasCli = f => { const d = parseFechaAR(f['Fecha entrega']); return d ? diasEntre(d, hoyCero()) : 0 }
+    const trabado = f => f.__plazo.nivel === 'rojo' || f.__plazo.tono === 'rojo' || !String(f['Fecha compromiso'] || '').trim() || !String(f.Editor || '').trim()
+    const defs = [
+      ...((yo.pms || []).length ? [
+        { t: 'Esperan tu OK', s: 'revisá y aprobá o pedí cambios', a: 'Revisar', cola: true, f: x => esPM(x) && e(x) === 'Para revisar' },
+        { t: 'Perseguir al cliente', s: 'lo tiene hace 5 días o más', a: 'Ver', f: x => esPM(x) && e(x) === 'Con el cliente' && diasCli(x) >= 5 },
+        { t: 'Trabados en edición', s: 'atrasados, sin fecha o sin editor', a: 'Ver', f: x => esPM(x) && ['Material listo', 'Editando', 'Cambios internos', 'Cambios del cliente'].includes(e(x)) && trabado(x) },
+        { t: 'Falta el material', s: 'el evento pasó hace 3 días o más', a: 'Ver', f: x => esPM(x) && e(x) === 'Sin material' && x.__plazo.tono === 'rojo' },
+      ] : []),
+      ...(yo.editor ? [
+        { t: 'Cambios para hacer', s: 'volvieron del PM o del cliente', a: 'Abrir', f: x => esEd(x) && /^Cambios/.test(e(x)) },
+        { t: 'Para editar', s: 'lo más urgente primero', a: 'Abrir', f: x => esEd(x) && ['Material listo', 'Editando'].includes(e(x)) },
+        { t: 'Esperando material', s: 'todavía no se puede arrancar', a: 'Ver', f: x => esEd(x) && e(x) === 'Sin material' },
+      ] : []),
+    ]
+    const usadas = new Set(), secs = []
+    defs.forEach((d, di) => {
+      const items = mias.filter(x => !usadas.has(x.ID) && d.f(x)).sort((a, b) => a.__sem.orden - b.__sem.orden)
+      items.forEach(x => usadas.add(x.ID))
+      if (items.length) secs.push({ ...d, primera: secs.length === 0, items, grupos: armarGrupos(items) })
+    })
+    const resto = mias.length - usadas.size
+    if (!(yo.pms || []).length && !yo.editor) return <div style={{ ...card, padding: 26, textAlign: 'center', color: T.ink2, fontSize: 14.5 }}>Hoy muestra lo de cada uno, y no encontré trabajos a tu nombre. <button onClick={() => setVista('lista')} style={{ ...btn, marginLeft: 8, color: T.ink }}>Ver la lista</button></div>
+    return <div>
+      {!secs.length && <div style={{ ...card, padding: 28, textAlign: 'center', fontSize: 16, fontWeight: 600, color: T.ink }}>Hoy: nada pendiente ✓</div>}
+      {secs.map(sec => <section key={sec.t} style={{ marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: T.ink }}>{sec.t}</h2>
+          <span style={{ fontSize: 13, fontFamily: MONO, color: T.ink2 }}>{sec.items.length}</span>
+          <span style={{ fontSize: 13.5, color: T.ink2 }}>{sec.s}</span>
+        </div>
+        <div style={{ ...card, overflow: 'hidden' }}>
+          {sec.grupos.map((g, gi) => { const ids = g.items.map(x => x.ID)
+            return <div key={g.num} style={{ display: 'flex', alignItems: 'center', gap: '10px 18px', flexWrap: 'wrap', padding: '13px 16px', borderTop: gi ? `1px solid ${T.border}` : 'none' }}>
+              <div style={{ flex: '1 1 340px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: T.ink }}><BotonCliente nombre={g.cliente || g.agencia || '—'} /></span>
+                  {g.agencia && g.agencia !== g.cliente && <span style={{ fontSize: 12.5, color: T.ink2 }}>vía {g.agencia}</span>}
+                  <span style={{ fontSize: 13.5, color: T.ink2 }}>{g.proyecto}</span>
+                  <span style={{ fontSize: 12.5, fontFamily: MONO, color: T.ink2 }}>#{g.num}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {g.items.map(x => <button key={x.ID} onClick={() => abrir(x.ID)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${T.border}`, background: T.bg, borderRadius: 999, padding: '6px 12px', fontSize: 13.5, color: T.ink, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {nombrePieza(x)}{String(x.Prioridad || '').trim() === 'Urgente' && <MarcaUrgente />}{etiquetaCambios(x) && <span style={{ fontSize: 12, color: T.warn, fontWeight: 600 }}>{etiquetaCambios(x)}</span>}
+                  </button>)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 'auto' }}>
+                <Plazo p={g.items[0].__plazo} />
+                <button onClick={() => { if (sec.cola && ids.length > 1) setCola(ids); abrir(ids[0]) }}
+                  style={{ ...(sec.primera ? btnPri : btn), color: sec.primera ? '#fff' : T.ink, padding: '8px 14px', fontSize: 13.5 }}>{sec.a}{sec.cola && ids.length > 1 ? ` ${ids.length}` : ''}</button>
+              </div>
+            </div> })}
+        </div>
+      </section>)}
+      {resto > 0 && <p style={{ fontSize: 14, color: T.ink2, margin: '4px 2px 0' }}>
+        Y {resto} {resto === 1 ? 'pieza más en marcha que hoy no necesita' : 'piezas más en marcha que hoy no necesitan'} nada tuyo. <button onClick={() => setVista('lista')} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: T.ink, textDecoration: 'underline', textUnderlineOffset: 3 }}>Ver en la lista</button>
+      </p>}
+    </div>
+  })()
+
+  // ------------------------------------------------------------ ficha de cliente
+  // Todo lo que tiene en edición, por proyecto, con a quién le toca. Para la llamada con
+  // el cliente o la agencia: "¿cómo vamos con lo de ustedes?".
+  const clienteNodo = clienteSel && !(enfoque && abierto) && (() => {
+    const de = filas.filter(f => (f.Cliente || f.Agencia) === clienteSel)
+    const abiertas = de.filter(f => !estaCerrado(f.Estado))
+    const uniq = a => [...new Set(a.map(x => String(x || '').trim()).filter(Boolean))]
+    const grupos = armarGrupos(abiertas.sort((a, b) => a.__sem.orden - b.__sem.orden))
+    const porPaso = PASOS.map(x => ({ id: x.id, n: abiertas.filter(f => x.estados.includes(estadoDe(f.Estado))).length })).filter(x => x.n)
+    const rondasCli = de.reduce((s, f) => s + (parseInt(f['Rondas cliente']) || 0), 0)
+    return <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', justifyContent: 'flex-end' }}>
+      <div onClick={() => setClienteSel(null)} aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(26,25,23,0.32)' }} />
+      <aside role="dialog" aria-modal="true" aria-label={`Ficha de ${clienteSel}`} tabIndex={-1} ref={el => { if (el && !el.contains(document.activeElement)) el.focus() }}
+        onKeyDown={e => { if (e.key === 'Escape') setClienteSel(null) }}
+        style={{ position: 'relative', width: cel ? '100%' : 'min(640px, 94vw)', height: '100%', overflowY: 'auto', background: T.bg, boxShadow: '-12px 0 32px rgba(26,25,23,0.18)', padding: cel ? '14px 12px 40px' : '20px 24px 48px', outline: 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: T.ink }}>{clienteSel}</h2>
+            <div style={{ fontSize: 14, color: T.ink2, marginTop: 4 }}>{abiertas.length} {abiertas.length === 1 ? 'pieza en curso' : 'piezas en curso'} · {grupos.length} {grupos.length === 1 ? 'trabajo' : 'trabajos'}{rondasCli ? ` · ${rondasCli} ${rondasCli === 1 ? 'ronda' : 'rondas'} de cambios del cliente` : ''}</div>
+          </div>
+          <button onClick={() => setClienteSel(null)} aria-label="Cerrar" style={{ ...btn, color: T.ink, padding: '8px 12px' }}>✕</button>
+        </div>
+        <div style={{ ...card, padding: '14px 16px', marginTop: 16, display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 14px', fontSize: 14 }}>
+          <span style={{ color: T.ink2 }}>Agencia</span><span>{uniq(de.map(f => f.Agencia !== f.Cliente ? f.Agencia : '')).join(', ') || 'Directo'}</span>
+          <span style={{ color: T.ink2 }}>PM</span><span>{uniq(de.map(f => f.PM)).join(', ') || 'Falta definir'}</span>
+          <span style={{ color: T.ink2 }}>Editores</span><span>{uniq(abiertas.map(f => f.Editor)).map(x => x.split(' ')[0]).join(', ') || 'Falta definir'}</span>
+          <span style={{ color: T.ink2 }}>En curso</span><span>{porPaso.map(x => `${x.n} ${x.id.toLowerCase()}`).join(' · ') || 'nada'}</span>
+        </div>
+        {grupos.map(g => <div key={g.num} style={{ ...card, padding: '12px 16px', marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>{g.proyecto || 'Sin nombre de proyecto'}</span>
+            <span style={{ fontSize: 12.5, fontFamily: MONO, color: T.ink2 }}>#{g.num}</span>
+          </div>
+          {g.items.map(f => { const t = leTocaA(f)
+            return <button key={f.ID} onClick={() => { setClienteSel(null); abrir(f.ID) }} style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '9px 0', border: 'none', borderTop: `1px solid ${T.border}`, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+              <span style={{ fontSize: 14, color: T.ink, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombrePieza(f)}</span>
+              <span style={{ fontSize: 13, color: T.ink2 }}>{PASOS[pasoIdx(f.Estado)].id} · {t.sigue ? `cliente` : t.quien}</span>
+              <Plazo p={f.__plazo} />
+            </button> })}
+        </div>)}
+        {!grupos.length && <div style={{ ...card, padding: 22, marginTop: 12, textAlign: 'center', color: T.ink2, fontSize: 14 }}>No tiene nada en edición ahora.</div>}
+      </aside>
+    </div>
+  })()
 
   // ------------------------------------------------------------ la ficha
   // El trabajo abierto, solo. El grupo se arma con TODAS las piezas del proyecto
@@ -668,6 +814,12 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             : <button onClick={salirFicha} aria-label="Cerrar la ficha" style={{ ...btn, color: T.ink, padding: '8px 14px', fontSize: 13.5 }}>✕ Cerrar</button>}
           {!cel && <span style={{ fontSize: 12.5, color: T.ink2 }}>o apretá Esc</span>}
         </div>
+        {cola && cola.length > 1 && cola.includes(abierto) && (() => { const i = cola.indexOf(abierto)
+          return <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: T.ink, color: '#fff', borderRadius: 10, padding: '8px 8px 8px 14px', marginBottom: 12, fontSize: 14 }}>
+            <span style={{ flex: 1 }}>Revisando <strong>{i + 1} de {cola.length}</strong>{fichaF ? ` · ${fichaF.Cliente || fichaF.Agencia || ''}` : ''}</span>
+            <button onClick={() => i > 0 && abrir(cola[i - 1])} disabled={i === 0} style={{ ...btn, background: 'transparent', color: '#fff', borderColor: '#5E5A53', opacity: i === 0 ? 0.4 : 1 }}>Anterior</button>
+            <button onClick={() => i < cola.length - 1 && abrir(cola[i + 1])} disabled={i === cola.length - 1} style={{ ...btn, background: 'transparent', color: '#fff', borderColor: '#5E5A53', opacity: i === cola.length - 1 ? 0.4 : 1 }}>Siguiente</button>
+          </div> })()}
         {g
           ? <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} personaF="todos" soloId={abierto} />
           : <div style={{ ...card, padding: 28, textAlign: 'center', color: T.ink2, fontSize: 14 }}>
@@ -681,7 +833,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: cel ? 10 : 22, marginBottom: 16, borderBottom: `1px solid ${T.border}` }}>
       <h1 style={{ fontSize: 21, fontWeight: 700, color: T.ink, margin: '0 0 8px' }}>Edición</h1>
       <div style={{ display: 'flex', gap: 2 }}>
-        {[['lista', 'Lista'], ['columnas', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
+        {[['hoy', 'Hoy'], ['lista', 'Lista'], ['columnas', 'Tablero'], ['info', 'Cómo trabajamos']].map(([id, l]) => (
           <button key={id} onClick={() => setVista(id)} style={{
             padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 13.5, fontWeight: vista === id ? 700 : 500, color: vista === id ? T.ink : T.ink2,
@@ -715,7 +867,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
             {/* Lo mío / todo el equipo: manda sobre los números, los chips y la lista. Dani,
                 17/9/2026: "cuando aprieto veo las de todos y a veces tengo que andar buscando". */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.ink2, flex: cel ? '1 1 100%' : undefined }}>
+            {vista !== 'hoy' && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.ink2, flex: cel ? '1 1 100%' : undefined }}>
               Persona
               <select value={soloMio && hayMio ? 'yo' : quienF} aria-label="Persona"
                 onChange={e => { const v = e.target.value; if (v === 'yo') { elegirMio(true); setQuienF('todos') } else { elegirMio(false); setQuienF(v) } }}
@@ -725,15 +877,20 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
                 {[...new Set([...pms.map(([x]) => x), ...personas.map(([x]) => x)])].map(x => <option key={x} value={x}>{x}</option>)}
                 {sinAsignar > 0 && <option value="__sin__">Sin editor asignado ({sinAsignar})</option>}
               </select>
-            </label>
+            </label>}
+            {vista === 'lista' && <div role="group" aria-label="Agrupar la lista" style={{ display: 'flex', alignItems: 'center', gap: 2, background: T.surfaceAlt, borderRadius: 10, padding: 3, flex: cel ? '1 1 100%' : undefined }}>
+              <span style={{ fontSize: 12.5, color: T.ink2, padding: '0 6px' }}>Agrupar</span>
+              {[['estado', 'Estado'], ['cliente', 'Cliente'], ['agencia', 'Agencia'], ['nada', 'Nada']].map(([k, l]) => <button key={k} aria-pressed={agruparPor === k} onClick={() => setAgrupar(k)}
+                style={{ border: 'none', borderRadius: 8, padding: '6px 11px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', background: agruparPor === k ? T.surface : 'transparent', color: agruparPor === k ? T.ink : T.ink2, fontWeight: agruparPor === k ? 700 : 500, boxShadow: agruparPor === k ? '0 1px 2px rgba(0,0,0,0.12)' : 'none' }}>{l}</button>)}
+            </div>}
             {!cel && <div style={{ flex: 1 }} />}
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proyecto, cliente…" style={{ ...inp, padding: cel ? '9px 10px' : '7px 10px', fontSize: cel ? 13 : 12.5, flex: cel ? '1 1 100%' : undefined, width: cel ? '100%' : 210 }} />
-            <button onClick={() => setVerFiltros(v => !v)} title="Por estado o por plazo" style={{ ...btn, padding: cel ? '9px 12px' : '7px 12px', flex: cel ? 1 : undefined, background: nFiltros ? T.ink : T.surface, color: nFiltros ? '#fff' : T.ink2, borderColor: nFiltros || verFiltros ? T.ink : T.border }}>Filtros{nFiltros ? ` · ${nFiltros}` : ''} {verFiltros ? '▴' : '▾'}</button>
+            {vista !== 'hoy' && <button onClick={() => setVerFiltros(v => !v)} title="Por estado o por plazo" style={{ ...btn, padding: cel ? '9px 12px' : '7px 12px', flex: cel ? 1 : undefined, background: nFiltros ? T.ink : T.surface, color: nFiltros ? '#fff' : T.ink2, borderColor: nFiltros || verFiltros ? T.ink : T.border }}>Filtros{nFiltros ? ` · ${nFiltros}` : ''} {verFiltros ? '▴' : '▾'}</button>}
             <button onClick={() => sincronizar(false)} disabled={sincro} title="Trae los entregables nuevos desde Proyectos (también corre solo al abrir)" style={{ ...btn, padding: cel ? '9px 12px' : '7px 11px' }}>{sincro ? '…' : '↻'}</button>
             <button onClick={() => setNueva(n => !n)} title="Para sumar un video a un trabajo que ya está en el tablero, tocá el nombre del trabajo y usá “+ Video”" style={{ ...btnPri, padding: cel ? '9px 14px' : '7px 13px', flex: cel ? 1 : undefined }}>{nueva ? 'Cerrar' : '+ Tarea'}</button>
           </div>
 
-          {verFiltros && <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '-8px 0 18px', flexWrap: 'wrap', padding: '9px 11px', background: T.surfaceAlt, borderRadius: 9 }}>
+          {verFiltros && vista !== 'hoy' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '-8px 0 18px', flexWrap: 'wrap', padding: '9px 11px', background: T.surfaceAlt, borderRadius: 9 }}>
             <select value={estadoF} onChange={e => setEstadoF(e.target.value)} title="En qué anda cada entregable (distinto del plazo)" style={{ ...inp, padding: cel ? '9px 10px' : '6px 9px', fontSize: cel ? 13 : 12, flex: cel ? '1 1 100%' : undefined, maxWidth: cel ? '100%' : 200, borderColor: estadoF !== 'todos' ? T.ink : T.border, fontWeight: estadoF !== 'todos' ? 600 : 400 }}>
               <option value="todos">Cualquier estado</option>
               {ESTADOS.filter(e => porEstado[e] || e === estadoF).map(e => <option key={e} value={e}>{e} ({porEstado[e] || 0})</option>)}
@@ -747,22 +904,33 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
 
           {nueva && <NuevaTarea onCrear={crearTarea} onCancelar={() => setNueva(false)} proyectos={data?.proyectos || []} personas={editores.map(e => e.nombre)} />}
 
-          {!visibles.length
+          {vista === 'hoy' ? hoyNodo : !visibles.length
             ? <div style={{ ...card, padding: 30, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>{soloMio && hayMio ? 'Nada tuyo acá.' : 'Nada acá.'} {nFiltros > 0 && <button onClick={sacarFiltros} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Sacar filtros</button>}{((soloMio && hayMio) || quienF !== 'todos') && <button onClick={() => { elegirMio(false); setQuienF('todos') }} style={{ ...btn, marginLeft: 8, padding: '4px 10px' }}>Ver todo el equipo</button>}</div>
             : <>
               {!enColumnas && !filasActivas.length && !filtrando && <div style={{ fontSize: 13, color: T.ink2, padding: '6px 2px 16px' }}>{soloMio && hayMio ? 'No tenés nada en edición ahora.' : 'No hay nada en edición ahora.'}</div>}
               {enColumnas
                 ? <Columnas filas={visibles} onAbrir={abrir} onMover={moverA} onEstado={(f, e) => guardar(f.ID, { Estado: e })} cel={cel} />
+                : agruparPor !== 'estado' ? (() => {
+                    // Lo abierto (lo terminado está en Estado → Terminados). Proyectos enteros,
+                    // el trabajo escrito una sola vez (propuesta de Sofi, 24/10/2026).
+                    const act = visibles.filter(f => !estaCerrado(f.Estado)).sort((a, b) => a.__sem.orden - b.__sem.orden)
+                    if (agruparPor === 'nada') return pintar(act, 'grupo')
+                    const m = new Map()
+                    act.forEach(f => { const k = agruparPor === 'agencia' ? (String(f.Agencia || '').trim() && f.Agencia !== f.Cliente ? f.Agencia : 'Directo, sin agencia') : (f.Cliente || f.Agencia || 'Sin cliente'); if (!m.has(k)) m.set(k, []); m.get(k).push(f) })
+                    const claves = [...m.keys()].sort((a, b) => a === 'Directo, sin agencia' ? 1 : b === 'Directo, sin agencia' ? -1 : a.localeCompare(b, 'es'))
+                    return claves.map(k => { const items = m.get(k), urg = items.filter(f => f.__plazo.nivel === 'rojo' || f.__plazo.tono === 'rojo').length
+                      return <Seccion key={k} titulo={agruparPor === 'cliente' ? <BotonCliente nombre={k} /> : k} n={items.length} sub={urg ? `${urg} atrasad${urg === 1 ? 'a' : 'as'}` : ''}>{pintar(items, 'grupo')}</Seccion> })
+                  })()
                 : ordenSecciones.map(sec => {
                     const items = porSeccion[sec.id]
                     return items.length > 0 && <Seccion key={sec.id} titulo={sec.titulo} n={items.length} sub={subDe(sec)} avisos={avisosDe(sec.id, items)}>{pintar(items, sec.id)}</Seccion>
                   })}
-              {!enColumnas && porSeccion.espera.length > 0 && <Seccion titulo="Esperando material" n={porSeccion.espera.length} sub="todavía no hay nada para editar"
+              {!enColumnas && agruparPor === 'estado' && porSeccion.espera.length > 0 && <Seccion titulo="Esperando material" n={porSeccion.espera.length} sub="todavía no hay nada para editar"
                 plegada={filtrando ? null : !verEspera} onPlegar={() => { const n = !verEspera; setVerEspera(n); recordar('ed-ver-espera', n ? '1' : '0') }}
                 avisos={esperaViejas ? [{ txt: `${esperaViejas} con el evento hace 3 días o más`, rojo: true }] : []}>
                 {pintar(filtrando || verEspera ? porSeccion.espera : porSeccion.espera.filter(f => tocados.has(f.ID)), 'espera')}
               </Seccion>}
-              {!enColumnas && porSeccion.listo.length > 0 && <Seccion titulo="Terminados" n={porSeccion.listo.length} sub="el cliente dio el OK"
+              {!enColumnas && agruparPor === 'estado' && porSeccion.listo.length > 0 && <Seccion titulo="Terminados" n={porSeccion.listo.length} sub="el cliente dio el OK"
                 plegada={estadoF === 'Terminado' ? null : !verListo} onPlegar={() => setVerListo(v => !v)}>
                 {pintar(verListo || estadoF === 'Terminado' ? porSeccion.listo : porSeccion.listo.filter(f => tocados.has(f.ID)), 'listo')}
               </Seccion>}
@@ -770,6 +938,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
         </>}
     </>}
     {fichaNodo}
+    {clienteNodo}
   </div>
 }
 
@@ -837,7 +1006,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
   }
 
   return <div style={{ border: `1px solid ${T.ink}40`, background: T.surfaceAlt, borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
-    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Esperando tu OK</div>
+    <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Esperando tu OK · v{versionDe(f)}</div>
     <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 11 }}>
       {f.Editor || 'El editor'} subió una versión. Si va, se la mandamos al cliente y queda esperando su OK; si no, vuelve sin que él se entere.
     </div>
@@ -847,7 +1016,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
           display: 'block', textAlign: 'center', padding: cel ? '16px' : '12px', borderRadius: 9,
           background: T.surface, border: `1px solid ${T.border}`, color: T.ink, textDecoration: 'none',
           fontSize: 14, fontWeight: 600, marginBottom: 11,
-        }}>▶ Ver la versión</a>
+        }}>▶ Ver la v{versionDe(f)}</a>
       : <div style={{ fontSize: 12, color: T.warn, fontWeight: 600, marginBottom: 11 }}>No hay link de pre-entrega cargado — pedíselo antes de aprobar.</div>}
 
     {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
@@ -1105,7 +1274,12 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
   const hermana = hermanos.find(h => h.ID === copiarDe)
   const baseNombre = hermana ? limpiarPedido(hermana.Entregable).replace(/\s+\d+$/, '') : ''
   const yaHay = hermana ? hermanos.filter(h => limpiarPedido(h.Entregable).replace(/\s+\d+$/, '').toLowerCase() === baseNombre.toLowerCase()).length : 0
-  const puede = esVideo || !!titulo.trim()
+  // Nombre propio obligatorio y único dentro del proyecto (Sofi, 24/10/2026): se
+  // terminan los ocho "Edit 60s" iguales. Con cantidad > 1 se numeran solos.
+  const cant0 = +cantidad || 1
+  const repetido = esVideo && !!titulo.trim() && cant0 === 1 && hermanos.some(h => nombrePieza(h).trim().toLowerCase() === titulo.trim().toLowerCase())
+  const faltaNombre = esVideo && cant0 === 1 && !titulo.trim()
+  const puede = (esVideo || !!titulo.trim()) && !faltaNombre && !repetido
 
   const enviar = async () => {
     if (!puede) return
@@ -1134,9 +1308,10 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
             <div style={{ fontSize: 10.5, color: T.ink3, marginTop: 4, lineHeight: 1.4 }}>Copia el brief, el crudo y el PM de esa pieza. Quién lo edita lo elegís abajo.</div>
           </div>
           <div>
-            <label style={lbl}>Nombre (opcional)</label>
-            <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
-              placeholder={baseNombre ? `${baseNombre} ${yaHay + 1}` : 'Video'} style={{ ...inp, width: '100%' }} />
+            <label style={lbl}>Nombre del video{cant0 > 1 ? ' (se numeran solos)' : ''}</label>
+            <input value={titulo} onChange={e => setTitulo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }} autoFocus
+              placeholder="Ej: Reel 30 s vertical" style={{ ...inp, width: '100%', borderColor: repetido ? T.warn : undefined }} />
+            {repetido && <div style={{ fontSize: 12.5, color: T.warn, fontWeight: 600, marginTop: 4 }}>Ya hay una pieza con ese nombre en este trabajo</div>}
           </div>
           <div>
             <label style={lbl}>Cuántos</label>
@@ -1184,7 +1359,8 @@ function NuevaTarea({ onCrear, onCancelar, proyectos, personas, numFijo = '', he
         {yendo ? 'Agregando…' : esVideo ? (cant > 1 ? `Agregar ${cant} videos` : 'Agregar el video') : cant > 1 ? `Agregar ${cant} tareas` : 'Agregar'}
       </button>
       <button onClick={onCancelar} style={btn}>Cancelar</button>
-      {esVideo && !titulo.trim() && <span style={{ fontSize: 11.5, color: T.ink3 }}>Queda como “{baseNombre} {yaHay + 1}”{cant > 1 ? `, “${baseNombre} ${yaHay + 2}”…` : ''} — y aparece abajo, marcado.</span>}
+      {faltaNombre && <span style={{ fontSize: 12.5, color: T.ink2 }}>Ponele un nombre propio: así el equipo sabe de cuál habla.</span>}
+      {esVideo && !titulo.trim() && cant > 1 && <span style={{ fontSize: 12.5, color: T.ink2 }}>Quedan como “{baseNombre} {yaHay + 1}”, “{baseNombre} {yaHay + 2}”…</span>}
       {!esVideo && cant > 1 && <span style={{ fontSize: 11.5, color: T.ink3 }}>Se numeran solas: “{titulo || 'Tarea'} 1”, “{titulo || 'Tarea'} 2”…</span>}
     </div>
   </div>
@@ -1717,8 +1893,8 @@ function ProximoPaso({ f, guardar }) {
   const quien = ed ? primerNombre(ed) : 'El editor'
   const cfg = e === 'Sin material' ? { txt: 'Falta que llegue el material.', btn: 'Llegó el material', a: 'Material listo' }
     : e === 'Material listo' ? { txt: ed ? `Hay material. Falta que ${quien} empiece.` : 'Hay material, pero nadie está a cargo: asignalo en "Para cuándo y quién".', btn: 'Empezar a editar', a: 'Editando' }
-    : /^Cambios/.test(e) ? { txt: `${quien} tiene ${e.toLowerCase()} para hacer. Están en el historial.`, btn: 'Subí la versión nueva → Para revisar', a: 'Para revisar' }
-    : e === 'Editando' ? { txt: `${quien} está editando.`, btn: 'Subí la versión → Para revisar', a: 'Para revisar' }
+    : /^Cambios/.test(e) ? { txt: `${quien} tiene ${e.toLowerCase()} para hacer. Están en el historial.`, btn: `Subí la v${versionDe(f)} → Para revisar`, a: 'Para revisar' }
+    : e === 'Editando' ? { txt: `${quien} está editando.`, btn: `Subí la v${versionDe(f)} → Para revisar`, a: 'Para revisar' }
     : e === 'Terminado' ? { txt: 'Terminada: el cliente dio el OK.' }
     : null
   if (!cfg) return null

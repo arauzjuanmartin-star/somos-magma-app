@@ -170,8 +170,10 @@ export default function V2() {
   const [showSearch,setShowSearch] = useState(false)
   const cel = useEsCelular()
   const [menuAbierto,setMenuAbierto] = useState(false)
-  const [toast,setToast] = useState(null)  // {msg, tipo:'ok'|'err'}
-  const showToast = (msg,tipo='ok') => { setToast({msg,tipo}); setTimeout(()=>setToast(null), 3200) }
+  const [toast,setToast] = useState(null)  // {msg, tipo:'ok'|'err', accion?:{label, fn}}
+  // Con `accion` (p. ej. "Deshacer" en Edición) dura 6 s y lleva el botón.
+  const toastT = useRef(null)
+  const showToast = (msg,tipo='ok',accion=null) => { clearTimeout(toastT.current); setToast({msg,tipo,accion}); toastT.current=setTimeout(()=>setToast(null), accion?6000:3200) }
 
   // Atajo Cmd/Ctrl+K → buscador · Esc cierra
   useEffect(()=>{
@@ -350,7 +352,10 @@ export default function V2() {
       </main>
     </div>
     {showSearch && <GlobalSearch data={data} onClose={()=>setShowSearch(false)} onNavegar={(m,q)=>{ goSearch(m,q); setShowSearch(false) }}/>}
-    {toast && <div style={{position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:1000, padding:'11px 20px', borderRadius:10, fontSize:13, fontWeight:500, color:'#fff', background: toast.tipo==='err'?T.brand:T.ink, boxShadow:'0 8px 24px rgba(0,0,0,0.18)'}}>{toast.msg}</div>}
+    {toast && <div role="status" style={{position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:1000, padding:toast.accion?'7px 8px 7px 18px':'11px 20px', borderRadius:10, fontSize:13.5, fontWeight:500, color:'#fff', background: toast.tipo==='err'?T.brand:T.ink, boxShadow:'0 8px 24px rgba(0,0,0,0.18)', display:'flex', alignItems:'center', gap:12}}>
+      <span>{toast.msg}</span>
+      {toast.accion && <button onClick={()=>{ const a=toast.accion; clearTimeout(toastT.current); setToast(null); a.fn() }} style={{border:'none', background:'transparent', color:'#fff', fontWeight:700, fontSize:13.5, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', padding:'6px 10px', borderRadius:6, fontFamily:'inherit'}}>{toast.accion.label}</button>}
+    </div>}
   </Shell>
 }
 

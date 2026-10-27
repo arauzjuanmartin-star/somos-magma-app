@@ -46,7 +46,10 @@ export default async function handler(req, res) {
   // "[dd/mm quien]" y la pega arriba de lo que HAY EN EL SHEET en este momento. Antes el
   // navegador mandaba la bitácora entera y si dos personas anotaban a la vez, la nota
   // del primero desaparecía (25/10/2026).
-  const { id, campos, borrar, nota, anteponer } = req.body || {}
+  //
+  // `deshacer`: vuelve el estado atrás desde el "Deshacer" de la app. Se escribe y queda en
+  // el LOG como cualquier cambio, pero no le manda mail a nadie (el original tampoco mandó).
+  const { id, campos, borrar, nota, anteponer, deshacer } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Falta id' })
   if (!borrar && (!campos || typeof campos !== 'object')) return res.status(400).json({ error: 'Falta id o campos' })
 
@@ -138,7 +141,8 @@ export default async function handler(req, res) {
     // Es lo que después dice de quién es el problema: muchas internas = edición,
     // muchas del cliente = brief flojo. El manual incluye 2 rondas DEL CLIENTE.
     const contador = CONTADOR_DE[String(campos.Estado || '').trim()]
-    if (contador && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()) {
+    // Deshacer no suma ronda: vuelve a un estado que ya la había contado.
+    if (contador && !deshacer && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()) {
       const col = cE(contador)
       if (col > -1) {
         const ahora = (parseInt(actual[col]) || 0) + 1
@@ -168,7 +172,7 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'LOG!A:F', valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[new Date().toISOString(), mail, 'edicion-guardar', 'EDICION', String(id), cambios.join(' · ')]] },
+        requestBody: { values: [[new Date().toISOString(), mail, deshacer ? 'edicion-deshacer' : 'edicion-guardar', 'EDICION', String(id), cambios.join(' · ')]] },
       })
     } catch (e) {}
 
@@ -181,7 +185,7 @@ export default async function handler(req, res) {
     let aviso = null
     const cambioEstado = !!campos.Estado && String(actual[cE('Estado')] || '').trim() !== String(campos.Estado).trim()
     const hayNota = !!String(nota || '').trim() && (notasNuevas !== null || String(campos.Notas ?? '') !== String(actual[cE('Notas')] || ''))
-    if (cambioEstado || hayNota) {
+    if ((cambioEstado || hayNota) && !deshacer) {
       try {
         const fila = {}
         hE.forEach((h, i) => { fila[h] = actual[i] ?? '' })
@@ -201,7 +205,8 @@ export default async function handler(req, res) {
     // La pieza se cerró: el que la filmó tiene que poder ver cómo quedó. Lectura sobre la carpeta Finales del
     // proyecto para todo su staff (Mi Magma → "Cómo quedó" muestra el link). Nunca frena el guardado.
     let finales = null
-    if (cambioEstado && estaCerrado(campos.Estado) && !estaCerrado(actual[cE('Estado')])) {
+    // Deshacer que vuelve a Terminado no repite el cierre (Finales, link abierto, push).
+    if (cambioEstado && !deshacer && estaCerrado(campos.Estado) && !estaCerrado(actual[cE('Estado')])) {
       try {
         const nro = String(actual[cE('N° presupuesto')] || '').trim()
         const b = await sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: ['PROYECTOS!A:EW', 'RRHH!A:Z'] })
