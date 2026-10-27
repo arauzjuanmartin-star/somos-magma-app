@@ -2832,123 +2832,225 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
       fetch('/api/calendar-evento',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, accion})}).catch(()=>{})
     }catch(e){showToast('Error de conexión','err')}
   }
+  // El staff se arma por slot y la misma persona puede ir en dos (Somos Magma, Jorge con dos roles):
+  // en el panel se nombra una vez.
   const staffDe=p=>{ const out=[]; for(let j=1;j<=MAX_SLOTS;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''; if(s) out.push({persona:s, pedido:ped}) } return out }
+  const nombresStaff=p=>[...new Set(staffDe(p).map(s=>s.persona))]
   const esHoy=d=>d&&dayKey(d)===dayKey(now)
+  const montoDe=p=>parseMonto(p['Total ']||p['Total']||p['Precio Final'])
+  const DIA_CORTO=['dom','lun','mar','mié','jue','vie','sáb']
+  const diaTxt=d=>esHoy(d)?'hoy':`${DIA_CORTO[d.getDay()]} ${d.getDate()}`
+  const irA=d=>{ setRef({a:d.getFullYear(), m:d.getMonth()}); setDiaSel(d); setMasDe(null) }
+
+  // ── Lo que hay que resolver. El PM abre el calendario para esto, no para barrer la grilla:
+  // rodajes de esta semana sin staff, presus en espera con fecha encima, entregas atrasadas.
+  const hoyC=new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const proxDias=n=>Array.from({length:n},(_,i)=>new Date(hoyC.getFullYear(), hoyC.getMonth(), hoyC.getDate()+i))
+  const sinStaff=[], esperaCerca=[], vistosH=new Set(); let rodSemana=0
+  if(verRod) proxDias(7).forEach(d=>{ const k=dayKey(d)
+    ;(aprobadosPorDia[k]||[]).forEach(p=>{ const c=claveTrab(p); if(esTentDia(k,p)||vistosH.has(c)) return; vistosH.add(c); rodSemana++; if(staffDe(p).length===0) sinStaff.push({p,d}) })
+  })
+  if(verRod) proxDias(10).forEach(d=>{ const k=dayKey(d); (enEsperaPorDia[k]||[]).forEach(p=>{ const c='e'+claveTrab(p); if(esTentDia(k,p)||vistosH.has(c)) return; vistosH.add(c); esperaCerca.push({p,d}) }) })
+  const atrasadas=[]
+  if(verEnt) Object.keys(entregasPorDia).forEach(k=>{ const [y,m,dd]=k.split('-').map(Number); entregasPorDia[k].forEach(f=>{ if(!f.__cerrado&&f.__sem.nivel==='rojo') atrasadas.push({f, d:new Date(y,m,dd)}) }) })
+  atrasadas.sort((a,b)=>a.d-b.d)
+  const entSemana=verEnt ? proxDias(7).reduce((n,d)=>n+(entregasPorDia[dayKey(d)]||[]).filter(f=>!f.__cerrado).length,0) : 0
+  const partes=[]
+  if(!soloVer && sinStaff.length) partes.push(`${sinStaff.length} ${sinStaff.length===1?'rodaje':'rodajes'} de esta semana sin staff`)
+  if(!soloVer && esperaCerca.length) partes.push(`${esperaCerca.length} ${esperaCerca.length===1?'presupuesto':'presupuestos'} en espera con fecha en 10 días`)
+  if(atrasadas.length) partes.push(`${atrasadas.length} ${atrasadas.length===1?'entrega atrasada':'entregas atrasadas'}`)
+  const fraseHoy = partes.length ? 'Para resolver: '+partes.join(' · ')
+    : soloVer ? (entSemana ? `Esta semana: ${entSemana} ${entSemana===1?'entrega':'entregas'}, ninguna atrasada` : 'Nada atrasado ✓')
+    : rodSemana ? `Esta semana: ${rodSemana} ${rodSemana===1?'rodaje':'rodajes'}, todos con staff ✓` : 'Esta semana no hay rodajes'
+  const chipsHoy=[
+    ...(soloVer?[]:sinStaff.map(({p,d})=>({k:'s'+claveTrab(p), t:`${p['Cliente']||p['Agencia']||'—'} · ${diaTxt(d)} · sin staff`, go:()=>irA(d)}))),
+    ...(soloVer?[]:esperaCerca.map(({p,d})=>({k:'e'+claveTrab(p), t:`${p['Cliente']||p['Agencia']||'—'} · ${diaTxt(d)} · en espera`, go:()=>irA(d)}))),
+    ...atrasadas.map(({f,d})=>({k:'n'+f.ID, t:`✂ ${limpiarPedidoEd(f.Entregable)} · ${f.Cliente||f.Agencia||'—'} · atrasada`, go:()=>irA(d)})),
+  ]
+  const [verTodosChips,setVerTodosChips]=useState(false)
+  const TOPE_CHIPS=6
+
+  const cel=useEsCelular(1000)
+  const [masDe,setMasDe]=useState(null)
+  const panelRef=useRef(null)
+  // En el celular el panel queda abajo de la grilla: al tocar un día, bajar hasta él.
+  const primeraVez=useRef(true)
+  useEffect(()=>{ if(primeraVez.current){ primeraVez.current=false; return } if(cel&&diaSel&&panelRef.current) panelRef.current.scrollIntoView({behavior:'smooth', block:'start'}) /* eslint-disable-next-line */ },[diaSel])
+  const tecla=fn=>e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fn() } }
+  const card={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const chipCal={fontSize:12.5, lineHeight:1.35, padding:'2px 6px', marginBottom:2, borderRadius:5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', gap:5}
+  const punto=c=><span aria-hidden style={{width:6, height:6, borderRadius:3, background:c, flex:'0 0 6px'}}/>
+  const puntoHueco=c=><span aria-hidden style={{width:6, height:6, borderRadius:3, border:`1.5px solid ${c}`, flex:'0 0 6px', boxSizing:'border-box'}}/>
+  const btnMas=k=><button onClick={e=>{e.stopPropagation(); setMasDe(masDe===k?null:k)}} aria-label="Más opciones" aria-expanded={masDe===k} style={{...miniBtn, fontSize:12.5, padding:'6px 10px'}}>⋯</button>
+  const menuMas=(k, items)=> masDe===k && <div style={{display:'flex', flexDirection:'column', gap:2, marginTop:6, padding:4, background:T.surfaceAlt, borderRadius:9}}>
+    {items.filter(Boolean).map(([l,fn])=><button key={l} onClick={()=>{ setMasDe(null); fn() }} style={{textAlign:'left', border:'none', background:'transparent', padding:'7px 9px', borderRadius:7, fontSize:13, color:T.ink, cursor:'pointer'}}>{l}</button>)}
+  </div>
+  const abrirStaff=num=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }
+
+  // ── Fichas del panel
+  const fichaAprobado=(p,i,dia)=>{ const staff=nombresStaff(p); const num=String(p['N° presupuesto']||'').trim(); const tent=esTentDia(dayKey(dia),p); const presu=presusByNum[num]; const k='a'+i+num
+    const extra=[presu?.['Horario'],presu?.['Ubicación']].filter(Boolean).join(' · ')
+    return <div key={k} style={{padding:'14px 18px', borderTop:`1px solid ${T.border}`}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+        <span style={{fontSize:12.5, color:tent?T.ink3:T.pos, fontWeight:600, display:'flex', alignItems:'center', gap:6}}>{tent?puntoHueco(T.ink3):punto(T.pos)}<span style={{fontFamily:MONO}}>#{num}</span>{tent?' · día a confirmar':' · aprobado'}</span>
+        {!soloVer && <span style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(montoDe(p))}</span>}
+      </div>
+      <div style={{fontSize:14.5, color:T.ink, fontWeight:600, marginTop:5}}>{p['Proyecto']||'—'}</div>
+      <div style={{fontSize:12.5, color:T.ink2}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
+      {extra && <div style={{fontSize:12.5, color:T.ink2, marginTop:4}}>🕒 {extra}</div>}
+      {staff.length===0
+        ? <div style={{fontSize:12.5, color:T.warn, marginTop:6, fontWeight:600}}>Falta cargar el staff</div>
+        : <div style={{fontSize:12.5, color:T.ink2, marginTop:6, lineHeight:1.45}}><span style={{color:T.ink3}}>Staff:</span> {staff.join(', ')}</div>}
+      {!soloVer && <>
+        <div style={{display:'flex', gap:7, marginTop:10, flexWrap:'wrap'}}>
+          <button onClick={()=>abrirStaff(num)} style={{...miniBtn, fontSize:12.5, ...(staff.length===0?{background:T.ink, color:'#fff', border:'none', fontWeight:600}:{})}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>
+          <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:12.5}}>PDF</a>
+          {btnMas(k)}
+        </div>
+        {menuMas(k, [presu&&['Editar datos',()=>setEditando(presu)], presu&&['Represupuestar',()=>setRepresu(presu)], ['Desaprobar…',()=>setMotivoModal({num, estado:'DESAPROBADO'})]])}
+      </>}
+    </div>
+  }
+  const fichaEspera=(p,i)=>{ const num=String(p['Columna 1']||'').trim(); const k='e'+i+num
+    return <div key={k} style={{padding:'14px 18px', borderTop:`1px solid ${T.border}`}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+        <span style={{fontSize:12.5, color:T.warn, fontWeight:600, display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.warn)}<span style={{fontFamily:MONO}}>#{num}</span> · en espera</span>
+        {!soloVer && <span style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(p['Precio Final']))}</span>}
+      </div>
+      <div style={{fontSize:14.5, color:T.ink, fontWeight:600, marginTop:5}}>{p['Proyecto']||'—'}</div>
+      <div style={{fontSize:12.5, color:T.ink2}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
+      {!soloVer && <>
+        <div style={{display:'flex', gap:7, marginTop:10, flexWrap:'wrap'}}>
+          <button onClick={()=> necesitaResguardo(p, data.agencias, data.clientes) ? setResg(p) : presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, fontSize:12.5, background:T.pos, color:'#fff', border:'none', fontWeight:600}}>✓ Aprobar</button>
+          <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:12.5}}>PDF</a>
+          {btnMas(k)}
+        </div>
+        {menuMas(k, [['Editar datos',()=>setEditando(p)], ['Represupuestar',()=>setRepresu(p)], ['Desaprobar…',()=>setMotivoModal({num, estado:'DESAPROBADO'})]])}
+      </>}
+    </div>
+  }
+  const fichaEntrega=(f,i)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde; const ed=String(f.Editor||'').trim()
+    return <div key={'n'+i} style={{padding:'14px 18px', borderTop:`1px solid ${T.border}`}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+        <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink3}}>✂ #{f['N° presupuesto']}</span>
+        <span style={{fontSize:12.5, fontWeight:600, color:c.fg, background:c.bg, padding:'2px 8px', borderRadius:6, whiteSpace:'nowrap'}}>{f.__sem.txt}</span>
+      </div>
+      <div style={{fontSize:14.5, color:T.ink, fontWeight:600, marginTop:5}}>{nombrePiezaEd(f)}</div>
+      <div style={{fontSize:12.5, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
+      <div style={{fontSize:12.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.warn, fontWeight:600}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
+      {f.__estimada && <div style={{fontSize:12.5, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}
+      {goTo && <div style={{display:'flex', gap:7, marginTop:10}}><button onClick={()=>abrirEntrega(f)} style={{...miniBtn, fontSize:12.5, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>Abrir este trabajo</button></div>}
+    </div>
+  }
 
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap'}}>
       <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>{MESES_LARGO[ref.m]} {ref.a}</h1>
       <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}>
-        {edicion.length>0 && <div style={{display:'flex', gap:4, marginRight:6}}>
-          {[['todo','Todo'],['rodajes','Rodajes'],['entregas','✂ Entregas']].map(([id,l])=><button key={id} onClick={()=>{setCapa(id);setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 12px', fontSize:12, background:capa===id?T.ink:T.surface, color:capa===id?'#fff':T.ink2, borderColor:capa===id?T.ink:T.border}}>{l}</button>)}
+        {edicion.length>0 && <div role="group" aria-label="Qué mostrar" style={{display:'flex', gap:4, marginRight:6}}>
+          {[['todo','Todo'],['rodajes','Rodajes'],['entregas','✂ Entregas']].map(([id,l])=><button key={id} aria-pressed={capa===id} onClick={()=>{setCapa(id);setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 12px', fontSize:12.5, background:capa===id?T.ink:T.surface, color:capa===id?'#fff':T.ink2, borderColor:capa===id?T.ink:T.border}}>{l}</button>)}
         </div>}
-        {verEnt && edicion.length>0 && <select value={editorF} onChange={e=>elegirEditor(e.target.value)} title="Quién edita" style={{...navBtn, width:'auto', padding:'0 10px', fontSize:12, cursor:'pointer', marginRight:6, ...(editorF!=='todos'?{borderColor:T.ink, fontWeight:600}:{})}}>
+        {verEnt && edicion.length>0 && <select value={editorF} onChange={e=>elegirEditor(e.target.value)} aria-label="Quién edita" title="Quién edita" style={{...navBtn, width:'auto', padding:'0 10px', fontSize:12.5, cursor:'pointer', marginRight:6, ...(editorF!=='todos'?{borderColor:T.ink, fontWeight:600}:{})}}>
           <option value="todos">Todo el equipo</option>
           {editorF!=='todos'&&editorF!=='__sin__'&&!editores.includes(editorF) && <option value={editorF}>{editorF}</option>}
           {sinAsignar>0 && <option value="__sin__">Sin asignar ({sinAsignar})</option>}
           {editores.map(e=><option key={e} value={e}>{e}</option>)}
         </select>}
-        <button onClick={()=>navMes(-1)} style={navBtn}>←</button>
-        <button onClick={()=>{setRef({a:now.getFullYear(),m:now.getMonth()});setDiaSel(null)}} style={{...navBtn, width:'auto', padding:'0 14px'}}>Hoy</button>
-        <button onClick={()=>navMes(1)} style={navBtn}>→</button>
+        <button onClick={()=>navMes(-1)} aria-label="Mes anterior" style={navBtn}>←</button>
+        <button onClick={()=>irA(hoyC)} style={{...navBtn, width:'auto', padding:'0 14px'}}>Hoy</button>
+        <button onClick={()=>navMes(1)} aria-label="Mes siguiente" style={navBtn}>→</button>
       </div>
     </div>
-    {/* Los números van en su propia fila, a todo el ancho: al lado de los botones no entraban y se partían en dos renglones */}
-    <div style={{fontSize:13, color:T.ink3, marginTop:6, marginBottom:18, lineHeight:1.6}}>
-      <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} aprobados · {fmtM(totAprob)}{jorAprob>0&&<span style={{color:T.ink3}}> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</span>}{porConfirmar>0&&<span style={{color:T.ink3}} title="Días del trabajo que todavía no tienen fecha confirmada — se ven en gris en la grilla."> · {porConfirmar} a confirmar</span>}</span>
-      &nbsp;·&nbsp;
-      <span title="Presupuestos en espera con evento este mes. Idem: cada uno cuenta una vez.">{cntEsp} en espera · {fmtM(totEsp)}{jorEsp>cntEsp&&<span style={{color:T.ink3}}> · {jorEsp} jornadas</span>}</span>
-      {verEnt && <>&nbsp;·&nbsp;<span title="Entregas de edición con fecha este mes (la prometida por el PM, o la del manual si no hay)">✂ {cntEnt} {cntEnt===1?'entrega':'entregas'}{entAtras>0&&<span style={{color:T.brand, fontWeight:600}}> · {entAtras} atrasadas</span>}{entHechas>0&&<span style={{color:T.ink3}}> · {entHechas} hechas</span>}{sinFecha>0&&<span style={{color:T.ink3}} title="Trabajos abiertos sin fecha de evento ni compromiso: no se pueden ubicar en el calendario"> · {sinFecha} sin fecha</span>}</span></>}
+    {/* Los números del mes en su propia fila. La plata no la ven los que solo miran (editores). */}
+    <div style={{fontSize:13.5, color:T.ink2, marginTop:6, marginBottom:14, lineHeight:1.6}}>
+      {verRod && <>
+        <span title="Trabajos distintos con evento este mes. La plata de cada uno cuenta una sola vez, aunque el trabajo ocupe varios días.">{cntAprob} {cntAprob===1?'aprobado':'aprobados'}{!soloVer&&<> · <b style={{fontFamily:MONO, fontWeight:600, color:T.ink}}>{fmtM(totAprob)}</b></>}{jorAprob>0&&<> · {jorAprob} {jorAprob===1?'jornada':'jornadas'}</>}{porConfirmar>0&&<span title="Días que todavía no tienen fecha confirmada: se ven con el punto hueco en la grilla."> · {porConfirmar} a confirmar</span>}</span>
+        &nbsp;·&nbsp;
+        <span title="Presupuestos en espera con evento este mes. Cada uno cuenta una vez.">{cntEsp} en espera{!soloVer&&<> · <b style={{fontFamily:MONO, fontWeight:600, color:T.ink}}>{fmtM(totEsp)}</b></>}</span>
+      </>}
+      {verEnt && <>{verRod&&<>&nbsp;·&nbsp;</>}<span title="Entregas de edición con fecha este mes (la prometida por el PM, o la del manual si no hay)">✂ {cntEnt} {cntEnt===1?'entrega':'entregas'}{entAtras>0&&<span style={{color:T.brand, fontWeight:600}}> · {entAtras} {entAtras===1?'atrasada':'atrasadas'}</span>}{entHechas>0&&<> · {entHechas} hechas</>}{sinFecha>0&&<span title="Trabajos abiertos sin fecha de evento ni compromiso: no se pueden ubicar en el calendario"> · {sinFecha} sin fecha</span>}</span></>}
     </div>
-    <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
-      <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
+
+    {/* Hoy: lo que hay que resolver, con atajo al día */}
+    <div style={{...card, padding:'16px 18px', marginBottom:16}}>
+      <div style={{fontSize:17, fontWeight:700, color:T.ink, lineHeight:1.35}}>{fraseHoy}</div>
+      {chipsHoy.length>0 && <div style={{display:'flex', gap:8, marginTop:11, flexWrap:'wrap'}}>
+        {(verTodosChips?chipsHoy:chipsHoy.slice(0,TOPE_CHIPS)).map(c=><button key={c.k} onClick={c.go} style={{border:'none', background:T.surfaceAlt, borderRadius:999, padding:'7px 13px', fontSize:13, color:T.ink, cursor:'pointer'}}>{c.t}</button>)}
+        {chipsHoy.length>TOPE_CHIPS && <button onClick={()=>setVerTodosChips(!verTodosChips)} style={{border:'none', background:'transparent', padding:'7px 6px', fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>{verTodosChips?'ver menos':`+${chipsHoy.length-TOPE_CHIPS} más`}</button>}
+      </div>}
+    </div>
+
+    <div style={{display:'flex', flexDirection:cel?'column':'row', gap:16, alignItems:cel?'stretch':'flex-start'}}>
+      <div style={{flex:1, minWidth:0, ...card, overflow:'hidden'}}>
         {/* minmax(0,1fr) y minWidth:0: las fichas en una línea sin cortar ("Edit 60s · Austral Derecho")
             estiraban las columnas hasta que sábado y domingo quedaban fuera de la caja, recortados. */}
         <div style={{display:'grid', gridTemplateColumns:'repeat(7,minmax(0,1fr))'}}>
-          {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=><div key={d} style={{padding:'9px 0', textAlign:'center', fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase', color:T.ink3, borderBottom:`1px solid ${T.border}`}}>{d}</div>)}
+          {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=><div key={d} style={{padding:'10px 0', textAlign:'center', fontSize:12.5, fontWeight:600, color:T.ink2, borderBottom:`1px solid ${T.border}`}}>{d}</div>)}
           {celdas.map((d,i)=>{
-            if(!d) return <div key={i} style={{minHeight:96, minWidth:0, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
-            const ap=verRod?(aprobadosPorDia[dayKey(d)]||[]):[], es=verRod?(enEsperaPorDia[dayKey(d)]||[]):[], en=verEnt?(entregasPorDia[dayKey(d)]||[]):[], total=ap.length+es.length+en.length
-            const TOPE=capa==='todo'?4:3, quedan=n=>Math.max(0,TOPE-n)
-            const sel = diaSel&&dayKey(diaSel)===dayKey(d)
-            return <div key={i} onClick={()=>setDiaSel(d)} style={{minHeight:96, minWidth:0, padding:6, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, cursor:'pointer', background:sel?T.surfaceAlt:T.surface}}>
-              <div style={{fontSize:11.5, fontWeight:esHoy(d)?700:500, color:esHoy(d)?T.brand:T.ink3, marginBottom:4, display:'flex', justifyContent:'space-between'}}>
-                <span style={esHoy(d)?{background:T.brand,color:'#fff',borderRadius:10,width:18,height:18,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10.5}:{}}>{d.getDate()}</span>
+            if(!d) return <div key={i} style={{minHeight:cel?64:104, minWidth:0, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
+            const k=dayKey(d)
+            const ap=verRod?(aprobadosPorDia[k]||[]):[], es=verRod?(enEsperaPorDia[k]||[]):[], en=verEnt?(entregasPorDia[k]||[]):[]
+            // Orden: lo firme primero, lo "a confirmar" al final (Popstars ocupa todo el mes en gris y tapaba lo demás).
+            const firmes=ap.filter(p=>!esTentDia(k,p)), tents=ap.filter(p=>esTentDia(k,p))
+            const items=[
+              ...firmes.map((p,j)=>()=> <div key={'a'+j} style={{...chipCal, background:T.posSoft, color:T.ink}}>{punto(T.pos)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              ...es.map((p,j)=>()=> <div key={'e'+j} style={{...chipCal, background:T.warnSoft, color:T.ink}}>{puntoHueco(T.warn)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              // ✂ Entregas: el color es el semáforo del trabajo (rojo atrasado, ámbar esta semana,
+              // verde en fecha, gris entregado). Cursiva = fecha del manual, el PM no la confirmó.
+              ...en.map((f,j)=>()=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
+                return <div key={'n'+j} role={goTo?'button':undefined} tabIndex={goTo?0:undefined} onKeyDown={goTo?tecla(()=>abrirEntrega(f,d)):undefined} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${nombrePiezaEd(f)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{...chipCal, cursor:goTo?'pointer':undefined, background:c.bg, color:f.__cerrado?T.ink3:T.ink, fontStyle:f.__estimada?'italic':undefined}}>{punto(c.fg)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</span></div>
+              }),
+              ...tents.map((p,j)=>()=> <div key={'t'+j} title="Día a confirmar" style={{...chipCal, background:T.surfaceAlt, color:T.ink3}}>{puntoHueco(T.ink3)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+            ]
+            const TOPE=cel?2:(capa==='todo'?4:3)
+            const sel = diaSel&&dayKey(diaSel)===k
+            const abrir=()=>{ setDiaSel(d); setMasDe(null) }
+            return <div key={i} role="button" tabIndex={0} aria-label={`${d.getDate()} de ${MESES_LARGO[d.getMonth()]}${items.length?`, ${items.length} ${items.length===1?'cosa':'cosas'}`:''}`} onClick={abrir} onKeyDown={tecla(abrir)} style={{minHeight:cel?64:104, minWidth:0, padding:cel?4:6, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, cursor:'pointer', background:sel?T.surfaceAlt:T.surface, outlineOffset:-2}}>
+              <div style={{fontSize:12.5, fontWeight:esHoy(d)?700:500, color:esHoy(d)?'#fff':T.ink2, marginBottom:4}}>
+                <span style={esHoy(d)?{background:T.ink, borderRadius:11, minWidth:22, height:22, padding:'0 5px', display:'inline-flex', alignItems:'center', justifyContent:'center'}:{}}>{d.getDate()}</span>
               </div>
-              {/* Gris = el trabajo está confirmado pero ESE día todavía no. Popstars tiene
-                  las dos cosas en el mismo mes: el 3 y el 4 firmes, el resto a ubicar. */}
-              {ap.slice(0,3).map((p,j)=>{ const tent=esTentDia(dayKey(d),p)
-                return <div key={'a'+j} title={tent?'Día a confirmar':undefined} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:tent?T.surfaceAlt:T.posSoft, borderLeft:`2px ${tent?'dashed':'solid'} ${tent?T.ink3:T.pos}`, color:tent?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>
-              })}
-              {es.slice(0,quedan(ap.length)).map((p,j)=><div key={'e'+j} style={{fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:T.warnSoft, borderLeft:`2px dashed ${T.warn}`, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</div>)}
-              {/* ✂ Entregas: el color es el semáforo del trabajo (rojo atrasado, naranja hoy,
-                  amarillo esta semana, verde en fecha, gris entregado). Punteado = fecha del
-                  manual, todavía no la confirmó el PM. */}
-              {en.slice(0,quedan(ap.length+es.length)).map((f,j)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
-                return <div key={'n'+j} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${nombrePiezaEd(f)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{cursor:goTo?'pointer':undefined, fontSize:10.5, padding:'2px 5px', marginBottom:2, borderRadius:4, background:c.bg, borderLeft:`2px ${f.__estimada?'dashed':'solid'} ${c.fg}`, color:f.__cerrado?T.ink3:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</div>
-              })}
-              {total>TOPE&&<div style={{fontSize:10, color:T.ink3, paddingLeft:5}}>+{total-TOPE} más</div>}
+              {items.slice(0,TOPE).map(r=>r())}
+              {items.length>TOPE&&<div style={{fontSize:12.5, color:T.ink2, paddingLeft:6}}>+{items.length-TOPE} más</div>}
             </div>
           })}
         </div>
+        {/* Leyenda: el estado no puede depender solo del color */}
+        <div style={{display:'flex', gap:16, flexWrap:'wrap', padding:'10px 14px', fontSize:12.5, color:T.ink2}}>
+          {verRod && <>
+            <span style={{display:'flex', alignItems:'center', gap:6}}>{punto(T.pos)} Aprobado</span>
+            <span style={{display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.warn)} En espera</span>
+            <span style={{display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.ink3)} Día a confirmar</span>
+          </>}
+          {verEnt && <span>✂ Entrega de edición · <i>cursiva</i> = fecha estimada</span>}
+        </div>
       </div>
 
-      {/* Panel del día */}
-      <div style={{flex:'0 0 340px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
-        {!diaSel ? <Empty>Clickeá un día para ver el detalle</Empty> : <>
-          <CardHead>{diaSel.getDate()} de {MESES_LARGO[diaSel.getMonth()]}</CardHead>
+      {/* Panel del día. Sin día elegido: lo que viene en la semana. */}
+      <div ref={panelRef} aria-live="polite" style={{flex:cel?'1 1 auto':'0 0 360px', ...card, overflow:'hidden', ...(cel?{}:{position:'sticky', top:16, maxHeight:'calc(100vh - 32px)', overflowY:'auto'})}}>
+        {!diaSel ? <>
+          <div style={{padding:'14px 18px', fontSize:14.5, fontWeight:700, color:T.ink}}>Próximos 7 días</div>
+          {(()=>{ const filas=proxDias(7).map(d=>{ const k=dayKey(d)
+              const rod=verRod?[...(aprobadosPorDia[k]||[]).filter(p=>!esTentDia(k,p)), ...(enEsperaPorDia[k]||[]).filter(p=>!esTentDia(k,p))]:[]
+              const ent=verEnt?(entregasPorDia[k]||[]).filter(f=>!f.__cerrado):[]
+              return {d, rod, ent} }).filter(x=>x.rod.length||x.ent.length)
+            if(!filas.length) return <Empty>Nada agendado en los próximos 7 días</Empty>
+            return filas.map(({d,rod,ent})=><button key={dayKey(d)} onClick={()=>{ setDiaSel(d); setMasDe(null) }} style={{display:'block', width:'100%', textAlign:'left', border:'none', borderTop:`1px solid ${T.border}`, background:'transparent', padding:'11px 18px', cursor:'pointer'}}>
+              <div style={{fontSize:12.5, fontWeight:700, color:T.ink, textTransform:'capitalize'}}>{diaTxt(d)}</div>
+              <div style={{fontSize:13, color:T.ink2, marginTop:2, lineHeight:1.45}}>
+                {[...rod.map(p=>(p['Cliente']||p['Agencia']||'—')+(String(p['Estado']||'').toUpperCase()==='EN ESPERA'?' (en espera)':staffDe(p).length===0?' (sin staff)':'')), ...ent.map(f=>'✂ '+limpiarPedidoEd(f.Entregable))].join(' · ')}
+              </div>
+            </button>)
+          })()}
+        </> : <>
+          <div style={{padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <span style={{fontSize:14.5, fontWeight:700, color:T.ink}}>{['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][diaSel.getDay()]} {diaSel.getDate()} de {MESES_LARGO[diaSel.getMonth()].toLowerCase()}</span>
+            <button onClick={()=>setDiaSel(null)} aria-label="Cerrar el día" style={{border:'none', background:'transparent', fontSize:20, color:T.ink2, cursor:'pointer', lineHeight:1}}>×</button>
+          </div>
           {aprobSel.length===0&&espSel.length===0&&entSel.length===0 && <Empty>{capa==='entregas'?'Sin entregas este día':'Sin eventos este día'}</Empty>}
-          {entSel.map((f,i)=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde; const ed=String(f.Editor||'').trim()
-            return <div key={'n'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`, borderLeft:`3px solid ${c.fg}`}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-                <span style={{fontSize:11, fontFamily:MONO, color:T.ink3}}>✂ #{f['N° presupuesto']}</span>
-                <span style={{fontSize:11, fontWeight:600, color:c.fg, background:c.bg, padding:'2px 8px', borderRadius:6, whiteSpace:'nowrap'}}>{f.__sem.txt}</span>
-              </div>
-              <div style={{fontSize:13, color:T.ink, fontWeight:600, marginTop:4}}>{nombrePiezaEd(f)}</div>
-              <div style={{fontSize:12, color:T.ink2}}>{[f.Cliente||f.Agencia, f.Proyecto].filter(Boolean).join(' · ')}</div>
-              <div style={{fontSize:11.5, color:T.ink2, marginTop:5}}><span style={{color:T.ink3}}>Estado:</span> {String(f.Estado||'Sin material')} <span style={{color:T.ink3}}>· Edita:</span> {ed||<span style={{color:T.brand}}>sin asignar</span>}{f.PM&&<span style={{color:T.ink3}}> · PM {f.PM}</span>}</div>
-              {f.__estimada && <div style={{fontSize:11, color:T.warn, marginTop:4}}>Fecha del manual: el PM todavía no confirmó cuándo se entrega.</div>}
-              {goTo && <div style={{display:'flex', gap:7, marginTop:9}}><button onClick={()=>abrirEntrega(f)} style={{...miniBtn, background:T.ink, color:'#fff', border:'none'}}>Abrir este trabajo</button></div>}
-            </div>
-          })}
-          {aprobSel.map((p,i)=>{ const staff=staffDe(p); const num=p['N° presupuesto']; const tent=esTentDia(dayKey(diaSel),p)
-            return <div key={'a'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontSize:11, fontFamily:MONO, color:tent?T.ink3:T.pos, fontWeight:600}}>{tent?'○':'●'} #{num}{tent&&<span style={{fontFamily:'inherit', fontWeight:500}}> · día a confirmar</span>}</span>
-                <span style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(p['Total ']||p['Total']))}</span>
-              </div>
-              <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
-              <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
-              {(()=>{ const ev=presusByNum[String(num)]||{}; const extra=[ev['Horario'],ev['Ubicación']].filter(Boolean).join(' · '); return extra?<div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>🕒 {extra}</div>:null })()}
-              {staff.length===0
-                ? <div style={{fontSize:11.5, color:T.warn, marginTop:6, fontWeight:500}}>⚠ Sin staff cargado todavía</div>
-                : <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}><span style={{color:T.ink3}}>Staff:</span> {staff.map(s=>s.persona).join(', ')}</div>}
-              <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                {!soloVer && <button onClick={()=>{ const proy=proyByNum[String(num).trim()]; if(proy) setStaffModal({proy, presu:presusByNum[String(num).trim()]}); else showToast('El proyecto aún no está disponible, actualizá','err') }} style={{...miniBtn, background:staff.length===0?T.brand:T.surface, color:staff.length===0?'#fff':T.ink2, border:staff.length===0?'none':`1px solid ${T.border}`}}>{staff.length===0?'Cargar staff':'Editar staff'}</button>}
-                {!soloVer && presusByNum[String(num).trim()] && <button onClick={()=>setEditando(presusByNum[String(num).trim()])} style={miniBtn}>Editar datos</button>}
-                <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                {!soloVer && presusByNum[String(num).trim()] && <button onClick={()=>setRepresu(presusByNum[String(num).trim()])} style={miniBtn}>Represupuestar</button>}
-                {!soloVer && <button onClick={()=>setMotivoModal({num, estado:'DESAPROBADO'})} style={miniBtn}>Desaprobar</button>}
-              </div>
-            </div>
-          })}
-          {espSel.map((p,i)=>{ const num=p['Columna 1']
-            return <div key={'e'+i} style={{padding:'12px 18px', borderTop:`1px solid ${T.border}`}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontSize:11, fontFamily:MONO, color:T.warn, fontWeight:600}}>○ #{num}</span>
-                <span style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(p['Precio Final']))}</span>
-              </div>
-              <div style={{fontSize:13, color:T.ink, fontWeight:500, marginTop:4}}>{p['Proyecto']||'—'}</div>
-              <div style={{fontSize:11.5, color:T.ink3}}>{[p['Agencia'],p['Cliente']].filter(Boolean).join(' · ')}</div>
-              <div style={{display:'flex', gap:7, marginTop:9, flexWrap:'wrap'}}>
-                {!soloVer && <button onClick={()=> necesitaResguardo(p, data.agencias, data.clientes) ? setResg(p) : presuTieneOpciones(p) ? setAprobAdic(p) : setEstado(num,'APROBADO')} style={{...miniBtn, background:T.pos, color:'#fff', border:'none'}}>✓ Aprobar</button>}
-                {!soloVer && <button onClick={()=>setEditando(p)} style={miniBtn}>Editar datos</button>}
-                <a href={`/presupuesto?nro=${encodeURIComponent(num)}`} target="_blank" rel="noreferrer" style={miniBtn}>PDF</a>
-                {!soloVer && <button onClick={()=>setRepresu(p)} style={miniBtn}>Represupuestar</button>}
-                {!soloVer && <button onClick={()=>setMotivoModal({num, estado:'DESAPROBADO'})} style={miniBtn}>Desaprobar</button>}
-              </div>
-            </div>
-          })}
+          {soloVer && entSel.map(fichaEntrega)}
+          {[...aprobSel].sort((a,b)=>esTentDia(dayKey(diaSel),a)-esTentDia(dayKey(diaSel),b)).map((p,i)=>fichaAprobado(p,i,diaSel))}
+          {espSel.map(fichaEspera)}
+          {!soloVer && entSel.map(fichaEntrega)}
         </>}
       </div>
     </div>
