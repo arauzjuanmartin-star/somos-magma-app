@@ -1,4 +1,4 @@
-import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED, COL_PDF, COL_PRECIO_VISIBLE, HEADER_PRECIO_VISIBLE } from '../../lib/sheets'
+import { getSheets, withSheetsRetry, MAX_SLOTS, SLOT_PRESU, ANCHO_PRESU_FILA, COL_DESGLOSAR, COL_BRIEF_ED, HEADERS_BRIEF_ED, COL_PDF, COL_PRECIO_VISIBLE, HEADER_PRECIO_VISIBLE, COL_ENTREGA_CRUDO, HEADER_ENTREGA_CRUDO, COL_TIPO_TRABAJO, HEADER_TIPO_TRABAJO } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 
 // Estructura real de PRESUPUESTOS:
@@ -143,6 +143,18 @@ export default async function handler(req, res) {
         const h1 = (await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!1:1' }))).data.values?.[0] || []
         if (h1[COL_PRECIO_VISIBLE] === HEADER_PRECIO_VISIBLE) row[COL_PRECIO_VISIBLE] = String(p[HEADER_PRECIO_VISIBLE])
         else avisoVisible = `El "$" por línea no se guardó: falta la columna "${HEADER_PRECIO_VISIBLE}" en PRESUPUESTOS (node scripts/presupuestos-columna-precio-visible.mjs --escribir).`
+      }
+      // DY-DZ: ¿le entregamos el crudo? y, en Austral, ¿jornada o video producto? Deciden
+      // dónde se crean las carpetas al aprobar (lib/drive.js). Solo si las columnas existen
+      // (scripts/presupuestos-columnas-crudo.mjs): una fila más ancha que la hoja hace fallar
+      // el append entero.
+      if (String(p[HEADER_ENTREGA_CRUDO] || '').trim() || String(p[HEADER_TIPO_TRABAJO] || '').trim()) {
+        const h1 = (await withSheetsRetry(() => sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'PRESUPUESTOS!1:1' }))).data.values?.[0] || []
+        if (h1[COL_ENTREGA_CRUDO] === HEADER_ENTREGA_CRUDO && h1[COL_TIPO_TRABAJO] === HEADER_TIPO_TRABAJO) {
+          for (let i = 0; i < COL_ENTREGA_CRUDO; i++) if (row[i] === undefined) row[i] = ''
+          row[COL_ENTREGA_CRUDO] = String(p[HEADER_ENTREGA_CRUDO] || '').trim()
+          row[COL_TIPO_TRABAJO] = String(p[HEADER_TIPO_TRABAJO] || '').trim()
+        } else avisoVisible = (avisoVisible ? avisoVisible + ' ' : '') + `"Entrega del crudo" y "Tipo de trabajo" no se guardaron: faltan las columnas en PRESUPUESTOS (node scripts/presupuestos-columnas-crudo.mjs --escribir).`
       }
       row[8] = num(p['Precio Final']) || total
 

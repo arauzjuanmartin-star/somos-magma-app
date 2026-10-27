@@ -1764,7 +1764,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
     desglosar:presuDesglosado(initialData),
     edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
-  } : { fp:hoyISO, dias:[], tentativos:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'' })
+    entregaCrudo:/^s[ií]/i.test(String(initialData['Entrega crudo']||'').trim()) || /austral/i.test(String(initialData['Agencia']||'')+' '+String(initialData['Cliente']||'')), tipoTrabajo:String(initialData['Tipo de trabajo']||'').trim(),
+  } : { fp:hoyISO, dias:[], tentativos:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'', entregaCrudo:false, tipoTrabajo:'' })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -1820,14 +1821,24 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // había puesto la app (`auto`): lo que escribió el PM no se pisa.
   const ultimoDeAgencia=nombre=>{ const n=nrm(nombre); if(!n) return null; const ps=(data?.presupuestos||[]).filter(p=>nrm(p['Agencia'])===n); return ps[ps.length-1]||null }
   const auto=useRef({cliente:false, contacto:false})
+  const crudoTocado=useRef(isRep)
+  // Austral divide cada año en "Jornadas" y "Video producto" (las chicas de Austral, 27/10/2026).
+  // Sugerencia: si hay cámara o foto en el trabajo es jornada; si es solo edición, video producto.
+  const esAustral=/austral/i.test(form.agencia)||/austral/i.test(form.cliente)
+  const tipoSugerido=peds.some(p=>p.svc.trim()&&!p.adicional&&!esPedidoEdicion(p.svc))?'Jornadas':'Video producto'
+  const tipoEfectivo=esAustral?(form.tipoTrabajo||tipoSugerido):''
   useEffect(()=>{
     if(isRep) return
     const ag=form.agencia.trim()
     const u=/^(sin agencia|directo)/i.test(ag) ? null : ultimoDeAgencia(ag)
     const directo=!!u && nrm(u['Cliente'])===nrm(ag)
     const ctUlt=String(u?.['Contacto']||'').trim()
+    // Entrega del crudo: Austral siempre (Juan, 27/10/2026); el resto, como el último trabajo
+    // con esa agencia. Si el PM ya la tocó a mano, no se pisa.
+    const crudoDefault=/austral/i.test(ag) || /^s[ií]/i.test(String(u?.['Entrega crudo']||'').trim())
     setForm(f=>{
       const ch={}
+      if(!crudoTocado.current && f.entregaCrudo!==crudoDefault) ch.entregaCrudo=crudoDefault
       if(!f.cliente.trim() || auto.current.cliente){ ch.cliente=directo?ag:''; auto.current.cliente=directo }
       if(!f.contacto.trim() || auto.current.contacto){ ch.contacto=ctUlt; auto.current.contacto=!!ctUlt }
       return Object.keys(ch).some(k=>ch[k]!==f[k]) ? {...f, ...ch} : f
@@ -1975,6 +1986,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       'Ed. Duración':duracionDePedido(valid.find(p=>esPedidoEdicion(p.svc))?.svc||''),
       'Ed. Material':materialDePedidos(valid.map(p=>p.svc)),
       'Observaciones':form.observaciones,
+      'Entrega crudo':form.entregaCrudo?'Sí':'', 'Tipo de trabajo':tipoEfectivo,
       'Horario':(form.horaIni&&form.horaFin)?`${form.horaIni} a ${form.horaFin} hs`:'',
       'Ubicación':form.ubicacion,
       'Contacto Lugar':form.contacto,          // por defecto = el mismo contacto; si es otro, se cambia en el Calendar
@@ -2218,6 +2230,19 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
             <button type="button" onClick={()=>addPed(false)} style={linkP}>+ Agregar servicio</button>
             <button type="button" onClick={()=>addPed(true)} style={linkP}>+ Opcional para el cliente</button>
             <button type="button" onClick={()=>setSvcNew({nombre:'',precio:'',fee:true})} style={{...linkP, color:T.ink2}}>+ Servicio que no está en la lista</button>
+          </div>
+          {/* Entrega del crudo: si va, la carpeta del crudo nace en ENTREGAS (lo ve el cliente) y no en CRUDO. */}
+          <div style={{display:'flex', gap:18, alignItems:'center', flexWrap:'wrap', marginTop:12, paddingTop:12, borderTop:`1px solid ${T.surfaceAlt}`}}>
+            <label style={{display:'flex', gap:8, alignItems:'center', fontSize:14, color:T.ink, cursor:'pointer'}}>
+              <input type="checkbox" checked={!!form.entregaCrudo} onChange={e=>{ crudoTocado.current=true; upd('entregaCrudo',e.target.checked) }} style={{width:17, height:17, accentColor:T.ink}}/>
+              Le entregamos el crudo al cliente
+              <span style={{fontSize:12.5, color:T.ink2}}>{form.entregaCrudo?'· se sube directo a su carpeta de entregas':'· queda en CRUDO, lo ve solo Magma'}</span>
+            </label>
+            {esAustral && <div role="group" aria-label="Tipo de trabajo" style={{display:'flex', alignItems:'center', gap:2, background:T.surfaceAlt, borderRadius:10, padding:3}}>
+              <span style={{fontSize:12.5, color:T.ink2, padding:'0 6px'}}>Austral</span>
+              {[['Jornadas','Jornada'],['Video producto','Video producto']].map(([v,l])=><button key={v} type="button" aria-pressed={tipoEfectivo===v} onClick={()=>upd('tipoTrabajo',v)}
+                style={{border:'none', borderRadius:8, padding:'6px 11px', fontSize:13, cursor:'pointer', fontFamily:'inherit', background:tipoEfectivo===v?T.surface:'transparent', color:tipoEfectivo===v?T.ink:T.ink2, fontWeight:tipoEfectivo===v?700:500, boxShadow:tipoEfectivo===v?'0 1px 2px rgba(0,0,0,0.12)':'none'}}>{l}</button>)}
+            </div>}
           </div>
           {svcNew && <div style={{border:`1px solid ${T.campo}`, borderRadius:10, padding:12, marginTop:10, background:T.surfaceAlt}}>
             <div style={{fontSize:13, fontWeight:600, color:T.ink, marginBottom:8}}>Servicio nuevo <span style={{fontWeight:400, color:T.ink2}}>· queda guardado para todos los presupuestos</span></div>
