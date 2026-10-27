@@ -342,8 +342,8 @@ export default function V2() {
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : (mod==='egresos'||mod==='caja') ? <Caja data={data} onRefresh={()=>load(true)} showToast={showToast} goTo={goTo}/>
-            : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
+            : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
+            : mod==='clientes' ? <Clientes data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='historico' ? <Historico data={data}/>
             : <Placeholder label={NAV.find(n=>n.id===mod)?.label}/>
@@ -5832,142 +5832,188 @@ function Contactos({data, onRefresh, showToast, nav, clearNav}){
 }
 
 // ============================ AGENCIAS ============================
-function Agencias({data, onRefresh, showToast, nav, clearNav}){
-  const presus=data.presupuestos||[], fc=data.facturacion||[], contactos=data.contactos||[]
-  const [rows,setRows]=useState(data.agencias||[])
-  useEffect(()=>{ setRows(data.agencias||[]) },[data.agencias])
-  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [edit,setEdit]=useState(false), [form,setForm]=useState({})
-  useEffect(()=>{ if(nav?.mod==='agencias'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
-  const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Agencia'])===n); const fcs=fc.filter(f=>normTxt(f['Agencia'])===n); return {presus:ps.length, aprob:ps.filter(isAprobado).length, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
-  const filtrados=rows.filter(a=>!q||normTxt(a['Nombre']).includes(normTxt(q))||normTxt(a['CUIT']).includes(normTxt(q)))
-  const agSel = sel ? rows.find(a=>a['Nombre']===sel) : null
-  const st = agSel ? stats(agSel['Nombre']) : null
+// La ficha antes de llamar: qué tiene en espera, qué te debe, cuándo trabajó por última vez y a quién llamar.
+// Agencias y Clientes comparten la pantalla; cambia la columna con la que se cruzan los presupuestos y,
+// en Agencias, los datos fiscales que se editan acá. La plata (lo que te debe) la ven Juan, Sofi y Flor.
+function Directorio({tipo, data, onRefresh, showToast, nav, clearNav, goTo, mail}){
+  const esAg = tipo==='agencia', campo = esAg?'Agencia':'Cliente', mod = esAg?'agencias':'clientes'
+  const presus=data.presupuestos||[], contactos=data.contactos||[]
+  const plata=verPlata(mail), cel=useEsCelular(1000)
+  const [rows,setRows]=useState((esAg?data.agencias:data.clientes)||[])
+  useEffect(()=>{ setRows((esAg?data.agencias:data.clientes)||[]) /* eslint-disable-next-line */ },[data.agencias, data.clientes])
+  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [edit,setEdit]=useState(false), [form,setForm]=useState({}), [filtro,setFiltro]=useState('')
+  useEffect(()=>{ if(nav?.mod===mod&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  const hoy=new Date(), hoy0=new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()), anio=hoy.getFullYear()
+  const fechaDe = v => { const t=String(v||'').trim(), m=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : parseD(t) }
+  // Lo que te debe: las mismas facturas que Caja (emitidas, sin cobrar, con saldo), con el mismo "vencida".
+  const cobros = useMemo(()=> plata ? (calcularCaja(data,{hoy, maxSlots:MAX_SLOTS, canonStaff, tarjetasActivas:TARJETAS_ACTIVAS}).cobros||[]) : [], [data, plata]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const porNombre=useMemo(()=>{
+    const m={}
+    presus.forEach(p=>{ const k=normTxt(p[campo]); if(!k) return; (m[k]=m[k]||{ps:[], cobros:[]}).ps.push(p) })
+    cobros.forEach(c=>{ const k=normTxt(esAg?c.agencia:c.cliente); if(!k) return; (m[k]=m[k]||{ps:[], cobros:[]}).cobros.push(c) })
+    return m
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[presus, cobros, campo])
+  const stats=nombre=>{
+    const x=porNombre[normTxt(nombre)]||{ps:[], cobros:[]}, ps=x.ps
+    const est=p=>String(p['Estado']||'').toUpperCase()
+    const espera=ps.filter(p=>est(p)==='EN ESPERA')
+    const delAnio=ps.filter(p=>{ const d=fechaDe(p['Fecha Presupuesto'])||fechaDe(p['Fecha Evento']); return d&&d.getFullYear()===anio })
+    const aprob=delAnio.filter(isAprobado).length, perdidos=delAnio.filter(p=>est(p)==='DESAPROBADO').length
+    // Última vez = el presupuesto más nuevo (pedido o evento): cuándo hubo movimiento con ellos.
+    const ultima=ps.reduce((u,p)=>{ const d=fechaDe(p['Fecha Presupuesto'])||fechaDe(p['Fecha Evento']); return d&&d<=hoy0&&(!u||d>u)?d:u },null)
+    const proximo=ps.filter(isAprobado).reduce((u,p)=>{ const d=fechaDe(p['Fecha Evento']); return d&&d>hoy0&&(!u||d<u)?d:u },null)
+    const debe=x.cobros.reduce((s,c)=>s+c.saldo,0), vencido=x.cobros.filter(c=>c.vencida).reduce((s,c)=>s+c.saldo,0)
+    return {ps, espera, esperaM:espera.reduce((s,p)=>s+parseMonto(p['Precio Final']),0), anioN:delAnio.length, aprob, perdidos, ultima, proximo, debe, vencido, cobros:x.cobros}
+  }
+  // Faltan datos = hay que facturarle (tiene aprobados este año) y no tiene CUIT. Las agencias viejas sin CUIT no molestan.
+  const faltanDatos=a=>esAg&&!String(a['CUIT']||'').trim()&&stats(a['Nombre']).aprob>0
+  const lista=rows.filter(r=>String(r['Nombre']||'').trim()).map(r=>({r, s:stats(r['Nombre'])}))
+  const dormido=s=>s.ultima&&(hoy0-s.ultima)/864e5>90&&!s.espera.length&&!s.proximo
+  const FILTROS=[['','Todas'],['espera','Con presus en espera'],...(plata?[['debe','Te deben']]:[]),...(esAg?[['datos','Faltan datos fiscales']]:[]),['dormidos','Hace más de 3 meses']]
+  const pasa={'':()=>true, espera:x=>x.s.espera.length>0, debe:x=>x.s.debe>0, datos:x=>faltanDatos(x.r), dormidos:x=>dormido(x.s)}
+  const filtrados=lista.filter(x=>(!q||normTxt(x.r['Nombre']).includes(normTxt(q))||normTxt(x.r['CUIT']).includes(normTxt(q))||normTxt(x.r['Agencia habitual']).includes(normTxt(q)))&&(pasa[filtro]||pasa[''])(x))
+    .sort((a,b)=>(b.s.vencido>0)-(a.s.vencido>0)||b.s.espera.length-a.s.espera.length||(b.s.ultima||0)-(a.s.ultima||0))
+  const cuenta=k=>lista.filter(pasa[k]).length
+  const selR = sel ? rows.find(a=>a['Nombre']===sel) : null
+  const st = selR ? stats(selR['Nombre']) : null
+  const susContactos = selR ? contactos.filter(c=>normTxt(c['Agencia'])===normTxt(selR['Nombre'])) : []
 
   async function guardar(){
-    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:agSel['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas, plazoPago:form.plazoPago, condicionCobro:form.condicionCobro})})
+    try{ const r=await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:selR['Nombre'], cuit:form.cuit, condIVA:form.condIVA, mailFact:form.mailFact, telefono:form.telefono, direccion:form.direccion, notas:form.notas, plazoPago:form.plazoPago, condicionCobro:form.condicionCobro})})
       const j=await r.json(); if(!j.ok){showToast(j.error||'Error','err');return}
       showToast('Agencia guardada'); setEdit(false); if(onRefresh) onRefresh()
     }catch(e){ showToast('Error de conexión','err') }
   }
   const abrir=a=>{ setSel(a['Nombre']); setEdit(false); setForm({cuit:a['CUIT']||'',condIVA:a['Condicion IVA']||'',mailFact:a['Mail facturacion']||'',plazoPago:a['Plazo de pago']||'',condicionCobro:a['Condición de cobro']||'',telefono:a['Telefono']||'',direccion:a['Direccion fiscal']||'',notas:a['Notas']||''}) }
 
+  const hace=d=>{ if(!d) return '—'; const n=Math.round((hoy0-d)/864e5); return n<=0?'hoy':n===1?'ayer':n<31?`hace ${n} días`:n<365?`hace ${Math.round(n/30.4)} ${Math.round(n/30.4)===1?'mes':'meses'}`:`hace ${Math.floor(n/365)} ${Math.floor(n/365)===1?'año':'años'}` }
+  const fCorta=d=>d?`${d.getDate()}/${d.getMonth()+1}`:''
+  const telWa=t=>{ let d=String(t||'').replace(/\D/g,''); if(d.length<8) return ''; if(!d.startsWith('54')) d='549'+d.replace(/^0/,''); return 'https://wa.me/'+d }
+  const tecla=fn=>e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fn() } }
+  const card={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const chip=on=>({border:on?'none':`1px solid ${T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, borderRadius:999, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'})
+  const etiqueta={fontSize:12.5, color:T.ink2}
+  const cols = cel ? '1fr 110px' : (plata?'1.6fr 150px 120px 150px 110px':'1.6fr 150px 120px 110px')
+  const ESTADO_TXT={ 'APROBADO':'aprobado', 'EN CURSO':'en curso', 'ENTREGADO':'entregado', 'EN ESPERA':'en espera', 'DESAPROBADO':'perdido', 'REPRESUPUESTADO':'represupuestado' }
+  const estTxt=p=>ESTADO_TXT[String(p['Estado']||'').toUpperCase()]||String(p['Estado']||'—').toLowerCase()
+  const frase=s=>[s.vencido>0&&{t:`● ${fmtM(s.vencido)} vencido`, c:T.brand}, s.debe-s.vencido>0&&{t:`${fmtM(s.debe-s.vencido)} por cobrar`, c:T.ink}, s.espera.length>0&&{t:`${s.espera.length} en espera · ${fmtM(s.esperaM)}`, c:T.warn}, s.proximo&&{t:`próximo trabajo el ${fCorta(s.proximo)}`, c:T.ink2}].filter(Boolean)
+
   return <>
-    <PageHead title="Agencias" sub={`${filtrados.length} de ${rows.length}`}/>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar agencia o CUIT…" style={{width:'100%', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none', marginBottom:14}}/>
-    <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
-      <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 70px 70px 110px 50px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-          <span>Nombre</span><span style={{textAlign:'right'}}>Presus</span><span style={{textAlign:'right'}}>Aprob</span><span style={{textAlign:'right'}}>Cobrado</span><span style={{textAlign:'center'}}>Datos</span>
+    <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:'0 0 14px', letterSpacing:-0.3}}>{esAg?'Agencias':'Clientes'}</h1>
+    <div style={{display:'flex', gap:10, marginBottom:10, flexWrap:'wrap', alignItems:'center'}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} aria-label={esAg?'Buscar agencia':'Buscar cliente'} placeholder={esAg?'Buscar agencia o CUIT…':'Buscar cliente o agencia…'} style={{flex:'1 1 240px', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13.5, outline:'none'}}/>
+    </div>
+    <div role="group" aria-label="Filtrar" style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:14}}>
+      {FILTROS.map(([k,l])=><button key={k} aria-pressed={filtro===k} onClick={()=>setFiltro(filtro===k?'':k)} style={chip(filtro===k)}>{l} {cuenta(k)}</button>)}
+    </div>
+
+    <div style={{display:'flex', flexDirection:cel?'column':'row', gap:16, alignItems:cel?'stretch':'flex-start'}}>
+      <div style={{flex:1, minWidth:0, ...card, overflow:'hidden'}}>
+        <div style={{display:'grid', gridTemplateColumns:cols, gap:10, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, ...etiqueta, fontWeight:600}}>
+          <span>{filtrados.length} {esAg?(filtrados.length===1?'agencia':'agencias'):(filtrados.length===1?'cliente':'clientes')}</span>
+          {!cel && <span style={{textAlign:'right'}}>En espera</span>}
+          {!cel && <span style={{textAlign:'right'}}>{anio}: aprobados</span>}
+          {plata && !cel && <span style={{textAlign:'right'}}>Te debe</span>}
+          <span style={{textAlign:'right'}}>Última vez</span>
         </div>
-        {filtrados.map((a,i)=>{ const s=stats(a['Nombre']); const ok=a['CUIT']&&a['Condicion IVA']
-          return <div key={i} onClick={()=>abrir(a)} style={{display:'grid', gridTemplateColumns:'1.5fr 70px 70px 110px 50px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===a['Nombre']?T.surfaceAlt:'transparent'}}>
-            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{a['Nombre']}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{s.presus}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{s.aprob}</span>
-            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(s.cobrado)}</span>
-            <span style={{textAlign:'center', color:ok?T.pos:T.warn}}>{ok?'✓':'⚠'}</span>
+        {filtrados.length===0 && <Empty>Nadie con ese nombre o filtro</Empty>}
+        {filtrados.map(({r,s})=>{ const ab=()=>abrir(r)
+          return <div key={r['Nombre']} role="button" tabIndex={0} onClick={ab} onKeyDown={tecla(ab)} style={{display:'grid', gridTemplateColumns:cols, gap:10, padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:sel===r['Nombre']?T.surfaceAlt:'transparent'}}>
+            <span style={{minWidth:0}}>
+              <span style={{display:'block', fontSize:14, color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{r['Nombre']}</span>
+              <span style={{display:'block', ...etiqueta, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                {esAg ? [r['Tipo'], faltanDatos(r)&&<span key="f" style={{color:T.warn, fontWeight:600}}>faltan datos fiscales</span>].filter(Boolean).reduce((a,b,i)=>i?[...a,' · ',b]:[b],[]) : [r['Agencia habitual'], r['Industria']].filter(Boolean).join(' · ')}
+              </span>
+            </span>
+            {!cel && <span style={{textAlign:'right', fontSize:13, color:s.espera.length?T.warn:T.ink3, fontWeight:s.espera.length?600:400}}>{s.espera.length?<>{s.espera.length} · <span style={{fontFamily:MONO}}>{fmtM(s.esperaM)}</span></>:'—'}</span>}
+            {!cel && <span style={{textAlign:'right', fontSize:13, color:T.ink2}}>{s.anioN?<>{s.aprob} de {s.anioN}{s.aprob+s.perdidos>0&&<span style={{color:T.ink3}}> · {Math.round(s.aprob/(s.aprob+s.perdidos)*100)}%</span>}</>:'—'}</span>}
+            {plata && !cel && <span style={{textAlign:'right', fontSize:13}}>{s.vencido>0?<span style={{color:T.brand, fontWeight:600}}>● <span style={{fontFamily:MONO}}>{fmtM(s.vencido)}</span> vencido</span>:s.debe>0?<span style={{fontFamily:MONO, color:T.ink}}>{fmtM(s.debe)}</span>:<span style={{color:T.ink3}}>—</span>}</span>}
+            <span style={{textAlign:'right', fontSize:13, color:T.ink2}}>{hace(s.ultima)}</span>
           </div>
         })}
       </div>
-      {agSel && <div style={{flex:'0 0 360px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
+
+      {selR && <div style={{flex:cel?'1 1 auto':'0 0 390px', ...card, overflow:'hidden', ...(cel?{}:{position:'sticky', top:16, maxHeight:'calc(100vh - 32px)', overflowY:'auto'})}}>
         <div style={{padding:'14px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-          <span style={{fontSize:15, fontWeight:700, color:T.ink, flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{agSel['Nombre']}</span>
-          <button onClick={()=>edit?guardar():setEdit(true)} style={{...miniBtn, ...(edit?{background:T.pos,color:'#fff',border:'none'}:{})}}>{edit?'Guardar':'✎ Editar'}</button>
-          <button onClick={()=>{setSel(null);setEdit(false)}} title="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+          <span style={{flex:1, minWidth:0}}>
+            <span style={{display:'block', fontSize:16, fontWeight:700, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{selR['Nombre']}</span>
+            <span style={{display:'block', ...etiqueta}}>{(esAg?[selR['Tipo'], selR['PM default']&&`PM ${selR['PM default']}`]:[selR['Agencia habitual'], selR['Industria']]).filter(Boolean).join(' · ')||(esAg?'Agencia':'Cliente')}</span>
+          </span>
+          {esAg && <button onClick={()=>edit?guardar():setEdit(true)} style={{...miniBtn, fontSize:12.5, ...(edit?{background:T.ink,color:'#fff',border:'none',fontWeight:600}:{})}}>{edit?'Guardar':'Editar'}</button>}
+          <button onClick={()=>{setSel(null);setEdit(false)}} aria-label="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink2, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
         <div style={{padding:'14px 18px'}}>
           {edit ? <>
             {[['CUIT','cuit'],['Condición IVA','condIVA'],['Mail facturación','mailFact'],['Plazo de pago (días)','plazoPago'],['Teléfono','telefono'],['Dirección fiscal','direccion'],['Notas','notas']].map(([l,k])=>(
-              <div key={k} style={{marginBottom:9}}><label style={lblV2}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
+              <div key={k} style={{marginBottom:9}}><label style={{...lblV2, fontSize:12.5, textTransform:'none', letterSpacing:0}}>{l}</label><input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={inpV2}/></div>
             ))}
             {/* 🔒 Qué se le pide a esta agencia para aprobar un trabajo (lib/condicion-cobro.js). Vacío = Seña 30%. */}
-            <div style={{marginBottom:9}}><label style={lblV2}>Condición de cobro</label>
+            <div style={{marginBottom:9}}><label style={{...lblV2, fontSize:12.5, textTransform:'none', letterSpacing:0}}>Condición de cobro</label>
               <select value={form.condicionCobro||''} onChange={e=>setForm(f=>({...f,condicionCobro:e.target.value}))} style={inpV2}>
                 <option value="">Seña 30% (por defecto)</option>
                 {CONDICIONES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
-              <div style={{fontSize:11, color:T.ink3, marginTop:3}}>Seña 30% u OC: sin eso no se aprueba. OC después y Cuenta corriente: se aprueba sin pedir nada.</div>
+              <div style={{fontSize:12.5, color:T.ink2, marginTop:4}}>Seña 30% u OC: sin eso no se aprueba. OC después y Cuenta corriente: se aprueba sin pedir nada.</div>
             </div>
+            <button onClick={()=>setEdit(false)} style={{...miniBtn, fontSize:12.5, marginTop:4}}>Cancelar</button>
           </> : <>
-            <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
-              <Mini label="Presupuestos" val={st.presus}/><Mini label="Aprobados" val={st.aprob}/><Mini label="Facturas" val={st.fact}/><Mini label="Cobrado" val={fmtM(st.cobrado)} color={T.pos}/>
-            </div>
-            {[['CUIT',agSel['CUIT']],['Cond. IVA',agSel['Condicion IVA']],['Mail',agSel['Mail facturacion']],['Paga a',agSel['Plazo de pago']?agSel['Plazo de pago']+' días':''],['Cobro',agSel['Condición de cobro']||'Seña 30% (por defecto)'],['Tel',agSel['Telefono']]].filter(x=>x[1]).map(([k,v])=>(
-              <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
-            ))}
-            <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
-            {st.psList.slice(-10).reverse().map((p,i)=>{ const si=estadoInfo(p['Estado']); return (
-              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-                <span style={{width:6,height:6,borderRadius:6,background:si.c,flexShrink:0}} title={si.l}/>
-                <span style={{flex:1, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Proyecto']||p['Cliente']||'—'}</span>
-                <span style={{fontFamily:MONO, color:T.ink2}}>{fmtM(parseMonto(p['Precio Final']))}</span>
+            {/* En una línea: lo que hay que saber antes de llamar */}
+            {frase({...st, ...(plata?{}:{debe:0, vencido:0})}).length>0
+              ? <div style={{fontSize:14, fontWeight:600, lineHeight:1.5, marginBottom:12}}>{frase({...st, ...(plata?{}:{debe:0, vencido:0})}).map((x,i)=><span key={i} style={{color:x.c}}>{i?<span style={{color:T.ink3}}> · </span>:null}{x.t}</span>)}</div>
+              : <div style={{fontSize:14, color:T.ink2, marginBottom:12}}>Nada pendiente con {esAg?'esta agencia':'este cliente'}{st.ultima?` · último presupuesto ${hace(st.ultima)}`:''}</div>}
+
+            {/* A quién llamar */}
+            {susContactos.length>0 && <div style={{marginBottom:14}}>
+              <div style={{fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:6}}>Contactos</div>
+              {susContactos.slice(0,6).map((c,i)=><div key={i} style={{padding:'7px 0', borderTop:i?`1px solid ${T.border}`:'none'}}>
+                <div style={{fontSize:13.5, color:T.ink}}>{c['Nombre']||'—'}{c['Cargo']&&<span style={{color:T.ink2}}> · {c['Cargo']}</span>}</div>
+                <div style={{display:'flex', gap:10, flexWrap:'wrap', marginTop:2, fontSize:12.5}}>
+                  {sinErr(c['Teléfono'])&&telWa(sinErr(c['Teléfono']))&&<a href={telWa(sinErr(c['Teléfono']))} target="_blank" rel="noreferrer" style={{color:T.ink}}>WhatsApp {sinErr(c['Teléfono'])}</a>}
+                  {c['Mail']&&<a href={`mailto:${c['Mail']}`} style={{color:T.ink}}>{c['Mail']}</a>}
+                </div>
+              </div>)}
+              {susContactos.length>6 && goTo && <button onClick={()=>goTo('contactos',{q:selR['Nombre']})} style={{border:'none', background:'transparent', padding:0, marginTop:4, fontSize:12.5, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver los {susContactos.length}</button>}
+            </div>}
+
+            {plata && st.cobros.length>0 && <div style={{marginBottom:14}}>
+              <div style={{fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:6}}>Facturas sin cobrar</div>
+              {st.cobros.slice().sort((a,b)=>(b.vencida-a.vencida)||((a.venc||0)-(b.venc||0))).slice(0,8).map((c,i)=><div key={i} style={{display:'grid', gridTemplateColumns:'1fr auto auto', gap:10, alignItems:'baseline', padding:'6px 0', borderTop:i?`1px solid ${T.border}`:'none', fontSize:13}}>
+                <span style={{minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:T.ink}}>{c.proyecto||c.cliente||'—'} <span style={{color:T.ink2, fontFamily:MONO, fontSize:12.5}}>#{c.nro}</span></span>
+                <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmtM(c.saldo)}</span>
+                <span style={{fontSize:12.5, whiteSpace:'nowrap', color:c.vencida?T.brand:T.ink2, fontWeight:c.vencida?600:400}}>{c.vencida?'● vencida':c.venc?`vence ${fCorta(c.venc)}`:'sin fecha'}</span>
+              </div>)}
+              {goTo && <button onClick={()=>goTo('facturacion',{agF:esAg?selR['Nombre']:undefined})} style={{border:'none', background:'transparent', padding:0, marginTop:4, fontSize:12.5, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ir a Facturación</button>}
+            </div>}
+
+            <div style={{fontSize:13.5, fontWeight:700, color:T.ink, margin:'4px 0 6px'}}>Últimos presupuestos</div>
+            {st.ps.length===0 && <div style={etiqueta}>Todavía no hay presupuestos.</div>}
+            {st.ps.slice().sort((a,b)=>((fechaDe(b['Fecha Evento'])||fechaDe(b['Fecha Presupuesto'])||0)-(fechaDe(a['Fecha Evento'])||fechaDe(a['Fecha Presupuesto'])||0))).slice(0,10).map((p,i)=>{ const si=estadoInfo(p['Estado']); const d=fechaDe(p['Fecha Evento']); return (
+              <div key={i} style={{display:'grid', gridTemplateColumns:'1fr auto auto', gap:10, alignItems:'baseline', padding:'6px 0', fontSize:13, borderTop:i?`1px solid ${T.border}`:'none'}}>
+                <span style={{minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:T.ink}}>{d&&<span style={{color:T.ink2}}>{fCorta(d)}/{String(d.getFullYear()).slice(2)} · </span>}{p['Proyecto']||(esAg?p['Cliente']:'')||'—'}</span>
+                <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink2}}>{fmtM(parseMonto(p['Precio Final']))}</span>
+                <span style={{fontSize:12.5, color:si.c, fontWeight:600, whiteSpace:'nowrap'}}>{estTxt(p)}</span>
               </div>
             )})}
+            {goTo && st.ps.length>0 && <button onClick={()=>goTo('presupuestos',{q:selR['Nombre']})} style={{border:'none', background:'transparent', padding:0, marginTop:6, fontSize:12.5, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver todos en Trabajos</button>}
+
+            {esAg && <div style={{marginTop:16}}>
+              <div style={{fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:6}}>Para facturar</div>
+              {[['CUIT',selR['CUIT']],['Cond. IVA',selR['Condicion IVA']],['Mail',selR['Mail facturacion']],['Paga a',selR['Plazo de pago']?selR['Plazo de pago']+' días':''],['Cobro',selR['Condición de cobro']||'Seña 30% (por defecto)'],['Tel',selR['Telefono']],['Dirección',selR['Direccion fiscal']]].map(([k,v])=>(
+                <div key={k} style={{display:'flex', justifyContent:'space-between', gap:10, padding:'4px 0', fontSize:13}}><span style={{color:T.ink2}}>{k}</span><span style={{color:v?T.ink:T.warn, textAlign:'right', overflowWrap:'anywhere'}}>{v||'falta'}</span></div>
+              ))}
+              {selR['Notas'] && <div style={{fontSize:13, color:T.ink, background:T.warnSoft, borderRadius:9, padding:'9px 12px', marginTop:8, lineHeight:1.45}}>{selR['Notas']}</div>}
+            </div>}
+            {!esAg && selR['Notas'] && <div style={{fontSize:13, color:T.ink, background:T.warnSoft, borderRadius:9, padding:'9px 12px', marginTop:12, lineHeight:1.45}}>{selR['Notas']}</div>}
           </>}
         </div>
       </div>}
     </div>
   </>
 }
-
-// ============================ CLIENTES ============================
-function Clientes({data, nav, clearNav}){
-  const presus=data.presupuestos||[], fc=data.facturacion||[]
-  const rows=data.clientes||[]
-  const [q,setQ]=useState(''), [sel,setSel]=useState(null)
-  useEffect(()=>{ if(nav?.mod==='clientes'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
-  const stats=nombre=>{ const n=normTxt(nombre); const ps=presus.filter(p=>normTxt(p['Cliente'])===n); const fcs=fc.filter(f=>normTxt(f['Cliente'])===n)
-    const aprob=ps.filter(isAprobado).length
-    const espera=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='EN ESPERA').length
-    const desaprob=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
-    return {presus:ps.length, aprob, espera, desaprob, fact:fcs.length, cobrado:fcs.filter(isCobrada).reduce((s,f)=>s+parseMonto(f['Precio FINAL']),0), psList:ps} }
-  const filtrados=rows.filter(c=>!q||normTxt(c['Nombre']).includes(normTxt(q)))
-  const cliSel = sel?rows.find(c=>c['Nombre']===sel):null
-  const st = cliSel?stats(cliSel['Nombre']):null
-  return <>
-    <PageHead title="Clientes" sub={`${filtrados.length} de ${rows.length}`}/>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar cliente…" style={{width:'100%', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none', marginBottom:14}}/>
-    <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
-      <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr 80px 110px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-          <span>Nombre</span><span>Agencia habitual</span><span style={{textAlign:'right'}}>Presus</span><span style={{textAlign:'right'}}>Cobrado</span>
-        </div>
-        {filtrados.map((c,i)=>{ const s=stats(c['Nombre'])
-          return <div key={i} onClick={()=>setSel(c['Nombre'])} style={{display:'grid', gridTemplateColumns:'1.5fr 1fr 80px 110px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===c['Nombre']?T.surfaceAlt:'transparent'}}>
-            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{c['Nombre']}</span>
-            <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{c['Agencia habitual']||'—'}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{s.presus}</span>
-            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(s.cobrado)}</span>
-          </div>
-        })}
-      </div>
-      {cliSel && <div style={{flex:'0 0 340px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
-        <CardHead>{cliSel['Nombre']}</CardHead>
-        <div style={{padding:'0 18px 16px'}}>
-          <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:10}}>
-            <Mini label="Presupuestos" val={st.presus}/><Mini label="Facturas" val={st.fact}/><Mini label="Cobrado" val={fmtM(st.cobrado)} color={T.pos}/>
-          </div>
-          <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
-            <span style={{fontSize:11.5, color:T.pos, background:T.posSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.aprob} aprobados</span>
-            <span style={{fontSize:11.5, color:T.warn, background:T.warnSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.espera} en espera</span>
-            <span style={{fontSize:11.5, color:T.brand, background:T.brandSoft, padding:'3px 9px', borderRadius:20, fontWeight:600}}>{st.desaprob} desaprob.</span>
-          </div>
-          {[['Agencia habitual',cliSel['Agencia habitual']],['Industria',cliSel['Industria']],['Última vez',cliSel['Ultima vez']]].filter(x=>x[1]).map(([k,v])=>(
-            <div key={k} style={{display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink}}>{v}</span></div>
-          ))}
-          <div style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, margin:'14px 0 6px'}}>Últimos presupuestos</div>
-          {st.psList.slice(-10).reverse().map((p,i)=>{ const si=estadoInfo(p['Estado']); return (
-            <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-              <span style={{width:6,height:6,borderRadius:6,background:si.c,flexShrink:0}} title={si.l}/>
-              <span style={{flex:1, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p['Proyecto']||'—'}</span>
-              <span style={{fontFamily:MONO, color:T.ink2}}>{fmtM(parseMonto(p['Precio Final']))}</span>
-            </div>
-          )})}
-        </div>
-      </div>}
-    </div>
-  </>
-}
+const Agencias = props => <Directorio tipo="agencia" {...props}/>
+const Clientes = props => <Directorio tipo="cliente" {...props}/>
 
 // ============================ HISTÓRICO ============================
 function Historico({data}){
