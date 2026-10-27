@@ -825,9 +825,9 @@ function SaldosEditor({cuentas, onClose, onSaved, showToast}){
   return <div>
     {cuentas.map((c,i)=>{ const enUsd=esCuentaUsd(c); return (
       <div key={c['Nombre']} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'6px 0', borderTop:i===0?'none':`1px solid ${T.border}`}}>
-        <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div><div style={{fontSize:11, color:T.ink3}}>en la app: {enUsd?'USD '+fmt(actualDe(c)):fmtS(actualDe(c))}</div></div>
+        <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{c['Nombre']}</div><div style={{fontSize:12.5, color:T.ink3}}>en la app: {enUsd?'USD '+fmt(actualDe(c)):fmtS(actualDe(c))}</div></div>
         <div style={{display:'flex', alignItems:'center', gap:6}}>
-          <span style={{fontSize:12, color:T.ink3, fontFamily:MONO}}>{enUsd?'USD':'$'}</span>
+          <span style={{fontSize:12.5, color:T.ink3, fontFamily:MONO}}>{enUsd?'USD':'$'}</span>
           <MontoInput value={vals[c['Nombre']]} onChange={v=>setVals(s=>({...s,[c['Nombre']]:v}))} disabled={saving} placeholder="0" style={{...inpV2, width:150, textAlign:'right', fontFamily:MONO}}/>
         </div>
       </div>
@@ -836,10 +836,10 @@ function SaldosEditor({cuentas, onClose, onSaved, showToast}){
       <span style={{fontSize:12.5, color:T.ink2}}>En caja quedaría <b style={{fontFamily:MONO, color:T.ink}}>{fmtS(totalPesos)}</b>{cambiados.length>0&&<span style={{color:T.ink3}}> · {cambiados.length} {cambiados.length===1?'cuenta cambia':'cuentas cambian'}</span>}</span>
       <div style={{display:'flex', gap:8}}>
         <button style={miniBtn} onClick={onClose} disabled={saving}>Cancelar</button>
-        <button style={{...miniBtn, background:T.brand, color:'#fff', border:'none', fontWeight:600, opacity:saving?0.6:1}} onClick={guardar} disabled={saving}>{saving?'Guardando…':'Guardar saldos'}</button>
+        <button style={{...miniBtn, background:T.ink, color:'#fff', border:'none', fontWeight:600, opacity:saving?0.6:1}} onClick={guardar} disabled={saving}>{saving?'Guardando…':'Guardar saldos'}</button>
       </div>
     </div>
-    <div style={{fontSize:11, color:T.ink3, marginTop:8}}>Copiá el saldo del home banking tal cual. Queda en la solapa CUENTAS con fecha, quién lo cargó y el historial.</div>
+    <div style={{fontSize:12.5, color:T.ink3, marginTop:8}}>Copiá el saldo del home banking tal cual. Queda en la solapa CUENTAS con fecha, quién lo cargó y el historial.</div>
   </div>
 }
 
@@ -6000,29 +6000,29 @@ function Caja({data, onRefresh, showToast, goTo}){
   const bloques=[...c.semanas.map((s,k)=>({key:'s'+k, s, titulo:s.esActual?`Esta semana · del ${s.desde} al ${s.hasta}`:`Del ${s.desde} al ${s.hasta}`, items:c.items.filter(i=>i.dia!==null && i.dia>=s.desde && i.dia<=s.hasta), cobros:cobrosDe(s)})),
     {key:'sin', s:null, titulo:'Sin día de pago cargado', items:c.items.filter(i=>i.dia===null), cobros:[]}]
 
-  const chip={fontSize:11.5, padding:'4px 10px', borderRadius:20, background:T.surfaceAlt, color:T.ink2, whiteSpace:'nowrap'}
-  const btnSec={fontSize:12, fontWeight:600, padding:'7px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer', whiteSpace:'nowrap'}
+  const chip={fontSize:12.5, padding:'4px 10px', borderRadius:20, background:T.surfaceAlt, color:T.ink2, whiteSpace:'nowrap'}
+  const btnSec={fontSize:13.5, fontWeight:500, padding:'8px 13px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, cursor:'pointer', whiteSpace:'nowrap'}
   const seg=(val,cur,set,l)=><button key={val} onClick={()=>set(val)} style={{padding:'7px 12px', border:'none', borderLeft:`1px solid ${T.border}`, background:cur===val?T.ink:'transparent', color:cur===val?'#fff':T.ink2, fontSize:12.5, fontWeight:cur===val?600:500, cursor:'pointer'}}>{l}</button>
   const grid=cel?'40px minmax(0,1fr)':'44px minmax(0,1fr) auto 118px 150px'
 
   const Fila=i=>{ const ab=!!abiertos[i.id], vencido=!i.pagado && hoyDia!==null && i.dia!==null && i.dia<hoyDia && i.tipo!=='falta', cta=cuentaDeItem(i), ocupado=busy===i.id
     let accion
-    if(i.pagado) accion=<span style={{fontSize:11.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{(i.hoja==='GASTOS_FIJOS'||i.hoja==='IMPUESTOS') && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
-    else if(i.tipo==='debito') accion=<span style={{display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}><span style={{fontSize:11.5, color:T.ink3}}>se debita solo</span><button disabled={ocupado} onClick={()=>pagar(i,true)} style={btnSec} title="Marcarlo cuando ya lo viste debitado en el banco. No resta de la cuenta: el débito ya está en el saldo que se copia del banco.">{ocupado?'Guardando…':'Ya se debitó'}</button></span>
+    if(i.pagado) accion=<span style={{fontSize:12.5, color:T.pos, fontWeight:600}}>✓ Pagado{i.fechaPago?` ${i.fechaPago.split('/').slice(0,2).join('/')}`:''}{(i.hoja==='GASTOS_FIJOS'||i.hoja==='IMPUESTOS') && <button disabled={ocupado} onClick={()=>pagar(i,false)} title={i.tipo==='debito'?'Lo deja sin marcar (no toca ninguna cuenta)':'Lo deja sin pagar y devuelve la plata a la cuenta'} style={{border:'none', background:'none', color:T.ink3, fontSize:12.5, textDecoration:'underline', cursor:'pointer', marginLeft:5, padding:0}}>{ocupado?'…':'deshacer'}</button>}</span>
+    else if(i.tipo==='debito') accion=<span style={{display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}><span style={{fontSize:12.5, color:T.ink3}}>se debita solo</span><button disabled={ocupado} onClick={()=>pagar(i,true)} style={btnSec} title="Marcarlo cuando ya lo viste debitado en el banco. No resta de la cuenta: el débito ya está en el saldo que se copia del banco.">{ocupado?'Guardando…':'Ya se debitó'}</button></span>
     else if(i.tipo==='socios') accion=<button onClick={()=>{ setTab('detalle'); window.scrollTo&&window.scrollTo(0,0) }} style={btnSec} title="El sueldo de los socios se anota con «Sacó plata» en la cuenta de socios (pestaña Cargar y detalle)">Cuenta de socios</button>
     else if(i.tipo==='falta') accion=<button onClick={()=>setSubir(true)} style={btnSec}>Subir resumen</button>
     else if(i.link) accion=<button onClick={()=>goTo&&goTo(i.link)} style={btnSec}>Ir a Pagos Staff</button>
-    else accion=<button disabled={ocupado} onClick={()=>pagar(i,true)} style={{fontSize:12, fontWeight:700, padding:'7px 16px', borderRadius:8, border:'none', background:T.brand, color:'#fff', cursor:ocupado?'default':'pointer', opacity:ocupado?0.6:1}}>{ocupado?'Guardando…':'Pagué'}</button>
+    else accion=<button disabled={ocupado} onClick={()=>pagar(i,true)} style={{fontSize:12.5, fontWeight:700, padding:'7px 16px', borderRadius:8, border:'none', background:T.ink, color:'#fff', cursor:ocupado?'default':'pointer', opacity:ocupado?0.6:1}}>{ocupado?'Guardando…':'Pagué'}</button>
     let cuentaEl
     if(i.tipo==='socios') cuentaEl=<span style={chip}>cuenta de socios</span>
-    else if(i.tipo==='mano' && i.hoja && !i.pagado) cuentaEl=<select value={cta} onChange={e=>setCuentaDe(o=>({...o,[i.id]:e.target.value}))} title="De qué cuenta sale. Queda guardada para el mes que viene." style={{fontSize:11.5, padding:'5px 8px', borderRadius:20, border:`1px ${cta?'solid':'dashed'} ${cta?T.border:T.warn}`, background:T.surface, color:cta?T.ink:T.warn, cursor:'pointer', maxWidth:170, outline:'none'}}>{!cta && <option value="">elegir cuenta</option>}{[...new Set([...cuentaOpts, ...(cta?[cta]:[])])].map(n=><option key={n} value={n}>{n}</option>)}</select>
+    else if(i.tipo==='mano' && i.hoja && !i.pagado) cuentaEl=<select value={cta} onChange={e=>setCuentaDe(o=>({...o,[i.id]:e.target.value}))} title="De qué cuenta sale. Queda guardada para el mes que viene." style={{fontSize:12.5, padding:'5px 8px', borderRadius:20, border:`1px ${cta?'solid':'dashed'} ${cta?T.border:T.warn}`, background:T.surface, color:cta?T.ink:T.warn, cursor:'pointer', maxWidth:170}}>{!cta && <option value="">elegir cuenta</option>}{[...new Set([...cuentaOpts, ...(cta?[cta]:[])])].map(n=><option key={n} value={n}>{n}</option>)}</select>
     else cuentaEl=cta?<span style={chip}>{cta}</span>:<span style={{...chip, background:'transparent', border:`1px dashed ${T.ink3}`, color:T.ink3}}>sin cuenta</span>
     return <div key={i.id}>
       <div style={{display:'grid', gridTemplateColumns:grid, gap:cel?9:12, alignItems:'center', padding:'11px 16px', borderTop:`1px solid ${T.border}`, opacity:i.pagado?0.6:1}}>
-        <div style={{textAlign:'center', lineHeight:1.1, alignSelf:cel?'start':'center'}}>{i.dia!==null ? <><div style={{fontFamily:MONO, fontSize:17, fontWeight:600, color:vencido?T.brand:T.ink}}>{i.dia}</div><div style={{fontSize:10, textTransform:'uppercase', letterSpacing:0.4, color:i.dia===hoyDia||vencido?T.brand:T.ink3, fontWeight:i.dia===hoyDia||vencido?700:400}}>{i.dia===hoyDia?'hoy':vencido?'venció':DIAS_SEM[new Date(anio,mesIdx-1,i.dia).getDay()]}</div></> : <div style={{fontFamily:MONO, color:T.ink3}}>·</div>}</div>
+        <div style={{textAlign:'center', lineHeight:1.1, alignSelf:cel?'start':'center'}}>{i.dia!==null ? <><div style={{fontFamily:MONO, fontSize:17, fontWeight:600, color:vencido?T.brand:T.ink}}>{i.dia}</div><div style={{fontSize:12.5, textTransform:'uppercase', letterSpacing:0.4, color:vencido?T.brand:i.dia===hoyDia?T.ink:T.ink2, fontWeight:i.dia===hoyDia||vencido?700:400}}>{i.dia===hoyDia?'hoy':vencido?'venció':DIAS_SEM[new Date(anio,mesIdx-1,i.dia).getDay()]}</div></> : <div style={{fontFamily:MONO, color:T.ink3}}>·</div>}</div>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:13.5, fontWeight:600, color:T.ink, textDecoration:i.pagado?'line-through':'none'}}>{i.nombre}{i.partes && <button onClick={()=>setAbiertos(o=>({...o,[i.id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver los ${i.partes.length}`}</button>}</div>
-          <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}><span style={{fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>{i.fuente}</span>{i.det && <span style={{color:i.tipo==='falta'?T.warn:T.ink2, fontWeight:i.tipo==='falta'?600:400}}> · {i.det}</span>}</div>
+          <div style={{fontSize:13.5, fontWeight:600, color:T.ink, textDecoration:i.pagado?'line-through':'none'}}>{i.nombre}{i.partes && <button onClick={()=>setAbiertos(o=>({...o,[i.id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver los ${i.partes.length}`}</button>}</div>
+          <div style={{fontSize:12.5, color:T.ink2, marginTop:2}}><span style={{fontSize:12.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>{i.fuente}</span>{i.det && <span style={{color:i.tipo==='falta'?T.warn:T.ink2, fontWeight:i.tipo==='falta'?600:400}}> · {i.det}</span>}</div>
           {cel && <div style={{display:'flex', gap:9, alignItems:'center', flexWrap:'wrap', marginTop:8}}>{cuentaEl}<span style={{fontFamily:MONO, fontSize:13.5, fontWeight:600}}>{i.tipo==='falta'?'—':fmt(i.monto)}</span>{accion}</div>}
         </div>
         {!cel && <div style={{justifySelf:'end'}}>{cuentaEl}</div>}
@@ -6037,8 +6037,8 @@ function Caja({data, onRefresh, showToast, goTo}){
       <div style={{display:'grid', gridTemplateColumns:grid, gap:cel?9:12, alignItems:'center', padding:'11px 16px', borderTop:`1px solid ${T.border}`, background:T.posSoft+'55'}}>
         <div style={{textAlign:'center'}}><span style={{display:'inline-block', width:9, height:9, borderRadius:9, background:T.pos}}/></div>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>Cobros que entran<button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver ${b.cobros.length===1?'la factura':`las ${b.cobros.length}`}`}</button></div>
-          <div style={{fontSize:11.5, color:T.ink2, marginTop:2}}><span style={{fontSize:10.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>Facturación</span> · {b.cobros.length} {b.cobros.length===1?'factura':'facturas'}{dud.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {fmt(totDud)} es de agencias que hoy vienen atrasadas</span>}</div>
+          <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>Cobros que entran<button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', cursor:'pointer', marginLeft:8, padding:0, fontWeight:400}}>{ab?'cerrar':`ver ${b.cobros.length===1?'la factura':`las ${b.cobros.length}`}`}</button></div>
+          <div style={{fontSize:12.5, color:T.ink2, marginTop:2}}><span style={{fontSize:12.5, fontWeight:600, letterSpacing:0.4, textTransform:'uppercase'}}>Facturación</span> · {b.cobros.length} {b.cobros.length===1?'factura':'facturas'}{dud.length>0 && <span style={{color:T.warn, fontWeight:600}}> · {fmt(totDud)} es de agencias que hoy vienen atrasadas</span>}</div>
           {cel && <div style={{display:'flex', gap:9, alignItems:'center', flexWrap:'wrap', marginTop:8}}><span style={{fontFamily:MONO, fontSize:13.5, fontWeight:600, color:T.pos}}>+{fmt(tot)}</span><button onClick={()=>goTo&&goTo('facturacion')} style={btnSec}>Ir a cobrar</button></div>}
         </div>
         {!cel && <div style={{justifySelf:'end'}}><span style={{...chip, background:'transparent', border:`1px dashed ${T.ink3}`, color:T.ink3}}>se elige al cobrar</span></div>}
@@ -6052,19 +6052,19 @@ function Caja({data, onRefresh, showToast, goTo}){
   const limite7=new Date(c.hoy0.getTime()+7*864e5)
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap', marginBottom:18}}>
-      <div><h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Caja</h1><div style={{fontSize:13, color:T.ink3, marginTop:3}}>Toda la plata en un solo lugar</div></div>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Caja</h1>
       <div style={{display:tab==='caja'?'flex':'none', gap:10, alignItems:'center', flexWrap:'wrap'}}>
-        <button onClick={()=>mover(-1)} style={navBtn}>←</button>
+        <button aria-label="Mes anterior" onClick={()=>mover(-1)} style={navBtn}>←</button>
         <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:118, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
-        <button onClick={()=>mover(1)} style={navBtn}>→</button>
+        <button aria-label="Mes siguiente" onClick={()=>mover(1)} style={navBtn}>→</button>
         <button onClick={()=>setExtracto(true)} style={{...btnSec, padding:'9px 14px'}}>⬆ Subir extracto del banco</button>
         <button onClick={()=>setSubir(true)} style={{...btnSec, padding:'9px 14px'}}>⬆ Subir resumen de tarjeta</button>
-        <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
+        <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.ink, color:'#fff', cursor:'pointer'}}>+ Agregar</button>
       </div>
     </div>
     <div style={{display:'flex', marginBottom:18, borderBottom:`1px solid ${T.border}`}}>
       {[['hoy','Hoy','qué hay que hacer'],['caja','Caja','lo que entra, lo que sale y si alcanza'],['banco',`Banco${nBanco?` (${nBanco})`:''}`,'lo que el extracto dejó para revisar'],['detalle','Cargar y detalle','gastos uno por uno, tarjetas, cuotas y cuenta de socios']].map(([k,l,sub])=>
-        <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:tab===k?700:500, color:tab===k?T.ink:T.ink2, borderBottom:`2px solid ${tab===k?T.brand:'transparent'}`}}>{l}{!cel && <span style={{fontSize:11, fontWeight:400, color:T.ink3, marginLeft:7}}>{sub}</span>}</button>)}
+        <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:14, fontWeight:tab===k?700:500, color:tab===k?T.ink:T.ink2, borderBottom:`2px solid ${tab===k?T.ink:'transparent'}`}} title={sub}>{l}</button>)}
     </div>
     {tab==='hoy' && (()=>{
       // HOY: la lista de tareas de administración. Se arma sola (lib/hoy.mjs) y cada tarea lleva a donde se resuelve.
@@ -6073,31 +6073,39 @@ function Caja({data, onRefresh, showToast, goTo}){
       const irA=d=>{ if(d==='facturar') goTo&&goTo('facturacion',{agF:'facturar'}); else if(d==='enviar') goTo&&goTo('facturacion',{agF:'sinenviar'}); else if(d==='reclamar') goTo&&goTo('facturacion',{agF:'vencido'}); else if(d==='caja') setTab('caja'); else if(d==='subir-tarjeta') setSubir(true); else if(d==='subir-extracto') setExtracto(true); else if(d==='banco') setTab('banco'); else if(d==='saldos') setEditSaldos(true); else if(d==='tickets') setVerTickets(true); else setTab('detalle') }
       const DIAS_L=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
       const montoDe=x=>x.monto>0?`${x.tono==='entra'?'+':''}${x.montoAprox?'≈ ':''}${fmt(x.monto)}`:''
-      const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:T.ink
+      const colorMonto=x=>x.tono==='entra'?T.pos:x.tono==='alerta'?T.brand:x.tono==='falta'?T.ink2:T.ink
+      // Lo que trae plata y lo que hay que pagar va a la vista; lo que falta cargar, plegado abajo (DESIGN.md).
+      const principales=h.tareas.filter(x=>x.tono!=='falta'), cargar=h.tareas.filter(x=>x.tono==='falta')
+      const tarjeta={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+      const Tarea=(x,i,primera)=>{ const tn=TONO[x.tono], id='hoy:'+x.id, ab=abiertos[id]??(x.tono==='alerta')
+        const btn={...btnSec, ...(primera?{background:T.ink, borderColor:T.ink, color:'#fff', fontWeight:600}:{})}
+        return <div key={x.id} style={{borderTop:i?`1px solid ${T.border}`:'none', padding:cel?'14px':'15px 18px'}}>
+          <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':'minmax(0,1fr) auto 160px', gap:cel?10:16, alignItems:'center'}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:15.5, fontWeight:700, color:T.ink}}>{x.titulo}</div>
+              <div style={{fontSize:13.5, color:T.ink2, marginTop:3, lineHeight:1.45}}><span style={{fontWeight:600, color:tn.c}}>{tn.l}</span> · {x.sub}{x.lista.length>0 && <button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} aria-expanded={ab} style={{border:'none', background:'none', color:T.ink, fontSize:13, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', marginLeft:6, padding:0, fontFamily:'inherit'}}>{ab?'ocultar detalle':'ver detalle'}</button>}</div>
+              {cel && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:9}}>{x.monto>0 && <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:colorMonto(x)}}>{montoDe(x)}</span>}<button onClick={()=>irA(x.ir.donde)} style={btn}>{x.ir.label}</button></div>}
+            </div>
+            {!cel && <div style={{fontFamily:MONO, fontSize:x.tono==='falta'?13.5:15, fontWeight:x.tono==='falta'?400:600, textAlign:'right', color:colorMonto(x), whiteSpace:'nowrap'}}>{montoDe(x)}</div>}
+            {!cel && <button onClick={()=>irA(x.ir.donde)} style={{...btn, justifySelf:'stretch', textAlign:'center'}}>{x.ir.label}</button>}
+          </div>
+          {ab && x.lista.length>0 && <div style={{marginTop:10, borderTop:`1px solid ${T.border}`, paddingTop:7}}>{x.lista.map((l,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:12, fontSize:13.5, padding:'4px 0'}}><span style={{minWidth:0, color:T.ink}}>{l.t}{l.d && <span style={{color:T.ink2}}> · {l.d}</span>}</span>{l.m>0 && <span style={{fontFamily:MONO, color:T.ink2, whiteSpace:'nowrap'}}>{fmt(l.m)}</span>}</div>)}</div>}
+          {x.id==='saldos' && editSaldos && <div style={{marginTop:12}}><SaldosEditor cuentas={(data.cuentas||[]).filter(k=>esActiva(k['Activa']))} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/></div>}
+        </div> }
+      const verCargar=abiertos['hoy:cargar']??!principales.length
       return <>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:14}}>
-          <div style={{fontSize:15, fontWeight:700, color:T.ink}}>{DIAS_L[now.getDay()]} {now.getDate()} de {MESES_LARGO[now.getMonth()].toLowerCase()} · {h.tareas.length?`${h.tareas.length} ${h.tareas.length===1?'cosa':'cosas'} para hacer`:'todo al día'}</div>
-          {h.porDestrabar>0 && <div style={{fontSize:12.5, color:T.ink2}}>{h.nEntra===1?'La primera destraba':`Las ${h.nEntra} primeras destraban`} <b style={{fontFamily:MONO, color:T.pos}}>{fmt(h.porDestrabar)}</b></div>}
+        <div style={{...tarjeta, padding:cel?'14px':'16px 18px', marginBottom:12}}>
+          <div style={{fontSize:cel?15.5:17, fontWeight:700, color:T.ink}}>Hoy, {DIAS_L[now.getDay()].toLowerCase()} {now.getDate()} de {MESES_LARGO[now.getMonth()].toLowerCase()}: {h.tareas.length?`${h.tareas.length} ${h.tareas.length===1?'cosa':'cosas'} para hacer`:'todo al día ✓'}</div>
+          {h.porDestrabar>0 && <div style={{fontSize:14, color:T.ink2, marginTop:4}}>{h.nEntra===1?'La primera destraba':`Las ${h.nEntra} primeras destraban`} <b style={{fontFamily:MONO, color:T.pos}}>{fmt(h.porDestrabar)}</b>{cargar.length?` · ${cargar.length} ${cargar.length===1?'es':'son'} de cargar datos`:''}</div>}
+          {!h.tareas.length && <div style={{fontSize:14, color:T.ink2, marginTop:4}}>Todo facturado, enviado, reclamado y pagado.</div>}
         </div>
-        {!h.tareas.length && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'22px 18px', fontSize:13.5, color:T.ink2}}>No hay nada pendiente: todo facturado, enviado, reclamado y pagado.</div>}
-        {h.tareas.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden'}}>
-          {h.tareas.map((x,i)=>{ const tn=TONO[x.tono], id='hoy:'+x.id, ab=abiertos[id]??(x.tono==='entra'||x.tono==='alerta')
-            return <div key={x.id} style={{borderTop:i?`1px solid ${T.border}`:'none', padding:cel?'14px':'15px 18px'}}>
-              <div style={{display:'grid', gridTemplateColumns:cel?'30px minmax(0,1fr)':'34px minmax(0,1fr) auto 150px', gap:cel?10:14, alignItems:'center'}}>
-                <div style={{width:28, height:28, borderRadius:'50%', background:tn.bg, color:tn.c, fontSize:13, fontWeight:700, fontFamily:MONO, display:'flex', alignItems:'center', justifyContent:'center'}}>{i+1}</div>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:14, fontWeight:700, color:T.ink}}>{x.titulo}</div>
-                  <div style={{fontSize:12, color:T.ink2, marginTop:3, lineHeight:1.45}}><span style={{fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:tn.c}}>{tn.l}</span> · {x.sub}{x.lista.length>0 && <button onClick={()=>setAbiertos(o=>({...o,[id]:!ab}))} style={{border:'none', background:'none', color:T.ink2, fontSize:11.5, textDecoration:'underline', cursor:'pointer', marginLeft:6, padding:0, fontFamily:'inherit'}}>{ab?'ocultar detalle':'ver detalle'}</button>}</div>
-                  {cel && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:9}}>{x.monto>0 && <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:colorMonto(x)}}>{montoDe(x)}</span>}<button onClick={()=>irA(x.ir.donde)} style={{...btnSec, ...(i===0?{background:T.brand, borderColor:T.brand, color:'#fff'}:{})}}>{x.ir.label}</button></div>}
-                </div>
-                {!cel && <div style={{fontFamily:MONO, fontSize:15, fontWeight:600, textAlign:'right', color:colorMonto(x), whiteSpace:'nowrap'}}>{montoDe(x)}</div>}
-                {!cel && <button onClick={()=>irA(x.ir.donde)} style={{...btnSec, justifySelf:'stretch', textAlign:'center', ...(i===0?{background:T.brand, borderColor:T.brand, color:'#fff'}:{})}}>{x.ir.label}</button>}
-              </div>
-              {ab && x.lista.length>0 && <div style={{margin:cel?'10px 0 0':'10px 0 0 48px', borderTop:`1px dashed ${T.border}`, paddingTop:7}}>{x.lista.map((l,k)=><div key={k} style={{display:'flex', justifyContent:'space-between', gap:12, fontSize:12.5, padding:'4px 0'}}><span style={{minWidth:0, color:T.ink}}>{l.t}{l.d && <span style={{color:T.ink3}}> · {l.d}</span>}</span>{l.m>0 && <span style={{fontFamily:MONO, color:T.ink2, whiteSpace:'nowrap'}}>{fmt(l.m)}</span>}</div>)}</div>}
-              {x.id==='saldos' && editSaldos && <div style={{margin:cel?'12px 0 0':'12px 0 0 48px'}}><SaldosEditor cuentas={(data.cuentas||[]).filter(k=>esActiva(k['Activa']))} onClose={()=>setEditSaldos(false)} onSaved={()=>{ setEditSaldos(false); if(onRefresh) onRefresh() }} showToast={showToast}/></div>}
-            </div> })}
-        </div>}
-        <div style={{fontSize:11.5, color:T.ink3, marginTop:10, lineHeight:1.5}}>La lista se arma sola con lo que hay cargado: cuando una tarea queda hecha, desaparece. Primero va lo que trae plata, después lo que hay que pagar y al final lo que falta cargar.</div>
+        {principales.length>0 && <div style={{...tarjeta, overflow:'hidden'}}>{principales.map((x,i)=>Tarea(x,i,i===0))}</div>}
+        {cargar.length>0 && <>
+          <button type="button" onClick={()=>setAbiertos(o=>({...o,'hoy:cargar':!verCargar}))} aria-expanded={verCargar} style={{...tarjeta, width:'100%', border:'none', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'13px 18px', marginTop:12, fontSize:14.5, color:T.ink, cursor:'pointer', fontFamily:'inherit', borderBottomLeftRadius:verCargar?0:14, borderBottomRightRadius:verCargar?0:14}}>
+            <span><span style={{color:T.warn, fontWeight:600}}>Falta cargar</span> · {cargar.length} {cargar.length===1?'cosa':'cosas'} para que la Caja cierre con el banco</span><span style={{color:T.ink2}}>{verCargar?'▲':'▼'}</span></button>
+          {verCargar && <div style={{...tarjeta, overflow:'hidden', borderTopLeftRadius:0, borderTopRightRadius:0, borderTop:`1px solid ${T.border}`}}>{cargar.map((x,i)=>Tarea(x,i,!principales.length&&i===0))}</div>}
+        </>}
+        <div style={{fontSize:13, color:T.ink2, marginTop:12, lineHeight:1.5}}>La lista se arma sola con lo que hay cargado: cuando una tarea queda hecha, desaparece.</div>
       </> })()}
     {tab==='banco' && <RevisarBanco data={data} onRefresh={onRefresh} showToast={showToast}/>}
     {tab==='detalle' && <Egresos data={data} onRefresh={onRefresh} showToast={showToast} embebido/>}
@@ -6109,14 +6117,14 @@ function Caja({data, onRefresh, showToast, goTo}){
         <datalist id="caja-previos">{Object.values(previos).map(p=><option key={p.concepto} value={p.concepto}/>)}</datalist>
         <MontoInput value={qa.monto} onChange={v=>setQa(q=>({...q,monto:v}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="Cuánto" style={{...inpV2, flex:'1 1 120px', minWidth:110, width:'auto', textAlign:'right', fontFamily:MONO}}/>
         <select value={qaCuenta} onChange={e=>setQa(q=>({...q,cuenta:e.target.value}))} title="De dónde salió la plata" style={{...inpV2, flex:'1 1 150px', minWidth:140, width:'auto', cursor:'pointer'}}>{cuentaOpts.map(n=><option key={n} value={n}>{n}</option>)}</select>
-        <button disabled={qaBusy} onClick={anotarPago} style={{fontSize:13, fontWeight:700, padding:'9px 20px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':'Anotar'}</button>
+        <button disabled={qaBusy} onClick={anotarPago} style={{fontSize:13, fontWeight:700, padding:'9px 20px', borderRadius:9, border:'none', background:T.ink, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':'Anotar'}</button>
       </div>
-      <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:11.5, color:T.ink3}}>
+      <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:12.5, color:T.ink3}}>
         <span>Para lo que pagás en efectivo o con una transferencia suelta. Lo que sale por débito o con tarjeta entra solo al subir el resumen.</span>
         <span style={{flex:1}}/>
-        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} title={qaRub?.incluye||'Los rubros son los de la solapa RUBROS'} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px ${qaRubro?'solid':'dashed'} ${qaRubro?T.border:T.warn}`, background:T.surface, color:qaRubro?T.ink2:T.warn, cursor:'pointer', maxWidth:230}}>{!qaRubro && <option value="">elegir rubro</option>}{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
-        {esDeTrabajo && <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>¿Para qué trabajo? <input list="caja-trabajos" value={qa.trabajo} onChange={e=>setQa(q=>({...q,trabajo:e.target.value}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="N° o cliente" style={{fontSize:11.5, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, width:190, fontFamily:'inherit', outline:'none'}}/><datalist id="caja-trabajos">{trabajosRec.map(t=><option key={t} value={t}/>)}</datalist></label>}
-        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
+        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} title={qaRub?.incluye||'Los rubros son los de la solapa RUBROS'} style={{fontSize:12.5, padding:'3px 6px', borderRadius:7, border:`1px ${qaRubro?'solid':'dashed'} ${qaRubro?T.border:T.warn}`, background:T.surface, color:qaRubro?T.ink2:T.warn, cursor:'pointer', maxWidth:230}}>{!qaRubro && <option value="">elegir rubro</option>}{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
+        {esDeTrabajo && <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>¿Para qué trabajo? <input list="caja-trabajos" value={qa.trabajo} onChange={e=>setQa(q=>({...q,trabajo:e.target.value}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="N° o cliente" style={{fontSize:12.5, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, width:190, fontFamily:'inherit'}}/><datalist id="caja-trabajos">{trabajosRec.map(t=><option key={t} value={t}/>)}</datalist></label>}
+        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:12.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
       </div>
     </div>
 
@@ -6127,25 +6135,25 @@ function Caja({data, onRefresh, showToast, goTo}){
         {l:'Falta que salga', v:fmt(t.sale), col:T.ink, s:`a mano ${fmtM(t.mano)} · débito ${fmtM(t.debito)}${t.socios>0?` · socios ${fmtM(t.socios)}`:''} · ya salió ${fmtM(t.yaSalio)}`},
         {l:'Así termina el mes', v:fm(termina), col:termina<0?T.brand:T.ink, s:t.tarjetasFaltan>0?`Sin ${t.tarjetasFaltan===1?'la tarjeta que falta':`las ${t.tarjetasFaltan} tarjetas que faltan`} cargar (las últimas: ${fmtM(t.tarjetasReferencia)}).`:'Con todo lo que está cargado.'},
       ].map((k,i)=><div key={i} style={{padding:'16px 18px', minWidth:0, borderLeft:!cel&&i>0?`1px solid ${T.border}`:'none', borderTop:cel&&i>0?`1px solid ${T.border}`:'none'}}>
-        <div style={{fontSize:11, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>{k.l}</div>
+        <div style={{fontSize:12.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>{k.l}</div>
         <div style={{fontFamily:MONO, fontSize:22, fontWeight:600, letterSpacing:-0.5, marginTop:6, color:k.col}}>{k.v}</div>
-        <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>{k.s}</div>
+        <div style={{fontSize:12.5, color:T.ink2, marginTop:4}}>{k.s}</div>
       </div>)}
     </div>
 
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:9}}>
-      <span style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>Semana a semana</span>
+      <span style={{fontSize:12.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2}}>Semana a semana</span>
       <div style={{display:'flex', border:`1px solid ${T.border}`, borderRadius:9, overflow:'hidden', background:T.surface, marginLeft:-1}}>{seg('seguro',modo,setModo,'Sin los que hoy vienen atrasados')}{seg('fecha',modo,setModo,'Si todos pagan en fecha')}</div>
     </div>
     <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':`repeat(${c.semanas.length},minmax(0,1fr))`, background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden'}}>
       {c.semanas.map((s,i)=>{ const q=seguro?s.quedaSeguro:s.queda; return <div key={i} style={{padding:'13px 15px', minWidth:0, background:s.esActual?T.surfaceAlt:'transparent', opacity:s.pasada?0.5:1, borderLeft:!cel&&i>0?`1px solid ${T.border}`:'none', borderTop:cel&&i>0?`1px solid ${T.border}`:'none'}}>
-        <div style={{fontSize:11.5, fontWeight:600, color:T.ink2}}>{s.esActual?'Esta semana':`Del ${s.desde} al ${s.hasta}`}</div>
-        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12, marginTop:6, color:T.ink2}}><span>Entra</span><b style={{fontFamily:MONO, fontWeight:500, color:T.pos}}>+{fmt(seguro?s.entraSeguro:s.entra)}</b></div>
-        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12, marginTop:6, color:T.ink2}}><span>Sale</span><b style={{fontFamily:MONO, fontWeight:500, color:T.ink}}>−{fmt(s.sale)}</b></div>
-        <div style={{marginTop:9, paddingTop:9, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.ink2}}>{s.pasada?'Ya pasó':'Queda al cierre'}<div style={{fontFamily:MONO, fontSize:16, fontWeight:600, color:q!==null&&q<0?T.brand:T.ink, marginTop:2}}>{q===null?'—':fm(q)}</div></div>
+        <div style={{fontSize:12.5, fontWeight:600, color:T.ink2}}>{s.esActual?'Esta semana':`Del ${s.desde} al ${s.hasta}`}</div>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12.5, marginTop:6, color:T.ink2}}><span>Entra</span><b style={{fontFamily:MONO, fontWeight:500, color:T.pos}}>+{fmt(seguro?s.entraSeguro:s.entra)}</b></div>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, fontSize:12.5, marginTop:6, color:T.ink2}}><span>Sale</span><b style={{fontFamily:MONO, fontWeight:500, color:T.ink}}>−{fmt(s.sale)}</b></div>
+        <div style={{marginTop:9, paddingTop:9, borderTop:`1px solid ${T.border}`, fontSize:12.5, color:T.ink2}}>{s.pasada?'Ya pasó':'Queda al cierre'}<div style={{fontFamily:MONO, fontSize:16, fontWeight:600, color:q!==null&&q<0?T.brand:T.ink, marginTop:2}}>{q===null?'—':fm(q)}</div></div>
       </div> })}
     </div>
-    <div style={{fontSize:12, color:T.ink2, margin:'8px 0 18px'}}>Arranca de lo que hay hoy en las cuentas.{seguro && c.atrasadas.length>0?` No cuenta lo que vence de ${c.atrasadas.join(', ')}, porque hoy tienen facturas vencidas (salvo las que tienen fecha prometida).`:''}{t.nSinDia>0?` Falta restar ${fmt(t.sinDia)} de ${t.nSinDia} gastos sin día de pago.`:''}</div>
+    <div style={{fontSize:12.5, color:T.ink2, margin:'8px 0 18px'}}>Arranca de lo que hay hoy en las cuentas.{seguro && c.atrasadas.length>0?` No cuenta lo que vence de ${c.atrasadas.join(', ')}, porque hoy tienen facturas vencidas (salvo las que tienen fecha prometida).`:''}{t.nSinDia>0?` Falta restar ${fmt(t.sinDia)} de ${t.nSinDia} gastos sin día de pago.`:''}</div>
 
     {(t.nVencidoSinFecha>0 || t.atrasadosN>0 || t.nDespues>0) && <div style={{background:T.warnSoft, borderRadius:10, padding:'11px 14px', fontSize:12.5, color:T.ink, display:'flex', flexDirection:'column', gap:6, marginBottom:18}}>
       {t.nVencidoSinFecha>0 && <div><b style={{color:T.warn}}>{t.nVencidoSinFecha} facturas vencidas sin fecha de pago: {fmt(t.vencidoSinFecha)}.</b> No están contadas en lo que entra. Reclamalas y anotá la fecha que prometan: desde ahí se cuentan. <button onClick={()=>goTo&&goTo('facturacion')} style={{border:'none', background:'none', textDecoration:'underline', cursor:'pointer', fontSize:12.5, fontWeight:600, padding:0, color:T.ink}}>Ver por agencia</button></div>}
@@ -6157,7 +6165,7 @@ function Caja({data, onRefresh, showToast, goTo}){
       <div>
         <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:12}}>
           <div style={{display:'flex', flexWrap:'wrap', border:`1px solid ${T.border}`, borderRadius:9, overflow:'hidden', background:T.surface, marginLeft:-1}}>{seg('todo',filtro,setFiltro,'Todo')}{seg('entra',filtro,setFiltro,'Entra')}{seg('mano',filtro,setFiltro,'Sale a mano')}{seg('debito',filtro,setFiltro,'Sale por débito')}</div>
-          {cuentaSel && <button onClick={()=>setCuentaSel('')} style={{fontSize:12, border:`1px solid ${T.ink}`, borderRadius:20, padding:'5px 11px', background:T.surface, cursor:'pointer', color:T.ink}}>Cuenta: {cuentaSel} ✕</button>}
+          {cuentaSel && <button onClick={()=>setCuentaSel('')} style={{fontSize:12.5, border:`1px solid ${T.ink}`, borderRadius:20, padding:'5px 11px', background:T.surface, cursor:'pointer', color:T.ink}}>Cuenta: {cuentaSel} ✕</button>}
         </div>
         {bloques.map(b=>{ const its=filtro==='entra'?[]:b.items.filter(pasa).sort((x,y)=>(x.dia??99)-(y.dia??99)), conEntra=(filtro==='todo'||filtro==='entra') && !cuentaSel && b.cobros.length>0
           if(!its.length && !conEntra) return null
@@ -6172,19 +6180,19 @@ function Caja({data, onRefresh, showToast, goTo}){
           </div> })}
       </div>
       <div>
-        <div style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Cuentas · alcanza hasta el {limite7.getDate()}/{limite7.getMonth()+1}</div>
+        <div style={{fontSize:12.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Cuentas · alcanza hasta el {limite7.getDate()}/{limite7.getMonth()+1}</div>
         <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:18}}>
-          {c.cuentas.map((x,i)=>{ const est=x.usd?null:!x.activa?<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.warnSoft, color:T.warn}}>inactiva · saldo del {x.actualizada.split('/').slice(0,2).join('/')||'?'}</span>:x.resto>=0?<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.posSoft, color:T.pos}}>alcanza</span>:<span style={{fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.brandSoft, color:T.brand}}>faltan {fmt(-x.resto)}</span>
+          {c.cuentas.map((x,i)=>{ const est=x.usd?null:!x.activa?<span style={{fontSize:12.5, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.warnSoft, color:T.warn}}>inactiva · saldo del {x.actualizada.split('/').slice(0,2).join('/')||'?'}</span>:x.resto>=0?<span style={{fontSize:12.5, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.posSoft, color:T.pos}}>alcanza</span>:<span style={{fontSize:12.5, fontWeight:700, padding:'2px 9px', borderRadius:20, background:T.brandSoft, color:T.brand}}>faltan {fmt(-x.resto)}</span>
             return <div key={x.nombre} onClick={()=>!x.usd&&setCuentaSel(cuentaSel===x.nombre?'':x.nombre)} style={{padding:'12px 15px', borderTop:i===0?'none':`1px solid ${T.border}`, cursor:x.usd?'default':'pointer', boxShadow:cuentaSel===x.nombre?`inset 3px 0 0 ${T.ink}`:'none'}} title={x.usd?'':'Ver solo lo que sale de esta cuenta'}>
               <div style={{display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline'}}><span style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{x.nombre}</span><span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:x.saldo<0?T.brand:T.ink}}>{x.usd?`US$ ${fmt(x.saldoUsd).replace('$','')}`:fm(x.saldo)}</span></div>
-              {!x.usd && <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:6, fontSize:11.5, color:T.ink2}}><span>Sale de acá: <b style={{fontFamily:MONO}}>{fmt(x.sale7)}</b></span>{est}</div>}
+              {!x.usd && <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:6, fontSize:12.5, color:T.ink2}}><span>Sale de acá: <b style={{fontFamily:MONO}}>{fmt(x.sale7)}</b></span>{est}</div>}
             </div> })}
         </div>
         {c.revisar.length>0 && <>
-          <div style={{fontSize:11.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Para revisar · datos que ensucian el número</div>
+          <div style={{fontSize:12.5, fontWeight:600, letterSpacing:0.5, textTransform:'uppercase', color:T.ink2, marginBottom:9}}>Para revisar · datos que ensucian el número</div>
           <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'4px 15px 10px', marginBottom:18}}>
-            {c.revisar.map((r,i)=><div key={i} style={{padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}`, fontSize:12.5}}><b style={{fontWeight:600, color:T.ink}}>{r.t}</b><div style={{color:T.ink2, fontSize:11.5, marginTop:2}}>{r.d}</div></div>)}
-            <div style={{fontSize:11.5, color:T.ink3, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Se corrigen en la pestaña «Cargar y detalle» (el lápiz de cada gasto) o en la solapa GASTOS_FIJOS.</div>
+            {c.revisar.map((r,i)=><div key={i} style={{padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}`, fontSize:12.5}}><b style={{fontWeight:600, color:T.ink}}>{r.t}</b><div style={{color:T.ink2, fontSize:12.5, marginTop:2}}>{r.d}</div></div>)}
+            <div style={{fontSize:12.5, color:T.ink3, paddingTop:8, borderTop:`1px solid ${T.border}`}}>Se corrigen en la pestaña «Cargar y detalle» (el lápiz de cada gasto) o en la solapa GASTOS_FIJOS.</div>
           </div>
         </>}
       </div>
@@ -6355,7 +6363,7 @@ function RevisarBanco({data, onRefresh, showToast}){
   }
   async function reabrir(m){ if(busy) return; setBusy(true); try{ const {j}=await post('/api/extracto-clasificar',{fila:m.fila, clave:m.clave, accion:'reabrir'}); if(!j.ok) showToast(j.error||'Error','err'); else { showToast('Volvió a "para revisar"'); if(onRefresh) await onRefresh() } }catch(e){ showToast('Error de conexión','err') } setBusy(false) }
 
-  const chipF=on=>({fontSize:12, fontWeight:600, padding:'6px 12px', borderRadius:20, border:`1px solid ${on?T.ink:T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, cursor:'pointer', whiteSpace:'nowrap'})
+  const chipF=on=>({fontSize:12.5, fontWeight:600, padding:'6px 12px', borderRadius:20, border:`1px solid ${on?T.ink:T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, cursor:'pointer', whiteSpace:'nowrap'})
   const seg=on=>({fontSize:12.5, fontWeight:on?700:500, padding:'7px 12px', borderRadius:8, border:`1px solid ${on?T.brand:T.border}`, background:on?T.brandSoft:T.surface, color:on?T.brand:T.ink2, cursor:'pointer'})
   const btnOk=dis=>({fontSize:13, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:dis?T.apagado:T.brand, color:'#fff', cursor:dis?'default':'pointer'})
   const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
@@ -6393,14 +6401,14 @@ function RevisarBanco({data, onRefresh, showToast}){
         const rec=ab?null:recuerdoDe(m)
         return <div key={m.clave} style={{borderTop:i?`1px solid ${T.border}`:'none', background:ab?T.bg:'transparent'}}>
           <div onClick={()=>abrir(m)} style={{display:'grid', gridTemplateColumns:cel?'44px minmax(0,1fr) auto':'52px minmax(0,1fr) auto 96px', gap:cel?9:14, alignItems:'center', padding:cel?'12px 14px':'12px 18px', cursor:'pointer'}}>
-            <span style={{fontFamily:MONO, fontSize:12, color:T.ink3}}>{dm(m.fecha)}</span>
+            <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink3}}>{dm(m.fecha)}</span>
             <span style={{minWidth:0}}>
               <span style={{display:'block', fontSize:13.5, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{quienDe(m)}</span>
-              <span style={{display:'block', fontSize:11.5, color:T.ink3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.concepto}{/^¿/.test(m.que)?` · ${m.que}`:''}</span>
-              {rec && <span style={{display:'block', fontSize:11.5, color:T.pos, marginTop:2}}>Como el {dm(rec.h.fecha)} ({rec.por}): <b>{rec.texto}</b>{cel && <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{marginLeft:8, fontSize:11.5, fontWeight:700, padding:'3px 9px', borderRadius:7, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button>}</span>}
+              <span style={{display:'block', fontSize:12.5, color:T.ink3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.concepto}{/^¿/.test(m.que)?` · ${m.que}`:''}</span>
+              {rec && <span style={{display:'block', fontSize:12.5, color:T.pos, marginTop:2}}>Como el {dm(rec.h.fecha)} ({rec.por}): <b>{rec.texto}</b>{cel && <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{marginLeft:8, fontSize:12.5, fontWeight:700, padding:'3px 9px', borderRadius:7, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button>}</span>}
             </span>
             <span style={{fontFamily:MONO, fontSize:14, fontWeight:600, color:entra?T.pos:T.ink, whiteSpace:'nowrap'}}>{entra?'+':'−'}{fmt(B)}</span>
-            {!cel && (rec ? <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{fontSize:12, fontWeight:700, padding:'6px 8px', borderRadius:8, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer', whiteSpace:'nowrap'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button> : <span style={{fontSize:12, fontWeight:600, color:ab?T.ink2:T.brand, textAlign:'right'}}>{ab?'cerrar':'¿Qué es?'}</span>)}
+            {!cel && (rec ? <button disabled={busy} onClick={e=>{ e.stopPropagation(); repetir(m,rec) }} style={{fontSize:12.5, fontWeight:700, padding:'6px 8px', borderRadius:8, border:`1px solid ${T.pos}`, background:T.posSoft, color:T.pos, cursor:'pointer', whiteSpace:'nowrap'}}>{rec.tipo==='staff'?'Ver':'Es lo mismo'}</button> : <span style={{fontSize:12.5, fontWeight:600, color:ab?T.ink2:T.ink, textAlign:'right', textDecoration:'underline', textUnderlineOffset:3}}>{ab?'cerrar':'¿Qué es?'}</span>)}
           </div>
           {ab && <div style={{padding:cel?'2px 14px 16px':'2px 18px 18px 84px'}}>
             <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:12}}>
@@ -6409,12 +6417,12 @@ function RevisarBanco({data, onRefresh, showToast}){
 
             {entra && modo==='factura' && <>
               <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar otra factura: agencia, cliente, N° o monto" style={{...inpV2, marginBottom:8}}/>
-              {!ql && cand.sumanJusto.length>0 && <div style={{fontSize:12, color:T.pos, marginBottom:6}}>{cand.sumanJusto.length===1?'Esta factura es justo lo que entró':'Estas facturas suman justo lo que entró'}: ya {cand.sumanJusto.length===1?'está elegida':'están elegidas'}.</div>}
+              {!ql && cand.sumanJusto.length>0 && <div style={{fontSize:12.5, color:T.pos, marginBottom:6}}>{cand.sumanJusto.length===1?'Esta factura es justo lo que entró':'Estas facturas suman justo lo que entró'}: ya {cand.sumanJusto.length===1?'está elegida':'están elegidas'}.</div>}
               {visibles.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'8px 0'}}>{ql?'Ninguna factura con eso.':'No encontré facturas parecidas. Buscala arriba.'}</div>}
               {visibles.map(c=><label key={c.fila} style={{display:'grid', gridTemplateColumns:'18px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'7px 0', borderTop:`1px solid ${T.border}`, cursor:'pointer', fontSize:12.5}}>
                 <input type="checkbox" checked={!!sel[c.fila]} onChange={e=>setSel(s=>{ const x={...s}; if(e.target.checked) x[c.fila]=c; else delete x[c.fila]; return x })} style={{width:16, height:16, accentColor:T.brand}}/>
                 <span style={{minWidth:0}}><b style={{color:T.ink}}>#{c.nro} · {c.agencia}</b><span style={{color:T.ink2}}>{c.cliente&&c.cliente!==c.agencia?` · ${c.cliente}`:''}{c.proyecto?` · ${c.proyecto}`:''}</span>
-                  <span style={{display:'block', fontSize:11.5, color:c.cobrada?T.ink3:T.warn, marginTop:1}}>{c.cobrada?`ya figura cobrada${c.fechaCobro?` el ${c.fechaCobro}`:''}: solo se une`:`sin cobrar${c.vence?` · vence ${c.vence}`:''}${c.pendiente<c.final-1?` · falta ${fmt(c.pendiente)} de ${fmt(c.final)}`:''}`}{c.porque&&c.porque.length?` · ${c.porque.join(' · ')}`:''}</span></span>
+                  <span style={{display:'block', fontSize:12.5, color:c.cobrada?T.ink3:T.warn, marginTop:1}}>{c.cobrada?`ya figura cobrada${c.fechaCobro?` el ${c.fechaCobro}`:''}: solo se une`:`sin cobrar${c.vence?` · vence ${c.vence}`:''}${c.pendiente<c.final-1?` · falta ${fmt(c.pendiente)} de ${fmt(c.final)}`:''}`}{c.porque&&c.porque.length?` · ${c.porque.join(' · ')}`:''}</span></span>
                 <span style={{fontFamily:MONO, fontWeight:600, color:T.ink, whiteSpace:'nowrap'}}>{fmt(c.vale)}</span>
               </label>)}
               {elegidas.length>0 && <div style={{marginTop:12, padding:'11px 13px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, fontSize:12.5, color:T.ink, lineHeight:1.6}}>
@@ -6422,39 +6430,39 @@ function RevisarBanco({data, onRefresh, showToast}){
                 {Math.abs(D)<1 ? <span style={{color:T.pos, fontWeight:600}}> · cierra justo</span>
                   : D>0 ? <span style={{color:T.warn, fontWeight:600}}> · entraron {fmt(D)} menos</span>
                   : <span style={{color:T.warn, fontWeight:600}}> · entraron {fmt(-D)} de más: elegí otra factura, o guardá así y queda anotado</span>}
-                {D>=1 && sinCobrar.length>0 && <div style={{marginTop:8}}><div style={{fontSize:11.5, color:T.ink2, marginBottom:5}}>¿Qué son esos {fmt(D)}?</div><div style={{display:'flex', gap:6, flexWrap:'wrap'}}>{DIFS_COBRO.map(([k,l])=><button key={k} onClick={()=>setDif(k)} style={seg(dif===k)}>{l}</button>)}</div>
-                  {dif==='parcial' && <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}>{sinCobrar.length>1?`Las primeras quedan cobradas enteras y la última (#${sinCobrar[sinCobrar.length-1].nro}) queda con ${fmt(D)} por cobrar.`:`La factura queda con ${fmt(D)} por cobrar.`}</div>}
-                  {dif && dif!=='parcial' && sinCobrar.length>1 && <div style={{fontSize:11.5, color:T.ink2, marginTop:6}}>Se reparte entre las {sinCobrar.length} facturas sin cobrar, en proporción a su monto.</div>}</div>}
-                {D>=1 && sinCobrar.length===0 && <div style={{fontSize:11.5, color:T.ink2, marginTop:4}}>Las elegidas ya figuraban cobradas: no se cambia nada en ellas, la diferencia queda anotada en el movimiento.</div>}
+                {D>=1 && sinCobrar.length>0 && <div style={{marginTop:8}}><div style={{fontSize:12.5, color:T.ink2, marginBottom:5}}>¿Qué son esos {fmt(D)}?</div><div style={{display:'flex', gap:6, flexWrap:'wrap'}}>{DIFS_COBRO.map(([k,l])=><button key={k} onClick={()=>setDif(k)} style={seg(dif===k)}>{l}</button>)}</div>
+                  {dif==='parcial' && <div style={{fontSize:12.5, color:T.ink2, marginTop:6}}>{sinCobrar.length>1?`Las primeras quedan cobradas enteras y la última (#${sinCobrar[sinCobrar.length-1].nro}) queda con ${fmt(D)} por cobrar.`:`La factura queda con ${fmt(D)} por cobrar.`}</div>}
+                  {dif && dif!=='parcial' && sinCobrar.length>1 && <div style={{fontSize:12.5, color:T.ink2, marginTop:6}}>Se reparte entre las {sinCobrar.length} facturas sin cobrar, en proporción a su monto.</div>}</div>}
+                {D>=1 && sinCobrar.length===0 && <div style={{fontSize:12.5, color:T.ink2, marginTop:4}}>Las elegidas ya figuraban cobradas: no se cambia nada en ellas, la diferencia queda anotada en el movimiento.</div>}
               </div>}
               <div style={{marginTop:12}}><button disabled={busy||!elegidas.length} onClick={()=>guardarFacturas(m)} style={btnOk(busy||!elegidas.length)}>{busy?'Guardando…':sinCobrar.length?`Guardar y cobrar ${sinCobrar.length===1?'la factura':`las ${sinCobrar.length} facturas`}`:'Guardar: es esto'}</button></div>
             </>}
 
             {!entra && modo==='staff' && (()=>{ const sugeridos=quizasStaff(m), lineas=per?lineasDe(per,m):[], elegidasS=lineas.filter(x=>selS[x.fila]), S=elegidasS.reduce((t,x)=>t+x.vale,0), aMarcar=elegidasS.filter(x=>!x.pagada)
               return <>
-                {sugeridos.length>0 && <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:9}}><span style={{fontSize:12, color:T.ink2}}>Puede ser:</span>{sugeridos.map(x=><button key={x.persona+x.por} onClick={()=>{ setPer(x.persona); setSelS(Object.fromEntries(x.filas.map(f=>[f,true]))) }} style={seg(normTxt(per)===normTxt(x.persona))}>{x.persona} · {x.por}</button>)}</div>}
+                {sugeridos.length>0 && <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:9}}><span style={{fontSize:12.5, color:T.ink2}}>Puede ser:</span>{sugeridos.map(x=><button key={x.persona+x.por} onClick={()=>{ setPer(x.persona); setSelS(Object.fromEntries(x.filas.map(f=>[f,true]))) }} style={seg(normTxt(per)===normTxt(x.persona))}>{x.persona} · {x.por}</button>)}</div>}
                 <input list="banco-freelancers" value={per} onChange={e=>{ setPer(e.target.value); setSelS({}) }} placeholder="A quién se le pagó" style={{...inpV2, marginBottom:8}}/>
                 <datalist id="banco-freelancers">{personasStaff.map(p=><option key={p} value={p}/>)}</datalist>
                 {per && lineas.length===0 && <div style={{fontSize:12.5, color:T.ink2, padding:'6px 0 10px', lineHeight:1.5}}>No encuentro trabajos de {per} pendientes ni pagados por esos días en Pagos Staff. Si igual fue un pago a esa persona, guardalo con "Solo anotar qué es".</div>}
                 {lineas.map(x=><label key={x.fila} style={{display:'grid', gridTemplateColumns:'18px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'7px 0', borderTop:`1px solid ${T.border}`, cursor:'pointer', fontSize:12.5}}>
                   <input type="checkbox" checked={!!selS[x.fila]} onChange={e=>setSelS(o=>({...o,[x.fila]:e.target.checked}))} style={{width:16, height:16, accentColor:T.brand}}/>
                   <span style={{minWidth:0}}><b style={{color:T.ink}}>{x.nro?`#${x.nro} · `:''}{x.proyecto||x.servicio}</b><span style={{color:T.ink2}}>{x.proyecto&&x.servicio?` · ${x.servicio}`:''} · {x.mes}</span>
-                    <span style={{display:'block', fontSize:11.5, color:x.pagada?T.ink3:T.warn, marginTop:1}}>{x.pagada?`ya figura pagado el ${dm(x.fPago)}: solo se une`:'pendiente'}</span></span>
+                    <span style={{display:'block', fontSize:12.5, color:x.pagada?T.ink3:T.warn, marginTop:1}}>{x.pagada?`ya figura pagado el ${dm(x.fPago)}: solo se une`:'pendiente'}</span></span>
                   <span style={{fontFamily:MONO, fontWeight:600, color:T.ink, whiteSpace:'nowrap'}}>{fmt(x.vale)}</span>
                 </label>)}
                 {elegidasS.length>0 && <div style={{marginTop:12, padding:'11px 13px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, fontSize:12.5, color:T.ink, lineHeight:1.6}}>
                   Salió <b style={{fontFamily:MONO}}>{fmt(B)}</b> · {elegidasS.length===1?'el trabajo elegido es de':`los ${elegidasS.length} elegidos suman`} <b style={{fontFamily:MONO}}>{fmt(S)}</b>
                   {Math.abs(S-B)<1 ? <span style={{color:T.pos, fontWeight:600}}> · cierra justo</span> : <span style={{color:T.warn, fontWeight:600}}> · hay {fmt(Math.abs(S-B))} de diferencia</span>}
                   {Math.abs(S-B)>=1 && (aMarcar.length===elegidasS.length && Math.abs(aMarcar.reduce((t,x)=>t+x.hon*1.21+x.viat,0)-B)<2
-                    ? <div style={{fontSize:11.5, color:T.pos, marginTop:3}}>La diferencia es justo el 21% de IVA de su factura: se guarda como pagado con IVA.</div>
-                    : <div style={{fontSize:11.5, color:T.ink2, marginTop:3}}>Puede ser el IVA de su factura, un viático o que falte elegir un trabajo. Si guardás así, la diferencia queda anotada en el movimiento.</div>)}
+                    ? <div style={{fontSize:12.5, color:T.pos, marginTop:3}}>La diferencia es justo el 21% de IVA de su factura: se guarda como pagado con IVA.</div>
+                    : <div style={{fontSize:12.5, color:T.ink2, marginTop:3}}>Puede ser el IVA de su factura, un viático o que falte elegir un trabajo. Si guardás así, la diferencia queda anotada en el movimiento.</div>)}
                 </div>}
                 <div style={{marginTop:12}}><button disabled={busy||!elegidasS.length} onClick={()=>guardarStaff(m, per, elegidasS)} style={btnOk(busy||!elegidasS.length)}>{busy?'Guardando…':aMarcar.length?`Guardar y marcar ${aMarcar.length===1?'el trabajo pagado':`los ${aMarcar.length} trabajos pagados`}`:'Guardar: es esto'}</button></div>
               </> })()}
 
             {!entra && modo==='lista' && <>
               <select value={gSel} onChange={e=>setGSel(e.target.value)} style={{...inpV2, marginBottom:8}}><option value="">Elegí el gasto, la cuota o la tarjeta</option>{ops.map(o=><option key={o.id} value={o.id}>{o.label} · {fmt(o.monto)}{o.pagado?' · ya figura pagado':' · pendiente'}</option>)}</select>
-              {op && <div style={{fontSize:12, color:T.ink2, marginBottom:10, lineHeight:1.5}}>{op.pagado?'Ya figuraba pagado: solo queda unido a este movimiento.':`Queda marcado como pagado el ${m.fechaTxt} desde ${m.cuenta}.`}{Math.abs(op.monto-B)>=1?` El monto previsto era ${fmt(op.monto)} y el banco dice ${fmt(B)}: queda anotada la diferencia.`:''}</div>}
+              {op && <div style={{fontSize:12.5, color:T.ink2, marginBottom:10, lineHeight:1.5}}>{op.pagado?'Ya figuraba pagado: solo queda unido a este movimiento.':`Queda marcado como pagado el ${m.fechaTxt} desde ${m.cuenta}.`}{Math.abs(op.monto-B)>=1?` El monto previsto era ${fmt(op.monto)} y el banco dice ${fmt(B)}: queda anotada la diferencia.`:''}</div>}
               <button disabled={busy||!op} onClick={()=>guardarGasto(m,op)} style={btnOk(busy||!op)}>{busy?'Guardando…':'Guardar: es esto'}</button>
             </>}
 
@@ -6464,14 +6472,14 @@ function RevisarBanco({data, onRefresh, showToast}){
                 <div style={{flex:'1 1 200px', minWidth:0}}><label style={lblV2}>Rubro</label><select value={nuevo.rubro} onChange={e=>setNuevo(s=>({...s,rubro:e.target.value}))} style={inpV2}><option value="">Elegir rubro</option>{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></div>
                 <div style={{flex:'0 1 150px', minWidth:0}}><label style={lblV2}>N° de trabajo</label><input value={nuevo.trabajo} onChange={e=>setNuevo(s=>({...s,trabajo:e.target.value}))} placeholder="si fue para uno" style={inpV2}/></div>
               </div>
-              <div style={{fontSize:12, color:T.ink2, marginBottom:10}}>Se anota como un gasto de {fmt(B)} pagado el {m.fechaTxt} desde {m.cuenta}. No resta del saldo: el extracto ya lo trae descontado.</div>
+              <div style={{fontSize:12.5, color:T.ink2, marginBottom:10}}>Se anota como un gasto de {fmt(B)} pagado el {m.fechaTxt} desde {m.cuenta}. No resta del saldo: el extracto ya lo trae descontado.</div>
               <button disabled={busy} onClick={()=>guardarNuevo(m)} style={btnOk(busy)}>{busy?'Guardando…':'Anotar el gasto'}</button>
             </>}
 
             {modo==='anotar' && <>
               <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:9}}>{(entra?NOTAS_ENTRO:NOTAS_SALIO).map(c=><button key={c} onClick={()=>setNota(s=>({...s,chip:c}))} style={seg(nota.chip===c)}>{c}</button>)}</div>
               <input value={nota.texto} onChange={e=>setNota(s=>({...s,texto:e.target.value}))} placeholder={nota.chip==='Otro'?'Qué es':'Detalle (opcional): a quién, de qué mes…'} style={{...inpV2, marginBottom:10}}/>
-              <div style={{fontSize:12, color:T.ink2, marginBottom:10}}>Solo queda escrito en el movimiento, para que deje de estar "para revisar". No marca ni crea nada.</div>
+              <div style={{fontSize:12.5, color:T.ink2, marginBottom:10}}>Solo queda escrito en el movimiento, para que deje de estar "para revisar". No marca ni crea nada.</div>
               <button disabled={busy||!nota.chip} onClick={()=>guardarNota(m)} style={btnOk(busy||!nota.chip)}>{busy?'Guardando…':'Guardar'}</button>
             </>}
           </div>}
@@ -6480,10 +6488,10 @@ function RevisarBanco({data, onRefresh, showToast}){
     {hechos.length>0 && <div style={{marginTop:16}}>
       <button onClick={()=>setVerHechos(v=>!v)} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit'}}>{verHechos?'Ocultar':'Ver'} los {hechos.length} ya revisados a mano</button>
       {verHechos && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, overflow:'hidden', marginTop:8}}>{hechos.slice().sort((a,b)=>b.fecha-a.fecha).slice(0,60).map((m,i)=><div key={m.clave} style={{display:'grid', gridTemplateColumns:cel?'44px minmax(0,1fr) auto':'52px minmax(0,1fr) auto 70px', gap:cel?9:14, alignItems:'center', padding:cel?'10px 14px':'10px 18px', borderTop:i?`1px solid ${T.border}`:'none', fontSize:12.5}}>
-        <span style={{fontFamily:MONO, fontSize:12, color:T.ink3}}>{dm(m.fecha)}</span>
-        <span style={{minWidth:0}}><b style={{color:T.ink}}>{m.que}</b><span style={{display:'block', fontSize:11.5, color:T.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.detalle||m.concepto}</span></span>
+        <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink3}}>{dm(m.fecha)}</span>
+        <span style={{minWidth:0}}><b style={{color:T.ink}}>{m.que}</b><span style={{display:'block', fontSize:12.5, color:T.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{m.cuenta} · {m.detalle||m.concepto}</span></span>
         <span style={{fontFamily:MONO, fontWeight:600, color:m.monto>0?T.pos:T.ink, whiteSpace:'nowrap'}}>{m.monto>0?'+':'−'}{fmt(Math.abs(m.monto))}</span>
-        {!cel && <button disabled={busy} onClick={()=>reabrir(m)} style={{border:'none', background:'none', color:T.ink3, fontSize:11.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit', textAlign:'right'}}>reabrir</button>}
+        {!cel && <button disabled={busy} onClick={()=>reabrir(m)} style={{border:'none', background:'none', color:T.ink3, fontSize:12.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit', textAlign:'right'}}>reabrir</button>}
       </div>)}</div>}
     </div>}
   </>
@@ -6527,19 +6535,19 @@ function SubirExtracto({data, onClose, onDone, showToast}){
       setHecho(j); setBusy(false); showToast(j.aviso||'Extracto guardado ✓', j.aviso?'err':undefined)
     }catch(e){ showToast('Error de conexión','err'); setBusy(false) } }
   const caja={background:T.surfaceAlt, borderRadius:10, padding:'11px 13px', minWidth:0}
-  const lblK={fontSize:10.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}
+  const lblK={fontSize:12.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}
   const numK={fontFamily:MONO, fontSize:19, fontWeight:600, color:T.ink, marginTop:3}
   const renglon=(x,extra)=><div key={x.clave} style={{display:'grid', gridTemplateColumns:'auto 52px minmax(0,1fr) auto', gap:10, alignItems:'center', padding:'8px 0', borderTop:`1px solid ${T.border}`, fontSize:12.5}}>
     {extra}
-    <span style={{color:T.ink3, fontFamily:MONO, fontSize:11.5}}>{dm(x.fecha)}</span>
-    <span style={{minWidth:0}}><span style={{color:T.ink, fontWeight:600}}>{x.estado==='revisar'?(x.quien||x.que):x.que}</span><span style={{color:T.ink3}}> · {x.concepto}{x.estado==='revisar'&&x.quien?` · ${x.que}`:''}</span>{x.candidatos.length>0 && <span style={{display:'block', color:T.warn, fontSize:11.5, marginTop:2}}>Puede ser: {x.candidatos.join(' · ')}</span>}</span>
+    <span style={{color:T.ink3, fontFamily:MONO, fontSize:12.5}}>{dm(x.fecha)}</span>
+    <span style={{minWidth:0}}><span style={{color:T.ink, fontWeight:600}}>{x.estado==='revisar'?(x.quien||x.que):x.que}</span><span style={{color:T.ink3}}> · {x.concepto}{x.estado==='revisar'&&x.quien?` · ${x.que}`:''}</span>{x.candidatos.length>0 && <span style={{display:'block', color:T.warn, fontSize:12.5, marginTop:2}}>Puede ser: {x.candidatos.join(' · ')}</span>}</span>
     <span style={{fontFamily:MONO, fontWeight:600, color:x.monto>0?T.pos:T.ink, whiteSpace:'nowrap'}}>{x.monto>0?'+':'−'}{fmt(Math.abs(x.monto))}</span>
   </div>
   return <div onClick={busy?undefined:onClose} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:210, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', overflowY:'auto'}}>
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:780, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12}}>
-        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Lee los movimientos de la cuenta de BBVA, de Santander y de Galicia, en CSV.</div></div>
-        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        <div><div style={{fontSize:16, fontWeight:700, color:T.ink}}>Subir extracto del banco</div><div style={{fontSize:12.5, color:T.ink3, marginTop:2}}>El banco marca los pagos y los cobros, no vos. Lee los movimientos de la cuenta de BBVA, de Santander y de Galicia, en CSV.</div></div>
+        <button aria-label="Cerrar" onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'16px 22px 20px'}}>
         {hecho ? <>
@@ -6554,7 +6562,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
           <label style={{display:'block', border:`1.5px dashed ${T.ink3}`, borderRadius:12, padding:ext?'11px 14px':'26px 14px', textAlign:'center', cursor:'pointer', background:T.bg}}>
             <input type="file" accept=".csv,text/csv,text/plain" multiple onChange={e=>elegir(e.target.files)} style={{display:'none'}}/>
             <div style={{fontSize:13.5, fontWeight:600, color:T.ink}}>{ext?'Elegir otros archivos':'Elegir los archivos del banco'}</div>
-            {!ext && <div style={{fontSize:12, color:T.ink3, marginTop:4}}>Podés elegir juntos el de movimientos históricos y el de movimientos del día.</div>}
+            {!ext && <div style={{fontSize:12.5, color:T.ink3, marginTop:4}}>Podés elegir juntos el de movimientos históricos y el de movimientos del día.</div>}
           </label>
           {err && <div style={{fontSize:12.5, color:T.brand, background:T.brandSoft, padding:'9px 12px', borderRadius:9, marginTop:10}}>{err}</div>}
           {cruce && <>
@@ -6563,27 +6571,27 @@ function SubirExtracto({data, onClose, onDone, showToast}){
               <select value={cuenta} onChange={e=>setCuentaSel(e.target.value)} style={{...inpV2, width:'auto', flex:'0 1 220px'}}><option value="">¿De qué cuenta es?</option>{cuentas.map(c=><option key={c['Nombre']} value={c['Nombre']}>{c['Nombre']}</option>)}</select>
             </div>
             <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:9}}>
-              <div style={caja}><div style={lblK}>Ya estaban bien</div><div style={numK}>{r.ok}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>la app ya los tenía igual</div></div>
-              <div style={{...caja, background:T.posSoft}}><div style={{...lblK, color:T.pos}}>Se marcan ahora</div><div style={numK}>{marcadas.length}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{fmt(marcadas.reduce((s,x)=>s+Math.abs(x.monto),0))} que figuraban pendientes</div></div>
-              <div style={caja}><div style={lblK}>Los cobró el banco</div><div style={numK}>{r.banco}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>{fmt(Math.abs(r.montoBanco))} en cargos e impuestos</div></div>
-              <div style={{...caja, background:revisar.length?T.warnSoft:T.surfaceAlt}}><div style={{...lblK, color:revisar.length?T.warn:T.ink2}}>Para revisar</div><div style={numK}>{revisar.length}</div><div style={{fontSize:11.5, color:T.ink2, marginTop:2}}>no se reconocen solos</div></div>
+              <div style={caja}><div style={lblK}>Ya estaban bien</div><div style={numK}>{r.ok}</div><div style={{fontSize:12.5, color:T.ink2, marginTop:2}}>la app ya los tenía igual</div></div>
+              <div style={{...caja, background:T.posSoft}}><div style={{...lblK, color:T.pos}}>Se marcan ahora</div><div style={numK}>{marcadas.length}</div><div style={{fontSize:12.5, color:T.ink2, marginTop:2}}>{fmt(marcadas.reduce((s,x)=>s+Math.abs(x.monto),0))} que figuraban pendientes</div></div>
+              <div style={caja}><div style={lblK}>Los cobró el banco</div><div style={numK}>{r.banco}</div><div style={{fontSize:12.5, color:T.ink2, marginTop:2}}>{fmt(Math.abs(r.montoBanco))} en cargos e impuestos</div></div>
+              <div style={{...caja, background:revisar.length?T.warnSoft:T.surfaceAlt}}><div style={{...lblK, color:revisar.length?T.warn:T.ink2}}>Para revisar</div><div style={numK}>{revisar.length}</div><div style={{fontSize:12.5, color:T.ink2, marginTop:2}}>no se reconocen solos</div></div>
             </div>
-            {r.pases>0 && <div style={{fontSize:12, color:T.ink2, marginTop:10}}>{r.pases} {r.pases===1?"es un movimiento":"son movimientos"} entre cuentas de la misma persona: no hay nada que marcar.</div>}
-            {r.nuevas<r.total && <div style={{fontSize:12, color:T.ink2, marginTop:10}}>{r.total-r.nuevas} de estos movimientos ya estaban cargados de un extracto anterior: no se repiten.</div>}
+            {r.pases>0 && <div style={{fontSize:12.5, color:T.ink2, marginTop:10}}>{r.pases} {r.pases===1?"es un movimiento":"son movimientos"} entre cuentas de la misma persona: no hay nada que marcar.</div>}
+            {r.nuevas<r.total && <div style={{fontSize:12.5, color:T.ink2, marginTop:10}}>{r.total-r.nuevas} de estos movimientos ya estaban cargados de un extracto anterior: no se repiten.</div>}
 
             {aMarcar.length>0 && <div style={{marginTop:16}}>
-              <div style={{fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2, marginBottom:4}}>Se marcan al confirmar · con la fecha del banco</div>
+              <div style={{fontSize:12.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2, marginBottom:4}}>Se marcan al confirmar · con la fecha del banco</div>
               {aMarcar.map(x=>renglon(x, <input type="checkbox" checked={!noMarcar[x.clave]} onChange={e=>setNoMarcar(o=>({...o,[x.clave]:!e.target.checked}))} style={{width:16, height:16, accentColor:T.brand, cursor:'pointer'}}/>))}
-              <div style={{fontSize:11.5, color:T.ink3, marginTop:6}}>Si alguno no corresponde, destildalo: queda anotado como "para revisar" y no se marca nada.</div>
+              <div style={{fontSize:12.5, color:T.ink3, marginTop:6}}>Si alguno no corresponde, destildalo: queda anotado como "para revisar" y no se marca nada.</div>
             </div>}
 
             {revisar.length>0 && <div style={{marginTop:16}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:10, marginBottom:4}}>
-                <div style={{fontSize:11.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}}>Para revisar · {fmt(r.montoRevisar)}</div>
-                <button onClick={()=>setVerRev(v=>!v)} style={{border:'none', background:'none', color:T.ink2, fontSize:12, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit'}}>{verRev?'mostrar menos':`ver los ${revisar.length}`}</button>
+                <div style={{fontSize:12.5, fontWeight:700, letterSpacing:0.4, textTransform:'uppercase', color:T.ink2}}>Para revisar · {fmt(r.montoRevisar)}</div>
+                <button onClick={()=>setVerRev(v=>!v)} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', cursor:'pointer', padding:0, fontFamily:'inherit'}}>{verRev?'mostrar menos':`ver los ${revisar.length}`}</button>
               </div>
               {(verRev?revisar:revisar.slice(0,5)).map(x=>renglon(x, <span style={{width:16}}/>))}
-              <div style={{fontSize:11.5, color:T.ink3, marginTop:6}}>No se marca nada con estos. Quedan en la solapa MOVIMIENTOS_BANCO como "Para revisar", resaltados, para identificarlos después.</div>
+              <div style={{fontSize:12.5, color:T.ink3, marginTop:6}}>No se marca nada con estos. Quedan en la solapa MOVIMIENTOS_BANCO como "Para revisar", resaltados, para identificarlos después.</div>
             </div>}
 
             <div style={{marginTop:16, fontSize:12.5, color:T.ink2, lineHeight:1.6}}>
@@ -6592,7 +6600,7 @@ function SubirExtracto({data, onClose, onDone, showToast}){
 
             {ext.saldo>0 && (reciente
               ? <label style={{display:'flex', gap:9, alignItems:'flex-start', marginTop:14, fontSize:12.5, color:T.ink, cursor:'pointer'}}><input type="checkbox" checked={usarSaldo} onChange={e=>setUsarSaldo(e.target.checked)} style={{width:16, height:16, accentColor:T.brand, marginTop:1}}/><span>Poner como saldo de {cuenta||'la cuenta'} el del extracto: <b style={{fontFamily:MONO}}>{fmt(ext.saldo)}</b>{cuentaObj?<span style={{color:T.ink3}}> (hoy la app dice {fmt(parseMonto(cuentaObj['Saldo actual']))})</span>:null}</span></label>
-              : <div style={{fontSize:12, color:T.ink3, marginTop:14}}>{r.nuevas===0?'Este archivo no trae ningún movimiento nuevo':`El extracto llega hasta el ${dm(r.hasta)}: es viejo para usar su saldo`}, así que el saldo de la cuenta no se toca.</div>)}
+              : <div style={{fontSize:12.5, color:T.ink3, marginTop:14}}>{r.nuevas===0?'Este archivo no trae ningún movimiento nuevo':`El extracto llega hasta el ${dm(r.hasta)}: es viejo para usar su saldo`}, así que el saldo de la cuenta no se toca.</div>)}
 
             <button disabled={busy||!cuenta} onClick={confirmar} style={{...btnAgregar(busy||!cuenta), marginTop:16}}>{busy?'Guardando…':`Confirmar y guardar${marcadas.length?` · marca ${marcadas.length}`:''}`}</button>
           </>}
@@ -6854,6 +6862,7 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
 
 // Modal "Agregar": gasto (fijo o impuesto puntual) · movimiento de plata (dólares/transferencia/efectivo) · préstamo entre socios
 function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, showToast}){
+  useEscCierra(onClose)
   const [tab,setTab]=useState('gasto')
   const [saving,setSaving]=useState(false)
   const monedaCuenta=n=>{ const c=(cuentas||[]).find(x=>String(x['Nombre']||'').trim().toLowerCase()===String(n||'').trim().toLowerCase()); return /d[oó]lar|usd/i.test(String(c?.['Tipo']||'')+String(c?.['Nombre']||''))?'USD':'ARS' }
@@ -6894,7 +6903,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:16, width:520, maxWidth:'100%', border:`1px solid ${T.border}`, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content'}}>
       <div style={{padding:'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
         <div style={{fontSize:16, fontWeight:700, color:T.ink}}>Agregar</div>
-        <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        <button aria-label="Cerrar" onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       <div style={{padding:'16px 22px'}}>
         <div style={{display:'flex', gap:8, marginBottom:16}}>
@@ -6905,10 +6914,10 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
 
         {tab==='gasto' && <>
           <div style={{display:'flex', gap:8, marginBottom:14}}>
-            <button onClick={()=>setG(s=>({...s,recurrencia:'unico',categoria:s.categoria==='Otros'?'Impuestos':s.categoria}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='unico'?T.brand:T.border}`, background:g.recurrencia==='unico'?T.brandSoft:T.surface, color:g.recurrencia==='unico'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Puntual / impuesto<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>un solo pago</div></button>
-            <button onClick={()=>setG(s=>({...s,recurrencia:'fijo'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='fijo'?T.brand:T.border}`, background:g.recurrencia==='fijo'?T.brandSoft:T.surface, color:g.recurrencia==='fijo'?T.brand:T.ink2, fontSize:12, fontWeight:600, cursor:'pointer'}}>Fijo mensual<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>todos los meses</div></button>
+            <button onClick={()=>setG(s=>({...s,recurrencia:'unico',categoria:s.categoria==='Otros'?'Impuestos':s.categoria}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='unico'?T.brand:T.border}`, background:g.recurrencia==='unico'?T.brandSoft:T.surface, color:g.recurrencia==='unico'?T.brand:T.ink2, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Puntual / impuesto<div style={{fontSize:12.5, fontWeight:400, color:T.ink3}}>un solo pago</div></button>
+            <button onClick={()=>setG(s=>({...s,recurrencia:'fijo'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${g.recurrencia==='fijo'?T.brand:T.border}`, background:g.recurrencia==='fijo'?T.brandSoft:T.surface, color:g.recurrencia==='fijo'?T.brand:T.ink2, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Fijo mensual<div style={{fontSize:12.5, fontWeight:400, color:T.ink3}}>todos los meses</div></button>
           </div>
-          {g.recurrencia==='unico' && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[gFm-1]} {gFy}</b> (según la fecha que elijas). Lo marcás pagado y se descuenta de la cuenta.</div>}
+          {g.recurrencia==='unico' && <div style={{fontSize:12.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Se carga en <b>{MESES_LARGO[gFm-1]} {gFy}</b> (según la fecha que elijas). Lo marcás pagado y se descuenta de la cuenta.</div>}
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
             <Fld label="Categoría"><input list="ae-cats" value={g.categoria} onChange={e=>setG(s=>({...s,categoria:e.target.value}))} style={inpV2}/><datalist id="ae-cats"><option value="Impuestos"/><option value="Operativos"/><option value="Financieros"/><option value="Seguros"/><option value="Software"/><option value="Sueldos"/><option value="Otros"/></datalist></Fld>
             {g.recurrencia==='unico'
@@ -6945,16 +6954,16 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
             <Fld label={`Monto que sale (${moOrig})`}><MontoInput value={mv.montoOrigen} onChange={v=>setMv(s=>({...s,montoOrigen:v}))} placeholder="0" style={{...inpV2, fontFamily:MONO}} autoFocus/></Fld>
             {esConv && mv.cuentaDestino && <Fld label={`Monto que entra (${moDest})`}><MontoInput value={mv.montoDestino} onChange={v=>setMv(s=>({...s,montoDestino:v}))} placeholder="0" style={{...inpV2, fontFamily:MONO}}/></Fld>}
           </div>
-          {esConv && mv.cuentaDestino && coti>0 && <div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Tipo de cambio: <b style={{fontFamily:MONO}}>${Math.round(coti).toLocaleString('es-AR')}</b> por dólar</div>}
+          {esConv && mv.cuentaDestino && coti>0 && <div style={{fontSize:12.5, color:T.ink3, marginBottom:12}}>Tipo de cambio: <b style={{fontFamily:MONO}}>${Math.round(coti).toLocaleString('es-AR')}</b> por dólar</div>}
           <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={mv.notas} onChange={e=>setMv(s=>({...s,notas:e.target.value}))} placeholder="ej: para pagar tarjeta en dólares" style={inpV2}/></div>
-          <div style={{fontSize:11, color:T.ink3, marginBottom:12}}>Esto NO cuenta como gasto del mes — solo mueve los saldos de las cuentas.</div>
+          <div style={{fontSize:12.5, color:T.ink3, marginBottom:12}}>Esto NO cuenta como gasto del mes — solo mueve los saldos de las cuentas.</div>
           <button disabled={saving} onClick={guardarMov} style={btnAgregar(saving)}>{saving?'Guardando…':'Registrar movimiento'}</button>
         </>}
 
         {tab==='prestamo' && <>
           <div style={{display:'flex', gap:8, marginBottom:14}}>
-            <button onClick={()=>setPr(s=>({...s,direccion:'a_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='a_magma'?T.brand:T.border}`, background:pr.direccion==='a_magma'?T.brandSoft:T.surface, color:pr.direccion==='a_magma'?T.brand:T.ink2, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Un socio le presta a Magma<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>Magma le debe</div></button>
-            <button onClick={()=>setPr(s=>({...s,direccion:'de_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='de_magma'?T.brand:T.border}`, background:pr.direccion==='de_magma'?T.brandSoft:T.surface, color:pr.direccion==='de_magma'?T.brand:T.ink2, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Magma le presta a un socio<div style={{fontSize:10, fontWeight:400, color:T.ink3}}>el socio le debe</div></button>
+            <button onClick={()=>setPr(s=>({...s,direccion:'a_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='a_magma'?T.brand:T.border}`, background:pr.direccion==='a_magma'?T.brandSoft:T.surface, color:pr.direccion==='a_magma'?T.brand:T.ink2, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Un socio le presta a Magma<div style={{fontSize:12.5, fontWeight:400, color:T.ink3}}>Magma le debe</div></button>
+            <button onClick={()=>setPr(s=>({...s,direccion:'de_magma'}))} style={{flex:1, padding:'8px', borderRadius:8, border:`1px solid ${pr.direccion==='de_magma'?T.brand:T.border}`, background:pr.direccion==='de_magma'?T.brandSoft:T.surface, color:pr.direccion==='de_magma'?T.brand:T.ink2, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>Magma le presta a un socio<div style={{fontSize:12.5, fontWeight:400, color:T.ink3}}>el socio le debe</div></button>
           </div>
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom:12}}>
             <Fld label="Socio"><input list="ae-socios" value={pr.persona} onChange={e=>setPr(s=>({...s,persona:e.target.value}))} style={inpV2}/><datalist id="ae-socios"><option value="Sofi"/><option value="Juan"/></datalist></Fld>
@@ -6967,7 +6976,7 @@ function AgregarEgreso({cuentaOpts, cuentas, mesIdx, anio, onClose, onDone, show
           </label>
           {pr.ajusta && <div style={{marginBottom:12}}><label style={lblV2}>Cuenta</label><select value={pr.cuenta} onChange={e=>setPr(s=>({...s,cuenta:e.target.value}))} style={inpV2}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
           <div style={{marginBottom:16}}><label style={lblV2}>Nota (opcional)</label><input value={pr.notas} onChange={e=>setPr(s=>({...s,notas:e.target.value}))} style={inpV2}/></div>
-          <div style={{fontSize:11.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Queda en <b>Préstamos → Deudas entre socios</b>: {pr.direccion==='a_magma'?`Magma le debe ${fmt(parseMontoAR(pr.monto))} a ${pr.persona}`:`${pr.persona} le debe ${fmt(parseMontoAR(pr.monto))} a Magma`}</div>
+          <div style={{fontSize:12.5, color:T.ink3, marginBottom:12, background:T.surfaceAlt, padding:'8px 10px', borderRadius:8}}>Queda en <b>Préstamos → Deudas entre socios</b>: {pr.direccion==='a_magma'?`Magma le debe ${fmt(parseMontoAR(pr.monto))} a ${pr.persona}`:`${pr.persona} le debe ${fmt(parseMontoAR(pr.monto))} a Magma`}</div>
           <button disabled={saving} onClick={guardarPrestamo} style={btnAgregar(saving)}>{saving?'Guardando…':'Registrar préstamo'}</button>
         </>}
       </div>
@@ -7165,7 +7174,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
       showToast(j.pdfLink?'Cargado ✓ · PDF en Drive':'Cargado ✓'); onDone&&onDone()
     }catch(e){ showToast('Error de conexión','err'); setSaving(false) }
   }
-  const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}
+  const inp={padding:'8px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13}
   // Leído no es guardado: hasta "Confirmar y cargar" no hay nada en el sheet. Cerrar con un resumen leído (o a medio leer) lo pierde,
   // así que se pregunta antes; y un clic afuera de la ventana no cierra (el 05/10/2026 se perdió así el Santander de septiembre).
   const enJuego=!!data||loading||saving
@@ -7177,7 +7186,7 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
     <div onClick={e=>e.stopPropagation()} style={{background:T.surface, borderRadius:14, padding:22, width:data?680:500, maxWidth:'100%', maxHeight:'90vh', overflow:'auto', border:`1px solid ${T.border}`}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h3 style={{margin:0, fontSize:17, fontWeight:700, color:T.ink}}>Subir resumen de tarjeta</h3>
-        <button onClick={cerrar} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+        <button aria-label="Cerrar" onClick={cerrar} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
       {!data ? <>
         <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap'}}>
@@ -7187,47 +7196,47 @@ function SubirResumen({datos={}, onClose, onDone, showToast}){
         </div>
         <input type="file" accept="application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)} style={{marginBottom:16, fontSize:13, color:T.ink2}}/>
         <button onClick={procesar} disabled={loading} style={{width:'100%', padding:'11px', borderRadius:10, border:'none', background:loading?T.apagado:T.brand, color:'#fff', fontSize:14, fontWeight:600, cursor:loading?'default':'pointer'}}>{loading?'📄 Leyendo con IA… puede tardar unos minutos':'Leer PDF'}</button>
-        <div style={{fontSize:11.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
+        <div style={{fontSize:12.5, color:T.ink3, marginTop:10}}>La IA lee el PDF, extrae los consumos y estima Empresa vs Personal. Antes de guardar te muestra el resumen.</div>
       </> : <>
         <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'9px 13px', fontSize:12.5, marginBottom:10, fontWeight:600}}>Leído, todavía NO guardado. Revisalo y tocá “Confirmar y cargar” abajo.</div>
         <div style={{background:T.surfaceAlt, borderRadius:10, padding:14, marginBottom:14}}>
-          <div style={{fontSize:12, color:T.ink3}}>{tarjeta} · resumen de <select value={mes} onChange={e=>setMes(parseInt(e.target.value))} style={{...inp, padding:'2px 4px', fontSize:12}}>{MESES_LARGO.map((x,k)=><option key={k} value={k+1}>{x}</option>)}</select> {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
+          <div style={{fontSize:12.5, color:T.ink3}}>{tarjeta} · resumen de <select value={mes} onChange={e=>setMes(parseInt(e.target.value))} style={{...inp, padding:'2px 4px', fontSize:12.5}}>{MESES_LARGO.map((x,k)=><option key={k} value={k+1}>{x}</option>)}</select> {anio}{data.vencimiento?` · vence ${data.vencimiento}`:''}</div>
           <div style={{fontSize:22, fontWeight:700, color:T.ink, fontFamily:MONO, marginTop:4}}>{fmt(totalPagar)}{totalPagarUsd?`  + US$${totalPagarUsd}`:''}</div>
-          <div style={{fontSize:12, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''}</div>
+          <div style={{fontSize:12.5, color:T.ink3, marginTop:2}}>total a pagar (saldo del resumen){consumos?` · consumos del mes ${fmt(consumos)}`:''}</div>
         </div>
         {lecturaOk ? <>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:6, fontWeight:600}}>Tocá Magma para revisar el rubro y el trabajo de cada consumo; tocá Juan o Sofi para ver lo personal de cada uno.</div>
+        <div style={{fontSize:12.5, color:T.ink3, marginBottom:6, fontWeight:600}}>Tocá Magma para revisar el rubro y el trabajo de cada consumo; tocá Juan o Sofi para ver lo personal de cada uno.</div>
         <div style={{display:'flex', gap:8, marginBottom:10}}>
-          <div onClick={()=>setExpand(e=>e==='magma'?'':'magma')} style={{flex:1, background:T.posSoft, borderRadius:10, padding:'10px 12px', cursor:'pointer', outline:expand==='magma'?`2px solid ${T.pos}`:'none'}}><div style={{fontSize:11, color:T.ink3}}>🏢 Magma {expand==='magma'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}</div>{empresaUsd?<div style={{fontSize:10.5, color:T.ink3, fontFamily:MONO}}>+US${empresaUsd.toFixed(0)}</div>:null}</div>
-          {idxJuan>=0 && <div onClick={()=>setExpand(e=>e==='juan'?'':'juan')} style={{flex:1, background:expand==='juan'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:11, color:T.ink3}}>👤 Juan {expand==='juan'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(juanPers)}</div></div>}
-          {idxSofi>=0 && <div onClick={()=>setExpand(e=>e==='sofi'?'':'sofi')} style={{flex:1, background:expand==='sofi'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:11, color:T.ink3}}>👤 Sofi {expand==='sofi'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(sofiPers)}</div></div>}
+          <div onClick={()=>setExpand(e=>e==='magma'?'':'magma')} style={{flex:1, background:T.posSoft, borderRadius:10, padding:'10px 12px', cursor:'pointer', outline:expand==='magma'?`2px solid ${T.pos}`:'none'}}><div style={{fontSize:12.5, color:T.ink3}}>🏢 Magma {expand==='magma'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(empresa)}</div>{empresaUsd?<div style={{fontSize:12.5, color:T.ink3, fontFamily:MONO}}>+US${empresaUsd.toFixed(0)}</div>:null}</div>
+          {idxJuan>=0 && <div onClick={()=>setExpand(e=>e==='juan'?'':'juan')} style={{flex:1, background:expand==='juan'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:12.5, color:T.ink3}}>👤 Juan {expand==='juan'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(juanPers)}</div></div>}
+          {idxSofi>=0 && <div onClick={()=>setExpand(e=>e==='sofi'?'':'sofi')} style={{flex:1, background:expand==='sofi'?T.brandSoft:T.surfaceAlt, borderRadius:10, padding:'10px 12px', cursor:'pointer'}}><div style={{fontSize:12.5, color:T.ink3}}>👤 Sofi {expand==='sofi'?'▴':'▾'}</div><div style={{fontSize:15, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(sofiPers)}</div></div>}
         </div>
         {expand==='magma' && magmaList.length>0 && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', marginBottom:12, maxHeight:340, overflow:'auto'}}>
-          <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Lo de Magma, consumo por consumo. Cambiá el rubro si no corresponde y, en los de Producción, elegí de qué trabajo fue. El 👤 lo pasa a personal.</div>
+          <div style={{fontSize:12.5, color:T.ink3, marginBottom:6}}>Lo de Magma, consumo por consumo. Cambiá el rubro si no corresponde y, en los de Producción, elegí de qué trabajo fue. El 👤 lo pasa a personal.</div>
           {magmaList.map((m,i)=>{ const cerca=esProd(m)&&m.moneda==='ARS'?trabajosCerca(m):[], rb=rubroOf(m), tr=trabajoOf(m)
             return <div key={m.key} style={{padding:'7px 2px', borderTop:i?`1px solid ${T.border}`:'none'}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8}}>
-                <span style={{fontSize:12.5, color:T.ink, fontWeight:600, minWidth:0}}>{m.comercio} <span style={{color:T.ink3, fontSize:11, fontWeight:400}}>{m.fecha} · {m.titular}{m.cuota?` · cuota ${m.cuota}`:''}</span></span>
-                <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink, whiteSpace:'nowrap'}}>{m.moneda==='USD'?`US$${m.monto}`:fmt(m.monto)} <button onClick={()=>toggleItem(m)} title="Pasarlo a personal" style={{border:'none', background:'none', cursor:'pointer', fontSize:12, padding:'0 0 0 4px'}}>👤</button></span>
+                <span style={{fontSize:12.5, color:T.ink, fontWeight:600, minWidth:0}}>{m.comercio} <span style={{color:T.ink3, fontSize:12.5, fontWeight:400}}>{m.fecha} · {m.titular}{m.cuota?` · cuota ${m.cuota}`:''}</span></span>
+                <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink, whiteSpace:'nowrap'}}>{m.moneda==='USD'?`US$${m.monto}`:fmt(m.monto)} <button onClick={()=>toggleItem(m)} title="Pasarlo a personal" style={{border:'none', background:'none', cursor:'pointer', fontSize:12.5, padding:'0 0 0 4px'}}>👤</button></span>
               </div>
               <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:4}}>
-                <select value={rb} onChange={e=>setRubroDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:11.5, flex:'1 1 220px', minWidth:0, borderColor:RUBROS_T.includes(rb)?T.border:T.warn}}>{!RUBROS_T.includes(rb) && <option value={rb}>{rb||'Elegir rubro'}</option>}{RUBROS_T.map(r=><option key={r} value={r}>{r}</option>)}</select>
-                {esProd(m) && m.moneda==='ARS' && <select value={tr} onChange={e=>setTrabajoDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:11.5, flex:'1 1 220px', minWidth:0, borderColor:tr?T.pos:T.border}}><option value="">Sin trabajo</option>{tr && !cerca.some(c=>c.nro===tr) && <option value={tr}>#{tr}</option>}{cerca.map(c=><option key={c.nro} value={c.nro}>{c.label}</option>)}</select>}
+                <select value={rb} onChange={e=>setRubroDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:12.5, flex:'1 1 220px', minWidth:0, borderColor:RUBROS_T.includes(rb)?T.border:T.warn}}>{!RUBROS_T.includes(rb) && <option value={rb}>{rb||'Elegir rubro'}</option>}{RUBROS_T.map(r=><option key={r} value={r}>{r}</option>)}</select>
+                {esProd(m) && m.moneda==='ARS' && <select value={tr} onChange={e=>setTrabajoDe(o=>({...o,[m.key]:e.target.value}))} style={{...inp, padding:'4px 6px', fontSize:12.5, flex:'1 1 220px', minWidth:0, borderColor:tr?T.pos:T.border}}><option value="">Sin trabajo</option>{tr && !cerca.some(c=>c.nro===tr) && <option value={tr}>#{tr}</option>}{cerca.map(c=><option key={c.nro} value={c.nro}>{c.label}</option>)}</select>}
               </div>
             </div> })}
         </div>}
         {expand && expList.length ? <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 12px', marginBottom:12, maxHeight:260, overflow:'auto'}}>
-          <div style={{fontSize:11, color:T.ink3, marginBottom:6}}>Consumos de {expand==='juan'?'Juan':'Sofi'} — tocá para cambiar 👤 personal ⇄ 🏢 Magma</div>
+          <div style={{fontSize:12.5, color:T.ink3, marginBottom:6}}>Consumos de {expand==='juan'?'Juan':'Sofi'} — tocá para cambiar 👤 personal ⇄ 🏢 Magma</div>
           {expList.map((m,i)=>{ const on=isEmp(m); return <div key={m.key} onClick={()=>toggleItem(m)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 2px', cursor:'pointer', borderTop:i?`1px solid ${T.border}`:'none'}}>
-            <span style={{fontSize:12.5, color:on?T.pos:T.ink2, fontWeight:on?600:400}}>{on?'🏢':'👤'} {m.comercio} <span style={{color:T.ink3, fontSize:11}}>{m.fecha}{m.moneda==='USD'?' · US$':''}</span></span>
+            <span style={{fontSize:12.5, color:on?T.pos:T.ink2, fontWeight:on?600:400}}>{on?'🏢':'👤'} {m.comercio} <span style={{color:T.ink3, fontSize:12.5}}>{m.fecha}{m.moneda==='USD'?' · US$':''}</span></span>
             <span style={{fontFamily:MONO, fontSize:12.5, color:on?T.pos:T.ink2}}>{fmt(m.monto)}</span>
           </div> })}
         </div> : null}
-        {rubEmpArr.length?<div style={{background:T.surfaceAlt, borderRadius:10, padding:'10px 14px', marginBottom:12}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, marginBottom:4, textTransform:'uppercase', letterSpacing:0.4}}>Qué hay en Magma</div>{rubEmpArr.map(([k,v])=><div key={k} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 0', color:T.ink2}}><span>{k}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}</div>:null}
-        {otrosPers>0?<div style={{fontSize:11.5, color:T.ink3, marginBottom:12}}>Otros titulares (personal): {fmt(otrosPers)}</div>:null}
-        <div style={{fontSize:10.5, color:T.ink3, marginBottom:12}}>Se guarda cada consumo con tu marca (después editable en el detalle de la tarjeta) + el total + el PDF en Drive.</div>
-        </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12, marginBottom:14, fontWeight:500}}>⚠ No pude clasificar bien este resumen. Igual cargo el <b>total a pagar</b> correcto — la división Empresa/Juan/Sofi la hacemos aparte.</div>}
-        {yaCargados>0 && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 13px', fontSize:12, marginBottom:12, fontWeight:500, lineHeight:1.5}}>⚠ {tarjeta} de {MESES_LARGO[mes-1]} {anio} ya está cargada ({yaCargados} consumos). Si confirmás, se REEMPLAZAN por los de este PDF. Lo que ya estaba marcado (revisado, de qué trabajo fue) se conserva en los consumos que sigan iguales; si acá un consumo de Magma quedó como personal, o al revés, vale lo de esta pantalla.</div>}
+        {rubEmpArr.length?<div style={{background:T.surfaceAlt, borderRadius:10, padding:'10px 14px', marginBottom:12}}><div style={{fontSize:12.5, fontWeight:700, color:T.ink3, marginBottom:4, textTransform:'uppercase', letterSpacing:0.4}}>Qué hay en Magma</div>{rubEmpArr.map(([k,v])=><div key={k} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'2px 0', color:T.ink2}}><span>{k}</span><span style={{fontFamily:MONO}}>{fmt(v)}</span></div>)}</div>:null}
+        {otrosPers>0?<div style={{fontSize:12.5, color:T.ink3, marginBottom:12}}>Otros titulares (personal): {fmt(otrosPers)}</div>:null}
+        <div style={{fontSize:12.5, color:T.ink3, marginBottom:12}}>Se guarda cada consumo con tu marca (después editable en el detalle de la tarjeta) + el total + el PDF en Drive.</div>
+        </> : <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'11px 14px', fontSize:12.5, marginBottom:14, fontWeight:500}}>⚠ No pude clasificar bien este resumen. Igual cargo el <b>total a pagar</b> correcto — la división Empresa/Juan/Sofi la hacemos aparte.</div>}
+        {yaCargados>0 && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 13px', fontSize:12.5, marginBottom:12, fontWeight:500, lineHeight:1.5}}>⚠ {tarjeta} de {MESES_LARGO[mes-1]} {anio} ya está cargada ({yaCargados} consumos). Si confirmás, se REEMPLAZAN por los de este PDF. Lo que ya estaba marcado (revisado, de qué trabajo fue) se conserva en los consumos que sigan iguales; si acá un consumo de Magma quedó como personal, o al revés, vale lo de esta pantalla.</div>}
         <div style={{display:'flex', gap:8}}>
           <button onClick={()=>{ if(saving) return; if(window.confirm(`${tarjeta} todavía NO se guardó.\n\nSi volvés para elegir otro PDF, esta lectura se pierde.\n\n¿Volver igual?`)) setData(null) }} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer'}}>← Otro</button>
           <button onClick={confirmar} disabled={saving} style={{flex:1, padding:'11px', borderRadius:10, border:'none', background:saving?T.apagado:T.pos, color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'default':'pointer'}}>{saving?'Guardando…':'Confirmar y cargar'}</button>

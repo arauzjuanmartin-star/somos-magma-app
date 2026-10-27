@@ -75,7 +75,7 @@ export default function TicketsRevisar({ data, onClose, onDone, showToast }) {
                 <input inputMode="numeric" value={monto} onChange={e => setMontoDe(o => ({ ...o, [id]: e.target.value.replace(/\D/g, '') }))} style={{ ...inp, width: 110, fontFamily: MONO, textAlign: 'right' }} />
                 <span style={{ flex: 1 }} />
                 <button disabled={ocupado} onClick={() => setRechazando(id)} style={btn(T.surface, T.ink2, T.border)}>Rechazar</button>
-                <button disabled={ocupado} onClick={() => revisar(r, 'aprobar')} style={btn(T.pos, '#fff')}>{ocupado ? 'Guardando…' : 'Aprobar'}</button>
+                <button disabled={ocupado} onClick={() => revisar(r, 'aprobar')} style={btn(T.ink, '#fff')}>{ocupado ? 'Guardando…' : 'Aprobar'}</button>
               </div>}
         </div> })}
       <div style={{ fontSize: 11.5, color: T.ink3, marginTop: 6 }}>Todos los tickets, con su estado y su foto, quedan en la solapa TICKETS del Master.</div>
