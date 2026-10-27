@@ -37,6 +37,13 @@ function filtrarPorModulos(data, modulos, soloLoSuyo) {
       presupuestos: data.presupuestos, proyectos: data.proyectos, contactos: data.contactos, acuerdos: data.acuerdos,
       disponibilidad: data.disponibilidad, seguros: data.seguros, facturacion: data.facturacion, edicion: data.edicion,
       rrhh: (data.rrhh || []).map(r => { const o = {}; Object.keys(r).forEach(k => { if (!/cbu|alias|banco/i.test(k)) o[k] = r[k] }); return o }),
+      // Los gastos de los chicos (tickets) los autoriza el PM del trabajo: el aviso de arriba los necesita.
+      tickets: data.tickets,
+      // Lo que se gastó en cada trabajo (atarGastosATrabajos): solo las filas atadas a un N° y solo esas columnas.
+      // Así la ganancia de un trabajo da lo mismo que para Juan, sin mandar los gastos de la empresa ni las cuentas.
+      gastosFijos: (data.gastosFijos || []).filter(g => String(g['N° trabajo'] || '').trim()).map(g => ({ 'N° trabajo': g['N° trabajo'], Concepto: g.Concepto, Monto: g.Monto, Activo: g.Activo, 'Fecha pago': g['Fecha pago'], 'Cuenta pago': g['Cuenta pago'], Rubro: g.Rubro, Subrubro: g.Subrubro })),
+      movimientosTarjeta: (data.movimientosTarjeta || []).filter(m => String(m['N° trabajo'] || '').trim()).map(m => ({ 'N° trabajo': m['N° trabajo'], Comercio: m.Comercio, Descripcion: m.Descripcion, Monto: m.Monto, Moneda: m.Moneda, Fecha: m.Fecha, Tarjeta: m.Tarjeta, Subcategoria: m.Subcategoria })),
+      pagosStaff: (data.pagosStaff || []).filter(r => Number(String(r['Viáticos'] || '').replace(/[^\d.-]/g, '')) > 0).map(r => ({ 'N° Presupuesto': r['N° Presupuesto'], Freelancer: r.Freelancer, 'Viáticos': r['Viáticos'], 'Fecha Pago': r['Fecha Pago'], Cuenta: r.Cuenta })),
     })
   }
   if (modulos.includes('agencias') || modulos.includes('presupuestos')) { out.agencias = data.agencias; out.contactos = data.contactos }

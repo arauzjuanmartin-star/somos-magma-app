@@ -6,7 +6,7 @@ import GoogleProvider from 'next-auth/providers/google'
 export const ALLOWED_MAILS = [
   'juan@somosmagma.com',
   'sofi@somosmagma.com',
-  'tom@somosmagma.com',
+  // tom@somosmagma.com: afuera desde el 27/10/2026 (Juan: "tom no está más, no debería poder entrar a nada").
   'admin@somosmagma.com',
   'lulu@somosmagma.com',
   'dani@somosmagma.com',
@@ -23,6 +23,7 @@ export const ALLOWED_MAILS = [
 export { MODULOS_POR_MAIL } from '../../../lib/roles'
 import { MODULOS_POR_MAIL as MODS } from '../../../lib/roles'
 import { freelancerPorMail } from '../../../lib/freelancers-acceso'
+import { estaBloqueado } from '../../../lib/roles'
 
 // Invitados en modo LECTURA: pueden entrar y ver todo, pero no modificar nada. Ej: coach.
 export const READONLY_MAILS = [
@@ -41,6 +42,7 @@ export const authOptions = {
   callbacks: {
     async signIn({ user }) {
       const mail = (user?.email || '').toLowerCase().trim()
+      if (estaBloqueado(mail)) return false
       if (ALLOWED_MAILS.includes(mail) || READONLY_MAILS.includes(mail)) return true
       // Freelancers: entran con el mail que Magma tiene en su ficha de RRHH, y lo único
       // que pueden abrir es /mi (lo cierra el middleware) con sus propios datos (/api/mi).
