@@ -340,7 +340,7 @@ export default function V2() {
             : mod==='edicion' ? <Edicion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='facturacion' ? <Facturacion data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo}/>
             : mod==='pagos' ? <PagosStaff data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast}/>
+            : mod==='freelancers' ? <Freelancers data={data} nav={nav} clearNav={clearNav} onRefresh={()=>load(true)} showToast={showToast} mail={mail}/>
             : (mod==='egresos'||mod==='caja') ? <Caja data={data} onRefresh={()=>load(true)} showToast={showToast} goTo={goTo}/>
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
             : mod==='clientes' ? <Clientes data={data} nav={nav} clearNav={clearNav}/>
@@ -5523,169 +5523,242 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
 // ============================ FREELANCERS ============================
 // Unifica nombres de staff repetidos (misma persona, distintas grafías). Solo UI, no toca datos.
 // canonStaff / canonKey viven en lib/staff.js — los usa también lib/jornadas.js.
-function Freelancers({data, nav, clearNav, onRefresh, showToast}){
+function Freelancers({data, nav, clearNav, onRefresh, showToast, mail}){
   const proyectos=data.proyectos||[], rrhh=data.rrhh||[], pagos=data.pagosStaff||[]
+  // La plata (cuánto ganó cada uno, qué se le debe) la ven Juan, Sofi y Flor. El PM viene a buscar
+  // a quién llamar: rubro, tarifa, teléfono y cuándo trabajó por última vez.
+  const plata=verPlata(mail)
+  const cel=useEsCelular(1000)
   const [q,setQ]=useState(''), [sel,setSel]=useState(null), [fAnio,setFAnio]=useState(''), [fMes,setFMes]=useState(''), [lAnio,setLAnio]=useState(''), [lMes,setLMes]=useState('')
+  const [rubroF,setRubroF]=useState(''), [orden,setOrden]=useState('ultima'), [verReparto,setVerReparto]=useState(false)
   // Editar datos del freelancer acá mismo (antes solo se podía desde Pagos Staff)
   const [editando,setEditando]=useState(null)
-  // Por defecto el panel muestra lo activo/reciente, no todo el histórico
+  // Por defecto el panel muestra lo activo/reciente, no todo el histórico. Al cambiar de persona,
+  // los filtros del panel vuelven a cero: si no, la nueva abría en "Sin trabajos en ese período".
   const [verTodos,setVerTodos]=useState(false)
-  useEffect(()=>{ setVerTodos(false) },[sel])
+  useEffect(()=>{ setVerTodos(false); setFAnio(''); setFMes('') },[sel])
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()
   useEffect(()=>{ if(nav?.mod==='freelancers'&&nav.q){ setQ(nav.q); clearNav&&clearNav() } /* eslint-disable-next-line */ },[nav])
+  const hoy=new Date(), hoy0=new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  // Los socios cobran su trabajo como staff por la cuenta de socios (lib/socios.mjs): acá no son deuda.
+  const esSocio=n=>/arauz/i.test(n)||/sof[ií]a\b.*grenier/i.test(n)
+  const proxPago=new Date(hoy.getFullYear(), hoy.getDate()>15?hoy.getMonth()+1:hoy.getMonth(), 15)
+  const f15=d=>`15/${String(d.getMonth()+1).padStart(2,'0')}`
 
-  // "Se le debe" se calcula IGUAL que en Pagos Staff (por persona+mes+N°+servicio),
-  // para que coincida exacto y no se duplique con los pagos de años anteriores.
+  // "Se le debe" con la MISMA llave que Pagos Staff (persona+mes+N°+servicio, con el día de cada
+  // línea de staff en trabajos de varias fechas) para que coincida y no se duplique.
   const mesLab=fe=>{ const d=parseD(fe); return d?`${String(d.getMonth()+1).padStart(2,'0')} - ${MESES_LARGO[d.getMonth()].toLowerCase()}`:'' }
   const esPag=r=>{ const e=String(r['Estado']||'').toLowerCase().trim(); return ['pagado','sí','si','true'].includes(e)||parseMonto(r['Monto Pagado'])>0 }
   const paidCount={}, viatByKey={}, usedV={}
   const keyPS=r=>canonKey(canonStaff(r['Freelancer']||r['Persona']||r['Nombre']))+'|'+norm(r['Mes Referencia']||r['Mes'])+'|'+String(r['N° Presupuesto']||r['N° Proyecto']||'').trim()+'|'+norm(r['Servicio'])
   pagos.forEach(r=>{ const k=keyPS(r); (viatByKey[k]=viatByKey[k]||[]).push(parseMonto(r['Viáticos']||r['Viaticos'])); if(esPag(r)) paidCount[k]=(paidCount[k]||0)+1 })
   const stats={}, usedG={}
-  proyectos.forEach(p=>{ for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr0=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
-    if(!st||/somos magma|^magma$/i.test(st)||pr0<=0) continue
-    const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
-    const pk=k+'|'+norm(mesLab(p['Fecha Evento']))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
-    // Los viáticos (columna de PAGOS_STAFF) van sumados al trabajo: también le salen a Magma.
-    const uv=usedV[pk]||0; usedV[pk]=uv+1; const pr=pr0+((viatByKey[pk]||[])[uv]||0)
-    stats[k].trabajos++; stats[k].ganado+=pr
-    const cnt=paidCount[pk]||0, u=usedG[pk]||0; const pagado=u<cnt; if(pagado)usedG[pk]=u+1; else stats[k].debe+=pr
-    const _d=parseD(p['Fecha Evento'])
-    stats[k].items.push({fecha:p['Fecha Evento']||'', anio:_d?_d.getFullYear():'', mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, nro:p['N° presupuesto']||''})
-  }})
-  // Años anteriores (HISTORICO 2023/2024/2025): ya saldados — suman a "total", NO a "se le debe"
+  const nuevo=cn=>({nombre:cn, trabajos:0, ganado:0, items:[], ultima:null, proxima:null, socio:esSocio(cn)})
+  proyectos.forEach(p=>{
+    const diaDeSlot={}; String(p['Fechas Staff']||'').split('|').forEach(x=>{ const [k,...v]=x.split(':'); if(k&&v.length) diaDeSlot[k.trim()]=v.join(':').trim() })
+    for(let j=1;j<=MAX_SLOTS;j++){ const st=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); const pr0=parseMonto(p['Precio '+j]||(j===1?p['Precio']:'')); const ped=p['Pedido '+j]||(j===1?p['Pedido']:'')||''
+      if(!st||/somos magma|^magma$/i.test(st)||!ped||pr0<=0) continue
+      const fecha=diaDeSlot[String(j)]||p['Fecha Evento']||''
+      const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]=nuevo(cn)
+      const pk=k+'|'+norm(mesLab(fecha))+'|'+String(p['N° presupuesto']||'').trim()+'|'+norm(ped)
+      // Los viáticos (columna de PAGOS_STAFF) van sumados al trabajo: también le salen a Magma.
+      const uv=usedV[pk]||0; usedV[pk]=uv+1; const pr=pr0+((viatByKey[pk]||[])[uv]||0)
+      stats[k].trabajos++; stats[k].ganado+=pr
+      const cnt=paidCount[pk]||0, u=usedG[pk]||0; const pagado=u<cnt; if(pagado)usedG[pk]=u+1
+      const _d=parseD(fecha)
+      // Se paga el 15 del mes siguiente al trabajo. Vencido = ese 15 ya pasó y no está pagado.
+      // Lo del mes en curso entra en el próximo 15 aunque el evento todavía no pasó: así lo
+      // paga Pagos Staff, y la frase de arriba tiene que dar el mismo número.
+      const vence=_d?new Date(_d.getFullYear(), _d.getMonth()+1, 15):null
+      const est = pagado ? 'pagado' : stats[k].socio ? 'socio' : !_d ? 'apagar' : vence<hoy0 ? 'vencido' : vence.getTime()===proxPago.getTime() ? 'apagar' : 'despues'
+      if(_d){ if(_d<=hoy0){ if(!stats[k].ultima||_d>stats[k].ultima) stats[k].ultima=_d } else if(!stats[k].proxima||_d<stats[k].proxima) stats[k].proxima=_d }
+      stats[k].items.push({fecha, d:_d, anio:_d?_d.getFullYear():'', mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped, monto:pr, pagado, est, vence, nro:p['N° presupuesto']||''})
+    }
+  })
+  // Años anteriores (HISTORICO 2023/2024/2025): ya saldados — suman al total, nunca a lo que se debe
   const addHist=(rows,anio)=>{ (rows||[]).forEach(p=>{ for(let j=1;j<=6;j++){ const st=String(p['Staff '+j]||'').trim(); const pr=parseMonto(p['Pago '+j]); if(!st||/somos magma|^magma$/i.test(st)||pr<=0) continue
-    const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]}
+    const cn=canonStaff(st), k=canonKey(cn); if(!stats[k]) stats[k]=nuevo(cn)
     stats[k].trabajos++; stats[k].ganado+=pr
     const _d=parseD(p['Fecha'])
-    stats[k].items.push({fecha:p['Fecha']||`${anio}`, anio:_d?_d.getFullYear():Number(anio), mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr, pagado:true})
+    if(_d&&(!stats[k].ultima||_d>stats[k].ultima)) stats[k].ultima=_d
+    stats[k].items.push({fecha:p['Fecha']||`${anio}`, d:_d, anio:_d?_d.getFullYear():Number(anio), mes:_d?_d.getMonth()+1:'', proy:p['Proyecto']||p['Cliente']||'—', ag:p['Agencia']||'', ped:'', monto:pr, pagado:true, est:'pagado'})
   }}) }
   addHist(data.historico2023,'2023'); addHist(data.historico2024,'2024'); addHist(data.historico2025,'2025')
   // RRHH (datos fiscales) + incluir roster que no tenga trabajos
-  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ const cn=canonStaff(n), k=canonKey(cn); rrhhByName[k]=r; if(!stats[k]) stats[k]={nombre:cn, trabajos:0, ganado:0, debe:0, items:[]} } })
+  const rrhhByName={}; rrhh.forEach(r=>{ const n=String(r['Nombre Apellido']||r['Nombre']||'').trim(); if(n){ const cn=canonStaff(n), k=canonKey(cn); rrhhByName[k]=r; if(!stats[k]) stats[k]=nuevo(cn) } })
+  const datosDe=p=>rrhhByName[canonKey(canonStaff(p.nombre))]||{}
+  const rubrosDe=p=>String(datosDe(p)['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean)
+  // Los rubros que de verdad se usan (2 o más personas), para filtrar sin tipear
+  const cuentaR={}; rrhh.forEach(r=>String(r['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(x=>{ cuentaR[x]=(cuentaR[x]||0)+1 }))
+  const rubrosTop=Object.keys(cuentaR).filter(x=>cuentaR[x]>=2).sort((a,b)=>cuentaR[b]-cuentaR[a])
+  const deuda=its=>{ let vencido=0, aPagar=0, futuro=0; its.forEach(it=>{ if(it.est==='vencido') vencido+=it.monto; else if(it.est==='apagar') aPagar+=it.monto; else if(it.est==='futuro'||it.est==='despues') futuro+=it.monto }); return {vencido, aPagar, futuro} }
 
   // Vista por período (año/mes) a nivel de toda la lista
   const aniosAll=[...new Set(Object.values(stats).flatMap(p=>p.items.map(it=>it.anio)).filter(Boolean))].sort((a,b)=>b-a)
   const per=it=>(!lAnio||String(it.anio)===String(lAnio))&&(!lMes||String(it.mes)===String(lMes))
-  const view=p=>{ const its=p.items.filter(per); const total=its.reduce((s,it)=>s+it.monto,0); const debe=its.filter(it=>!it.pagado).reduce((s,it)=>s+it.monto,0); return {trab:its.length, total, debe, prom:its.length?total/its.length:0} }
+  const view=p=>{ const its=p.items.filter(per); const total=its.reduce((s,it)=>s+it.monto,0); return {trab:its.length, total, ...deuda(its)} }
   const filtroActivo=!!(lAnio||lMes)
-  const lista=Object.values(stats).map(p=>({...p, v:view(p)})).filter(p=>!filtroActivo||p.v.trab>0).sort((a,b)=>b.v.total-a.v.total)
-  const filtrados=lista.filter(p=>!q||norm(p.nombre).includes(norm(q)))
+  const ORDENES={ ultima:(a,b)=>(b.ultima||0)-(a.ultima||0)||b.v.trab-a.v.trab, trabajos:(a,b)=>b.v.trab-a.v.trab, total:(a,b)=>b.v.total-a.v.total, nombre:(a,b)=>a.nombre.localeCompare(b.nombre) }
+  const lista=Object.values(stats).map(p=>({...p, v:view(p)})).filter(p=>!filtroActivo||p.v.trab>0).sort(ORDENES[orden]||ORDENES.ultima)
+  const filtrados=lista.filter(p=>(!q||norm(p.nombre).includes(norm(q))||rubrosDe(p).some(r=>norm(r).includes(norm(q))))&&(!rubroF||rubrosDe(p).some(r=>norm(r).startsWith(norm(rubroF).slice(0,6)))))
   const selP = sel ? stats[canonKey(canonStaff(sel))] : null
-  const datos = selP ? (rrhhByName[canonKey(canonStaff(selP.nombre))]||{}) : {}
-  const pend = selP ? selP.debe : 0
-  const totPeriodo=filtrados.reduce((s,p)=>s+p.v.total,0), trabPeriodo=filtrados.reduce((s,p)=>s+p.v.trab,0)
-  const periodoLbl=(lMes?MESES_LARGO[lMes-1]+' ':'')+(lAnio||(filtroActivo?'':'histórico'))
+  const datos = selP ? datosDe(selP) : {}
+  const sP = selP ? deuda(selP.items) : null
+
+  // ── Lo de este mes, en una frase
+  let aPagarTot=0, vencTot=0; const aPagarN=new Set(), vencN=new Set()
+  Object.values(stats).forEach(p=>{ const s=deuda(p.items); if(s.aPagar>0){ aPagarTot+=s.aPagar; aPagarN.add(p.nombre) } if(s.vencido>0){ vencTot+=s.vencido; vencN.add(p.nombre) } })
+  const esteMes=Object.values(stats).filter(p=>p.items.some(it=>it.d&&it.d.getFullYear()===hoy.getFullYear()&&it.d.getMonth()===hoy.getMonth())).length
+  const hace=d=>{ if(!d) return '—'; const dias=Math.round((hoy0-d)/864e5); return dias<=0?'hoy':dias===1?'ayer':dias<31?`hace ${dias} días`:dias<365?`hace ${Math.round(dias/30.4)} ${Math.round(dias/30.4)===1?'mes':'meses'}`:`hace ${Math.floor(dias/365)} ${Math.floor(dias/365)===1?'año':'años'}` }
+  const telWa=t=>{ let d=String(t||'').replace(/\D/g,''); if(!d) return ''; if(!d.startsWith('54')) d='549'+d.replace(/^0/,''); return 'https://wa.me/'+d }
+  const copiar=(txt,que)=>{ try{ navigator.clipboard.writeText(String(txt)); showToast(`${que} copiado`) }catch(e){ showToast('No se pudo copiar','err') } }
+  const tecla=fn=>e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fn() } }
+  const card={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const chip=on=>({border:on?'none':`1px solid ${T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2, borderRadius:999, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'})
+  const etiqueta={fontSize:12.5, color:T.ink2}
+  const cols = cel ? (plata?'1fr 110px':'1fr 96px') : (plata?'1.6fr 100px 120px 60px 150px':'1.6fr 110px 130px 70px')
+  const pendTxt=v=> v.vencido>0 ? <span style={{color:T.brand, fontWeight:600}}>● <span style={{fontFamily:MONO}}>{fmtM(v.vencido)}</span> vencido</span>
+    : v.aPagar>0 ? <span style={{color:T.ink}}><span style={{fontFamily:MONO}}>{fmtM(v.aPagar)}</span> <span style={{color:T.ink2}}>el {f15(proxPago)}</span></span>
+    : <span style={{color:T.ink3}}>—</span>
 
   return <>
-    <PageHead title="Freelancers" sub={`${filtrados.length} de ${lista.length}`}/>
-    <div style={{display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center'}}>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar freelancer…" style={{flex:'1 1 240px', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
-      <select value={lAnio} onChange={e=>setLAnio(e.target.value)} style={selectStyle}><option value="">Todos los años</option>{aniosAll.map(a=><option key={a} value={a}>{a}</option>)}</select>
-      <select value={lMes} onChange={e=>setLMes(e.target.value)} style={selectStyle}><option value="">Todo el año</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:14}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>Freelancers</h1>
+      <button onClick={()=>setVerReparto(!verReparto)} aria-expanded={verReparto} style={{border:'none', background:'transparent', fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>{verReparto?'Ocultar el reparto del mes':'Ver el reparto del mes'}</button>
     </div>
-    <div style={{display:'flex', gap:24, flexWrap:'wrap', padding:'11px 18px', marginBottom:14, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:10}}>
-      <Mini label={`Freelancers · ${periodoLbl}`} val={filtrados.length}/>
-      <Mini label="Total pagado a staff" val={fmtM(totPeriodo)}/>
-      <Mini label="Trabajos" val={trabPeriodo}/>
-      <Mini label="Promedio x trabajo" val={fmtM(trabPeriodo?totPeriodo/trabPeriodo:0)}/>
-    </div>
-    {/* Cómo viene repartido el mes. Si arriba filtraste un mes, el gráfico lo sigue;
-        si no, muestra el mes en curso con su propio selector. Clic = abre su ficha. */}
-    <RepartoStaff proyectos={proyectos} rrhh={rrhh} onPersona={n=>setSel(n)}
-      mes={lMes?+lMes:undefined} anio={lAnio?+lAnio:undefined}
-      titulo={lMes?`Reparto de ${MESES_LARGO[+lMes-1]}`:'Reparto del mes'}/>
-    <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
-      <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-        <div style={{display:'grid', gridTemplateColumns:'1.5fr 55px 110px 105px 110px', padding:'11px 18px', borderBottom:`1px solid ${T.border}`, fontSize:10.5, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-          <span>Nombre</span><span style={{textAlign:'right'}}>Trab.</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Prom.</span><span style={{textAlign:'right'}}>Se le debe</span>
-        </div>
-        {filtrados.length===0&&<Empty>Sin resultados</Empty>}
-        {filtrados.slice(0,300).map((p,i)=>{ const d=p.v.debe; return (
-          <div key={i} onClick={()=>setSel(p.nombre)} style={{display:'grid', gridTemplateColumns:'1.5fr 55px 110px 105px 110px', padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', fontSize:13, background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
-            <span style={{color:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{p.nombre}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{p.v.trab}</span>
-            <span style={{textAlign:'right', color:T.ink, fontFamily:MONO, fontSize:12}}>{fmtM(p.v.total)}</span>
-            <span style={{textAlign:'right', color:T.ink2, fontFamily:MONO, fontSize:12}}>{fmtM(p.v.prom)}</span>
-            <span style={{textAlign:'right', color:d>0?T.brand:T.ink3, fontFamily:MONO, fontSize:12, fontWeight:d>0?600:400}}>{d>0?fmtM(d):'—'}</span>
-          </div>
-        )})}
+
+    {/* Hoy: quién trabajó este mes y, para quien ve plata, qué se paga el 15 */}
+    <div style={{...card, padding:'16px 18px', marginBottom:14}}>
+      <div style={{fontSize:17, fontWeight:700, color:T.ink, lineHeight:1.4}}>
+        {plata
+          ? <>El {f15(proxPago)} se pagan {fmtM(aPagarTot)} a {aPagarN.size} {aPagarN.size===1?'persona':'personas'}{vencTot>0&&<span style={{color:T.brand}}> · ● {fmtM(vencTot)} vencido de meses anteriores</span>}</>
+          : <>En {MESES_LARGO[hoy.getMonth()].toLowerCase()} trabajaron {esteMes} {esteMes===1?'persona':'personas'}</>}
       </div>
-      {selP && <div style={{flex:'0 0 360px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', position:'sticky', top:0}}>
+      <div style={{fontSize:13.5, color:T.ink2, marginTop:4}}>
+        {plata ? <>{esteMes} {esteMes===1?'persona trabajó':'personas trabajaron'} en {MESES_LARGO[hoy.getMonth()].toLowerCase()} · lo de Juan y Sofi va por la cuenta de socios</> : <>Buscá por nombre o elegí un rubro para ver la tarifa y el teléfono</>}
+        {plata&&vencN.size>0&&<> · vencido: {[...vencN].slice(0,4).join(', ')}{vencN.size>4?` y ${vencN.size-4} más`:''}</>}
+      </div>
+    </div>
+
+    {verReparto && <RepartoStaff proyectos={proyectos} rrhh={rrhh} onPersona={n=>setSel(n)}
+      mes={lMes?+lMes:undefined} anio={lAnio?+lAnio:undefined}
+      titulo={lMes?`Reparto de ${MESES_LARGO[+lMes-1]}`:'Reparto del mes'}/>}
+
+    <div style={{display:'flex', gap:10, marginBottom:10, flexWrap:'wrap', alignItems:'center'}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} aria-label="Buscar freelancer" placeholder="Buscar por nombre o rubro…" style={{flex:'1 1 240px', maxWidth:360, padding:'9px 13px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13.5, outline:'none'}}/>
+      <select value={orden} onChange={e=>setOrden(e.target.value)} aria-label="Ordenar" style={selectStyle}>
+        <option value="ultima">Trabajó hace menos</option><option value="trabajos">Más trabajos</option><option value="nombre">Nombre</option>{plata&&<option value="total">Más plata</option>}
+      </select>
+      {plata && <>
+        <select value={lAnio} onChange={e=>setLAnio(e.target.value)} aria-label="Año" style={selectStyle}><option value="">Todos los años</option>{aniosAll.map(a=><option key={a} value={a}>{a}</option>)}</select>
+        <select value={lMes} onChange={e=>setLMes(e.target.value)} aria-label="Mes" style={selectStyle}><option value="">Todo el año</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+      </>}
+    </div>
+    <div role="group" aria-label="Rubro" style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:14}}>
+      <button aria-pressed={!rubroF} onClick={()=>setRubroF('')} style={chip(!rubroF)}>Todos {lista.length}</button>
+      {rubrosTop.map(r=><button key={r} aria-pressed={rubroF===r} onClick={()=>setRubroF(rubroF===r?'':r)} style={chip(rubroF===r)}>{r}</button>)}
+    </div>
+
+    <div style={{display:'flex', flexDirection:cel?'column':'row', gap:16, alignItems:cel?'stretch':'flex-start'}}>
+      <div style={{flex:1, minWidth:0, ...card, overflow:'hidden'}}>
+        <div style={{display:'grid', gridTemplateColumns:cols, gap:10, padding:'11px 18px', borderBottom:`1px solid ${T.border}`, ...etiqueta, fontWeight:600}}>
+          <span>{filtrados.length} {filtrados.length===1?'persona':'personas'}{rubroF?` · ${rubroF}`:''}</span>
+          {!cel && <span style={{textAlign:'right'}}>Jornada</span>}
+          <span style={{textAlign:'right'}}>Última vez</span>
+          {!cel && <span style={{textAlign:'right'}}>Trab.</span>}
+          {plata && !cel && <span style={{textAlign:'right'}}>A pagar</span>}
+        </div>
+        {filtrados.length===0&&<Empty>Nadie con ese nombre o rubro</Empty>}
+        {filtrados.map(p=>{ const dt=datosDe(p); const rub=rubrosDe(p); const no=/no llamar|inactivo/i.test(dt['Estado']||''); const abrir=()=>setSel(p.nombre)
+          return <div key={p.nombre} role="button" tabIndex={0} onClick={abrir} onKeyDown={tecla(abrir)} style={{display:'grid', gridTemplateColumns:cols, gap:10, padding:'11px 18px', borderTop:`1px solid ${T.border}`, cursor:'pointer', alignItems:'center', background:sel===p.nombre?T.surfaceAlt:'transparent'}}>
+            <span style={{minWidth:0}}>
+              <span style={{display:'block', fontSize:14, color:no?T.ink3:T.ink, fontWeight:500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{p.nombre}{p.socio&&<span style={{fontSize:12.5, color:T.ink2, fontWeight:400}}> · socio</span>}{no&&<span style={{fontSize:12.5, color:T.ink2, fontWeight:600}}> · ⊘ {dt['Estado']}</span>}</span>
+              {rub.length>0 && <span style={{display:'block', ...etiqueta, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{rub.join(' · ')}</span>}
+            </span>
+            {!cel && <span style={{textAlign:'right', fontFamily:MONO, fontSize:13, color:dt['Tarifa jornada']?T.ink:T.ink3}}>{dt['Tarifa jornada']?fmtM(parseMonto(dt['Tarifa jornada'])):'—'}</span>}
+            <span style={{textAlign:'right', fontSize:13, color:T.ink2}}>{p.proxima&&(!p.ultima||(p.proxima-hoy0)<(hoy0-p.ultima))?<span style={{color:T.ink}}>{`va el ${p.proxima.getDate()}/${p.proxima.getMonth()+1}`}</span>:hace(p.ultima)}</span>
+            {!cel && <span style={{textAlign:'right', fontFamily:MONO, fontSize:13, color:T.ink2}}>{p.v.trab}</span>}
+            {plata && !cel && <span style={{textAlign:'right', fontSize:13}}>{p.socio?<span style={{color:T.ink2}}>cuenta de socios</span>:pendTxt(p.v)}</span>}
+          </div>
+        })}
+      </div>
+
+      {selP && <div style={{flex:cel?'1 1 auto':'0 0 380px', ...card, overflow:'hidden', ...(cel?{}:{position:'sticky', top:16, maxHeight:'calc(100vh - 32px)', overflowY:'auto'})}}>
         <div style={{padding:'14px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-          <span style={{fontSize:15, fontWeight:700, color:T.ink, flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{selP.nombre}</span>
-          <button onClick={()=>setEditando({nombre:selP.nombre, datos})} title="Editar datos" style={{border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:11.5, fontWeight:600, padding:'4px 10px', borderRadius:7, cursor:'pointer', whiteSpace:'nowrap'}}>Editar</button>
-          <button onClick={()=>setSel(null)} title="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
+          <span style={{flex:1, minWidth:0}}>
+            <span style={{display:'block', fontSize:16, fontWeight:700, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{selP.nombre}</span>
+            <span style={{display:'block', ...etiqueta}}>{[String(datos['Rubro']||'').split(',').map(s=>s.trim()).filter(Boolean).join(' · '), datos['Zona'], datos['Estado']].filter(Boolean).join(' · ')||'Sin rubro cargado'}</span>
+          </span>
+          <button onClick={()=>setEditando({nombre:selP.nombre, datos})} style={{...miniBtn, fontSize:12.5}}>Editar</button>
+          <button onClick={()=>setSel(null)} aria-label="Cerrar" style={{border:'none', background:'transparent', fontSize:20, color:T.ink2, cursor:'pointer', lineHeight:1}}>×</button>
         </div>
         <div style={{padding:'14px 18px'}}>
-          <div style={{display:'flex', gap:18, flexWrap:'wrap', marginBottom:14}}>
-            <Mini label="Trabajos" val={selP.trabajos}/>
-            <Mini label="Total (le sale a Magma)" val={fmtM(selP.ganado)}/>
-            <Mini label="Promedio x trabajo" val={fmtM(selP.trabajos?selP.ganado/selP.trabajos:0)}/>
-            <Mini label="Se le debe" val={pend>0?fmtM(pend):'—'} color={pend>0?T.brand:T.pos}/>
-          </div>
-          {/* Rubro como etiquetas */}
-          {datos['Rubro'] && <div style={{display:'flex', flexWrap:'wrap', gap:5, marginBottom:10}}>
-            {String(datos['Rubro']).split(',').map(s=>s.trim()).filter(Boolean).map((r,i)=>(
-              <span key={i} style={{padding:'3px 9px', borderRadius:20, background:T.brandSoft, color:T.brand, fontSize:11, fontWeight:600}}>{r}</span>
-            ))}
+          {/* Para llamarlo: lo primero que busca el PM */}
+          {(datos['Celular']||datos['Mail']) && <div style={{display:'flex', gap:7, flexWrap:'wrap', marginBottom:12}}>
+            {datos['Celular'] && telWa(datos['Celular']) && <a href={telWa(datos['Celular'])} target="_blank" rel="noreferrer" style={{...miniBtn, fontSize:12.5, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>WhatsApp · {datos['Celular']}</a>}
+            {datos['Mail'] && <a href={`mailto:${datos['Mail']}`} style={{...miniBtn, fontSize:12.5}}>Mail</a>}
           </div>}
-          {/* Tarifas y estado — lo primero que se mira al armar un presupuesto */}
-          {(datos['Tarifa media jornada']||datos['Tarifa jornada']||datos['Zona']||datos['Estado']) && (
-            <div style={{display:'flex', gap:14, flexWrap:'wrap', padding:'9px 11px', marginBottom:10, background:T.surfaceAlt, borderRadius:9, border:`1px solid ${T.border}`}}>
-              {datos['Tarifa media jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>½ jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa media jornada']))}</div></div>}
-              {datos['Tarifa jornada'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Jornada</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa jornada']))}</div></div>}
-              {datos['Tarifa hora extra'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Hora extra</div><div style={{fontSize:13, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos['Tarifa hora extra']))}</div></div>}
-              {datos['Zona'] && <div><div style={{fontSize:9.5, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3, fontWeight:600}}>Zona</div><div style={{fontSize:12.5, color:T.ink}}>{datos['Zona']}</div></div>}
-              {datos['Estado'] && <div style={{marginLeft:'auto'}}><span style={{padding:'3px 9px', borderRadius:20, fontSize:10.5, fontWeight:600, background:/activo/i.test(datos['Estado'])?T.posSoft:/no llamar|inactivo/i.test(datos['Estado'])?T.brandSoft:T.warnSoft, color:/activo/i.test(datos['Estado'])?T.pos:/no llamar|inactivo/i.test(datos['Estado'])?T.brand:T.warn}}>{datos['Estado']}</span></div>}
+          {(datos['Tarifa media jornada']||datos['Tarifa jornada']||datos['Tarifa hora extra']) && <div style={{display:'flex', gap:18, flexWrap:'wrap', padding:'10px 12px', marginBottom:12, background:T.surfaceAlt, borderRadius:10}}>
+            {[['½ jornada','Tarifa media jornada'],['Jornada','Tarifa jornada'],['Hora extra','Tarifa hora extra']].filter(([,c])=>datos[c]).map(([l,c])=><div key={c}><div style={etiqueta}>{l}</div><div style={{fontSize:14, fontFamily:MONO, color:T.ink, fontWeight:600}}>{fmt(parseMonto(datos[c]))}</div></div>)}
+          </div>}
+          {datos['Notas'] && <div style={{fontSize:13, color:T.ink, background:T.warnSoft, borderRadius:9, padding:'9px 12px', marginBottom:12, lineHeight:1.45}}>{datos['Notas']}</div>}
+          {/* Datos para pagar y facturar, con copiar en lo que se pega en el banco */}
+          {[['CBU',datos['CBU'],true],['Alias',datos['Alias'],true],['CUIT',datos['CUIT/CUIL']||datos['CUIT'],true],['Banco',datos['Banco']],['Mail',datos['Mail']],['DNI',datos['Dni']],['Nacimiento',datos['Fecha de nac']||datos['Fecha de Nac']],['Nacionalidad',datos['Nacionalidad']]].filter(x=>x[1]).map(([k,v,cp])=>(
+            <div key={k} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'5px 0', fontSize:13}}>
+              <span style={{color:T.ink2}}>{k}</span>
+              <span style={{display:'flex', alignItems:'center', gap:6, minWidth:0}}>
+                <span style={{color:T.ink, fontFamily:MONO, fontSize:12.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span>
+                {cp && <button onClick={()=>copiar(v,k)} aria-label={`Copiar ${k}`} style={{border:'none', background:'transparent', color:T.ink, fontSize:12.5, textDecoration:'underline', cursor:'pointer', padding:0}}>copiar</button>}
+              </span>
             </div>
-          )}
-          {datos['Notas'] && <div style={{fontSize:12, color:T.ink2, background:T.warnSoft, borderRadius:8, padding:'8px 11px', marginBottom:10, lineHeight:1.45}}>{datos['Notas']}</div>}
-          {/* Ficha completa: todo lo que hay cargado en RRHH */}
-          {[['Mail',datos['Mail']],['Tel',datos['Celular']],['DNI',datos['Dni']],['Nacimiento',datos['Fecha de nac']||datos['Fecha de Nac']],['Nacionalidad',datos['Nacionalidad']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['Banco',datos['Banco']],['Alias',datos['Alias']],['CBU',datos['CBU']]].filter(x=>x[1]).map(([k,v])=>(
-            <div key={k} style={{display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', fontSize:12.5}}><span style={{color:T.ink3}}>{k}</span><span style={{color:T.ink, fontFamily:MONO, fontSize:11.5, textAlign:'right', wordBreak:'break-all'}}>{v}</span></div>
           ))}
           {/* Qué falta cargar — para que el registro se complete solo */}
           {(()=>{
             const falta=[['Mail',datos['Mail']],['Tel',datos['Celular']],['CUIT',datos['CUIT/CUIL']||datos['CUIT']],['CBU',datos['CBU']],['Rubro',datos['Rubro']]].filter(x=>!String(x[1]||'').trim()).map(x=>x[0])
-            if(!Object.keys(datos).length) return <button onClick={()=>setEditando({nombre:selP.nombre, datos:{}})} style={{width:'100%', marginTop:6, padding:'8px', borderRadius:8, border:`1px solid ${T.warn}`, background:T.warnSoft, color:T.warn, fontSize:12, fontWeight:600, cursor:'pointer'}}>⚠ Sin ficha en RRHH — cargar datos</button>
-            if(falta.length) return <button onClick={()=>setEditando({nombre:selP.nombre, datos})} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.warn, fontSize:11.5, fontWeight:600, cursor:'pointer'}}>Falta cargar: {falta.join(' · ')}</button>
+            if(!Object.keys(datos).length) return <div style={{marginTop:6}}><div style={{fontSize:13, color:T.warn, fontWeight:600, marginBottom:6}}>No tiene ficha en RRHH</div><button onClick={()=>setEditando({nombre:selP.nombre, datos:{}})} style={{...miniBtn, fontSize:12.5, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>Cargar sus datos</button></div>
+            if(falta.length) return <button onClick={()=>setEditando({nombre:selP.nombre, datos})} style={{width:'100%', marginTop:8, padding:'8px', borderRadius:9, border:'none', background:T.warnSoft, color:T.warn, fontSize:12.5, fontWeight:600, cursor:'pointer', textAlign:'left'}}>Falta cargar: {falta.join(' · ')} →</button>
             return null
           })()}
+          {plata && !selP.socio && (sP.vencido>0||sP.aPagar>0) && <div style={{marginTop:14, fontSize:13.5, lineHeight:1.5}}>
+            {sP.vencido>0 && <div style={{color:T.brand, fontWeight:600}}>● {fmtM(sP.vencido)} vencido</div>}
+            {sP.aPagar>0 && <div style={{color:T.ink}}>{fmtM(sP.aPagar)} se paga el {f15(proxPago)}</div>}
+          </div>}
+          {plata && selP.socio && <div style={{marginTop:14, fontSize:13, color:T.ink2}}>Lo que trabaja como staff va por la cuenta de socios, no se le paga por acá.</div>}
           {(()=>{
             const anios=[...new Set(selP.items.map(it=>it.anio).filter(Boolean))].sort((a,b)=>b-a)
             const its=selP.items.filter(it=>(!fAnio||String(it.anio)===String(fAnio))&&(!fMes||String(it.mes)===String(fMes)))
-            const totF=its.reduce((s,it)=>s+it.monto,0), debeF=its.filter(it=>!it.pagado).reduce((s,it)=>s+it.monto,0)
+            const totF=its.reduce((s,it)=>s+it.monto,0)
             // Ordenado por fecha (lo más nuevo arriba). Los históricos viejos traen solo el año.
-            const ts=it=>{ const d=parseD(it.fecha); return d?d.getTime():(it.anio?new Date(Number(it.anio),0,1).getTime():0) }
+            const ts=it=>it.d?it.d.getTime():(it.anio?new Date(Number(it.anio),0,1).getTime():0)
             const ord=its.slice().sort((a,b)=>ts(b)-ts(a))
-            // Por defecto: lo ACTIVO (lo que se le debe) + los últimos 5. El resto, con los
-            // filtros de año/mes o "ver todos". Antes se listaba el histórico completo y era ilegible.
+            // Por defecto: lo que no está pagado + los últimos 5. El resto, con año/mes o "ver todos".
             const hayFiltro=!!(fAnio||fMes)
-            const pendientes=ord.filter(it=>!it.pagado)
-            const recientes=ord.filter(it=>it.pagado).slice(0,5)
-            const resumen=[...pendientes,...recientes]
+            const resumen=[...ord.filter(it=>!it.pagado), ...ord.filter(it=>it.pagado).slice(0,5)]
             const mostrar=(hayFiltro||verTodos)?ord:resumen
             const ocultos=ord.length-mostrar.length
+            const estTxt=it=> it.est==='vencido' ? <span style={{color:T.brand, fontWeight:600}}>● vencido</span>
+              : it.est==='apagar' ? <span style={{color:T.ink}}>{it.vence?`el ${f15(it.vence)}`:'a pagar'}</span>
+              : it.est==='despues' ? <span style={{color:T.ink2}}>el {f15(it.vence)}</span>
+                            : it.est==='socio' ? <span style={{color:T.ink2}}>socios</span>
+              : <span style={{color:T.ink3}}>pagado</span>
             return <>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, margin:'16px 0 8px'}}>
-                <span style={{fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:0.3, color:T.ink3}}>{hayFiltro||verTodos?'Trabajos':'Activo y reciente'}</span>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, margin:'18px 0 8px'}}>
+                <span style={{fontSize:13.5, fontWeight:700, color:T.ink}}>{hayFiltro||verTodos?`Trabajos (${its.length})`:'Lo último'}{plata&&(hayFiltro||verTodos)&&<span style={{fontFamily:MONO, fontWeight:500, color:T.ink2}}> · {fmtM(totF)}</span>}</span>
                 <div style={{display:'flex', gap:6}}>
-                  <select value={fAnio} onChange={e=>setFAnio(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
-                  <select value={fMes} onChange={e=>setFMes(e.target.value)} style={{...selectStyle, padding:'4px 8px', fontSize:11.5}}><option value="">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+                  <select value={fAnio} onChange={e=>setFAnio(e.target.value)} aria-label="Año" style={{...selectStyle, padding:'5px 8px'}}><option value="">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
+                  <select value={fMes} onChange={e=>setFMes(e.target.value)} aria-label="Mes" style={{...selectStyle, padding:'5px 8px'}}><option value="">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
                 </div>
               </div>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.ink2, marginBottom:4}}><span>{its.length} trabajo{its.length===1?'':'s'}</span><span style={{fontFamily:MONO}}>{fmtM(totF)}</span></div>
-              {debeF>0 && <div style={{display:'flex', justifyContent:'space-between', fontSize:11.5, color:T.brand, fontWeight:600, marginBottom:6}}><span>Se le debe</span><span style={{fontFamily:MONO}}>{fmtM(debeF)}</span></div>}
               {mostrar.map((it,i)=>(
-                <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8, padding:'5px 0', fontSize:12, borderTop:`1px solid ${T.border}`}}>
-                  <span style={{flex:1, minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{it.fecha?String(it.fecha).slice(0,10)+' · ':''}{it.ped||it.proy} <span style={{color:T.ink3}}>· {it.proy}</span></span>
-                  <span style={{fontFamily:MONO, color:it.pagado?T.ink3:T.brand, fontWeight:it.pagado?400:600, flexShrink:0}} title={it.pagado?'pagado':'se le debe'}>{fmtM(it.monto)}{it.pagado?'':' •'}</span>
+                <div key={i} style={{display:'grid', gridTemplateColumns:plata?'1fr auto auto':'1fr auto', gap:10, alignItems:'baseline', padding:'7px 0', fontSize:13, borderTop:`1px solid ${T.border}`}}>
+                  <span style={{minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}><span style={{color:T.ink2}}>{it.d?`${it.d.getDate()}/${it.d.getMonth()+1}/${String(it.d.getFullYear()).slice(2)}`:it.anio} · </span><span style={{color:T.ink}}>{it.proy}</span>{it.ped&&<span style={{color:T.ink2}}> · {limpiarPedidoEd(it.ped)}</span>}</span>
+                  {plata && <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink}}>{fmtM(it.monto)}</span>}
+                  <span style={{fontSize:12.5, textAlign:'right', whiteSpace:'nowrap'}}>{estTxt(it)}</span>
                 </div>
               ))}
-              {ocultos>0 && !hayFiltro && <button onClick={()=>setVerTodos(true)} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.ink2, fontSize:11.5, cursor:'pointer'}}>Ver los {ocultos} trabajos anteriores</button>}
-              {verTodos && !hayFiltro && <button onClick={()=>setVerTodos(false)} style={{width:'100%', marginTop:8, padding:'7px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceAlt, color:T.ink3, fontSize:11.5, cursor:'pointer'}}>Ver menos</button>}
-              {!its.length && <div style={{fontSize:11.5, color:T.ink3, padding:'8px 0'}}>Sin trabajos en ese período</div>}
+              {ocultos>0 && !hayFiltro && <button onClick={()=>setVerTodos(true)} style={{marginTop:8, border:'none', background:'transparent', padding:0, fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver los {ocultos} trabajos anteriores</button>}
+              {verTodos && !hayFiltro && <button onClick={()=>setVerTodos(false)} style={{marginTop:8, border:'none', background:'transparent', padding:0, fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver menos</button>}
+              {!its.length && <div style={{fontSize:13, color:T.ink2, padding:'8px 0'}}>Sin trabajos en ese período</div>}
             </>
           })()}
         </div>
