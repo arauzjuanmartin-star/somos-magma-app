@@ -246,6 +246,12 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
     const h = e => { if (e.key === 'Escape' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) salirFicha() }
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
   }, [enfoque, abierto]) // eslint-disable-line
+  useEffect(() => {
+    if (!enfoque || !abierto) return
+    const antes = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = antes }
+  }, [enfoque, abierto])
   // Al entrar a una ficha, arriba de todo: si no, queda scrolleada donde estaba el tablero.
   useEffect(() => {
     if (!enfoque || !abierto) return
@@ -639,6 +645,9 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
   // (el logo se copia a las hermanas, "+ Video" copia el brief de una de ellas)
   // pero se dibuja una sola: `soloId`. No pasa por ningún filtro.
   const fichaF = enfoque && abierto ? filas.find(f => f.ID === abierto) : null
+  // Panel lateral (propuesta de Sofi, 24/10/2026): la lista queda atrás y se ve de dónde
+  // venías; en el celular ocupa toda la pantalla. Esc o el fondo lo cierran.
+  let fichaNodo = null
   if (enfoque && abierto) {
     const hermanas = fichaF ? filas.filter(f => String(f['N° presupuesto']) === String(fichaF['N° presupuesto'])) : []
     const g = fichaF && {
@@ -646,21 +655,25 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
       linkCrudo: (hermanas.find(h => h['Link crudo']) || {})['Link crudo'] || '', linkEntrega: (hermanas.find(h => h['Link entrega']) || {})['Link entrega'] || '',
       items: [fichaF, ...hermanas.filter(h => h.ID !== fichaF.ID)],
     }
-    return <div id="ed-ficha-tope">
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-        {volverA === 'calendario' && goTo
-          ? <>
-              <button onClick={() => goTo('calendario')} style={{ ...btnPri, padding: '8px 14px', fontSize: 13 }}>← Volver al calendario</button>
-              <button onClick={salirFicha} style={{ ...btn, padding: '8px 12px' }}>Ver en el tablero</button>
-            </>
-          : <button onClick={salirFicha} style={{ ...btnPri, padding: '8px 14px', fontSize: 13 }}>← Volver al tablero</button>}
-        {!cel && <span style={{ fontSize: 11.5, color: T.ink3 }}>o apretá Esc</span>}
-      </div>
-      {g
-        ? <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} personaF="todos" soloId={abierto} />
-        : <div style={{ ...card, padding: 28, textAlign: 'center', color: T.ink2, fontSize: 13.5 }}>
-            {crudas.length ? `El trabajo ${abierto} no está en tu tablero: se cerró, se represupuestó o no lo tenés asignado.` : 'Cargando…'}
-          </div>}
+    fichaNodo = <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', justifyContent: 'flex-end' }}>
+      <div onClick={salirFicha} aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(26,25,23,0.32)' }} />
+      <aside role="dialog" aria-modal="true" aria-label="Ficha de la pieza" tabIndex={-1} ref={el => { if (el && !el.contains(document.activeElement)) el.focus() }}
+        style={{ position: 'relative', width: cel ? '100%' : 'min(820px, 94vw)', height: '100%', overflowY: 'auto', background: T.bg, boxShadow: '-12px 0 32px rgba(26,25,23,0.18)', padding: cel ? '14px 12px 40px' : '18px 22px 48px', outline: 'none' }}>
+        <div id="ed-ficha-tope" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+          {volverA === 'calendario' && goTo
+            ? <>
+                <button onClick={() => goTo('calendario')} style={{ ...btn, color: T.ink, padding: '8px 14px', fontSize: 13.5 }}>← Volver al calendario</button>
+                <button onClick={salirFicha} style={{ ...btn, color: T.ink, padding: '8px 12px', fontSize: 13.5 }}>Ver en la lista</button>
+              </>
+            : <button onClick={salirFicha} aria-label="Cerrar la ficha" style={{ ...btn, color: T.ink, padding: '8px 14px', fontSize: 13.5 }}>✕ Cerrar</button>}
+          {!cel && <span style={{ fontSize: 12.5, color: T.ink2 }}>o apretá Esc</span>}
+        </div>
+        {g
+          ? <Grupo key={g.num} g={g} abierto={abierto} setAbierto={abrir} drive={drive} mailsCliente={mailsDe(g.agencia, g.cliente)} {...(sucesorDe(g) || {})} proy={proyDe.get(String(g.num))} {...props} personaF="todos" soloId={abierto} />
+          : <div style={{ ...card, padding: 28, textAlign: 'center', color: T.ink2, fontSize: 14 }}>
+              {crudas.length ? `El trabajo ${abierto} no está en tu tablero: se cerró, se represupuestó o no lo tenés asignado.` : 'Cargando…'}
+            </div>}
+      </aside>
     </div>
   }
 
@@ -756,6 +769,7 @@ export default function Edicion({ data, onRefresh, showToast, mail, nav, clearNa
             </>}
         </>}
     </>}
+    {fichaNodo}
   </div>
 }
 
@@ -1696,6 +1710,25 @@ function BriefAdjunto({ f, showToast, onRefresh }) {
   </div>
 }
 
+// Lo que hay que hacer con la pieza AHORA, con su botón (en Para revisar y Con el
+// cliente están los paneles de siempre: aprobar con Drive y el OK del cliente).
+function ProximoPaso({ f, guardar }) {
+  const e = estadoDe(f.Estado), ed = String(f.Editor || '').trim()
+  const quien = ed ? primerNombre(ed) : 'El editor'
+  const cfg = e === 'Sin material' ? { txt: 'Falta que llegue el material.', btn: 'Llegó el material', a: 'Material listo' }
+    : e === 'Material listo' ? { txt: ed ? `Hay material. Falta que ${quien} empiece.` : 'Hay material, pero nadie está a cargo: asignalo en "Para cuándo y quién".', btn: 'Empezar a editar', a: 'Editando' }
+    : /^Cambios/.test(e) ? { txt: `${quien} tiene ${e.toLowerCase()} para hacer. Están en el historial.`, btn: 'Subí la versión nueva → Para revisar', a: 'Para revisar' }
+    : e === 'Editando' ? { txt: `${quien} está editando.`, btn: 'Subí la versión → Para revisar', a: 'Para revisar' }
+    : e === 'Terminado' ? { txt: 'Terminada: el cliente dio el OK.' }
+    : null
+  if (!cfg) return null
+  return <div style={{ background: T.surface, borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', padding: '14px 16px', marginBottom: 14 }}>
+    <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 4 }}>Próximo paso</div>
+    <div style={{ fontSize: 15.5, color: T.ink, lineHeight: 1.4, marginBottom: cfg.btn ? 12 : 0 }}>{cfg.txt}</div>
+    {cfg.btn && <button onClick={() => guardar(f.ID, { Estado: cfg.a })} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>{cfg.btn}</button>}
+  </div>
+}
+
 function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente, showToast, editores = [], PMS = PMS_FIJOS, logos = {}, horas = [], onRefresh, soloLoSuyo, recursosDe }) {
   const [notas, setNotas] = useState(String(f.Notas || ''))
   const [nueva, setNueva] = useState('')
@@ -1717,6 +1750,12 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
   const aQuienLeLlega = ES_MAGMA(f.Editor) ? '' : String(f.Editor || '').trim()
   // Sin fecha confirmada o sin nadie a cargo, la sección se abre sola: es lo que hay que resolver.
   const faltaPlazo = !estaCerrado(f.Estado) && (!String(f['Fecha compromiso'] || '').trim() || !String(f.Editor || '').trim())
+  // Ahora (lo del día) · Brief (qué es y qué necesita) · Historial (la bitácora entera).
+  // Queda la última que eligió cada uno.
+  const [tab, setTabSt] = useState(() => { const t = recordado('ed-ficha-tab'); return ['ahora', 'brief', 'historial'].includes(t) ? t : 'ahora' })
+  const setTab = t => { setTabSt(t); recordar('ed-ficha-tab', t) }
+  const ultimaNota = notasDeBitacora(notas)[0] || ''
+  const tabBtn = (k, l, extra) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} style={{ padding: '10px 14px 9px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: tab === k ? 700 : 500, color: tab === k ? T.ink : T.ink2, borderBottom: `2px solid ${tab === k ? T.ink : 'transparent'}`, marginBottom: -1 }}>{l}{extra ? <span style={{ fontFamily: MONO, fontSize: 12.5, color: T.ink2, marginLeft: 6 }}>{extra}</span> : null}</button>
 
 
   return <div style={{ padding: '14px 16px 16px 17px', background: T.bg, borderLeft: `3px solid ${T.border}` }}>
@@ -1737,7 +1776,22 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
     {/* Lo que hay que hacer AHORA va primero; el resto son secciones que se abren. */}
     {esperaAlPM(f.Estado) && <Revisar f={f} guardar={guardar} mailsCliente={mailsCliente} showToast={showToast} cel={cel} />}
     {esperaAlCliente(f.Estado) && <OKCliente f={f} guardar={guardar} showToast={showToast} cel={cel} />}
+    {!esperaAlPM(f.Estado) && !esperaAlCliente(f.Estado) && <ProximoPaso f={f} guardar={guardar} />}
 
+    <div role="tablist" aria-label="Secciones de la ficha" style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${T.border}`, margin: '4px 0 14px' }}>
+      {tabBtn('ahora', 'Ahora')}
+      {tabBtn('brief', 'Brief', `${piezaLlena(f) + briefLleno(f)}/${piezaTotal(f) + briefTotal(f)}`)}
+      {tabBtn('historial', 'Historial', cuantasNotas || '')}
+    </div>
+
+    {tab === 'ahora' && <>
+    {ultimaNota && <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 12.5, color: T.ink2, flex: 1 }}>Última nota</span>
+        <button onClick={() => setTab('historial')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, color: T.ink, textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}>Ver el historial</button>
+      </div>
+      <div style={{ fontSize: 13.5, color: T.ink, whiteSpace: 'pre-line', lineHeight: 1.5, maxHeight: 132, overflow: 'hidden' }}>{ultimaNota}</div>
+    </div>}
     <Logo f={f} g={g} guardar={guardar} logos={logos} cel={cel} rec={recursosDe ? recursosDe(f.Agencia, f.Cliente) : {}} />
     <HorasExtra f={f} horas={horas} editores={editores} showToast={showToast} onRefresh={onRefresh} soloLoSuyo={soloLoSuyo} cel={cel} />
 
@@ -1783,7 +1837,9 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
       </div>
     </div>
     </Plegable>
+    </>}
 
+    {tab === 'brief' && <>
     <Plegable id="pieza" titulo="Qué clase de video es" contador={`${piezaLlena(f)}/${piezaTotal(f)}`} alerta={piezaLlena(f) < piezaTotal(f)} abiertoPorDefecto={piezaLlena(f) === 0}>
       <Campos f={f} campos={CAMPOS_PIEZA} guardar={guardar} cols={cel ? 1 : 3} />
       <div style={{ fontSize: 11, color: T.ink3, marginTop: 9, lineHeight: 1.5 }}>
@@ -1803,8 +1859,9 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
           : <button onClick={() => guardar(f.ID, { 'Brief pedido': aAR(new Date()) })} style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>Marcar como pedido hoy</button>}
       </div>
     </Plegable>
+    </>}
 
-    <Plegable id="links" titulo="Links y vueltas" contador={`${['Link crudo', 'Link pre-entrega', 'Link entrega'].filter(k => String(f[k] || (k === 'Link crudo' ? g?.linkCrudo : '') || '').trim()).length}/3 links · ${(parseInt(f['Rondas internas']) || 0) + (parseInt(f['Rondas cliente']) || 0)} vueltas`}>
+    {tab === 'ahora' && <Plegable id="links" titulo="Links y vueltas" contador={`${['Link crudo', 'Link pre-entrega', 'Link entrega'].filter(k => String(f[k] || (k === 'Link crudo' ? g?.linkCrudo : '') || '').trim()).length}/3 links · ${(parseInt(f['Rondas internas']) || 0) + (parseInt(f['Rondas cliente']) || 0)} vueltas`}>
     <div style={{ display: 'grid', gridTemplateColumns: cel ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
       <div>
         <label style={lbl}>Link del material (crudo)</label>
@@ -1831,9 +1888,9 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
         </div>
       </div>
     </div>
-    </Plegable>
+    </Plegable>}
 
-    <Plegable id="bitacora" titulo="Bitácora" abiertoPorDefecto contador={`${cuantasNotas} ${cuantasNotas === 1 ? 'nota' : 'notas'}`}>
+    {tab === 'historial' && <Plegable id="bitacora" titulo="Bitácora" abiertoPorDefecto contador={`${cuantasNotas} ${cuantasNotas === 1 ? 'nota' : 'notas'}`}>
     {/* Enter hace renglón nuevo (se pueden pegar listas); Cmd/Ctrl + Enter suma la nota. */}
     <div style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
       <textarea value={nueva} onChange={e => setNueva(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); agregarNota(true) } }}
@@ -1849,8 +1906,8 @@ function Detalle({ f, g, guardar, mail, preguntar, responder, cel, mailsCliente,
         : 'No hay nadie a cargo todavía: la nota queda anotada pero no le llega a nadie. Cargá quién lo hace en “A cargo”.'}
     </div>
     <textarea value={notas} onChange={e => setNotas(e.target.value)} onBlur={() => { if (notas !== String(f.Notas || '')) guardar(f.ID, { Notas: notas }) }}
-      rows={Math.min(10, Math.max(3, notas.split('\n').length + 1))} style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.55, fontSize: 12.5 }} />
-    </Plegable>
+      rows={Math.min(14, Math.max(3, notas.split('\n').length + 1))} style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.55, fontSize: 13.5 }} />
+    </Plegable>}
 
     <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
       <BotonCopiar texto={() => textoParaElEditor({ ...f, Notas: notas, 'Link crudo': f['Link crudo'] || g.linkCrudo })} etiqueta="📋 Copiar el brief para el editor" />
