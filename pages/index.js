@@ -1068,6 +1068,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const elegirVista=v=>{ setVistaSt(v); setOpen(null); setSoloLlamar(false); try{ window.localStorage.setItem('trabajos-vista2', v) }catch(e){} }
   const [q,setQ]=useState(''), [anio,setAnio]=useState('todos'), [mes,setMes]=useState('todos'), [pm,setPm]=useState('todos'), [open,setOpen]=useState(null), [tab,setTab]=useState('prod'), [editing,setEditing]=useState(null), [nuevo,setNuevo]=useState(false), [represu,setRepresu]=useState(null), [aprobAdic,setAprobAdic]=useState(null), [aprobSaving,setAprobSaving]=useState(false), [borrando,setBorrando]=useState(null), [borrSaving,setBorrSaving]=useState(false)
   const [motivoModal,setMotivoModal]=useState(null), [motivoSaving,setMotivoSaving]=useState(false)
+  const [nuevoPaq,setNuevoPaq]=useState(null)   // sumar un evento a un paquete (o armar uno desde este presu)
   // Seguimiento comercial: el presupuesto al que se le anota "hablé con el cliente", y el filtro "📞 Por llamar" de En espera
   const [seg,setSeg]=useState(null), [segSaving,setSegSaving]=useState(false), [soloLlamar,setSoloLlamar]=useState(false)
   // Llegar con un número (desde Facturación, el buscador, el dashboard) abre ese trabajo.
@@ -1319,7 +1320,9 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
         const celdaEstado = p
           ? <EstadoSelect value={p['Estado']} onChange={nuevo=>onEstado(it,nuevo)}/>
           : <span title="Está en PROYECTOS pero no tiene presupuesto cargado" style={{fontSize:11, color:T.ink3, textAlign:'right'}}>sin presupuesto</span>
-        const proyecto = dato(it,'Proyecto') || <em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>
+        const codPaq = String(p?.['Paquete']||'').trim()
+        const nPaq = codPaq ? presus.filter(x=>String(x['Paquete']||'').trim()===codPaq && ESTADOS_VIVOS.includes(String(x['Estado']||'').toUpperCase())).length : 0
+        const proyecto = <>{dato(it,'Proyecto') || <em style={{color:T.ink3, fontStyle:'normal'}}>sin nombre</em>}{codPaq && <span title={`Paquete ${codPaq}: se cotizó junto con otros eventos del mismo cliente`} style={{marginLeft:8, fontSize:12, fontWeight:500, color:T.ink2, background:T.surfaceAlt, borderRadius:999, padding:'2px 8px'}}>Paquete · {nPaq}</span>}</>
         const dosCaras = !!(p&&y), tabActual = dosCaras ? tab : (y?'prod':'coti')
         return <div key={it.key+'_'+i}>
           {cel
@@ -1346,7 +1349,8 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
               <button key={k} onClick={()=>setTab(k)} style={{padding:'10px 14px 9px', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:14, fontWeight:tabActual===k?700:500, color:tabActual===k?T.ink:T.ink2, borderBottom:`2px solid ${tabActual===k?T.ink:'transparent'}`}}>{l}</button>
             ))}
           </div>}
-          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null} onAprobar={enEspera?()=>onEstado(it,'APROBADO'):null} onPerdido={enEspera?()=>onEstado(it,'DESAPROBADO'):null}/>}
+          {abierto && tabActual==='coti' && p && <DetallePresupuesto p={p} id={num} onEdit={()=>setEditing(p)} onRepresupuestar={()=>setRepresu(p)} onEliminar={()=>setBorrando(p)} onSeguimiento={enEspera?()=>setSeg(p):null} onAprobar={enEspera?()=>onEstado(it,'APROBADO'):null} onPerdido={enEspera?()=>onEstado(it,'DESAPROBADO'):null}
+            paquete={<PaqueteCard p={p} presus={presus} showToast={showToast} onRefresh={onRefresh} onSumarEvento={setNuevoPaq}/>}/>}
           {abierto && tabActual==='prod' && y && <StaffEditor p={y} num={num} rrhhNames={rrhhNames} rrhh={rrhh} serviciosConocidos={serviciosConocidos} proyectos={proyectos} acuerdos={data.acuerdos||[]} disponibilidad={data.disponibilidad||[]} agencias={data.agencias||[]} clientes={data.clientes||[]} seguros={data.seguros||[]} presu={p} onRefresh={onRefresh} showToast={showToast} onClose={()=>setOpen(null)} onEditarDatos={()=>setEditing(p||y)}/>}
         </div>
       })}
@@ -1355,6 +1359,7 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     {editing && <EditarModal p={editing} data={data} onClose={()=>setEditing(null)} showToast={showToast}
       onSaved={(id,cambios)=>{ setRows(rs=>rs.map(r=>String(r['Columna 1'])===String(id)?{...r,...cambios}:r)); setEditing(null); if(onRefresh) onRefresh() }}/>}
     {nuevo && <NuevoPresupuesto data={data} showToast={showToast} onClose={()=>setNuevo(false)} onGuardado={()=>{ setNuevo(false); if(onRefresh) onRefresh() }}/>}
+    {nuevoPaq && <NuevoPresupuesto data={data} paqueteInicial={nuevoPaq} showToast={showToast} onClose={()=>setNuevoPaq(null)} onGuardado={()=>{ setNuevoPaq(null); if(onRefresh) onRefresh() }}/>}
     {represu && <NuevoPresupuesto data={data} initialData={represu} showToast={showToast} onClose={()=>setRepresu(null)} onGuardado={()=>{ setRepresu(null); if(onRefresh) onRefresh() }}/>}
     {resg && <ResguardoModal presu={resg} condicion={condicionDe(resg, data.agencias, data.clientes)} onClose={()=>setResg(null)} onConfirm={r=>{ const p=resg; setResg(null); setResgPend({num:p['Columna 1'], r}); presuTieneOpciones(p) ? setAprobAdic(p) : cambiarEstado(p['Columna 1'],'APROBADO',p['Estado'],undefined,r) }}/>}
     {aprobAdic && <AprobarAdicionalesModal presu={aprobAdic} saving={aprobSaving} onClose={()=>setAprobAdic(null)} onConfirm={aprobarConAdic}/>}
@@ -1564,7 +1569,108 @@ function EditarModal({p, data, onClose, onSaved, showToast}){
   </div>
 }
 
-function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSeguimiento, onAprobar, onPerdido}){
+// ============================ PAQUETE DE EVENTOS ============================
+// Juan, 27/10/2026: varios eventos al mismo cliente en un solo PDF, con el precio de cada uno
+// y un descuento si cierra todos. Cada evento es su propio presupuesto (staff, Calendar y
+// aprobación por separado); el paquete los agrupa en PRESUPUESTOS EA-EC (/api/paquete).
+const ESTADOS_VIVOS=['EN ESPERA','APROBADO','EN CURSO','ENTREGADO']
+function PaqueteCard({p, presus, showToast, onRefresh, onSumarEvento}){
+  const nrm=v=>String(v||'').trim().toLowerCase()
+  const codigo=String(p['Paquete']||'').trim()
+  const est=String(p['Estado']||'').toUpperCase()
+  const [armando,setArmando]=useState(false), [sel,setSel]=useState({}), [pctArmar,setPctArmar]=useState('10'), [saving,setSaving]=useState(false)
+  const [pctEdit,setPctEdit]=useState(null)
+  const llamar=async(body, ok)=>{
+    setSaving(true)
+    try{ const r=await fetch('/api/paquete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json()
+      if(!j.ok){ showToast(j.error||'No se pudo','err'); return false }
+      showToast(ok); onRefresh&&onRefresh(); return true
+    }catch(e){ showToast('Error de conexión','err'); return false } finally{ setSaving(false) }
+  }
+  const caja={marginTop:12, padding:'12px 14px', borderRadius:10, background:T.surface, border:`1px solid ${T.border}`, fontSize:13.5, color:T.ink}
+  const btn={...miniBtn, fontSize:13, background:T.surface, color:T.ink, border:`1px solid ${T.border}`}
+
+  if(!codigo){
+    if(est!=='EN ESPERA') return null
+    // Otros presus en espera del mismo cliente, sin paquete: los candidatos a ir juntos
+    const otros=presus.filter(x=>x!==p && String(x['Estado']||'').toUpperCase()==='EN ESPERA' && !String(x['Paquete']||'').trim() && nrm(x['Cliente']) && nrm(x['Cliente'])===nrm(p['Cliente']))
+    const yo={num:String(p['Columna 1']), proyecto:p['Proyecto']||'', total:Math.round(parseMonto(p['Precio Final'])), fecha:p['Fecha Evento']||''}
+    if(!armando) return <div style={{marginTop:12, display:'flex', gap:14, flexWrap:'wrap', fontSize:13.5}}>
+      {otros.length>0 && <button type="button" onClick={()=>setArmando(true)} style={{background:'transparent', border:'none', padding:0, color:T.ink, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', fontSize:13.5}}>Juntar en un paquete con otros {otros.length} de {p['Cliente']}</button>}
+      <button type="button" onClick={()=>onSumarEvento({codigo:'', pct:'', eventos:[yo], base:p})} style={{background:'transparent', border:'none', padding:0, color:T.ink, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', fontSize:13.5}}>＋ Sumar otro evento (paquete)</button>
+    </div>
+    const elegidos=otros.filter(x=>sel[x['Columna 1']])
+    const lista=[p,...elegidos].reduce((t,x)=>t+parseMonto(x['Precio Final']),0), pct=parseFloat(String(pctArmar).replace(',','.'))||0
+    return <div style={caja}>
+      <div style={{fontWeight:700, marginBottom:8}}>¿Qué eventos van juntos?</div>
+      <div style={{color:T.ink2, padding:'3px 0'}}>✓ #{yo.num} · {yo.proyecto} · {fmt(yo.total)}</div>
+      {otros.map(x=><label key={x['Columna 1']} style={{display:'flex', gap:8, alignItems:'center', padding:'3px 0', cursor:'pointer'}}>
+        <input type="checkbox" checked={!!sel[x['Columna 1']]} onChange={e=>setSel(o=>({...o,[x['Columna 1']]:e.target.checked}))} style={{width:16, height:16, accentColor:T.ink}}/>
+        <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink2}}>#{x['Columna 1']}</span><span style={{flex:1}}>{x['Proyecto']} <span style={{color:T.ink2}}>· {x['Fecha Evento']||'sin fecha'}</span></span><span style={{fontFamily:MONO}}>{fmt(parseMonto(x['Precio Final']))}</span>
+      </label>)}
+      <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:10}}>
+        <span>Descuento si cierra todo</span>
+        <input value={pctArmar} onChange={e=>setPctArmar(e.target.value.replace(/[^\d.,]/g,''))} inputMode="decimal" aria-label="Descuento en %" style={{width:56, padding:'6px 8px', borderRadius:8, border:`1px solid ${T.campo}`, textAlign:'right', fontSize:13.5}}/>%
+        <span style={{flex:1}}/>
+        <span style={{color:T.ink2}}>{fmt(lista)}{pct>0?<> → <strong style={{color:T.ink, fontFamily:MONO}}>{fmt(Math.round(lista*(1-pct/100)))}</strong></>:null}</span>
+      </div>
+      <div style={{display:'flex', gap:8, marginTop:10}}>
+        <button type="button" disabled={!elegidos.length||saving} onClick={async()=>{ if(await llamar({accion:'armar', nros:[yo.num,...elegidos.map(x=>String(x['Columna 1']))], pct:pctArmar}, `Paquete armado con ${elegidos.length+1} eventos`)) setArmando(false) }}
+          style={{...btn, background:elegidos.length?T.ink:T.apagado, color:'#fff', border:'none', fontWeight:600}}>{saving?'Guardando…':'Armar paquete'}</button>
+        <button type="button" onClick={()=>setArmando(false)} style={btn}>Cancelar</button>
+      </div>
+    </div>
+  }
+
+  // ---- Ya está en un paquete ----
+  const miembros=presus.filter(x=>String(x['Paquete']||'').trim()===codigo)
+  const vivos=miembros.filter(x=>ESTADOS_VIVOS.includes(String(x['Estado']||'').toUpperCase()))
+  const listaDe=x=>parseMonto(x['Precio lista'])||parseMonto(x['Precio Final'])
+  const aplicado=miembros.some(x=>parseMonto(x['Precio lista'])>0)
+  const pct=parseMonto(p['Desc. paquete'])
+  const totLista=vivos.reduce((t,x)=>t+listaDe(x),0)
+  const totFinal=aplicado ? vivos.reduce((t,x)=>t+parseMonto(x['Precio Final']),0) : vivos.reduce((t,x)=>t+Math.round(listaDe(x)*(1-pct/100)/1000)*1000,0)
+  // Lo que le queda a Magma después del descuento = precio − lo que se paga por los servicios
+  const costo=vivos.reduce((t,x)=>t+parseMonto(x['Subtotal']),0), queda=totFinal-costo, quedaPct=totFinal>0?queda/totFinal*100:0
+  const caidos=miembros.filter(x=>!ESTADOS_VIVOS.includes(String(x['Estado']||'').toUpperCase()))
+  const enEspera=vivos.filter(x=>String(x['Estado']||'').toUpperCase()==='EN ESPERA')
+  const guardarPct=async()=>{ if(pctEdit==null) return; const v=pctEdit; setPctEdit(null); if((parseFloat(String(v).replace(',','.'))||0)!==pct) await llamar({accion:'pct', codigo, pct:v}, `Descuento del paquete: ${v||0}%`) }
+  return <div style={caja}>
+    <div style={{display:'flex', alignItems:'baseline', gap:8, marginBottom:8, flexWrap:'wrap'}}>
+      <span style={{fontWeight:700}}>Paquete · {vivos.length} eventos</span><span style={{color:T.ink2, fontSize:12.5}}>{codigo}</span>
+      <span style={{flex:1}}/>
+      <a href={`/presupuesto?paquete=${encodeURIComponent(codigo)}`} target="_blank" rel="noreferrer" style={{...btn, textDecoration:'none'}}>PDF del paquete →</a>
+    </div>
+    {miembros.map(x=>{ const n=String(x['Columna 1']), e=String(x['Estado']||'').toUpperCase(), vivo=ESTADOS_VIVOS.includes(e), l=listaDe(x), f=parseMonto(x['Precio Final'])
+      return <div key={n} style={{display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderTop:`1px solid ${T.border}`, opacity:vivo?1:0.55}}>
+        <span style={{fontFamily:MONO, fontSize:12.5, color:T.ink2}}>#{n}</span>
+        <span style={{flex:1, minWidth:0}}><span style={{fontWeight:x===p?700:400}}>{x['Proyecto']}</span> <span style={{color:T.ink2}}>· {x['Fecha Evento']||'sin fecha'} · {e.toLowerCase()}</span></span>
+        <span style={{fontFamily:MONO, textAlign:'right'}}>{aplicado&&l!==f?<><s style={{color:T.ink3, fontSize:12}}>{fmt(l)}</s> {fmt(f)}</>:fmt(f)}</span>
+        <button type="button" title="Sacar este evento del paquete" disabled={saving} onClick={()=>{ if(confirm(`¿Sacar #${n} del paquete?${parseMonto(x['Precio lista'])>0?`\n\nVuelve a su precio de lista: ${fmt(l)}.`:''}${miembros.length===2?'\n\nEl paquete queda con un solo evento, así que se desarma.':''}`)) llamar({accion:'sacar', nro:n}, `#${n} salió del paquete`) }}
+          style={{background:'transparent', border:'none', color:T.ink3, cursor:'pointer', fontSize:16, lineHeight:1, padding:'0 2px'}} aria-label={`Sacar #${n} del paquete`}>×</button>
+      </div> })}
+    <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`}}>
+      <span>Descuento si cierra todo</span>
+      {aplicado ? <strong>{pct}%</strong> : <><input value={pctEdit??String(pct||'')} onChange={e=>setPctEdit(e.target.value.replace(/[^\d.,]/g,''))} onBlur={guardarPct} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} inputMode="decimal" aria-label="Descuento del paquete en %" placeholder="0" style={{width:56, padding:'6px 8px', borderRadius:8, border:`1px solid ${T.campo}`, textAlign:'right', fontSize:13.5}}/>%</>}
+      <span style={{flex:1}}/>
+      <span style={{color:T.ink2}}>{fmt(totLista)}{pct>0?<> → <strong style={{color:T.ink, fontFamily:MONO}}>{fmt(totFinal)}</strong></>:null}</span>
+    </div>
+    {pct>0 && <div style={{fontSize:12.5, color:quedaPct<20?T.warn:T.ink2, marginTop:4}}>Con el descuento a Magma le quedan {fmt(queda)} ({Math.round(quedaPct)}%) después de pagar los servicios.</div>}
+    {caidos.length>0 && !aplicado && <div style={{fontSize:12.5, color:T.warn, marginTop:4}}>{caidos.length===1?'Un evento se cayó':`${caidos.length} eventos se cayeron`}: el cliente no cierra todo, así que va sin descuento.</div>}
+    <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
+      {!aplicado && pct>0 && !caidos.length && vivos.length>=2 && <button type="button" disabled={saving} onClick={()=>{
+          const det=vivos.map(x=>`#${x['Columna 1']} ${x['Proyecto']}: ${fmt(listaDe(x))} → ${fmt(Math.round(listaDe(x)*(1-pct/100)/1000)*1000)}`).join('\n')
+          if(confirm(`El cliente cerró los ${vivos.length} eventos: aplicar −${pct}%.\n\n${det}\n\nTotal: ${fmt(totLista)} → ${fmt(totFinal)}\n\nSe baja el precio de cada presupuesto (sale del margen, no del staff). Después aprobá cada evento como siempre.`))
+            llamar({accion:'cerrar', codigo}, `Descuento aplicado. Ahora aprobá cada evento (${enEspera.length} en espera)`) }}
+        style={{...btn, background:T.ink, color:'#fff', border:'none', fontWeight:600}}>Cerró todo: aplicar −{pct}%</button>}
+      {aplicado && <button type="button" disabled={saving} onClick={()=>{ if(confirm('¿Volver cada evento a su precio de lista?')) llamar({accion:'deshacer', codigo}, 'Descuento deshecho: cada evento volvió a su precio de lista') }} style={btn}>Deshacer descuento</button>}
+      <button type="button" onClick={()=>onSumarEvento({codigo, pct:String(pct||''), eventos:vivos.map(x=>({num:String(x['Columna 1']), proyecto:x['Proyecto']||'', total:Math.round(parseMonto(x['Precio Final'])), fecha:x['Fecha Evento']||''})), base:p})} style={btn}>＋ Sumar otro evento</button>
+    </div>
+    {aplicado && enEspera.length>0 && <div style={{fontSize:12.5, color:T.ink2, marginTop:8}}>Falta aprobar {enEspera.map(x=>'#'+x['Columna 1']).join(', ')}. Cada uno pide su seña u OC, y después se le carga el staff en Producción.</div>}
+  </div>
+}
+
+function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSeguimiento, onAprobar, onPerdido, paquete}){
   const servicios=[]
   for(let j=1;j<=MAX_SLOTS;j++){
     const ped=p['Pedido '+j]||p['Pedido'+j+' ']||''
@@ -1593,6 +1699,7 @@ function DetallePresupuesto({p, id, onEdit, onRepresupuestar, onEliminar, onSegu
         </span>
         <button onClick={e=>{e.stopPropagation(); onSeguimiento()}} style={{...miniBtn, fontSize:13, background:T.surface, color:T.ink, border:`1px solid ${s.toca?T.ink:T.border}`, fontWeight:600}}>📞 Hablé con el cliente</button>
       </div> })()}
+    {paquete}
     <div style={{display:'flex', gap:32, padding:'14px 0', flexWrap:'wrap'}}>
       {[['N°',id],['Agencia',p['Agencia']],['Carga',p['Fecha Presupuesto']],['Contacto',p['Contacto']],['PM',p['PM Interno']],['Horario',p['Horario']],['Ubicación',p['Ubicación']]].filter(x=>x[1]).map(([k,v])=>(
         <div key={k}><div style={{fontSize:12.5, color:T.ink2}}>{k}</div><div style={{fontSize:14, color:T.ink, marginTop:2}}>{v}</div></div>
@@ -1743,7 +1850,7 @@ const gananciaPresu = p => parseMonto(p['Precio Final']) - parseMonto(p['Subtota
 // "sano" sigue siendo estar arriba de la mitad de los trabajos, y "bajo" menos de 45%.
 const semaforo = pct => pct>=60?{c:T.pos,l:'sano'}:pct>=45?{c:T.warn,l:'aceptable'}:{c:T.brand,l:'bajo'}
 
-function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
+function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, paqueteInicial}){
   const hoyISO = new Date().toISOString().slice(0,10)
   const isRep = !!initialData
   const tipoOrig = String(initialData?.['Tipo Fechas']||'').toLowerCase().trim() || 'dia'
@@ -1765,9 +1872,13 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
     desglosar:presuDesglosado(initialData),
     edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
     entregaCrudo:/^s[ií]/i.test(String(initialData['Entrega crudo']||'').trim()) || /austral/i.test(String(initialData['Agencia']||'')+' '+String(initialData['Cliente']||'')), tipoTrabajo:String(initialData['Tipo de trabajo']||'').trim(),
-  } : { fp:hoyISO, dias:[], tentativos:[], agencia:'', cliente:'', proyecto:'', contacto:'', pm:'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'', entregaCrudo:false, tipoTrabajo:'' })
+  } : { fp:hoyISO, dias:[], tentativos:[], agencia:paqueteInicial?.base?.['Agencia']||'', cliente:paqueteInicial?.base?.['Cliente']||'', proyecto:'', contacto:paqueteInicial?.base?.['Contacto']||'', pm:paqueteInicial?.base?.['PM Interno']||'', plazo:'0', interes:'0', gan:true, iibb:true, tajuste:'1', ajuste:'0', observaciones:'', horaIni:'', horaFin:'', ubicacion:'', descPct:'', motivo:'', desglosar:false, edClase:'', edFormato:'', edRed:'', edGrafica:'', entregaCrudo:false, tipoTrabajo:'' })
   const [peds,setPeds]=useState(isRep && readPedidosOrig(initialData).length>0 ? readPedidosOrig(initialData) : [{id:1,svc:'',precio:'',cant:1,feeAg:true,manual:false,adicional:false,precioCliente:''}])
   const [saving,setSaving]=useState(false)
+  // Paquete de eventos (Juan, 27/10/2026): "Crear y sumar otro evento" guarda este y deja el
+  // formulario listo para el siguiente, con el mismo cliente. Cada evento es su propio presu;
+  // desde el segundo se agrupan con /api/paquete (columnas EA-EC de PRESUPUESTOS).
+  const [paq,setPaq]=useState(()=>({codigo:paqueteInicial?.codigo||'', pct:String(paqueteInicial?.pct||''), eventos:paqueteInicial?.eventos||[]}))
   const upd=(k,v)=>setForm(f=>({...f,[k]:v}))
   const { data: session } = useSession()
   const cel = useEsCelular()
@@ -1953,7 +2064,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
 
   // `pdfWin`: la pestaña del PDF, abierta en el mismo clic ("Crear y abrir el PDF") para
   // que el navegador no la bloquee; se le pone la dirección cuando el sheet devuelve el número.
-  async function guardar(pdfWin){
+  async function guardar(pdfWin, otro=false){
     setSaving(true)
     const cerrarPdf=()=>{ try{ pdfWin&&pdfWin.close() }catch(e){} }
     // fechas
@@ -2000,7 +2111,20 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       const r=await fetch('/api/presupuesto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)})
       const j=await r.json()
       if(!j.ok){ cerrarPdf(); showToast((j.error||'Error')+(j.detalles?': '+j.detalles.join(', '):''),'err'); setSaving(false); return }
-      if(pdfWin) try{ pdfWin.location.href=`/presupuesto?nro=${encodeURIComponent(j.numero)}` }catch(e){}
+      // Paquete: desde el segundo evento se agrupan todos (el % vale para el paquete entero)
+      let codigoPaq=paq.codigo
+      if(!isRep && (otro || paq.eventos.length)){
+        const eventos=[...paq.eventos, {num:String(j.numero), proyecto:form.proyecto, total:Math.round(total), fecha:fechasTxt}]
+        if(eventos.length>=2){
+          try{
+            const rp=await fetch('/api/paquete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'armar', nros:eventos.map(e=>e.num), codigo:paq.codigo||undefined, pct:paq.pct})})
+            const jp=await rp.json()
+            if(jp.ok) codigoPaq=jp.codigo; else showToast(`#${j.numero} creado, pero no se sumó al paquete: ${jp.error}`,'err')
+          }catch(e){ showToast(`#${j.numero} creado, pero no se sumó al paquete (conexión)`,'err') }
+        }
+        setPaq(x=>({...x, codigo:codigoPaq, eventos}))
+      }
+      if(pdfWin) try{ pdfWin.location.href = codigoPaq ? `/presupuesto?paquete=${encodeURIComponent(codigoPaq)}` : `/presupuesto?nro=${encodeURIComponent(j.numero)}` }catch(e){}
       if(j.aviso) showToast(j.aviso,'err')   // p. ej. falta la columna "Precio visible" en el sheet
       // Represupuestar: marcar el original como REPRESUPUESTADO (con motivo)
       // `nuevo` va para que las tareas de Edición del original pasen al número nuevo
@@ -2014,7 +2138,15 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       if(agNueva){ try{ await fetch('/api/agencia-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.agencia, cuit:agNew.cuit, condIVA:agNew.condIVA, mailFact:agNew.mailFact, telefono:agNew.telefono})}) }catch(e){} }
       if(clNuevo){ try{ await fetch('/api/cliente-upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:form.cliente})}) }catch(e){} }
       limpiarBorrador()
-      showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
+      if(otro){
+        // Queda listo para el siguiente evento: mismo cliente, agencia, contacto, PM, condiciones y
+        // servicios (casi siempre se parecen); lo propio de cada evento, en blanco.
+        setForm(f=>({...f, proyecto:'', dias:[], tentativos:[], horaIni:'', horaFin:'', ubicacion:'', observaciones:'', descPct:'', tajuste:'1', ajuste:'0'}))
+        setSaving(false)
+        showToast(`Evento #${j.numero} creado. Cargá el siguiente: los servicios quedaron como el anterior`)
+        return
+      }
+      showToast(isRep?`Represupuesto #${j.numero} creado · original marcado`:codigoPaq?`Presupuesto #${j.numero} creado · paquete ${codigoPaq} armado`:`Presupuesto #${j.numero} creado`); onGuardado&&onGuardado()
     }catch(e){ cerrarPdf(); showToast('Error de conexión','err'); setSaving(false) }
   }
 
@@ -2022,7 +2154,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // Dos cosas distintas arreglan el mismo dolor: un clic de más afuera del cuadro
   // cerraba el modal y borraba media hora de trabajo, y cerrar la pestaña también.
   // El borrador se guarda en el navegador a cada tecla y vuelve solo al reabrir.
-  const CLAVE_BORRADOR = isRep ? null : 'magma:presu-borrador'
+  const CLAVE_BORRADOR = (isRep || paqueteInicial) ? null : 'magma:presu-borrador'   // sumar un evento a un paquete arranca con su cliente, no con un borrador viejo
   const hayDatos = !!(form.cliente.trim() || form.proyecto.trim() || form.agencia.trim() || (form.dias||[]).length || peds.some(x=>x.svc.trim()||x.precio))
   const [recuperado, setRecuperado] = useState(false)
 
@@ -2055,8 +2187,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   // El clic afuera ya no cierra y listo: si hay algo cargado, pregunta. Y aunque
   // digas que sí, el borrador queda guardado para recuperarlo.
   const cerrar = ()=>{
-    if(hayDatos && !confirm('¿Cerrar el presupuesto?\n\nLo que cargaste queda guardado como borrador y vuelve solo la próxima vez que abras uno nuevo.')) return
-    onClose && onClose()
+    if(hayDatos && !confirm(paq.eventos.length ? `¿Cerrar?\n\nLos ${paq.eventos.length} eventos que ya creaste quedan guardados. Lo que estás cargando ahora queda como borrador.` : '¿Cerrar el presupuesto?\n\nLo que cargaste queda guardado como borrador y vuelve solo la próxima vez que abras uno nuevo.')) return
+    paq.eventos.length ? (onGuardado&&onGuardado()) : (onClose && onClose())
   }
   const empezarDeCero = ()=>{
     if(!confirm('¿Descartar lo que quedó a medio cargar y empezar de cero?')) return
@@ -2116,13 +2248,30 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
   return <div onClick={cerrar} style={{position:'fixed', inset:0, background:'rgba(26,25,23,0.4)', zIndex:900, display:'flex', justifyContent:'center', overflowY:'auto', padding:cel?'0':'32px 20px'}}>
     <div onClick={e=>e.stopPropagation()} onKeyDown={alTeclado} role="dialog" aria-label={isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'} style={{width:'100%', maxWidth:860, background:T.bg, borderRadius:cel?0:16, boxShadow:'0 16px 50px rgba(0,0,0,0.18)', height:'fit-content', minHeight:cel?'100%':undefined}}>
       <div style={{padding:cel?'14px 16px':'16px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', gap:10, alignItems:'center', position:'sticky', top:0, background:T.surface, borderRadius:cel?0:'16px 16px 0 0', zIndex:2, flexWrap:'wrap'}}>
-        <div style={{fontSize:18, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:'Nuevo presupuesto'}</div>
+        <div style={{fontSize:18, fontWeight:700, color:T.ink}}>{isRep?`Represupuestar #${initialData['Columna 1']}`:paq.eventos.length?`Paquete · evento ${paq.eventos.length+1}`:'Nuevo presupuesto'}</div>
         <div style={{flex:1}}/>
         {ultimoParaRepetir && sinServicios && <button type="button" onClick={repetirUltimo} title={`Carga los servicios y precios del #${ultimoParaRepetir['Columna 1']} · ${ultimoParaRepetir['Proyecto']||''}`} style={{padding:'7px 13px', borderRadius:999, border:'none', background:'#F3EFE9', color:T.ink, fontSize:13.5, cursor:'pointer'}}>↺ Repetir el último de {String(ultimoParaRepetir['Cliente']||ultimoParaRepetir['Agencia']||'').trim()}</button>}
         <button type="button" onClick={cerrar} aria-label="Cerrar" style={{border:'none', background:'transparent', fontSize:24, color:T.ink2, cursor:'pointer', lineHeight:1, padding:'0 4px'}}>×</button>
       </div>
 
       <div style={{padding:cel?'14px 12px 4px':'18px 22px 6px'}}>
+        {paq.eventos.length>0 && (()=>{ const pct=Math.min(50,Math.max(0,parseFloat(String(paq.pct).replace(',','.'))||0))
+          const lista=paq.eventos.reduce((s,e)=>s+e.total,0)+(form.proyecto.trim()||baseList.some(p=>p.svc.trim())?Math.round(total):0)
+          return <div style={{...secP, background:T.surfaceAlt, boxShadow:'none'}}>
+            <div style={{fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:8}}>Paquete para {form.cliente||form.agencia||'el cliente'}{paq.codigo?<span style={{fontWeight:400, color:T.ink2}}> · {paq.codigo}</span>:null}</div>
+            {paq.eventos.map(e=><div key={e.num} style={{display:'flex', gap:10, fontSize:13.5, color:T.ink2, padding:'3px 0'}}>
+              <span style={{fontFamily:MONO, fontSize:12.5}}>#{e.num}</span><span style={{flex:1, color:T.ink, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{e.proyecto}{e.fecha?<span style={{color:T.ink2}}> · {e.fecha}</span>:null}</span><span style={{fontFamily:MONO, fontSize:13}}>{fmt(e.total)}</span>
+            </div>)}
+            <div style={{display:'flex', gap:10, fontSize:13.5, color:T.ink2, padding:'3px 0'}}><span style={{flex:1}}>Este evento</span><span style={{fontFamily:MONO, fontSize:13}}>{fmt(Math.round(total))}</span></div>
+            <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:13.5, color:T.ink}}>
+              <span>Descuento si cierra todo</span>
+              <input value={paq.pct} onChange={e=>setPaq(x=>({...x, pct:e.target.value.replace(/[^\d.,]/g,'')}))} inputMode="decimal" aria-label="Descuento del paquete en %" placeholder="0" style={{...inpP, width:64, textAlign:'right'}}/><span>%</span>
+              <span style={{flex:1}}/>
+              <span style={{color:T.ink2}}>Total {fmt(lista)}</span>
+              {pct>0 && <strong style={{fontFamily:MONO}}>→ {fmt(Math.round(lista*(1-pct/100)))}</strong>}
+            </div>
+            <div style={ayudaP}>Cada evento queda como su propio presupuesto (staff, Calendar y aprobación por separado). El descuento se aplica recién cuando el cliente cierra todo.</div>
+          </div> })()}
         {recuperado && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:'10px 14px', marginBottom:12}}>
           <span style={{fontSize:13.5, color:T.ink2, flex:1}}>Recuperamos el presupuesto que habías dejado a medio cargar.</span>
           <button type="button" onClick={empezarDeCero} style={{padding:'6px 12px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:13, cursor:'pointer'}}>Empezar de cero</button>
@@ -2402,7 +2551,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData}){
       <div style={{position:'sticky', bottom:0, background:T.surface, borderTop:`1px solid ${T.border}`, borderRadius:cel?0:'0 0 16px 16px', padding:cel?'12px 14px':'14px 22px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
         <span style={{fontSize:13, color:falta.length?T.warn:T.ink2, fontWeight:falta.length?600:400, flex:'1 1 200px'}}>{falta.length ? `Falta: ${falta.join(', ')}` : (cel ? '' : '⌘ + Enter crea')}</span>
         <button type="button" onClick={cerrar} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, fontSize:14, cursor:'pointer'}}>Cancelar</button>
-        <button type="button" onClick={crearYAbrirPdf} disabled={!puedeGuardar} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:puedeGuardar?T.ink:T.ink3, fontSize:14, cursor:puedeGuardar?'pointer':'default'}}>Crear y abrir el PDF</button>
+        {!isRep && <button type="button" onClick={()=>puedeGuardar&&guardar(null,true)} disabled={!puedeGuardar} title="Guarda este evento y deja el formulario listo para el siguiente, con el mismo cliente. Al cliente le llega un solo PDF con todos." style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:puedeGuardar?T.ink:T.ink3, fontSize:14, cursor:puedeGuardar?'pointer':'default'}}>＋ Crear y sumar otro evento</button>}
+        <button type="button" onClick={crearYAbrirPdf} disabled={!puedeGuardar} style={{padding:'10px 16px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:puedeGuardar?T.ink:T.ink3, fontSize:14, cursor:puedeGuardar?'pointer':'default'}}>{paq.eventos.length?'Crear y abrir el PDF del paquete':'Crear y abrir el PDF'}</button>
         <button type="button" onClick={()=>guardar()} disabled={!puedeGuardar} style={{padding:'10px 20px', borderRadius:10, border:'none', background:puedeGuardar?T.ink:T.apagado, color:'#fff', fontSize:14, fontWeight:600, cursor:puedeGuardar?'pointer':'default'}}>{saving?'Guardando…':(isRep?'Crear represupuesto':'Crear presupuesto')}</button>
       </div>
     </div>
@@ -5975,7 +6125,70 @@ function Caja({data, onRefresh, showToast, goTo}){
     qaLock.current=true; setQaBusy(true)
     try{ const r=await fetch('/api/gasto-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({categoria:categoriaDe(qaRub?.rubro||''), rubro:qaRub?.rubro||'', subrubro:qaRub?.subrubro||'', nroTrabajo:esDeTrabajo?((qa.trabajo||'').match(/\d{3,}/)||[''])[0]:'', concepto, monto, moneda:'ARS', recurrencia:'unico', diaPago:D, mes:M, anio:Y, pagado:true, cuentaPago:qaCuenta, fechaPago:`${D}/${M}/${Y}`, medio:/efectivo/i.test(qaCuenta)?'Efectivo':'Transferencia', tipo:'gasto'})})
       const j=await r.json(); if(j&&j.error){ showToast(j.error,'err'); qaLock.current=false; setQaBusy(false); return }
-      showToast(`Anotado ✓ · ${concepto} · ${fmt(monto)} desde ${qaCuenta}${qaRub?` · ${qaRub.label}`:''}${j.aviso?` · ${j.aviso}`:''}`); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', trabajo:'', fecha:hoyISO}); if(onRefresh) await onRefresh()
+      showToast(`Anotado ✓ · ${concepto} · ${fmt(monto)} desde ${qaCuenta}${qaRub?` · ${qaRub.label}`:''}${j.aviso?` · ${j.aviso}`:''}`); avisarNegativo(qaCuenta, monto); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', trabajo:'', fecha:hoyISO}); if(onRefresh) await onRefresh()
+    }catch(e){ showToast('Error de conexión','err') }
+    qaLock.current=false; setQaBusy(false)
+  }
+  // ---- "Pagué algo" (27/10/2026). Antes había que encontrar la fila exacta en la lista; si no aparecía o figuraba
+  // paga (la tarjeta pagada en dos veces), se creaba otra. Ahora se escribe qué se pagó y la app ofrece lo pendiente
+  // con ese nombre: tarjetas (también lo que quedó a medias), préstamos, VEPs y gastos del mes. Si no hay nada, es un gasto nuevo.
+  const [qaSel,setQaSel]=useState(null), [qaVer,setQaVer]=useState(false), [qaIdx,setQaIdx]=useState(0)
+  const [qaModo,setQaModo]=useState('pago'), [pase,setPase]=useState({de:'', a:'', monto:''}), [negativo,setNegativo]=useState(null)
+  const pendPago=(()=>{ const out=[], visto=new Set(), DIA=864e5, h0=new Date(now.getFullYear(),now.getMonth(),now.getDate())
+    const add=x=>{ const k=x.hoja+':'+x.fila; if(visto.has(k)) return; visto.add(k); out.push(x) }
+    const dm=d=>`${d.getDate()}/${d.getMonth()+1}`
+    // De cada tarjeta, solo el ÚLTIMO resumen puede deber algo: lo que no se pagó de uno anterior pasó financiado al siguiente
+    // (ofrecerlo sería pagarlo dos veces).
+    const ultimoResumen={}; (data.tarjetas||[]).forEach(r=>{ const v=parseD(r['Vencimiento']), k=normTxt(r['Tarjeta']); if(v&&v<=h0.getTime()+45*DIA&&(!ultimoResumen[k]||v>ultimoResumen[k])) ultimoResumen[k]=v })
+    ;(data.tarjetas||[]).forEach(r=>{ const v=parseD(r['Vencimiento']); if(!v||v<h0-150*DIA||v>h0.getTime()+45*DIA) return
+      if(v<ultimoResumen[normTxt(r['Tarjeta'])]) return
+      const monto=parseMonto(r['Monto']), pag=parseMonto(r['Monto pagado']), si=/^s[ií]$/i.test(String(r['Pagado']||'').trim())
+      const resta=si ? (pag>0 && pag<monto-1 ? monto-pag : 0) : Math.max(0, monto-pag); if(resta<=0) return
+      add({hoja:'TARJETAS', fila:r.__row, nombre:String(r['Tarjeta']||'').trim(), det:`resumen ${r['Mes']}/${r['Año']} · ${si||pag>0?`ya se pagaron ${fmt(pag)}, quedan ${fmt(resta)}`:`vence el ${dm(v)}`}`, resta, cuenta:String(r['Cuenta pago']||'').trim(), venc:v, parcial:true}) })
+    ;[...(data.prestamos||[])].sort((x,y)=>(parseD(x['Vencimiento'])||0)-(parseD(y['Vencimiento'])||0)).forEach(r=>{ if(/socio/i.test(String(r['Tipo']||''))) return; if(String(r['Moneda']||'ARS').trim().toUpperCase()!=='ARS') return; const v=parseD(r['Vencimiento']); if(!v||v<h0-150*DIA||v>h0.getTime()+45*DIA) return
+      if(/^s[ií]$/i.test(String(r['Pagado']||'').trim())) return; const monto=parseMonto(r['Monto cuota']), resta=Math.max(0, monto-parseMonto(r['Monto pagado'])); if(resta<=0) return
+      // De cada préstamo, solo la próxima cuota sin pagar
+      const kP='P:'+normTxt(r['Prestamo']); if(visto.has(kP)) return; visto.add(kP)
+      add({hoja:'PRESTAMOS', fila:r.__row, nombre:`Préstamo ${String(r['Prestamo']||'').trim()}`, det:`${String(r['Cuota nro']||'').trim()} · vence el ${dm(v)}`, resta, cuenta:String(r['Cuenta pago']||'').trim(), venc:v, parcial:false, debito:true}) })
+    cHoy.items.forEach(x=>{ if(x.pagado||!x.hoja||x.tipo==='falta'||x.tipo==='socios'||x.link||!(x.monto>0)) return; if(x.hoja==='TARJETAS'||x.hoja==='PRESTAMOS') return
+      add({hoja:x.hoja, fila:x.fila, mesPagoKey:x.mesPagoKey, nombre:x.nombre, det:[x.fuente, x.dia?`vence el ${x.dia}/${cHoy.mes}`:'', x.tipo==='debito'?'se debita solo':''].filter(Boolean).join(' · '), resta:x.monto, cuenta:x.cuenta, venc:x.dia?new Date(cHoy.anio,cHoy.mes-1,x.dia):null, parcial:x.hoja!=='GASTOS_FIJOS', debito:x.tipo==='debito'}) })
+    return out.sort((a,b)=>(a.venc||8.64e15)-(b.venc||8.64e15)) })()
+  const qaSug=(()=>{ const pal=normTxt(qa.concepto).split(/\s+/).filter(Boolean); if(qaSel) return []
+    const l=pal.length ? pendPago.filter(x=>{ const t=normTxt(`${x.nombre} ${x.det}`); return pal.every(w=>t.includes(w)) }) : pendPago.filter(x=>x.venc && x.venc<=new Date(now.getTime()+7*864e5))
+    return l.slice(0,6) })()
+  const elegirPend=x=>{ setQaSel(x); setQaVer(false); setQa(q=>({...q, concepto:x.nombre, monto:numAMontoAR(Math.round(x.resta*100)/100), cuenta:cuentaOpts.includes(x.cuenta)?x.cuenta:q.cuenta})) }
+  const avisarNegativo=(cuenta,monto)=>{ const k=c.cuentas.find(x=>x.nombre===cuenta); if(!k||/efectivo/i.test(cuenta)) return; const queda=k.saldo-monto; if(queda<0) setNegativo({cuenta, falta:Math.ceil(-queda)}) }
+  async function pagarPendiente(){
+    if(qaLock.current) return
+    const x=qaSel, monto=parseMontoAR(qa.monto)
+    if(!(monto>0)){ showToast('Poné cuánto pagaste','err'); return }
+    if(!qaCuenta){ showToast('Elegí de dónde salió la plata','err'); return }
+    const [Y,M,D]=(qa.fecha||hoyISO).split('-').map(Number)
+    qaLock.current=true; setQaBusy(true)
+    // Tarjetas, préstamos y VEPs: suma a lo ya pagado (sirve para pagar en partes y para el resto de lo que quedó a medias).
+    // Gasto fijo: marca el mes, con el monto de la fila.
+    // Lo que se debita solo se marca sin tocar el saldo (igual que el botón de siempre): el saldo ya viene del banco.
+    const cuentaPago=x.debito?undefined:qaCuenta
+    const body=x.parcial ? {hoja:x.hoja, fila:x.fila, tipoPago:'parcial', montoParcial:monto, cuentaPago, fechaPago:`${D}/${M}/${Y}`}
+      : {hoja:x.hoja, fila:x.fila, pagado:true, tipoPago:'total', cuentaPago, fechaPago:`${D}/${M}/${Y}`, mesPagoKey:x.mesPagoKey}
+    try{ const r=await fetch('/api/egreso-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err') }
+      else { const falta=x.parcial?x.resta-monto:0
+        showToast(x.debito?`${x.nombre}: marcado como debitado ✓ (no toca el saldo: ya está en el del banco)`:`${x.nombre}: ${fmt(x.parcial?monto:x.resta)} desde ${qaCuenta} ✓${falta>1?` · quedan ${fmt(falta)}`:''}`)
+        if(!x.debito) avisarNegativo(qaCuenta, x.parcial?monto:x.resta)
+        setQaSel(null); setQa({concepto:'', monto:'', cuenta:qa.cuenta, rubro:'', trabajo:'', fecha:hoyISO}); if(onRefresh) await onRefresh() }
+    }catch(e){ showToast('Error de conexión','err') }
+    qaLock.current=false; setQaBusy(false)
+  }
+  async function anotarPase(){
+    if(qaLock.current) return
+    const monto=parseMontoAR(pase.monto), de=pase.de||cuentaOpts[0]||'', a=pase.a
+    if(!a||!de||a===de){ showToast('Elegí de qué cuenta a qué cuenta','err'); return }
+    if(!(monto>0)){ showToast('Poné cuánto pasaste','err'); return }
+    qaLock.current=true; setQaBusy(true)
+    try{ const r=await fetch('/api/movimiento-nuevo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fecha:`${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`, tipo:'Transferencia entre cuentas', descripcion:`De ${de} a ${a}`, cuentaOrigen:de, montoOrigen:monto, cuentaDestino:a, montoDestino:monto})})
+      const j=await r.json(); if(j&&j.error){ showToast(j.error,'err') }
+      else { showToast(`Pasaste ${fmt(monto)} de ${de} a ${a} ✓`); setPase({de, a:'', monto:''}); setNegativo(null); setQaModo('pago'); if(onRefresh) await onRefresh() }
     }catch(e){ showToast('Error de conexión','err') }
     qaLock.current=false; setQaBusy(false)
   }
@@ -6049,6 +6262,75 @@ function Caja({data, onRefresh, showToast, goTo}){
     </div> }
 
   const entra=seguro?t.entraSeguro:t.entra, termina=seguro?t.terminaSeguro:t.termina
+  const lblMini={fontSize:12.5, color:T.ink2, display:'block', marginBottom:4}
+  const enter=fn=>e=>{ if(e.key==='Enter') fn() }
+  const anotar=()=>qaSel?pagarPendiente():anotarPago()
+  const cargaRapida=<div style={{background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', padding:cel?'14px':'14px 18px', marginBottom:14}}>
+    <div role="tablist" style={{display:'flex', gap:6, marginBottom:10}}>
+      {[['pago','Pagué algo'],['pase','Pasé plata entre cuentas']].map(([k,l])=><button key={k} role="tab" aria-selected={qaModo===k} onClick={()=>setQaModo(k)} style={{padding:'6px 13px', borderRadius:999, border:`1px solid ${qaModo===k?T.ink:T.border}`, background:qaModo===k?T.ink:T.surface, color:qaModo===k?'#fff':T.ink, fontSize:13.5, fontWeight:qaModo===k?600:500, cursor:'pointer', fontFamily:'inherit'}}>{l}</button>)}
+    </div>
+    {qaModo==='pago' ? <>
+      <div style={{display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap'}}>
+        <div style={{flex:'2 1 260px', minWidth:200, position:'relative'}}>
+          <label style={lblMini} htmlFor="qa-que">Qué pagaste</label>
+          <input id="qa-que" autoComplete="off" value={qa.concepto}
+            onChange={e=>{ const v=e.target.value; if(qaSel && v!==qaSel.nombre) setQaSel(null); qaConcepto(v); setQaVer(true); setQaIdx(0) }}
+            onFocus={()=>setQaVer(true)} onBlur={()=>setTimeout(()=>setQaVer(false),150)}
+            onKeyDown={e=>{ if(qaVer && qaSug.length && (e.key==='ArrowDown'||e.key==='ArrowUp')){ e.preventDefault(); setQaIdx(k=>(k+(e.key==='ArrowDown'?1:-1)+qaSug.length)%qaSug.length); return }
+              if(e.key==='Enter'){ if(qaVer && qaSug.length && !qaSel){ e.preventDefault(); elegirPend(qaSug[Math.min(qaIdx,qaSug.length-1)]); return } anotar() }
+              if(e.key==='Escape') setQaVer(false) }}
+            placeholder="Escribí: santander, gas, préstamo, limpieza…" style={{...inpV2, width:'100%', ...(qaSel?{borderColor:T.ink}:{})}}/>
+          {qaVer && qaSug.length>0 && <div role="listbox" style={{position:'absolute', left:0, right:0, top:'100%', marginTop:4, background:T.surface, borderRadius:12, boxShadow:'0 10px 30px rgba(0,0,0,0.14)', border:`1px solid ${T.border}`, zIndex:60, overflow:'hidden'}}>
+            <div style={{fontSize:12.5, color:T.ink2, padding:'8px 12px 4px'}}>{qa.concepto.trim()?'Pendiente con ese nombre':'Lo que vence esta semana'} · elegí uno para pagarlo</div>
+            {qaSug.map((x,k)=><div key={x.hoja+x.fila} role="option" aria-selected={k===qaIdx} onMouseDown={e=>{ e.preventDefault(); elegirPend(x) }} onMouseEnter={()=>setQaIdx(k)}
+              style={{display:'flex', justifyContent:'space-between', gap:12, padding:'9px 12px', cursor:'pointer', background:k===qaIdx?T.surfaceAlt:'transparent'}}>
+              <span style={{minWidth:0}}><span style={{display:'block', fontSize:14, color:T.ink, fontWeight:600}}>{x.nombre}</span><span style={{display:'block', fontSize:12.5, color:T.ink2}}>{x.det}</span></span>
+              <span style={{fontFamily:MONO, fontSize:13.5, color:T.ink, whiteSpace:'nowrap', alignSelf:'center'}}>{fmt(x.resta)}</span>
+            </div>)}
+            {qa.concepto.trim() && <div style={{fontSize:12.5, color:T.ink2, padding:'6px 12px 9px', borderTop:`1px solid ${T.border}`}}>¿No es ninguno? Seguí escribiendo y se anota como gasto nuevo.</div>}
+          </div>}
+        </div>
+        <div style={{flex:'1 1 130px', minWidth:120}}>
+          <label style={lblMini}>Cuánto</label>
+          <MontoInput value={qa.monto} onChange={v=>setQa(q=>({...q,monto:v}))} onKeyDown={enter(anotar)} readOnly={!!qaSel && !qaSel.parcial} title={qaSel && !qaSel.parcial?(qaSel.hoja==='PRESTAMOS'?'La cuota se paga entera.':'Es un gasto fijo: se marca el mes con el monto de la fila. Si cambió, editalo en Cargar y detalle.'):''} placeholder="$" style={{...inpV2, width:'100%', textAlign:'right', fontFamily:MONO}}/>
+        </div>
+        <div style={{flex:'1 1 160px', minWidth:150}}>
+          <label style={lblMini}>Desde</label>
+          <select value={qaCuenta} onChange={e=>setQa(q=>({...q,cuenta:e.target.value}))} style={{...inpV2, width:'100%', cursor:'pointer'}}>{cuentaOpts.map(n=><option key={n} value={n}>{n}</option>)}</select>
+        </div>
+        <button disabled={qaBusy} onClick={anotar} style={{fontSize:14, fontWeight:600, padding:'10px 20px', borderRadius:10, border:'none', background:T.ink, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':qaSel?'Pagué':'Anotar'}</button>
+      </div>
+      {qaSel
+        ? <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:13, color:T.ink2}}>
+            <span>Se marca en <strong style={{color:T.ink}}>{qaSel.nombre}</strong> · {qaSel.det}{qaSel.parcial?' · si pagás menos, queda el resto pendiente':''}{qaSel.debito?' · se debita solo: se marca sin tocar el saldo':''}</span>
+            <button onClick={()=>{ setQaSel(null); setQa(q=>({...q, concepto:'', monto:''})) }} style={{border:'none', background:'none', color:T.ink, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', fontSize:13, padding:0, fontFamily:'inherit'}}>no es esto</button>
+            <span style={{flex:1}}/>
+            <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:13, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
+          </div>
+        : qa.concepto.trim() ? <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:13, color:T.ink2}}>
+            <span>Gasto nuevo</span>
+            <span style={{flex:1}}/>
+            <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} title={qaRub?.incluye||'Los rubros son los de la solapa RUBROS'} style={{fontSize:13, padding:'3px 6px', borderRadius:7, border:`1px ${qaRubro?'solid':'dashed'} ${qaRubro?T.border:T.warn}`, background:T.surface, color:qaRubro?T.ink:T.warn, cursor:'pointer', maxWidth:230}}>{!qaRubro && <option value="">elegir rubro</option>}{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
+            {esDeTrabajo && <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>¿Para qué trabajo? <input list="caja-trabajos" value={qa.trabajo} onChange={e=>setQa(q=>({...q,trabajo:e.target.value}))} onKeyDown={enter(anotarPago)} placeholder="N° o cliente" style={{fontSize:13, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, width:190, fontFamily:'inherit'}}/><datalist id="caja-trabajos">{trabajosRec.map(t=><option key={t} value={t}/>)}</datalist></label>}
+            <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:13, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
+          </div>
+        : <div style={{marginTop:9, fontSize:13, color:T.ink2}}>Tarjetas, préstamos, impuestos y gastos del mes aparecen solos al escribir. Lo que no está, se anota como gasto nuevo.</div>}
+    </> : <>
+      <div style={{display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap'}}>
+        <div style={{flex:'1 1 170px', minWidth:150}}><label style={lblMini}>De</label><select value={pase.de||cuentaOpts[0]||''} onChange={e=>setPase(x=>({...x,de:e.target.value}))} style={{...inpV2, width:'100%', cursor:'pointer'}}>{cuentaOpts.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
+        <div style={{flex:'1 1 170px', minWidth:150}}><label style={lblMini}>A</label><select value={pase.a} onChange={e=>setPase(x=>({...x,a:e.target.value}))} style={{...inpV2, width:'100%', cursor:'pointer', ...(pase.a?{}:{color:T.ink2})}}><option value="">elegir cuenta</option>{cuentaOpts.filter(n=>n!==(pase.de||cuentaOpts[0])).map(n=><option key={n} value={n}>{n}</option>)}</select></div>
+        <div style={{flex:'1 1 130px', minWidth:120}}><label style={lblMini}>Cuánto</label><MontoInput value={pase.monto} onChange={v=>setPase(x=>({...x,monto:v}))} onKeyDown={enter(anotarPase)} placeholder="$" style={{...inpV2, width:'100%', textAlign:'right', fontFamily:MONO}}/></div>
+        <button disabled={qaBusy} onClick={anotarPase} style={{fontSize:14, fontWeight:600, padding:'10px 20px', borderRadius:10, border:'none', background:T.ink, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':'Anotar'}</button>
+      </div>
+      <div style={{marginTop:9, fontSize:13, color:T.ink2}}>No es un gasto: baja en una cuenta y sube en la otra. Para cuando pasás plata para cubrir un débito (el préstamo de Galicia, la tarjeta).</div>
+    </>}
+    {negativo && <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:12, padding:'10px 12px', borderRadius:10, background:T.surfaceAlt, fontSize:13.5, color:T.ink}}>
+      <span><strong>{negativo.cuenta}</strong> queda en <span style={{color:T.brand, fontWeight:600}}>−{fmt(negativo.falta)}</span>. ¿Pasaste plata desde otra cuenta para cubrirlo?</span>
+      <span style={{flex:1}}/>
+      <button onClick={()=>{ setQaModo('pase'); setPase({de:cuentaOpts.find(n=>n!==negativo.cuenta && /bbva|somos magma/i.test(n))||cuentaOpts.find(n=>n!==negativo.cuenta)||'', a:negativo.cuenta, monto:numAMontoAR(negativo.falta)}) }} style={{...btnSec, background:T.ink, color:'#fff', borderColor:T.ink, fontWeight:600}}>Sí, anotar el pase</button>
+      <button onClick={()=>setNegativo(null)} style={btnSec}>No</button>
+    </div>}
+  </div>
   const limite7=new Date(c.hoy0.getTime()+7*864e5)
   return <>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap', marginBottom:18}}>
@@ -6099,6 +6381,7 @@ function Caja({data, onRefresh, showToast, goTo}){
           {h.porDestrabar>0 && <div style={{fontSize:14, color:T.ink2, marginTop:4}}>{h.nEntra===1?'La primera destraba':`Las ${h.nEntra} primeras destraban`} <b style={{fontFamily:MONO, color:T.pos}}>{fmt(h.porDestrabar)}</b>{cargar.length?` · ${cargar.length} ${cargar.length===1?'es':'son'} de cargar datos`:''}</div>}
           {!h.tareas.length && <div style={{fontSize:14, color:T.ink2, marginTop:4}}>Todo facturado, enviado, reclamado y pagado.</div>}
         </div>
+        {cargaRapida}
         {principales.length>0 && <div style={{...tarjeta, overflow:'hidden'}}>{principales.map((x,i)=>Tarea(x,i,i===0))}</div>}
         {cargar.length>0 && <>
           <button type="button" onClick={()=>setAbiertos(o=>({...o,'hoy:cargar':!verCargar}))} aria-expanded={verCargar} style={{...tarjeta, width:'100%', border:'none', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'13px 18px', marginTop:12, fontSize:14.5, color:T.ink, cursor:'pointer', fontFamily:'inherit', borderBottomLeftRadius:verCargar?0:14, borderBottomRightRadius:verCargar?0:14}}>
@@ -6110,23 +6393,7 @@ function Caja({data, onRefresh, showToast, goTo}){
     {tab==='banco' && <RevisarBanco data={data} onRefresh={onRefresh} showToast={showToast}/>}
     {tab==='detalle' && <Egresos data={data} onRefresh={onRefresh} showToast={showToast} embebido/>}
     {tab==='caja' && <>
-    <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'13px 16px', marginBottom:18}}>
-      <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
-        <span style={{fontSize:13, fontWeight:700, color:T.ink, whiteSpace:'nowrap'}}>¿Pagaste algo?</span>
-        <input list="caja-previos" value={qa.concepto} onChange={e=>qaConcepto(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="Qué pagaste (ej: limpieza Vanesa)" style={{...inpV2, flex:'2 1 220px', minWidth:170, width:'auto'}}/>
-        <datalist id="caja-previos">{Object.values(previos).map(p=><option key={p.concepto} value={p.concepto}/>)}</datalist>
-        <MontoInput value={qa.monto} onChange={v=>setQa(q=>({...q,monto:v}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="Cuánto" style={{...inpV2, flex:'1 1 120px', minWidth:110, width:'auto', textAlign:'right', fontFamily:MONO}}/>
-        <select value={qaCuenta} onChange={e=>setQa(q=>({...q,cuenta:e.target.value}))} title="De dónde salió la plata" style={{...inpV2, flex:'1 1 150px', minWidth:140, width:'auto', cursor:'pointer'}}>{cuentaOpts.map(n=><option key={n} value={n}>{n}</option>)}</select>
-        <button disabled={qaBusy} onClick={anotarPago} style={{fontSize:13, fontWeight:700, padding:'9px 20px', borderRadius:9, border:'none', background:T.ink, color:'#fff', cursor:qaBusy?'default':'pointer', opacity:qaBusy?0.6:1, whiteSpace:'nowrap'}}>{qaBusy?'Anotando…':'Anotar'}</button>
-      </div>
-      <div style={{display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', marginTop:9, fontSize:12.5, color:T.ink3}}>
-        <span>Para lo que pagás en efectivo o con una transferencia suelta. Lo que sale por débito o con tarjeta entra solo al subir el resumen.</span>
-        <span style={{flex:1}}/>
-        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Rubro <select value={qaRubro} onChange={e=>setQa(q=>({...q,rubro:e.target.value}))} title={qaRub?.incluye||'Los rubros son los de la solapa RUBROS'} style={{fontSize:12.5, padding:'3px 6px', borderRadius:7, border:`1px ${qaRubro?'solid':'dashed'} ${qaRubro?T.border:T.warn}`, background:T.surface, color:qaRubro?T.ink2:T.warn, cursor:'pointer', maxWidth:230}}>{!qaRubro && <option value="">elegir rubro</option>}{rubros.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
-        {esDeTrabajo && <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>¿Para qué trabajo? <input list="caja-trabajos" value={qa.trabajo} onChange={e=>setQa(q=>({...q,trabajo:e.target.value}))} onKeyDown={e=>{ if(e.key==='Enter') anotarPago() }} placeholder="N° o cliente" style={{fontSize:12.5, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, width:190, fontFamily:'inherit'}}/><datalist id="caja-trabajos">{trabajosRec.map(t=><option key={t} value={t}/>)}</datalist></label>}
-        <label style={{display:'inline-flex', gap:6, alignItems:'center'}}>Fecha <input type="date" value={qa.fecha} max={hoyISO} onChange={e=>setQa(q=>({...q,fecha:e.target.value||hoyISO}))} style={{fontSize:12.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontFamily:'inherit'}}/></label>
-      </div>
-    </div>
+    {cargaRapida}
 
     <div style={{display:'grid', gridTemplateColumns:cel?'minmax(0,1fr)':'repeat(4,minmax(0,1fr))', background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, marginBottom:18}}>
       {[
