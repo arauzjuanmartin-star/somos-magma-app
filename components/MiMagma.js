@@ -17,31 +17,32 @@ import { T, MONO } from '../lib/ui'
 
 const $ = n => '$' + Math.round(n || 0).toLocaleString('es-AR')
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+const MESES_L = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const aFecha = s => { const [d, m, y] = String(s || '').split('/').map(Number); return d && m && y ? new Date(y, m - 1, d) : null }
 const diaSemana = s => { const f = aFecha(s); return f ? DIAS[f.getDay()] : '' }
 
-const caja = { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: '13px 14px', marginBottom: 10 }
-const tit = { fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: T.ink3, margin: '22px 0 9px' }
+const caja = { background: T.surface, border: '1px solid transparent', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', borderRadius: 14, padding: '13px 14px', marginBottom: 10 }
+const tit = { fontSize: 13.5, fontWeight: 700, color: T.ink, margin: '22px 0 9px' }
 const hola = { fontSize: 21, fontWeight: 700, letterSpacing: '-.01em', margin: 0, color: T.ink }
-const sub = { fontSize: 12.5, color: T.ink2, margin: '2px 0 0' }
+const sub = { fontSize: 13, color: T.ink2, margin: '2px 0 0' }
 const boton = { border: `1px solid ${T.border}`, background: T.surface, color: T.ink, borderRadius: 10, padding: '11px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'block', textAlign: 'center', width: '100%' }
 
 function Pill({ children, tono }) {
   const c = { ok: [T.posSoft, T.pos], falta: [T.warnSoft, T.warn], rojo: [T.brandSoft, T.brand] }[tono] || [T.surfaceAlt, T.ink2]
-  return <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: c[0], color: c[1], whiteSpace: 'nowrap' }}>{children}</span>
+  return <span style={{ fontSize: 12.5, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: c[0], color: c[1], whiteSpace: 'nowrap' }}>{children}</span>
 }
 function KV({ filas }) {
   return <dl style={{ display: 'grid', gridTemplateColumns: '86px minmax(0,1fr)', gap: '7px 10px', fontSize: 13, margin: 0 }}>
-    {filas.filter(Boolean).map(([k, v]) => <React.Fragment key={k}><dt style={{ color: T.ink3, fontSize: 11.5, paddingTop: 1 }}>{k}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere', color: T.ink }}>{v}</dd></React.Fragment>)}
+    {filas.filter(Boolean).map(([k, v]) => <React.Fragment key={k}><dt style={{ color: T.ink2, fontSize: 12.5, paddingTop: 1 }}>{k}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere', color: T.ink }}>{v}</dd></React.Fragment>)}
   </dl>
 }
 
 function Tarjeta({ j, onAbrir }) {
   const f = aFecha(j.fecha)
   return <button onClick={onAbrir} style={{ display: 'grid', gridTemplateColumns: '50px minmax(0,1fr)', gap: 12, width: '100%', textAlign: 'left', ...caja, marginBottom: 8, padding: 12, cursor: 'pointer', fontFamily: 'inherit', ...(j.esHoy ? { borderColor: T.ink, boxShadow: `0 0 0 1px ${T.ink}` } : {}) }}>
-    <span style={{ borderRadius: 10, background: j.esHoy ? T.brand : T.surfaceAlt, color: j.esHoy ? '#fff' : T.ink, textAlign: 'center', padding: '7px 0 6px', alignSelf: 'start' }}>
+    <span style={{ borderRadius: 10, background: j.esHoy ? T.ink : T.surfaceAlt, color: j.esHoy ? '#fff' : T.ink, textAlign: 'center', padding: '7px 0 6px', alignSelf: 'start' }}>
       <b style={{ display: 'block', fontFamily: MONO, fontWeight: 600, fontSize: 19, lineHeight: 1 }}>{f ? f.getDate() : '—'}</b>
-      <span style={{ fontSize: 9.5, fontWeight: 500, letterSpacing: '.07em', textTransform: 'uppercase', opacity: 0.75 }}>{diaSemana(j.fecha)}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.8 }}>{diaSemana(j.fecha)}</span>
     </span>
     <span style={{ minWidth: 0 }}>
       <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, lineHeight: 1.25, color: T.ink }}>{j.cliente || j.proyecto}</span>
@@ -345,7 +346,7 @@ function CargarGasto({ datos, inicial, onListo, onVolver }) {
         {error && <div style={{ marginTop: 14, background: T.brandSoft, color: T.brand, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{error}</div>}
         {datos.viendoComo
           ? <p style={{ ...sub, marginTop: 16, lineHeight: 1.5 }}>Estás mirando como equipo: desde acá no se cargan gastos a nombre de otra persona.</p>
-          : <button onClick={mandar} disabled={mandando} style={{ ...boton, marginTop: 18, background: mandando ? T.apagado : T.brand, borderColor: mandando ? T.apagado : T.brand, color: '#fff', padding: '14px 12px', fontSize: 15 }}>{mandando ? 'Mandando…' : 'Mandar a administración'}</button>}
+          : <button onClick={mandar} disabled={mandando} style={{ ...boton, marginTop: 18, background: mandando ? T.apagado : T.ink, borderColor: mandando ? T.apagado : T.ink, color: '#fff', padding: '14px 12px', fontSize: 15 }}>{mandando ? 'Mandando…' : 'Mandar a administración'}</button>}
       </>}
   </div>
 }
@@ -452,7 +453,9 @@ function Agenda({ datos, dias, viendoComo, onAbrir, onCambioDia }) {
     <p style={hola}>Hola, {datos.primerNombre}</p>
     <p style={sub}>{hoy.length ? `Hoy: ${hoy.map(j => j.cliente).join(' y ')}` : viene.length ? `Tu próximo trabajo es el ${diaSemana(viene[0].fecha)} ${viene[0].fecha.slice(0, 5)}` : 'No tenés trabajos cargados de hoy en adelante'}{sinConfirmar > 0 ? ` · ${sinConfirmar === 1 ? 'uno sin confirmar' : `${sinConfirmar} sin confirmar`}` : ''}</p>
     {hoy.length > 0 && <><div style={tit}>Hoy</div>{hoy.map(j => <Tarjeta key={j.num + '-' + j.slot} j={j} onAbrir={() => onAbrir(j)} />)}</>}
-    {viene.length > 0 && <><div style={tit}>Lo que viene</div>{viene.map(j => <Tarjeta key={j.num + '-' + j.slot + j.fecha} j={j} onAbrir={() => onAbrir(j)} />)}</>}
+    {/* Agrupado por mes: "12 jue" solo no dice si es este mes o el que viene. */}
+    {viene.map((j, k) => { const m = j.fecha.slice(3), nuevoMes = k === 0 || viene[k - 1].fecha.slice(3) !== m, f = aFecha(j.fecha)
+      return <React.Fragment key={j.num + '-' + j.slot + j.fecha}>{nuevoMes && <div style={tit}>{k === 0 && f && f.getMonth() === new Date().getMonth() ? 'Lo que viene' : f ? MESES_L[f.getMonth()] : 'Lo que viene'}</div>}<Tarjeta j={j} onAbrir={() => onAbrir(j)} /></React.Fragment> })}
     {!datos.proximos.length && <div style={{ ...caja, marginTop: 18, color: T.ink2, fontSize: 13, lineHeight: 1.55 }}>Cuando te convoquen para un trabajo va a aparecer acá, con el horario, el lugar y qué hay que grabar.</div>}
     <div style={tit}>Días que no podés</div>
     <DiasNoPuedo datos={datos} dias={dias} viendoComo={viendoComo} onAbrir={onAbrir} onCambio={onCambioDia} />
@@ -474,8 +477,8 @@ function Facturar({ datos, gastos, onCargar }) {
     <div style={caja}>
       {!m.lineas.length && <p style={{ ...sub, margin: 0 }}>Sin trabajos este mes.</p>}
       {m.lineas.map((l, k) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '44px minmax(0,1fr) auto', gap: 10, padding: '10px 0', borderTop: k ? `1px solid ${T.border}` : 'none', alignItems: 'baseline', fontSize: 13 }}>
-        <span style={{ fontFamily: MONO, fontSize: 12, color: T.ink2 }}>{l.dia}</span>
-        <span style={{ color: T.ink, minWidth: 0 }}>{l.cliente}<span style={{ display: 'block', color: T.ink2, fontSize: 12 }}>{l.rol} · {l.proyecto}{l.viaticos ? ` · + viáticos ${$(l.viaticos)}` : ''}{!l.yaFue ? ' · todavía no fue' : ''}</span></span>
+        <span style={{ fontFamily: MONO, fontSize: 12.5, color: T.ink2 }}>{l.dia}</span>
+        <span style={{ color: T.ink, minWidth: 0 }}>{l.cliente}<span style={{ display: 'block', color: T.ink2, fontSize: 12.5 }}>{l.rol} · {l.proyecto}{l.viaticos ? ` · + viáticos ${$(l.viaticos)}` : ''}{!l.yaFue ? ' · todavía no fue' : ''}</span></span>
         <b style={{ fontFamily: MONO, fontWeight: 600, fontSize: 13, color: l.pagado ? T.pos : T.ink }}>{$(l.monto + l.viaticos)}</b>
       </div>)}
       {m.lineas.length > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${T.ink}`, marginTop: 4, paddingTop: 11, fontWeight: 700, color: T.ink }}>
@@ -483,11 +486,11 @@ function Facturar({ datos, gastos, onCargar }) {
       </div>}
     </div>
     {m.lineas.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      {todoPago ? <Pill tono="ok">Pagado</Pill> : m.pagado > 0 ? <><Pill tono="ok">pagado {$(m.pagado)}</Pill><Pill tono="falta">falta {$(m.pendiente)}</Pill></> : <Pill>{datos.ficha?.acuerdo?.cuandoCobra ? 'se paga según tu acuerdo' : `se paga el ${m.sePaga}, todo junto`}</Pill>}
+      {datos.socio ? <Pill>va por tu cuenta de socios</Pill> : todoPago ? <Pill tono="ok">Pagado</Pill> : m.pagado > 0 ? <><Pill tono="ok">pagado {$(m.pagado)}</Pill><Pill tono="falta">falta {$(m.pendiente)}</Pill></> : <Pill>{datos.ficha?.acuerdo?.cuandoCobra ? 'se paga según tu acuerdo' : `se paga el ${m.sePaga}, todo junto`}</Pill>}
       {m.enCurso && m.faltanHacer > 0 && <Pill>faltan {m.faltanHacer} del mes</Pill>}
     </div>}
-    {m.lineas.length > 0 && !m.enCurso && <SubirFactura key={m.clave} m={m} viendoComo={!!datos.viendoComo} cuandoCobra={datos.ficha?.acuerdo?.cuandoCobra} />}
-    {!todoPago && m.lineas.length > 0 && <p style={{ ...sub, marginTop: 10, lineHeight: 1.5 }}>Si algo no coincide con lo que hiciste, avisale a administración antes del 15: <a href="mailto:admin@somosmagma.com" style={{ color: T.ink }}>admin@somosmagma.com</a></p>}
+    {m.lineas.length > 0 && !m.enCurso && !datos.socio && <SubirFactura key={m.clave} m={m} viendoComo={!!datos.viendoComo} cuandoCobra={datos.ficha?.acuerdo?.cuandoCobra} />}
+    {!todoPago && !datos.socio && m.lineas.length > 0 && <p style={{ ...sub, marginTop: 10, lineHeight: 1.5 }}>Si algo no coincide con lo que hiciste, avisale a administración antes del 15: <a href="mailto:admin@somosmagma.com" style={{ color: T.ink }}>admin@somosmagma.com</a></p>}
     <MisGastos gastos={gastos} onCargar={onCargar} />
   </div>
 }
@@ -628,8 +631,8 @@ export default function MiMagma({ datos, onSalir, tabInicial = 'agenda', abrirNu
     <nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: T.surface, borderTop: `1px solid ${T.border}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div style={{ maxWidth: 520, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
         {TABS.map(([k, l]) => { const on = gasto !== null ? k === 'facturar' : !job ? tab === k : k === 'agenda'
-          return <button key={k} onClick={() => ir(k)} style={{ border: 0, background: 'transparent', padding: '10px 2px 12px', fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? T.ink : T.ink3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <i style={{ width: 18, height: 3, borderRadius: 3, background: on ? T.brand : 'transparent' }} />{l}
+          return <button key={k} onClick={() => ir(k)} style={{ border: 0, background: 'transparent', padding: '10px 2px 12px', fontSize: 12.5, fontWeight: on ? 700 : 500, color: on ? T.ink : T.ink3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <i style={{ width: 18, height: 3, borderRadius: 3, background: on ? T.ink : 'transparent' }} />{l}
           </button> })}
       </div>
     </nav>
