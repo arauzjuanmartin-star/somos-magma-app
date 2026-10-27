@@ -5946,35 +5946,35 @@ function CuentaSocios({showToast}){
     .catch(()=>setErr('No se pudo calcular')),[])
   useEffect(()=>{ cargar() },[cargar])
   if(err) return null
-  if(!d) return <div style={{fontSize:12, color:T.ink3, padding:'10px 18px'}}>Calculando cuenta de socios…</div>
+  if(!d) return <div style={{fontSize:12.5, color:T.ink3, padding:'10px 18px'}}>Calculando cuenta de socios…</div>
   const MES=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
     <CardHead>Cuenta de socios · cuánto queda por cobrar</CardHead>
-    <div style={{padding:'4px 18px 10px', fontSize:11, color:T.ink3}}>
+    <div style={{padding:'4px 18px 10px', fontSize:12.5, color:T.ink3}}>
       Sueldo de {MES[d.desdeSueldo]} a {MES[d.hastaSueldo]} ({d.socios[0].meses} × {fmt(d.sueldoMensual)}) + extras de {MES[d.desdeExtras]} a {MES[d.hastaExtras]}, menos lo que ya retiró cada uno (transferencias + gastos personales con tarjeta de la empresa).
-      {d.tarjetasCargadas?.hasta && <div style={{marginTop:4, color:T.brand}}>⚠ Tarjetas cargadas hasta <b>{d.tarjetasCargadas.hasta}</b>: los meses sin resumen inflan el saldo a favor del socio.</div>}
+      {d.tarjetasCargadas?.hasta && <div style={{marginTop:4, color:T.warn}}>Tarjetas cargadas hasta <b>{d.tarjetasCargadas.hasta}</b>: los meses sin resumen inflan el saldo a favor del socio.</div>}
     </div>
     <div style={{display:'flex', gap:12, padding:'0 18px 16px', flexWrap:'wrap'}}>
       {d.socios.map(s=>{ const aFavor=s.saldo>=0, icon=/juan/i.test(s.nombre)?'👨':'👩'
-        return <div key={s.nombre} style={{flex:'1 1 240px', minWidth:230, border:`1px solid ${aFavor?T.posSoft:T.warnSoft}`, borderLeft:`3px solid ${aFavor?T.pos:T.brand}`, borderRadius:10, padding:'12px 14px', background:aFavor?T.posSoft:T.warnSoft}}>
+        return <div key={s.nombre} style={{flex:'1 1 240px', minWidth:230, border:`1px solid ${aFavor?T.posSoft:T.warnSoft}`, borderLeft:`3px solid ${aFavor?T.pos:T.warn}`, borderRadius:10, padding:'12px 14px', background:aFavor?T.posSoft:T.warnSoft}}>
           <div style={{fontSize:12.5, fontWeight:700, color:T.ink, marginBottom:6}}>{icon} {s.nombre}</div>
-          <div style={{fontSize:21, fontFamily:MONO, fontWeight:700, color:aFavor?T.pos:T.brand, lineHeight:1.1}}>{aFavor?'':'–'}{fmt(Math.abs(s.saldo))}</div>
-          <div style={{fontSize:11.5, color:T.ink2, marginTop:3, fontWeight:600}}>{aFavor?'le queda por cobrar':'retiró de más — se lo debe a Magma'}</div>
-          <div style={{marginTop:9, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11.5, color:T.ink3, display:'grid', gap:2}}>
-            <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Ganó</div>
+          <div style={{fontSize:21, fontFamily:MONO, fontWeight:700, color:aFavor?T.pos:T.warn, lineHeight:1.1}}>{aFavor?'':'–'}{fmt(Math.abs(s.saldo))}</div>
+          <div style={{fontSize:12.5, color:T.ink2, marginTop:3, fontWeight:600}}>{aFavor?'le queda por cobrar':'retiró de más — se lo debe a Magma'}</div>
+          <div style={{marginTop:9, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:12.5, color:T.ink3, display:'grid', gap:2}}>
+            <div style={{fontSize:12.5, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Ganó</div>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>Sueldo · {s.meses} meses × {fmtM(d.sueldoMensual)}</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.sueldo)}</b></div>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>Trabajos extras en proyectos</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.extra)}</b></div>
             <div style={{display:'flex', justifyContent:'space-between', borderTop:`1px solid ${T.border}`, paddingTop:2, marginTop:1}}><span style={{fontWeight:700, color:T.ink2}}>Le corresponde</span><b style={{fontFamily:MONO, color:T.ink}}>{fmt(s.devengado)}</b></div>
-            <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3, marginTop:6}}>Ya sacó</div>
+            <div style={{fontSize:12.5, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3, marginTop:6}}>Ya sacó</div>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>Transferencias y pagos</span><b style={{fontFamily:MONO, color:T.ink2}}>{fmt(s.recibido)}</b></div>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>Tarjeta (gastos personales)</span><b style={{fontFamily:MONO, color:s.tarjetas>s.recibido?T.brand:T.ink2}}>{fmt(s.tarjetas)}</b></div>
             {s.puso>0 && <div style={{display:'flex', justifyContent:'space-between'}}><span>Puso de su bolsillo</span><b style={{fontFamily:MONO, color:T.pos}}>+{fmt(s.puso)}</b></div>}
           </div>
           <div style={{marginTop:9, display:'flex', gap:6}}>
-            <button onClick={()=>setMov({socio:s.nombre, tipo:'saco'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>Sacó plata</button>
-            <button onClick={()=>setMov({socio:s.nombre, tipo:'puso'})} style={{flex:1, fontSize:11, fontWeight:700, padding:'6px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>Puso plata</button>
+            <button onClick={()=>setMov({socio:s.nombre, tipo:'saco'})} style={{flex:1, fontSize:12.5, fontWeight:700, padding:'6px 8px', borderRadius:7, border:'none', background:T.ink, color:'#fff', cursor:'pointer'}}>Sacó plata</button>
+            <button onClick={()=>setMov({socio:s.nombre, tipo:'puso'})} style={{flex:1, fontSize:12.5, fontWeight:700, padding:'6px 8px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>Puso plata</button>
           </div>
-          <button onClick={()=>setAbierto(abierto===s.nombre?null:s.nombre)} style={{marginTop:8, fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>{abierto===s.nombre?'Ocultar movimientos':'Ver cada movimiento ›'}</button>
+          <button onClick={()=>setAbierto(abierto===s.nombre?null:s.nombre)} style={{marginTop:8, fontSize:12.5, color:T.ink, background:'none', border:'none', cursor:'pointer', textDecoration:'underline', textUnderlineOffset:3, padding:0}}>{abierto===s.nombre?'Ocultar movimientos':'Ver cada movimiento ›'}</button>
         </div> })}
     </div>
     {abierto && (()=>{ const s=d.socios.find(x=>x.nombre===abierto); return s?.movimientosPorMes && <MovimientosSocio socio={s} onClose={()=>setAbierto(null)}/> })()}
@@ -6978,19 +6978,25 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
     }catch(e){ showToast('Error de conexión','err'); setOverride(o=>{const n={...o};delete n[k];return n}) }
   }
 
-  const Fila=({hoja, it, label, monto, extra})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row, venc=vencTxt(hoja,it), editing=!!editM[k]
-    return <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
-      <span style={{flex:1, minWidth:0}}>
-        <span style={{fontSize:13, color:T.ink}}>{label}</span>
-        {venc && <span style={{fontSize:10.5, color:T.ink3, marginLeft:8}}>· {venc}</span>}
+  const esDeSocios=(hoja,it)=>hoja==='GASTOS_FIJOS' && /sueldo/i.test(String(it['Categoria']||'')) && /^sueldo\s+(juan|sof)/i.test(String(it['Concepto']||'').trim())
+  const Fila=({hoja, it, label, monto, extra})=>{ const pagado=estaPagado(hoja,it), k=hoja+':'+it.__row, venc=vencTxt(hoja,it), editing=!!editM[k], socios=esDeSocios(hoja,it)
+    return <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`, flexWrap:'wrap'}}>
+      <span style={{flex:'1 1 200px', minWidth:0}}>
+        <span style={{fontSize:14, color:T.ink}}>{label}</span>
+        {venc && <span style={{fontSize:12.5, color:T.ink2, marginLeft:8}}>· {venc}</span>}
         {extra}
       </span>
-      {hoja==='GASTOS_FIJOS' && <button onClick={()=>setEditGasto(it)} title="Editar este gasto" style={{fontSize:13, padding:'3px 7px', borderRadius:6, border:`1px solid ${T.border}`, background:T.surface, color:T.ink3, cursor:'pointer'}}>✎</button>}
-      {!pagado && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:11.5}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
-      <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:'none', cursor:'pointer', background:pagado?T.posSoft:T.warnSoft, color:pagado?T.pos:T.warn, fontWeight:600}}>{pagado?'Pagado ✓':'Pendiente'}</button>
+      {hoja==='GASTOS_FIJOS' && <button onClick={()=>setEditGasto(it)} title="Editar este gasto" aria-label="Editar este gasto" style={{fontSize:14, padding:'4px 8px', borderRadius:8, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>✎</button>}
+      {!pagado && !socios && cuentaOpts.length>0 && <select value={cuentaSel[k]||it['Cuenta pago']||cuentaOpts[0]} onChange={e=>setCuentaSel(c=>({...c,[k]:e.target.value}))} onClick={e=>e.stopPropagation()} style={{...selectStyle, padding:'5px 8px', fontSize:13}}>{cuentaOpts.map(c=><option key={c} value={c}>{c}</option>)}</select>}
+      {socios && !pagado
+        ? <span style={{fontSize:12.5, color:T.ink2}} title="Se paga con «Sacó plata» en la cuenta de socios">va por cuenta de socios</span>
+        : (()=>{ // Una tarjeta pagada en dos veces puede figurar "Pagado" con plata pendiente: se dice cuánto queda (se paga desde "Pagué algo").
+            const yaPag=hoja==='TARJETAS'?parseMonto(it['Monto pagado']):0, queda=pagado&&yaPag>0&&yaPag<monto-1?monto-yaPag:0
+            return queda>0 ? <span style={{display:'inline-flex', gap:8, alignItems:'center'}}><span style={{fontSize:13, color:T.warn, fontWeight:600}} title="Se paga el resto desde Caja › Pagué algo">Pagado en parte · quedan {fmt(queda)}</span><button onClick={()=>toggle(hoja,it,monto)} style={{border:'none', background:'none', color:T.ink2, fontSize:12.5, textDecoration:'underline', textUnderlineOffset:3, cursor:'pointer', padding:0}}>desmarcar</button></span>
+              : <button onClick={()=>toggle(hoja,it,monto)} style={{fontSize:13, padding:'5px 12px', borderRadius:8, cursor:'pointer', fontWeight:pagado?600:500, border:pagado?'none':`1px solid ${T.border}`, background:pagado?T.posSoft:T.surface, color:pagado?T.pos:T.ink}}>{pagado?'Pagado ✓':'Marcar pagado'}</button> })()}
       {editing
-        ? <input autoFocus inputMode="decimal" defaultValue={numAMontoAR(monto)} onBlur={e=>saveMonto(hoja,it,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); if(e.key==='Escape') setEditM(x=>{const n={...x};delete n[k];return n}) }} style={{width:110, padding:'4px 7px', borderRadius:6, border:`1px solid ${T.brand}`, fontSize:13, fontFamily:MONO, textAlign:'right', outline:'none'}}/>
-        : <span onClick={()=>setEditM(x=>({...x,[k]:true}))} title="Tocá para editar el monto" style={{fontSize:13, fontFamily:MONO, color:T.ink, minWidth:90, textAlign:'right', cursor:'pointer', borderBottom:`1px dashed ${T.border}`}}>{fmt(monto)}</span>}
+        ? <input autoFocus inputMode="decimal" defaultValue={numAMontoAR(monto)} onBlur={e=>saveMonto(hoja,it,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); if(e.key==='Escape') setEditM(x=>{const n={...x};delete n[k];return n}) }} aria-label="Monto" style={{width:120, padding:'5px 8px', borderRadius:6, border:`1px solid ${T.ink}`, fontSize:14, fontFamily:MONO, textAlign:'right'}}/>
+        : <button onClick={()=>setEditM(x=>({...x,[k]:true}))} title="Tocá para editar el monto" aria-label={`Editar monto: ${fmt(monto)}`} style={{fontSize:14, fontFamily:MONO, color:T.ink, minWidth:100, textAlign:'right', cursor:'pointer', border:'none', borderBottom:`1px dashed ${T.campo}`, background:'transparent', padding:'2px 0'}}>{fmt(monto)}</button>}
     </div>
   }
   // Cada bloque es un acordeón: el título ya dice el total y cuánto falta pagar, así que
@@ -7012,35 +7018,35 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
     const hayTot=total!=null||its.length>0
     // Lo que ya se pasó de fecha (rojo) vs lo que vence dentro de la semana (amarillo).
     // Solo mira lo pendiente: lo pagado no vence.
-    const vencidos=pend.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d<0})
-    const porVencer=pend.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d>=0&&d<=7})
+    const pendReal=pend.filter(it=>!esDeSocios(hoja,it))
+    const vencidos=pendReal.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d<0})
+    const porVencer=pendReal.filter(it=>{const d=diasPara(hoja,it); return d!=null&&d>=0&&d<=7})
+    const montoSocios=suma(pend.filter(it=>esDeSocios(hoja,it)))
     const proximo=porVencer.map(it=>diasPara(hoja,it)).sort((a,b)=>a-b)[0]
     const pct=tot>0?Math.min(100,Math.round(montoPag/tot*100)):0
     // Default: cerrado. La barra y los montos del título ya dicen cómo viene la categoría,
     // no hace falta abrir para saberlo. 'Abrir todo' devuelve la vista larga de siempre.
     const abierta=id in openSec ? openSec[id] : false
-    return <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:14}}>
-      <div onClick={()=>setOpenSec(o=>({...o,[id]:!abierta}))} style={{padding:'12px 18px 13px', cursor:'pointer', background:abierta?T.surfaceAlt:'transparent'}}
+    const alternar=()=>setOpenSec(o=>({...o,[id]:!abierta}))
+    return <div style={{background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', overflow:'hidden', marginBottom:12}}>
+      <div onClick={alternar} role="button" tabIndex={0} aria-expanded={abierta} onKeyDown={e=>{ if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){ e.preventDefault(); alternar() } }} style={{padding:'13px 18px 14px', cursor:'pointer', background:abierta?T.surfaceAlt:'transparent'}}
         onMouseEnter={e=>{if(!abierta)e.currentTarget.style.background=T.surfaceAlt}} onMouseLeave={e=>{if(!abierta)e.currentTarget.style.background='transparent'}}>
         <div style={{display:'flex', alignItems:'center', gap:9}}>
-          <span style={{fontSize:9, color:T.ink3, display:'inline-block', width:9, transform:abierta?'rotate(90deg)':'none', transition:'transform .15s'}}>▶</span>
-          <span style={{fontSize:12.5, fontWeight:600, color:T.ink}}>{titulo}</span>
-          {sub && <span style={{fontSize:11, color:T.ink3}}>{sub}</span>}
+          <span aria-hidden="true" style={{fontSize:12.5, color:T.ink2, display:'inline-block', width:12, transform:abierta?'rotate(90deg)':'none', transition:'transform .15s'}}>▶</span>
+          <span style={{fontSize:15, fontWeight:700, color:T.ink}}>{titulo}</span>
+          {sub && <span style={{fontSize:13, color:T.ink2}}>{sub}</span>}
           <div style={{flex:1, minWidth:20}}/>
           {hayTot && <span style={{fontSize:15, fontFamily:MONO, fontWeight:700, color:T.ink}}>{fmt(tot)}</span>}
         </div>
         {hoja && tot>0 && <div style={{marginLeft:18, marginTop:9}}>
-          <div style={{display:'flex', height:7, borderRadius:5, overflow:'hidden', background:T.border}}>
+          <div style={{display:'flex', height:6, borderRadius:5, overflow:'hidden', background:T.border}} aria-hidden="true">
             <div style={{width:`${pct}%`, background:T.pos}}/>
-            <div style={{width:`${100-pct}%`, background:T.brand}}/>
           </div>
-          <div style={{display:'flex', gap:13, flexWrap:'wrap', marginTop:7, fontSize:11.5, alignItems:'center'}}>
-            <span style={{color:T.pos, fontWeight:700}}>✓ {fmt(montoPag)} pagado</span>
-            {montoPend>0
-              ? <span style={{color:T.brand, fontWeight:700}}>● {fmt(montoPend)} sin pagar</span>
-              : <span style={{color:T.pos, fontWeight:700, background:T.posSoft, padding:'2px 9px', borderRadius:20}}>todo pagado ✓</span>}
-            {vencidos.length>0 && <span style={{color:T.brand, fontWeight:700, background:T.brandSoft, padding:'2px 9px', borderRadius:20}}>🔴 {fmt(suma(vencidos))} vencido{vencidos.length>1?'s':''}</span>}
-            {porVencer.length>0 && <span style={{color:T.warn, fontWeight:700, background:T.warnSoft, padding:'2px 9px', borderRadius:20}}>⚠️ {fmt(suma(porVencer))} vence {cuando(proximo)}</span>}
+          <div style={{display:'flex', gap:13, flexWrap:'wrap', marginTop:7, fontSize:13, alignItems:'center'}}>
+            <span style={{color:T.ink2}}><span style={{color:T.pos, fontWeight:600}}>{fmt(montoPag)} pagado</span>{montoPend-montoSocios>0?<> · {fmt(montoPend-montoSocios)} sin pagar</>:''}{montoSocios>0?<> · {fmt(montoSocios)} por cuenta de socios</>:''}</span>
+            {montoPend===0 && <span style={{color:T.pos, fontWeight:600}}>todo pagado ✓</span>}
+            {vencidos.length>0 && <span style={{color:T.brand, fontWeight:600}}>● {fmt(suma(vencidos))} vencido{vencidos.length>1?'s':''}</span>}
+            {porVencer.length>0 && <span style={{color:T.warn, fontWeight:600}}>{fmt(suma(porVencer))} vence {cuando(proximo)}</span>}
           </div>
         </div>}
       </div>
@@ -7051,63 +7057,63 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
   return <>
     {!embebido && <PageHead title="Egresos" sub={`${MESES_LARGO[mesIdx-1]} ${anio}`}/>}
     <div style={{display:'flex', gap:14, marginBottom:18}}>
-      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.brand} sub={`Fijos ${fmtM(totalGFOper)}${totalFin>0?` · Financieros ${fmtM(totalFin)}`:''} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · 💵 US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
+      <Hero label="Total egresos del mes" value={fmt(totalEgresos)} accent={T.ink} sub={`Fijos ${fmtM(totalGFOper)}${totalFin>0?` · Financieros ${fmtM(totalFin)}`:''} · Tarjetas ${fmtM(totalTarj)} · Préstamos ${fmtM(totalPrest)}${totalTarjUsdPend>0?` · US$ ${fmt(totalTarjUsdPend)} en dólares`:''}`}/>
     </div>
     <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:16}}>
-      <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} style={navBtn}>←</button>
-      <span style={{fontSize:13, fontWeight:600, color:T.ink, minWidth:120, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
-      <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} style={navBtn}>→</button>
+      <button onClick={()=>{ let m=mesIdx-1,a=anio; if(m<1){m=12;a--} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} aria-label="Mes anterior" style={navBtn}>←</button>
+      <span style={{fontSize:15, fontWeight:700, color:T.ink, minWidth:130, textAlign:'center'}}>{MESES_LARGO[mesIdx-1]} {anio}</span>
+      <button onClick={()=>{ let m=mesIdx+1,a=anio; if(m>12){m=1;a++} setMesIdx(m);setAnio(a);setOpenSec({});setTodoAbierto(false) }} aria-label="Mes siguiente" style={navBtn}>→</button>
       <div style={{flex:1}}/>
-      <button onClick={()=>{ const v=!todoAbierto; setTodoAbierto(v); setOpenSec(Object.fromEntries(idsSec.map(id=>[id,v]))) }} style={{fontSize:12, fontWeight:600, padding:'9px 14px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, cursor:'pointer'}}>{todoAbierto?'Cerrar todo':'Abrir todo'}</button>
-      <button onClick={()=>setAgregar(true)} style={{fontSize:12.5, fontWeight:700, padding:'9px 16px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>➕ Agregar</button>
+      <button onClick={()=>{ const v=!todoAbierto; setTodoAbierto(v); setOpenSec(Object.fromEntries(idsSec.map(id=>[id,v]))) }} style={{fontSize:13.5, fontWeight:500, padding:'9px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, cursor:'pointer'}}>{todoAbierto?'Cerrar todo':'Abrir todo'}</button>
+      <button onClick={()=>setSubir(true)} style={{fontSize:13.5, fontWeight:500, padding:'9px 14px', borderRadius:10, border:`1px solid ${T.border}`, background:T.surface, color:T.ink, cursor:'pointer'}}>Subir resumen de tarjeta</button>
+      <button onClick={()=>setAgregar(true)} style={{fontSize:14, fontWeight:600, padding:'9px 18px', borderRadius:10, border:'none', background:T.ink, color:'#fff', cursor:'pointer'}}>+ Agregar</button>
     </div>
     <CuentaSocios showToast={showToast}/>
     {Object.entries(porCat).sort((a,b)=>(/financier/i.test(a[0])?1:0)-(/financier/i.test(b[0])?1:0)).map(([cat,items])=>(
       <Sec key={cat} id={cat} items={items} hoja="GASTOS_FIJOS" titulo={/financier/i.test(cat)?`Gastos fijos · ${cat} — fuera del resultado operativo`:`Gastos fijos · ${cat}`}>{items.map((g,i)=><Fila key={i} hoja="GASTOS_FIJOS" it={g} label={g['Concepto']} monto={parseMonto(g['Monto'])}/>)}</Sec>
     ))}
-    <div style={{display:'flex', justifyContent:'flex-end', marginBottom:8}}><button onClick={()=>setSubir(true)} style={{fontSize:12, fontWeight:600, padding:'7px 14px', borderRadius:9, border:'none', background:T.brand, color:'#fff', cursor:'pointer'}}>⬆ Subir resumen de tarjeta</button></div>
     <Sec id="tarjetas" titulo="Tarjetas" items={tarjMes} hoja="TARJETAS">
-      {totalTarjUsd>0 && <div style={{padding:'0 18px 8px', display:'flex', gap:8, alignItems:'center', fontSize:12}}>
+      {totalTarjUsd>0 && <div style={{padding:'0 18px 8px', display:'flex', gap:8, alignItems:'center', fontSize:12.5}}>
         <span style={{color:T.ink2}}>💵 Dólares a pagar este mes: <b style={{fontFamily:MONO}}>US$ {fmt(totalTarjUsd)}</b></span>
-        {totalTarjUsdPend>0 ? <span style={{fontSize:11, color:T.warn, background:T.warnSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>pendiente US$ {fmt(totalTarjUsdPend)}</span> : <span style={{fontSize:11, color:T.pos, background:T.posSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>todo pagado ✓</span>}
+        {totalTarjUsdPend>0 ? <span style={{fontSize:12.5, color:T.warn, background:T.warnSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>pendiente US$ {fmt(totalTarjUsdPend)}</span> : <span style={{fontSize:12.5, color:T.pos, background:T.posSoft, padding:'2px 8px', borderRadius:6, fontWeight:600}}>todo pagado ✓</span>}
       </div>}
       {tarjMes.length?tarjMes.map((t,i)=>{ const rm=parseInt(t['Mes']); const res=rm>=1&&rm<=12?` · resumen ${MESES_LARGO[rm-1]}`:''; const pdf=t['PDF resumen']; const nota=t['Notas']; const sp=splitDe(t); const usd=usdDe(t); const upg=usdPagado(t); return <div key={i}>
-      <Fila hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:11, color:T.brand, textDecoration:'none', fontWeight:600}}>📎 PDF</a>:null}/>
-      {usd>0 && <div style={{padding:'0 18px 9px 18px', display:'flex', gap:10, alignItems:'center', fontSize:11.5}}>
-        <span style={{color:T.ink3}}>💵 En dólares: <b style={{fontFamily:MONO, color:upg?T.pos:T.ink2}}>US$ {fmt(usd)}</b></span>
-        <button onClick={()=>toggleUsd(t)} style={{fontSize:10.5, padding:'2px 9px', borderRadius:6, border:'none', cursor:'pointer', background:upg?T.posSoft:T.warnSoft, color:upg?T.pos:T.warn, fontWeight:600}}>{upg?'US$ pagado ✓':'US$ pendiente'}</button>
+      <Fila hoja="TARJETAS" it={t} label={`${t['Tarjeta']}${res}`} monto={parseMonto(t['Monto'])} extra={pdf?<a href={pdf} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{marginLeft:8, fontSize:12.5, color:T.ink, textDecoration:'underline', textUnderlineOffset:3}}>PDF</a>:null}/>
+      {usd>0 && <div style={{padding:'0 18px 9px 18px', display:'flex', gap:10, alignItems:'center', fontSize:12.5}}>
+        <span style={{color:T.ink2}}>💵 En dólares: <b style={{fontFamily:MONO, color:upg?T.pos:T.ink2}}>US$ {fmt(usd)}</b></span>
+        <button onClick={()=>toggleUsd(t)} style={{fontSize:12.5, padding:'2px 9px', borderRadius:6, border:'none', cursor:'pointer', background:upg?T.posSoft:T.warnSoft, color:upg?T.pos:T.warn, fontWeight:600}}>{upg?'US$ pagado ✓':'US$ pendiente'}</button>
       </div>}
       {sp.n>0
-        ? <div style={{padding:'0 18px 9px 18px', display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', fontSize:11.5, color:T.ink3}}><span>🏢 Empresa {fmt(sp.emp)}{sp.eusd?` +US$${Math.round(sp.eusd)}`:''}</span><span>👨 Juan {fmt(sp.juan)}</span><span>👩 Sofi {fmt(sp.sofi)}</span><button onClick={()=>setDetalle(t)} style={{fontSize:11, color:T.brand, background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>Ver detalle ›</button></div>
-        : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:11.5, color:T.ink3, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
-    </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink3}}>Sin tarjetas a pagar este mes. Subí el resumen ⬆</div>}</Sec>
+        ? <div style={{padding:'0 18px 9px 18px', display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', fontSize:12.5, color:T.ink2}}><span>🏢 Empresa {fmt(sp.emp)}{sp.eusd?` +US$${Math.round(sp.eusd)}`:''}</span><span>👨 Juan {fmt(sp.juan)}</span><span>👩 Sofi {fmt(sp.sofi)}</span><button onClick={()=>setDetalle(t)} style={{fontSize:12.5, color:T.ink, background:'none', border:'none', cursor:'pointer', textDecoration:'underline', textUnderlineOffset:3, padding:0}}>Ver detalle</button></div>
+        : (nota&&/empresa/i.test(nota) ? <div style={{padding:'0 18px 9px 18px', fontSize:12.5, color:T.ink2, display:'flex', gap:14, flexWrap:'wrap'}}>{nota.split('·').map((p,k)=><span key={k}>{p.trim()}</span>)}</div> : null)}
+    </div> }):<div style={{padding:'12px 18px', fontSize:12.5, color:T.ink2}}>Sin tarjetas a pagar este mes. Subí el resumen.</div>}</Sec>
     <Sec id="prestamos" titulo="Préstamos" items={prestBancoMes} hoja="PRESTAMOS">{prestBancoMes.length?prestBancoMes.map((p,i)=>{ const tot=parseInt(String(p['Cuotas total']).replace(/\D/g,''))||0, nro=parseInt(String(p['Cuota nro']).replace(/\D/g,''))||0, faltan=Math.max(0,tot-nro); const v=parseD(p['Vencimiento']); const ult=v&&faltan?new Date(v.getFullYear(),v.getMonth()+faltan,1):null; const hasta=ult?` · hasta ${MESES_LARGO[ult.getMonth()].slice(0,3)}/${ult.getFullYear()}`:''; return <Fila key={i} hoja="PRESTAMOS" it={p} label={`${p['Prestamo']} · cuota ${nro}/${tot}${faltan?` · faltan ${faltan}${hasta}`:' · última ✓'}`} monto={parseMonto(p['Monto cuota'])}/> }):null}</Sec>
     {prestSocio.length>0 && <Sec id="socios" titulo="Deudas entre socios" sub={`${prestSocio.length} sin saldar`} total={prestSocio.reduce((a,p)=>a+parseMonto(p['Monto cuota']),0)}>
       {prestSocio.map((p,i)=>{ const deudor=p['Deudor']||'', acreedor=p['Acreedor']||'', magmaDebe=/magma/i.test(deudor); const ic=n=>/juan/i.test(n)?'👤':/sof/i.test(n)?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 18px', borderTop:`1px solid ${T.border}`}}>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:13, color:T.ink}}>{ic(deudor)} <b>{deudor}</b> le debe a {ic(acreedor)} <b>{acreedor}</b></div>
-          <div style={{fontSize:11, color:T.ink3}}>{p['Prestamo']}{p['Notas']?` · ${p['Notas']}`:''}{magmaDebe?' · Magma tiene que devolver':' · le entra a Magma'}</div>
+          <div style={{fontSize:12.5, color:T.ink2}}>{p['Prestamo']}{p['Notas']?` · ${p['Notas']}`:''}{magmaDebe?' · Magma tiene que devolver':' · le entra a Magma'}</div>
         </div>
         <span style={{fontSize:13.5, fontFamily:MONO, color:magmaDebe?T.warn:T.pos, fontWeight:600}}>{fmt(parseMonto(p['Monto cuota']))}</span>
-        <button onClick={()=>saldarSocio(p)} style={{fontSize:11, padding:'3px 10px', borderRadius:6, border:`1px solid ${T.border}`, cursor:'pointer', background:T.surface, color:T.ink2, fontWeight:600}}>Marcar saldada</button>
+        <button onClick={()=>saldarSocio(p)} style={{fontSize:12.5, padding:'3px 10px', borderRadius:6, border:`1px solid ${T.border}`, cursor:'pointer', background:T.surface, color:T.ink2, fontWeight:600}}>Marcar saldada</button>
       </div> })}
     </Sec>}
     {cuotasAll.length>0 && <Sec id="cuotas" titulo="Cuotas de tarjeta a futuro (ya comprometidas)" sub={`este mes ${fmtM(proxCuotas[0].tot)}`} total={totFutCuota('Juan')+totFutCuota('Sofi')+totFutCuota('Magma')}>
       <div style={{padding:'6px 18px 2px'}}>
         <div style={{display:'flex', gap:6, overflowX:'auto', paddingBottom:8}}>
-          {proxCuotas.map((mm,i)=><div key={i} style={{minWidth:100, flex:'0 0 auto', background:i===0?T.brandSoft:T.surfaceAlt, borderRadius:9, padding:'8px 10px'}}>
-            <div style={{fontSize:10.5, color:T.ink3, fontWeight:600}}>{MESES_LARGO[mm.m-1].slice(0,3)}/{String(mm.a).slice(2)}{i===0?' (este)':''}</div>
+          {proxCuotas.map((mm,i)=><div key={i} style={{minWidth:100, flex:'0 0 auto', background:T.surfaceAlt, border:`1px solid ${i===0?T.ink:'transparent'}`, borderRadius:9, padding:'8px 10px'}}>
+            <div style={{fontSize:12.5, color:T.ink2, fontWeight:600}}>{MESES_LARGO[mm.m-1].slice(0,3)}/{String(mm.a).slice(2)}{i===0?' (este)':''}</div>
             <div style={{fontSize:14, fontWeight:700, fontFamily:MONO, color:T.ink}}>{fmt(mm.tot)}</div>
-            <div style={{fontSize:9.5, color:T.ink3}}>{mm.n} cuota{mm.n===1?'':'s'}</div>
+            <div style={{fontSize:12.5, color:T.ink2}}>{mm.n} cuota{mm.n===1?'':'s'}</div>
           </div>)}
         </div>
-        <div style={{fontSize:11, color:T.ink3, marginBottom:4}}>Comprometido de acá en más: 👤 Juan {fmt(totFutCuota('Juan'))} · 👩 Sofi {fmt(totFutCuota('Sofi'))} · 🏢 Magma {fmt(totFutCuota('Magma'))}</div>
+        <div style={{fontSize:12.5, color:T.ink2, marginBottom:4}}>Comprometido de acá en más: 👤 Juan {fmt(totFutCuota('Juan'))} · 👩 Sofi {fmt(totFutCuota('Sofi'))} · 🏢 Magma {fmt(totFutCuota('Magma'))}</div>
       </div>
       {[...cuotasAll].sort((a,b)=> (parseMonto(b['Monto cuota'])*((parseInt(b['Cuotas total'])||0)-(parseInt(b['Cuota actual'])||0))) - (parseMonto(a['Monto cuota'])*((parseInt(a['Cuotas total'])||0)-(parseInt(a['Cuota actual'])||0))) ).map((c,i)=>{
         const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0, faltan=Math.max(0,tot-act), lastT=absM(parseInt(c['Mes base'])||7,parseInt(c['Año base'])||2026)+faltan, lm=(lastT%12)+1, la=Math.floor(lastT/12), pIcon=persDe(c)==='Juan'?'👤':persDe(c)==='Sofi'?'👩':'🏢'
         return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 18px', borderTop:`1px solid ${T.border}`}}>
-          <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{pIcon} {c['Comercio']} <span style={{fontSize:10.5, color:T.ink3, fontWeight:400}}>{c['Tarjeta']}</span></div><div style={{fontSize:11, color:T.ink3}}>cuota {act}/{tot} · faltan {faltan} · hasta {MESES_LARGO[lm-1].slice(0,3)}/{String(la).slice(2)}</div></div>
-          <div style={{fontFamily:MONO, fontSize:13, color:T.ink2}}>{fmt(parseMonto(c['Monto cuota']))}<span style={{fontSize:10, color:T.ink3}}>/mes</span></div>
+          <div><div style={{fontSize:13, color:T.ink, fontWeight:500}}>{pIcon} {c['Comercio']} <span style={{fontSize:12.5, color:T.ink2, fontWeight:400}}>{c['Tarjeta']}</span></div><div style={{fontSize:12.5, color:T.ink2}}>cuota {act}/{tot} · faltan {faltan} · hasta {MESES_LARGO[lm-1].slice(0,3)}/{String(la).slice(2)}</div></div>
+          <div style={{fontFamily:MONO, fontSize:13, color:T.ink2}}>{fmt(parseMonto(c['Monto cuota']))}<span style={{fontSize:12.5, color:T.ink2}}>/mes</span></div>
         </div>
       })}
     </Sec>}
@@ -7115,7 +7121,7 @@ function Egresos({data, onRefresh, showToast, embebido=false}){
       {movMes.map((m,i)=>{ const mo=String(m['Moneda origen']||'ARS').toUpperCase(), md=String(m['Moneda destino']||'ARS').toUpperCase(); const showM=(v,cur)=>cur==='USD'?`US$ ${fmt(parseMonto(v))}`:fmt(parseMonto(v)); return <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 18px', borderTop:`1px solid ${T.border}`}}>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:13, color:T.ink}}>{m['Tipo']}{m['Descripción']?` · ${m['Descripción']}`:''}</div>
-          <div style={{fontSize:11, color:T.ink3}}>{m['Fecha']}{m['Cuenta origen']?` · de ${m['Cuenta origen']}`:''}{m['Cuenta destino']?` → ${m['Cuenta destino']}`:''}{m['Persona']?` · ${m['Persona']}`:''}</div>
+          <div style={{fontSize:12.5, color:T.ink2}}>{m['Fecha']}{m['Cuenta origen']?` · de ${m['Cuenta origen']}`:''}{m['Cuenta destino']?` → ${m['Cuenta destino']}`:''}{m['Persona']?` · ${m['Persona']}`:''}</div>
         </div>
         <span style={{fontSize:13, fontFamily:MONO, color:T.ink2}}>{m['Cuenta destino']&&parseMonto(m['Monto destino'])?showM(m['Monto destino'],md):showM(m['Monto origen'],mo)}</span>
       </div> })}
@@ -7286,8 +7292,8 @@ function EditarGasto({g, cuentas=[], onClose, onDone, showToast}){
           <div style={{flex:'1 1 150px'}}><label style={lblV2}>Cómo se paga</label><select value={f.medio} onChange={e=>setF(s=>({...s,medio:e.target.value}))} style={inpV2}>{!MEDIOS_GASTO.includes(f.medio) && <option value={f.medio}>{f.medio||'Sin definir'}</option>}{MEDIOS_GASTO.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
           <div style={{flex:'1 1 150px'}}><label style={lblV2}>De qué cuenta sale</label><select value={f.cuenta} onChange={e=>setF(s=>({...s,cuenta:e.target.value}))} style={inpV2}><option value="">Sin definir</option>{cuentas.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
         </div>
-        <div style={{fontSize:11.5, color:T.ink3, marginBottom:14, lineHeight:1.45}}>{/d[eé]bito/i.test(f.medio)?'Se debita solo: en Caja solo hay que mirar que esa cuenta tenga saldo.':/^tarjeta$/i.test(f.medio)?'Viene adentro del resumen de la tarjeta: Caja no lo cuenta aparte.':'Hay que pagarlo a mano: Caja lo muestra para que alguien lo pague.'}</div>
-        {pagado && parseMontoAR(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:11.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMontoAR(f.Monto))}).</div>}
+        <div style={{fontSize:12.5, color:T.ink3, marginBottom:14, lineHeight:1.45}}>{/d[eé]bito/i.test(f.medio)?'Se debita solo: en Caja solo hay que mirar que esa cuenta tenga saldo.':/^tarjeta$/i.test(f.medio)?'Viene adentro del resumen de la tarjeta: Caja no lo cuenta aparte.':'Hay que pagarlo a mano: Caja lo muestra para que alguien lo pague.'}</div>
+        {pagado && parseMontoAR(f.Monto)!==parseMonto(g['Monto']) && <div style={{fontSize:12.5, color:T.ink2, marginBottom:12, background:T.warnSoft, padding:'8px 10px', borderRadius:8}}>Este gasto ya figura <b>pagado</b>. Al cambiar el monto ajusto la cuenta <b>{g['Cuenta pago']||'—'}</b> por la diferencia (de {fmt(parseMonto(g['Monto']))} a {fmt(parseMontoAR(f.Monto))}).</div>}
         <button disabled={saving} onClick={guardar} style={btnAgregar(saving)}>{saving?'Guardando…':'Guardar cambios'}</button>
       </div>
     </div>
@@ -7314,22 +7320,22 @@ function DetalleTarjeta({t, items, cuotas=[], onClose, onRefresh, showToast}){
         <h3 style={{margin:0, fontSize:16, fontWeight:700, color:T.ink}}>{t['Tarjeta']} · {MESES_LARGO[(parseInt(t['Mes'])||1)-1]} {t['Año']}</h3>
         <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:22, color:T.ink3, cursor:'pointer', lineHeight:1}}>×</button>
       </div>
-      <div style={{fontSize:11.5, color:T.ink3, marginBottom:14}}>Tocá un gasto para pasarlo de Personal 👤 a Empresa 🏢 (o al revés). Se guarda al instante.</div>
+      <div style={{fontSize:12.5, color:T.ink3, marginBottom:14}}>Tocá un gasto para pasarlo de Personal 👤 a Empresa 🏢 (o al revés). Se guarda al instante.</div>
       {indiv.length===0 && <div style={{fontSize:12.5, color:T.ink3, padding:'10px 0'}}>Este resumen no tiene el detalle guardado (cargalo por “Subir resumen” para poder editarlo acá).</div>}
       {Object.entries(porPersona).map(([p,arr])=><div key={p} style={{marginBottom:14}}>
-        <div style={{fontSize:12, fontWeight:700, color:T.ink2, marginBottom:2}}>{p} · {arr.length}</div>
+        <div style={{fontSize:12.5, fontWeight:700, color:T.ink2, marginBottom:2}}>{p} · {arr.length}</div>
         {arr.map((m,i)=>{ const emp=String(m['Categoria']||'').toLowerCase()==='empresa'; return <div key={i} onClick={()=>flip(m)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'6px 4px', cursor:'pointer', borderTop:i?`1px solid ${T.border}`:'none', opacity:busy===m.__row?0.4:1}}>
-          <span style={{fontSize:12.5, color:emp?T.pos:T.ink2, fontWeight:emp?600:400}}>{emp?'🏢':'👤'} {m['Comercio']} <span style={{color:T.ink3, fontSize:11}}>{m['Fecha']}{String(m['Moneda']||'').toUpperCase()==='USD'?' · USD':''}</span></span>
+          <span style={{fontSize:12.5, color:emp?T.pos:T.ink2, fontWeight:emp?600:400}}>{emp?'🏢':'👤'} {m['Comercio']} <span style={{color:T.ink3, fontSize:12.5}}>{m['Fecha']}{String(m['Moneda']||'').toUpperCase()==='USD'?' · USD':''}</span></span>
           <span style={{fontFamily:MONO, fontSize:12.5, color:emp?T.pos:T.ink2}}>{String(m['Moneda']||'').toUpperCase()==='USD'?`US$${fmt(parseMonto(m['Monto']))}`:fmt(parseMonto(m['Monto']))}</span>
         </div> })}
       </div>)}
-      {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Cargos bancarios (fijo)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
-      {deuda>1000?<div style={{marginTop:8, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{display:'flex', justifyContent:'space-between', fontSize:12.5, color:T.ink2, fontWeight:600}}><span>💳 Deuda del mes pasado (financiada)</span><span style={{fontFamily:MONO}}>{fmt(deuda)}</span></div><div style={{fontSize:10.5, color:T.ink3, marginTop:2}}>No es gasto de este mes — es deuda que se arrastra. Seguimiento en la solapa DEUDA_TARJETAS.</div></div>:null}
+      {agg.length?<div style={{marginTop:6, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{fontSize:12.5, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:4}}>Cargos bancarios (fijo)</div>{agg.map((m,i)=><div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, color:T.ink3, padding:'2px 4px'}}><span>{m['Comercio']} · {m['Descripcion']}</span><span style={{fontFamily:MONO}}>{fmt(parseMonto(m['Monto']))}{String(m['Moneda']||'').toUpperCase()==='USD'?' US$':''}</span></div>)}</div>:null}
+      {deuda>1000?<div style={{marginTop:8, paddingTop:10, borderTop:`1px solid ${T.border}`}}><div style={{display:'flex', justifyContent:'space-between', fontSize:12.5, color:T.ink2, fontWeight:600}}><span>💳 Deuda del mes pasado (financiada)</span><span style={{fontFamily:MONO}}>{fmt(deuda)}</span></div><div style={{fontSize:12.5, color:T.ink3, marginTop:2}}>No es gasto de este mes — es deuda que se arrastra. Seguimiento en la solapa DEUDA_TARJETAS.</div></div>:null}
       <div style={{marginTop:10, paddingTop:10, borderTop:`2px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700, color:T.ink}}><span>Total del resumen (a pagar)</span><span style={{fontFamily:MONO}}>{fmt(totalCard)}</span></div>
       {cuotas.length>0 && <div style={{marginTop:12, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
-        <div style={{fontSize:10, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:6}}>Cuotas en curso de esta tarjeta ({cuotas.length})</div>
-        {cuotas.map((c,i)=>{ const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0, faltan=Math.max(0,tot-act), pIcon=/juan/i.test(c['Persona'])?'👤':/sof/i.test(c['Persona'])?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0', color:T.ink2}}>
-          <span>{pIcon} {c['Comercio']} <span style={{color:T.ink3, fontSize:10.5}}>cuota {act}/{tot} · faltan {faltan}</span></span>
+        <div style={{fontSize:12.5, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:0.3, marginBottom:6}}>Cuotas en curso de esta tarjeta ({cuotas.length})</div>
+        {cuotas.map((c,i)=>{ const act=parseInt(c['Cuota actual'])||0, tot=parseInt(c['Cuotas total'])||0, faltan=Math.max(0,tot-act), pIcon=/juan/i.test(c['Persona'])?'👤':/sof/i.test(c['Persona'])?'👩':'🏢'; return <div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:12.5, padding:'3px 0', color:T.ink2}}>
+          <span>{pIcon} {c['Comercio']} <span style={{color:T.ink3, fontSize:12.5}}>cuota {act}/{tot} · faltan {faltan}</span></span>
           <span style={{fontFamily:MONO}}>{fmt(parseMonto(c['Monto cuota']))}/mes</span>
         </div> })}
       </div>}
