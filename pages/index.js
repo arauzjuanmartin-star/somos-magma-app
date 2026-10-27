@@ -23,6 +23,7 @@ import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
 import { codificarFechas, decodificarFechas, tentativosDe, resumenFechas } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
+import { tablaCotizaciones, convertir } from '../lib/cotizaciones.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
 import { tareasDeHoy } from '../lib/hoy.mjs'
 import TicketsRevisar from '../components/TicketsRevisar'
@@ -345,7 +346,7 @@ export default function V2() {
             : mod==='agencias' ? <Agencias data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='clientes' ? <Clientes data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav} goTo={goTo} mail={mail}/>
             : mod==='contactos' ? <Contactos data={data} onRefresh={()=>load(true)} showToast={showToast} nav={nav} clearNav={clearNav}/>
-            : mod==='historico' ? <Historico data={data}/>
+            : mod==='historico' ? <Historico data={data} mail={mail}/>
             : <Placeholder label={NAV.find(n=>n.id===mod)?.label}/>
             }</ErrorBoundary>}
         </div>
@@ -6015,77 +6016,245 @@ function Directorio({tipo, data, onRefresh, showToast, nav, clearNav, goTo, mail
 const Agencias = props => <Directorio tipo="agencia" {...props}/>
 const Clientes = props => <Directorio tipo="cliente" {...props}/>
 
-// ============================ HISTÓRICO ============================
-function Historico({data}){
+// ============================ HISTÓRICO: LA EMPRESA AÑO A AÑO ============================
+// Lo que mira un dueño (o alguien que la compraría): ¿creció de verdad?, ¿ganamos más por trabajo?, ¿tenemos más
+// gastos?, ¿dependemos de un cliente?, ¿la venta se repite?, ¿cuánto depende de Juan y Sofi? (memoria
+// project_metricas_dueno_comprador). Juan, 27/10/2026.
+// En Argentina un año contra otro en pesos no dice nada: todo se ve en dólares (blue promedio del mes del trabajo) o
+// en pesos de hoy (IPC), con la solapa COTIZACIONES (lib/cotizaciones.mjs). Todo SIN IVA.
+// Ganancia = precio − lo que se paga al staff de afuera, en todos los años (la definición de la app desde el
+// 24/09/2026). En los años viejos se calcula igual desde las columnas Staff/Pago de HISTORICO_20xx.
+function Historico({data, mail}){
   const proyectos=data.proyectos||[], fc=data.facturacion||[]
-  const [anio,setAnio]=useState('2026')
-  const [mesF,setMesF]=useState('todos')
-  const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
-  // Misma definición que Trabajos y el Dashboard: precio − staff de afuera (gananciaProyecto).
-  // Los años viejos (HISTORICO_2023/24/25) ya venían así: Magma + Viáticos + Impuestos + Extra M.
-  const magma2026=gananciaProyecto
+  const plata=verPlata(mail), cel=useEsCelular(1000)
+  const hoy=new Date(), anioHoy=hoy.getFullYear(), hoy0=new Date(anioHoy, hoy.getMonth(), hoy.getDate())
+  const [anio,setAnio]=useState(String(anioHoy))
+  const [vista,setVista]=useState('usd')   // usd · hoy · pesos
+  const [mesF,setMesF]=useState(0)
+  const [q,setQ]=useState(''), [cuantos,setCuantos]=useState(100)
+  useEffect(()=>{ setCuantos(100) },[anio, mesF, q])
+  const tabla=useMemo(()=>tablaCotizaciones(data.cotizaciones), [data.cotizaciones])
+  const hayCot=tabla.meses.length>0
+  const vistaR=hayCot?vista:'pesos'
+  const si=v=>['SÍ','SI','TRUE'].includes(String(v||'').toUpperCase())
+  const esSocioN=n=>/arauz/i.test(n)||/sof[ií]a\b.*grenier/i.test(n)
+  // La CUENTA es la agencia si la hay, y si no el cliente directo. En HISTORICO_2025 la columna "Cliente" tiene la
+  // agencia (Austral, Ostara, Oir) y "Agencia" viene vacía; en 2026 la agencia va aparte y "Cliente" es el final
+  // (Austral Derecho, Unilever). Comparando por cliente, 2026 parecía tener 96 clientes nuevos y 17% de venta repetida.
+  const cuenta=r=>r.agencia||r.cliente||'—'
 
-  let filasAll=[]
-  if(anio==='2026'){
-    filasAll=proyectos.filter(p=>String(p['Fecha Evento']||'').includes('2026')).map(p=>{ const f=fcByNro[String(p['N° presupuesto'])]
-      return {mesNum:parseInt((p['Fecha Evento']||'').split('/')[1])||0, fecha:p['Fecha Evento'], nro:p['N° presupuesto'], cliente:p['Cliente'], agencia:p['Agencia'], proyecto:p['Proyecto'], total:parseMonto(p['Total ']||p['Total']), magma:magma2026(p), cobrado:f?isCobrada(f):false} })
-  } else {
-    const src={'2023':data.historico2023,'2024':data.historico2024,'2025':data.historico2025}[anio]||[]
-    filasAll=src.map(r=>({ mesNum:parseInt(String(r['Fecha Evento']||'').split('/')[1])||parseInt(String(r['Mes']||''))||0, fecha:r['Fecha Evento'], nro:r['Nro Presupuesto'], cliente:r['Cliente'], agencia:r['Agencia'], proyecto:r['Proyecto'], total:parseMonto(r['Total']), magma:parseMonto(r['Viaticos'])+parseMonto(r['Magma'])+parseMonto(r['Impuestos'])+parseMonto(r['Extra M']), cobrado:String(r['Cobrado']||'').toUpperCase()==='SÍ'||String(r['Cobrado']||'').toUpperCase()==='SI'||String(r['Cobrado']||'').toUpperCase()==='TRUE' }))
+  const todas=useMemo(()=>{
+    const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
+    const out=[]
+    proyectos.forEach(p=>{ const d=parseD(p['Fecha Evento']); if(!d||d.getFullYear()<2026) return; const f=fcByNro[String(p['N° presupuesto'])]
+      const staff=[]; for(let j=1;j<=MAX_SLOTS;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(s) staff.push(s) }
+      out.push({d, anio:d.getFullYear(), mes:d.getMonth()+1, nro:p['N° presupuesto'], cliente:String(p['Cliente']||'').trim(), agencia:String(p['Agencia']||'').trim(), proyecto:p['Proyecto'],
+        total:parseMonto(p['Total ']||p['Total']), magma:gananciaProyecto(p), cobrado:f?isCobrada(f):false, pm:String(p['PM']||'').trim(), socios:staff.some(s=>esSocioN(canonStaff(s))) }) })
+    ;[['2023',data.historico2023],['2024',data.historico2024],['2025',data.historico2025]].forEach(([a,src])=>(src||[]).forEach(r=>{
+      const d=parseD(r['Fecha'])||new Date(+a, (parseInt(r['Mes'])||1)-1, 15); const total=parseMonto(r['Presupuesto'])||parseMonto(r['Total'])
+      let st=0, socios=false; for(let j=1;j<=6;j++){ const s=String(r['Staff '+j]||'').trim(); if(!s) continue; if(esSocioN(canonStaff(s))) socios=true; if(!/somos magma|^magma$/i.test(s)) st+=parseMonto(r['Pago '+j]) }
+      out.push({d, anio:+a, mes:d.getMonth()+1, nro:r['Nro'], cliente:String(r['Cliente']||'').trim(), agencia:String(r['Agencia']||'').trim(), proyecto:r['Proyecto'], total, magma:total-st, cobrado:si(r['Cobrado']), pm:'', socios}) }))
+    return out
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[data])
+  // Cada monto en la vista elegida, con la cotización del mes del trabajo
+  const V=(monto,d)=>{ const v=convertir(monto, d, tabla, vistaR); return v===null?0:v }
+  const fmtV=n=>{ if(vistaR!=='usd') return fmtM(n); const a=Math.abs(n||0); return (n<0?'-':'')+'US$'+(a>=1e6?(a/1e6).toFixed(1).replace('.',',')+'M':a>=1e3?Math.round(a/1e3)+'k':Math.round(a)) }
+  const vistaTxt={usd:'en dólares (blue de cada mes)', hoy:`en pesos de hoy (inflación hasta ${tabla.ultimoIpc?MESES_LARGO[+tabla.ultimoIpc.slice(5)-1].toLowerCase()+' '+tabla.ultimoIpc.slice(0,4):'el último IPC'})`, pesos:'en pesos de cada mes (sin ajustar)'}[vistaR]
+
+  const ANIOS=[...new Set(todas.map(r=>r.anio))].sort()
+  const A=Number(anio), esActual=A===anioHoy
+  // "A la misma fecha": este año hasta hoy contra el anterior hasta el mismo día. Un año cerrado, entero.
+  const hastaHoy=(r)=>!esActual||new Date(anioHoy, r.d.getMonth(), r.d.getDate())<=hoy0
+  const delAnio=a=>todas.filter(r=>r.anio===a)
+  const filasAll=delAnio(A), previas=delAnio(A-1)
+  const yaHecho=filasAll.filter(hastaHoy), prevMismo=previas.filter(hastaHoy), porVenir=filasAll.filter(r=>!hastaHoy(r))
+
+  // ---- Las métricas de un conjunto de trabajos
+  const sumV=(rs,k)=>rs.reduce((s,r)=>s+V(r[k],r.d),0)
+  const clientesDe=rs=>{ const m={}; rs.forEach(r=>{ const c=normTxt(cuenta(r))||'—'; (m[c]=m[c]||{n:cuenta(r), v:0}).v+=V(r.total,r.d) }); return m }
+  const metricas=(rs, antes)=>{
+    const ventas=sumV(rs,'total'), gan=sumV(rs,'magma'), n=rs.length
+    const cl=Object.values(clientesDe(rs)).sort((a,b)=>b.v-a.v)
+    const ya=new Set(antes.map(r=>normTxt(cuenta(r))))
+    const repite=rs.filter(r=>ya.has(normTxt(cuenta(r)))), nuevos=new Set(rs.filter(r=>!ya.has(normTxt(cuenta(r)))).map(r=>normTxt(cuenta(r))))
+    return { ventas, n, ticket:n?ventas/n:0, gan, margen:ventas?gan/ventas*100:0,
+      top1:cl[0]||null, top1p:ventas&&cl[0]?cl[0].v/ventas*100:0, top5p:ventas?cl.slice(0,5).reduce((s,c)=>s+c.v,0)/ventas*100:0,
+      repiteP:ventas&&antes.length?sumV(repite,'total')/ventas*100:null, nuevosN:antes.length?nuevos.size:null, nuevosV:antes.length?ventas-sumV(repite,'total'):null,
+      sociosP:ventas?sumV(rs.filter(r=>r.socios),'total')/ventas*100:0 }
   }
-  const filas = mesF==='todos' ? filasAll : filasAll.filter(r=>r.mesNum===parseInt(mesF))
-  const facturado=filas.reduce((s,r)=>s+r.total,0)
-  const ganancia=filas.reduce((s,r)=>s+r.magma,0)
-  const margenPct=facturado>0?(ganancia/facturado)*100:0
-  const semMargen=semaforo(margenPct)
-  const mesesPresentes=[...new Set(filasAll.map(r=>r.mesNum).filter(Boolean))].sort((a,b)=>a-b)
+  const mA=metricas(yaHecho, delAnio(A-1)), mP=previas.length?metricas(prevMismo, delAnio(A-2)):null
 
-  // top clientes del período
-  const porCli={}; filas.forEach(r=>{ const c=r.cliente||'—'; porCli[c]=(porCli[c]||0)+r.total }); const topCli=Object.entries(porCli).sort((a,b)=>b[1]-a[1]).slice(0,8)
+  // ---- Estructura (gastos fijos + sueldos internos). Solo se puede para el año en curso: los años viejos están en
+  // la planilla ADMIN MAGMA. Es la estructura de HOY (activos, mensuales, en pesos) por los meses que van del año.
+  const estructuraMes=useMemo(()=>(data.gastosFijos||[]).filter(g=>/^s[ií]$/i.test(String(g['Activo']||'').trim())&&/mensual/i.test(String(g['Frecuencia']||''))&&!/usd/i.test(String(g['Moneda']||''))).reduce((s,g)=>s+parseMonto(g['Monto']),0),[data.gastosFijos])
+  const mesesCorridos=hoy.getMonth()+hoy.getDate()/new Date(anioHoy, hoy.getMonth()+1, 0).getDate()
+  const estructura=esActual&&estructuraMes>0 ? V(estructuraMes*mesesCorridos, hoy0) : null
+
+  // ---- Conversión de presupuestos (la solapa tiene solo el año vigente) y días de cobro (FACTURACION)
+  const conv=useMemo(()=>{ const ps=(data.presupuestos||[]).filter(p=>{ const d=parseD(p['Fecha Presupuesto'])||(String(p['Fecha Presupuesto']||'').match(/^(\d{4})-/)?new Date(+String(p['Fecha Presupuesto']).slice(0,4),0,1):null); return d&&d.getFullYear()===A })
+    const ap=ps.filter(isAprobado).length, des=ps.filter(p=>String(p['Estado']||'').toUpperCase()==='DESAPROBADO').length
+    return ap+des?{p:ap/(ap+des)*100, ap, des}:null },[data.presupuestos, A]) // eslint-disable-line react-hooks/exhaustive-deps
+  const dso=useMemo(()=>{ const ds=fc.map(f=>{ const e=parseD(f['Fecha emision']), c=parseD(f['Fecha cobro']); return e&&c&&e.getFullYear()===A&&c>=e?(c-e)/864e5:null }).filter(x=>x!==null); return ds.length?{d:ds.reduce((s,x)=>s+x,0)/ds.length, n:ds.length}:null },[fc, A]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Últimos 12 meses contra los 12 anteriores: el crecimiento que mira un comprador, sin el corte de enero
+  const ltm=useMemo(()=>{ const h=hoy0.getTime(), a1=new Date(anioHoy-1, hoy.getMonth(), hoy.getDate()).getTime(), a2=new Date(anioHoy-2, hoy.getMonth(), hoy.getDate()).getTime()
+    const u=todas.filter(r=>r.d.getTime()>a1&&r.d.getTime()<=h), p=todas.filter(r=>r.d.getTime()>a2&&r.d.getTime()<=a1)
+    return {u:sumV(u,'total'), p:sumV(p,'total'), gu:sumV(u,'magma'), gp:sumV(p,'magma')}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[todas, vistaR, tabla])
+  const pct=(a,b)=>b>0?Math.round((a-b)/b*100):null
+  const signo=n=>n===null||n===undefined?'—':(n>=0?`+${n}%`:`${n}%`)
+  const pp=(a,b)=>a===null||b===null||b===undefined?'—':`${a-b>=0?'+':''}${Math.round(a-b)} pts`
+
+  // Mes a mes: este año contra el anterior
+  const porMes=(rs)=>Array.from({length:12},(_,i)=>rs.filter(r=>r.mes===i+1).reduce((s,r)=>s+(plata?V(r.total,r.d):1),0))
+  const barA=porMes(filasAll), barP=porMes(previas), maxB=Math.max(1,...barA,...barP)
+  const fmtBar=v=>plata?fmtV(v):`${v} ${v===1?'trabajo':'trabajos'}`
+  const mesFlojo=previas.length?barP.indexOf(Math.min(...barP.filter((_,i)=>barP[i]>0))):-1
+
+  const filas=filasAll.filter(r=>(!mesF||r.mes===mesF)&&(!q||normTxt([r.proyecto,r.cliente,r.agencia,r.nro].join(' ')).includes(normTxt(q)))).sort((a,b)=>b.d-a.d)
+  const cliA=clientesDe(mesF?filasAll.filter(r=>r.mes===mesF):filasAll), cliP=clientesDe(mesF?previas.filter(r=>r.mes===mesF):previas)
+  const totCli=Object.values(cliA).reduce((s,c)=>s+c.v,0)
+  const topCli=Object.entries(cliA).sort((a,b)=>b[1].v-a[1].v).slice(0,10)
+
+  const card={background:T.surface, borderRadius:14, boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}
+  const etiqueta={fontSize:12.5, color:T.ink2}
+  const chip=on=>({padding:'7px 14px', borderRadius:999, fontSize:13, fontWeight:600, cursor:'pointer', border:on?'none':`1px solid ${T.border}`, background:on?T.ink:T.surface, color:on?'#fff':T.ink2})
+  const prevLbl=String(A-1)
+  // Cambio: verde si mejora, ámbar si empeora (rojo es solo para lo vencido). "mejor" dice para qué lado es bueno.
+  const cambio=(txt, malo)=>txt==='—'?<span style={{color:T.ink3}}>—</span>:<span style={{color:malo?T.warn:T.pos, fontWeight:600}}>{txt}</span>
+  const filasM=plata ? [
+    ['Ventas (sin IVA)', fmtV(mA.ventas), mP&&fmtV(mP.ventas), mP&&cambio(signo(pct(mA.ventas,mP.ventas)), mA.ventas<mP.ventas), '¿Creció de verdad?'],
+    ['Trabajos', mA.n, mP&&mP.n, mP&&cambio(signo(pct(mA.n,mP.n)), mA.n<mP.n), 'Volumen'],
+    ['Ticket promedio', fmtV(mA.ticket), mP&&fmtV(mP.ticket), mP&&cambio(signo(pct(mA.ticket,mP.ticket)), mA.ticket<mP.ticket), 'Precio: ¿cobramos más por trabajo?'],
+    ['Ganancia de los trabajos', fmtV(mA.gan), mP&&fmtV(mP.gan), mP&&cambio(signo(pct(mA.gan,mP.gan)), mA.gan<mP.gan), 'Precio menos staff de afuera'],
+    ['Margen', Math.round(mA.margen)+'%', mP&&Math.round(mP.margen)+'%', mP&&cambio(pp(mA.margen,mP.margen), mA.margen<mP.margen), '¿Ganamos más por trabajo?'],
+    ['Estructura (gastos fijos y sueldos)', estructura!==null?fmtV(estructura):'—', null, null, esActual?`La de hoy, ${fmtM(estructuraMes)} por mes, por los meses del año. Los años viejos están en ADMIN MAGMA`:'Solo se calcula para el año en curso'],
+    ['Ganancia después de estructura', estructura!==null?fmtV(mA.gan-estructura):'—', null, null, 'Lo más parecido a la ganancia que mira un comprador'],
+    ['Cuenta #1', mA.top1?`${mA.top1.n} · ${Math.round(mA.top1p)}%`:'—', mP&&mP.top1?`${mP.top1.n} · ${Math.round(mP.top1p)}%`:null, null, mA.top1p>25?'Más del 25% en una sola cuenta baja el valor de la empresa':'Por debajo del 25%: no dependemos de una'],
+    ['Las 5 primeras cuentas', Math.round(mA.top5p)+'% de la venta', mP&&Math.round(mP.top5p)+'%', mP&&cambio(pp(mA.top5p,mP.top5p), mA.top5p>mP.top5p), 'Concentración. Cuenta = la agencia, o el cliente si viene directo'],
+    ['Venta de cuentas que repiten', mA.repiteP===null?'—':Math.round(mA.repiteP)+'%', mP&&mP.repiteP!==null?Math.round(mP.repiteP)+'%':null, mP&&mP.repiteP!==null&&mA.repiteP!==null?cambio(pp(mA.repiteP,mP.repiteP), mA.repiteP<mP.repiteP):null, `Cuentas que ya compraron en ${prevLbl}`],
+    ['Cuentas nuevas', mA.nuevosN===null?'—':`${mA.nuevosN} · ${fmtV(mA.nuevosV)}`, mP&&mP.nuevosN!==null?`${mP.nuevosN} · ${fmtV(mP.nuevosV)}`:null, mP&&mP.nuevosN!==null&&mA.nuevosN!==null?cambio(signo(pct(mA.nuevosV,mP.nuevosV)), mA.nuevosV<mP.nuevosV):null, '¿Funciona lo comercial?'],
+    ['Venta con Juan o Sofi en el staff', Math.round(mA.sociosP)+'%', mP&&Math.round(mP.sociosP)+'%', mP&&cambio(pp(mA.sociosP,mP.sociosP), mA.sociosP>mP.sociosP), 'Trabajos donde van ustedes: cuánto depende de que estén'],
+    ['Presupuestos que se aprueban', conv?`${Math.round(conv.p)}% · ${conv.ap} de ${conv.ap+conv.des}`:'—', null, null, 'De los que ya se decidieron (la solapa tiene solo el año vigente)'],
+    ['Días promedio para cobrar', dso?`${Math.round(dso.d)} días`:'—', null, null, dso?`De la factura al cobro, ${dso.n} facturas cobradas`:'Sin facturas con fecha de cobro ese año'],
+  ] : [
+    ['Trabajos', mA.n, mP&&mP.n, mP&&cambio(signo(pct(mA.n,mP.n)), mA.n<mP.n), ''],
+    ['Presupuestos que se aprueban', conv?`${Math.round(conv.p)}% · ${conv.ap} de ${conv.ap+conv.des}`:'—', null, null, ''],
+  ]
 
   return <>
-    <PageHead title="Histórico" sub={`${filas.length} proyectos${mesF==='todos'?` en ${anio}`:` en ${MESES_LARGO[parseInt(mesF)-1]} ${anio}`}`}/>
-    <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center'}}>
-      {['2023','2024','2025','2026'].map(a=><button key={a} onClick={()=>{setAnio(a);setMesF('todos')}} style={{padding:'7px 16px', borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', border:`1px solid ${anio===a?T.ink:T.border}`, background:anio===a?T.ink:T.surface, color:anio===a?'#fff':T.ink2}}>{a}</button>)}
-      <div style={{flex:1}}/>
-      <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selectStyle}><option value="todos">Todo el año</option>{mesesPresentes.map(m=><option key={m} value={m}>{MESES_LARGO[m-1]}</option>)}</select>
-    </div>
-    <div style={{display:'flex', gap:12, marginBottom:20, flexWrap:'wrap'}}>
-      <Stat label="Proyectos" value={filas.length}/>
-      <Stat label="Facturado" value={fmt(facturado)}/>
-      <Stat label="Ganancia Magma" value={fmt(ganancia)} color={T.pos}/>
-      <Stat label={`Margen · ${semMargen.l}`} value={Math.round(margenPct)+'%'} color={semMargen.c}/>
-    </div>
-    {filas.length===0
-      ? <Empty>Sin datos para {anio}. Los históricos viejos se cargan desde Admin → Backfill en la app actual.</Empty>
-      : <div style={{display:'flex', gap:16, alignItems:'flex-start'}}>
-        <div style={{flex:1.6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <div style={{display:'grid', gridTemplateColumns:'70px 1.5fr 1fr 110px 110px 60px', padding:'11px 16px', borderBottom:`1px solid ${T.border}`, fontSize:10, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', color:T.ink3}}>
-            <span>N°</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Magma</span><span style={{textAlign:'center'}}>Cob.</span>
-          </div>
-          <div style={{maxHeight:'60vh', overflowY:'auto'}}>
-          {filas.slice().reverse().slice(0,300).map((r,i)=>(
-            <div key={i} style={{display:'grid', gridTemplateColumns:'70px 1.5fr 1fr 110px 110px 60px', padding:'9px 16px', borderTop:`1px solid ${T.border}`, alignItems:'center', fontSize:12.5}}>
-              <span style={{fontFamily:MONO, fontSize:11, color:T.ink3}}>{r.nro||'—'}</span>
-              <span style={{color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{r.proyecto||'—'}</span>
-              <span style={{color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8}}>{r.cliente||'—'}</span>
-              <span style={{textAlign:'right', fontFamily:MONO, color:T.ink}}>{fmtM(r.total)}</span>
-              <span style={{textAlign:'right', fontFamily:MONO, color:T.pos}}>{fmtM(r.magma)}</span>
-              <span style={{textAlign:'center', color:r.cobrado?T.pos:T.ink3}}>{r.cobrado?'✓':'·'}</span>
-            </div>
-          ))}
-          </div>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:14}}>
+      <h1 style={{fontSize:23, fontWeight:700, color:T.ink, margin:0, letterSpacing:-0.3}}>La empresa año a año</h1>
+      <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+        {plata && hayCot && <div role="group" aria-label="Moneda" style={{display:'flex', gap:4, background:T.surfaceAlt, borderRadius:999, padding:3}}>
+          {[['usd','Dólares'],['hoy','Pesos de hoy'],['pesos','Pesos']].map(([k,l])=><button key={k} aria-pressed={vista===k} onClick={()=>setVista(k)} style={{...chip(vista===k), border:'none', background:vista===k?T.ink:'transparent'}}>{l}</button>)}
+        </div>}
+        <div role="group" aria-label="Año" style={{display:'flex', gap:6}}>
+          {ANIOS.map(a=><button key={a} aria-pressed={anio===String(a)} onClick={()=>{setAnio(String(a));setMesF(0)}} style={chip(anio===String(a))}>{a}</button>)}
         </div>
-        <div style={{flex:1, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
-          <CardHead>Top clientes {anio}</CardHead>
-          {topCli.map(([c,m],i)=>(
-            <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'9px 18px', borderTop:`1px solid ${T.border}`}}>
-              <span style={{fontSize:12.5, color:T.ink}}>{c}</span>
-              <span style={{fontSize:12.5, fontFamily:MONO, color:T.ink2}}>{fmtM(m)}</span>
-            </div>
-          ))}
+      </div>
+    </div>
+
+    {/* La frase: lo que creció de verdad */}
+    <div style={{...card, padding:'16px 18px', marginBottom:14}}>
+      {plata ? <>
+        <div style={{fontSize:17, fontWeight:700, color:T.ink, lineHeight:1.4}}>
+          Últimos 12 meses: {fmtV(ltm.u)} {ltm.p>0&&<span style={{color:ltm.u>=ltm.p?T.pos:T.warn}}>({signo(pct(ltm.u,ltm.p))} contra los 12 anteriores)</span>} · ganancia {fmtV(ltm.gu)}
         </div>
+        <div style={{fontSize:13.5, color:T.ink2, marginTop:4, lineHeight:1.5}}>
+          {esActual?`${anio} hasta hoy`:anio}: {fmtV(mA.ventas)} en {mA.n} trabajos{mP?` · ${prevLbl}${esActual?' a la misma fecha':''}: ${fmtV(mP.ventas)} (${signo(pct(mA.ventas,mP.ventas))})`:''}
+          {esActual&&porVenir.length>0&&` · ya aprobado para lo que queda del año: ${porVenir.length} trabajos, ${fmtV(sumV(porVenir,'total'))}`}
+          {' · '}{vistaTxt}, sin IVA
+        </div>
+      </> : <div style={{fontSize:17, fontWeight:700, color:T.ink}}>{esActual?`${anio} hasta hoy`:anio}: {mA.n} trabajos{mP?<span style={{fontWeight:500, color:T.ink2}}> · {prevLbl}{esActual?' a la misma fecha':''}: {mP.n} ({signo(pct(mA.n,mP.n))})</span>:''}</div>}
+      {!hayCot && plata && <div style={{fontSize:12.5, color:T.warn, marginTop:6}}>No pude leer la solapa COTIZACIONES: los montos van en pesos sin ajustar.</div>}
+    </div>
+
+    {/* Lo que mira un dueño o un comprador */}
+    <div style={{...card, overflow:'hidden', marginBottom:14}}>
+      <div style={{padding:'12px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', alignItems:'baseline'}}>
+        <span style={{fontSize:13.5, fontWeight:700, color:T.ink}}>Cómo está la empresa</span>
+        <span style={etiqueta}>{esActual?`${anio} hasta hoy contra ${prevLbl} hasta el mismo día`:`${anio} contra ${prevLbl}`}</span>
+      </div>
+      {!cel && <div style={{display:'grid', gridTemplateColumns:'1.3fr 150px 150px 100px 1.6fr', gap:12, padding:'9px 18px', borderBottom:`1px solid ${T.border}`, ...etiqueta, fontWeight:600}}>
+        <span>Qué miramos</span><span style={{textAlign:'right'}}>{anio}</span><span style={{textAlign:'right'}}>{prevLbl}</span><span style={{textAlign:'right'}}>Cambio</span><span>Para qué sirve</span>
       </div>}
+      {filasM.map(([l,a,p,c,n],i)=> cel
+        ? <div key={i} style={{padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none'}}>
+            <div style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:13.5}}><span style={{color:T.ink, fontWeight:600}}>{l}</span><span style={{fontFamily:MONO, color:T.ink}}>{a}</span></div>
+            <div style={{...etiqueta, marginTop:2}}>{p!==null&&p!==undefined?<>{prevLbl}: {p} · {c}</>:n}</div>
+          </div>
+        : <div key={i} style={{display:'grid', gridTemplateColumns:'1.3fr 150px 150px 100px 1.6fr', gap:12, padding:'10px 18px', borderTop:i?`1px solid ${T.border}`:'none', alignItems:'baseline', fontSize:13.5}}>
+            <span style={{color:T.ink, fontWeight:600}}>{l}</span>
+            <span style={{textAlign:'right', fontFamily:/[a-zA-Z]{3}/.test(String(a))?'inherit':MONO, color:T.ink, fontSize:13}}>{a}</span>
+            <span style={{textAlign:'right', fontFamily:/[a-zA-Z]{3}/.test(String(p))?'inherit':MONO, color:T.ink2, fontSize:13}}>{p===null||p===undefined?'—':p}</span>
+            <span style={{textAlign:'right', fontSize:13}}>{c||<span style={{color:T.ink3}}>—</span>}</span>
+            <span style={etiqueta}>{n}</span>
+          </div>)}
+    </div>
+
+    {/* Mes a mes */}
+    <div style={{...card, padding:'16px 18px 12px', marginBottom:14}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:10}}>
+        <span style={{fontSize:13.5, fontWeight:700, color:T.ink}}>{plata?'Ventas':'Trabajos'} mes a mes</span>
+        <span style={{display:'flex', gap:14, ...etiqueta}}>
+          <span style={{display:'flex', alignItems:'center', gap:6}}><i style={{width:10, height:10, borderRadius:3, background:T.ink}}/>{anio}</span>
+          {previas.length>0 && <span style={{display:'flex', alignItems:'center', gap:6}}><i style={{width:10, height:10, borderRadius:3, background:T.campo}}/>{prevLbl}</span>}
+          {mesF>0 && <button onClick={()=>setMesF(0)} style={{border:'none', background:'transparent', padding:0, fontSize:12.5, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>ver todo el año</button>}
+        </span>
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(12,minmax(0,1fr))', gap:cel?4:10, alignItems:'end', height:150, borderBottom:`1px solid ${T.border}`}}>
+        {barA.map((v,i)=>{ const p=barP[i], on=mesF===i+1, futuro=esActual&&i>hoy.getMonth()
+          return <button key={i} onClick={()=>setMesF(on?0:i+1)} aria-pressed={on} title={`${MESES_LARGO[i]}: ${fmtBar(v)}${previas.length?` · ${prevLbl}: ${fmtBar(p)}`:''}${futuro?' (ya aprobado)':''}`} style={{height:'100%', display:'flex', alignItems:'flex-end', justifyContent:'center', gap:2, border:'none', background:on?T.surfaceAlt:'transparent', borderRadius:8, padding:'6px 2px 0', cursor:'pointer', opacity:mesF&&!on?0.45:1}}>
+            {previas.length>0 && <i style={{width:'38%', maxWidth:16, height:`${p/maxB*100}%`, minHeight:p?2:0, background:T.campo, borderRadius:'4px 4px 0 0'}}/>}
+            <i style={{width:'38%', maxWidth:16, height:`${v/maxB*100}%`, minHeight:v?2:0, background:futuro?'transparent':T.ink, border:futuro?`1.5px dashed ${T.ink2}`:'none', borderBottom:'none', boxSizing:'border-box', borderRadius:'4px 4px 0 0'}}/>
+          </button> })}
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(12,minmax(0,1fr))', gap:cel?4:10, marginTop:6}}>
+        {MESES_LARGO.map((m,i)=><span key={i} style={{textAlign:'center', fontSize:12.5, color:mesF===i+1?T.ink:T.ink2, fontWeight:mesF===i+1?700:400}}>{m.slice(0,3)}</span>)}
+      </div>
+      <div style={{...etiqueta, marginTop:8}}>{esActual?'Punteado: meses que todavía no pasaron (trabajos ya aprobados). ':''}{plata&&mesFlojo>=0?`El mes más flojo de ${prevLbl} fue ${MESES_LARGO[mesFlojo].toLowerCase()}: hay que llegar con caja. `:''}Tocá un mes para ver solo ese.</div>
+    </div>
+
+    <div style={{display:'flex', flexDirection:cel?'column':'row', gap:16, alignItems:cel?'stretch':'flex-start'}}>
+      <div style={{flex:1.6, minWidth:0, ...card, overflow:'hidden'}}>
+        <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', padding:'12px 16px', borderBottom:`1px solid ${T.border}`}}>
+          <span style={{fontSize:13.5, fontWeight:700, color:T.ink, flex:1}}>{filas.length} trabajos{mesF?` en ${MESES_LARGO[mesF-1].toLowerCase()}`:''}{plata&&<span style={{fontWeight:500, color:T.ink2}}> · <span style={{fontFamily:MONO}}>{fmtV(sumV(filas,'total'))}</span> · ganancia <span style={{fontFamily:MONO}}>{fmtV(sumV(filas,'magma'))}</span></span>}</span>
+          <input value={q} onChange={e=>setQ(e.target.value)} aria-label="Buscar en el año" placeholder="Buscar trabajo, cliente o N°…" style={{flex:'0 1 240px', padding:'7px 11px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
+        </div>
+        {filas.length===0 && <Empty>{filasAll.length?'Nada con esa búsqueda':`Sin datos para ${anio}`}</Empty>}
+        {filas.slice(0,cuantos).map((r,i)=>{ const pc=r.total>0?Math.round(r.magma/r.total*100):0
+          return <div key={i} style={{display:'grid', gridTemplateColumns:cel?(plata?'1fr 90px':'1fr'):(plata?'60px 1.6fr 1fr 100px 100px 50px 30px':'60px 1.6fr 1fr 30px'), gap:8, padding:'9px 16px', borderTop:i?`1px solid ${T.border}`:'none', alignItems:'center', fontSize:13}}>
+            {cel ? <span style={{minWidth:0}}><span style={{display:'block', color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.proyecto||'—'}</span><span style={{display:'block', ...etiqueta}}>{r.d.getDate()}/{r.d.getMonth()+1} · {r.cliente||r.agencia||'—'}</span></span>
+              : <><span style={{color:T.ink2, fontSize:12.5}}>{r.d.getDate()}/{r.d.getMonth()+1}</span>
+                <span style={{minWidth:0, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{r.proyecto||'—'}{r.nro&&<span style={{fontFamily:MONO, fontSize:12.5, color:T.ink2}}> #{r.nro}</span>}</span>
+                <span style={{minWidth:0, color:T.ink2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{r.cliente||r.agencia||'—'}</span></>}
+            {plata && <span style={{textAlign:'right', fontFamily:MONO, color:T.ink}}>{fmtV(V(r.total,r.d))}</span>}
+            {plata && !cel && <><span style={{textAlign:'right', fontFamily:MONO, color:T.ink}}>{fmtV(V(r.magma,r.d))}</span>
+              <span style={{textAlign:'right', fontSize:12.5, color:r.total>0?(pc>=60?T.pos:pc>=45?T.ink2:T.warn):T.ink3, fontWeight:r.total>0&&pc<45?600:400}}>{r.total>0?pc+'%':'—'}</span></>}
+            {!cel && <span style={{textAlign:'center', color:r.cobrado?T.pos:T.ink3}} title={r.cobrado?'Cobrado':'Sin cobrar'}>{r.cobrado?'✓':'·'}</span>}
+          </div> })}
+        {filas.length>cuantos && <button onClick={()=>setCuantos(c=>c+200)} style={{display:'block', width:'100%', border:'none', borderTop:`1px solid ${T.border}`, background:'transparent', padding:'11px', fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver {Math.min(200, filas.length-cuantos)} más (quedan {filas.length-cuantos})</button>}
+      </div>
+
+      <div style={{flex:1, minWidth:0, ...card, overflow:'hidden'}}>
+        <div style={{padding:'12px 18px', fontSize:13.5, fontWeight:700, color:T.ink, borderBottom:`1px solid ${T.border}`}}>Cuentas {mesF?`de ${MESES_LARGO[mesF-1].toLowerCase()} `:''}{anio}</div>
+        {topCli.length===0 && <Empty>Sin datos</Empty>}
+        {topCli.map(([k,c],i)=>{ const p=cliP[k]?.v||0, d=pct(c.v,p)
+          return <div key={k} style={{padding:'9px 18px', borderTop:i?`1px solid ${T.border}`:'none'}}>
+            <div style={{display:'flex', justifyContent:'space-between', gap:10, fontSize:13}}>
+              <span style={{color:T.ink, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.n}</span>
+              {plata && <span style={{fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmtV(c.v)}</span>}
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:4}}>
+              <div style={{flex:1, height:6, background:T.surfaceAlt, borderRadius:3, overflow:'hidden'}}><div style={{width:`${totCli?c.v/totCli*100:0}%`, height:'100%', background:T.ink, borderRadius:3}}/></div>
+              <span style={{...etiqueta, whiteSpace:'nowrap', minWidth:120, textAlign:'right'}}>{totCli?Math.round(c.v/totCli*100):0}% del año{p?` · ${signo(d)} vs ${prevLbl}`:''}</span>
+            </div>
+          </div> })}
+      </div>
+    </div>
   </>
 }
 

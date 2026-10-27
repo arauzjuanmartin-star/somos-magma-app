@@ -7,6 +7,7 @@ import { resumenAdmin } from '../../../../lib/admin.mjs'
 import { canonStaff } from '../../../../lib/staff'
 import { MAX_SLOTS } from '../../../../lib/slots'
 import { traerVepsNuevos } from '../../../../lib/impuestos-sync.mjs'
+import { sincronizarCotizaciones } from '../../../../lib/cotizaciones.mjs'
 
 // La diaria mandada desde Vercel: sale a las 8:10 y a las 15:10 aunque la Mac de Juan esté cerrada.
 // (El 18/09/2026 el mail de las 8 no llegó: la Mac dormía, corrió el script sin red y falló.)
@@ -56,6 +57,11 @@ export default async function handler(req, res) {
     if (USER && PASS) { try { impuestos = await traerVepsNuevos({ sheets, SHEET_ID, user: USER, pass: PASS, dry, retry: withSheetsRetry }) } catch (e) { impuestos = { ok: false, error: e.message }; console.error('impuestos (VEP del mail):', e) } }
     if (impuestos) console.log('impuestos:', JSON.stringify(impuestos).slice(0, 600))
 
+    // El dólar y la inflación del mes a la solapa COTIZACIONES (para el Histórico). Una vez por día, a la mañana, con
+    // su propia red: si la API pública no contesta, la diaria sale igual.
+    let cotizaciones = null
+    if (!tarde) { try { cotizaciones = await sincronizarCotizaciones({ sheets, SHEET_ID, dry, retry: withSheetsRetry }) } catch (e) { cotizaciones = { ok: false, error: e.message }; console.error('cotizaciones:', e) } }
+
     let lunes = null
     if (!tarde && (ahoraAR.getDay() === 1 || req.query.lunes === '1')) {
       try {
@@ -70,7 +76,7 @@ export default async function handler(req, res) {
     let filas = []
     try { filas = await withSheetsRetry(() => leerDiaria(sheets, SHEET_ID)) } catch (e) { /* sin columna N o sin solapa todavía: se toma como "nadie mandó nada" */ }
     const quien = yaEnviado(filas, ahoraAR, aviso)
-    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.`, lunes, impuestos })
+    if (quien) return res.json({ ok: true, enviado: false, motivo: `El aviso de la ${aviso} de hoy ya lo mandó ${quien}.`, lunes, impuestos, cotizaciones })
 
     const r = await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
