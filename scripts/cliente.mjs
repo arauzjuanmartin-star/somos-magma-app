@@ -24,7 +24,9 @@ const fmtF=d=>d?d.toLocaleDateString('es-AR'):'—'
 const Q=process.argv.slice(2).filter(a=>!a.startsWith('--')).join(' ').trim()
 if(!Q){console.log('Uso: node scripts/cliente.mjs "Nombre del cliente"');process.exit(1)}
 const q=nrm(Q)
-const match=(...cs)=>cs.some(c=>{const v=nrm(c);return v&&(v.includes(q)||q.includes(v))})
+// Por palabra entera: "UIA" encontraba a Sebastian Uzq-uia-no (27/10/2026)
+const palabra=(a,b)=>new RegExp(`(^|[^a-z0-9])${b.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`).test(a)
+const match=(...cs)=>cs.some(c=>{const v=nrm(c);return v&&(palabra(v,q)||palabra(q,v))})
 
 const r=await sheets.spreadsheets.values.batchGet({spreadsheetId:ID,ranges:['PROYECTOS','FACTURACION','PRESUPUESTOS','Contactos/agencias','AGENCIAS'],valueRenderOption:'FORMATTED_VALUE'})
 const [PRO,FAC,PRE,CON,AG]=r.data.valueRanges.map(v=>v.values||[])
@@ -43,7 +45,9 @@ if(!ag&&!contactos.length) console.log(`   (sin ficha en Agencias/Contactos)`)
 // ---- proyectos ----
 const proy=PRO.slice(1).filter(p=>txt(p[2])&&(match(p[4])||match(p[5]))).map(p=>({
   nro:txt(p[2]),fe:fecha(p[3]),proyecto:txt(p[6]),total:num(p[7]),fee:num(p[8]),
-  costos:PRC.reduce((s,c)=>s+num(p[c]),0),pm:txt(p[51])}))
+  costos:PRC.reduce((s,c)=>s+num(p[c]),0),pm:txt(p[51]),
+  // Si se buscó una marca, quién nos contrató: el cliente de Magma es la agencia, no la marca
+  via:!match(p[4])&&txt(p[4])&&txt(p[4])!==txt(p[5])?txt(p[4]):''}))
 proy.sort((a,b)=>(b.fe||0)-(a.fe||0))
 const totFact=proy.reduce((s,p)=>s+p.total,0)
 const totMargen=proy.reduce((s,p)=>s+(p.total-p.costos),0)
@@ -55,7 +59,7 @@ if(proy.length){
   const cuando = !ult ? '' : dias(ult)<0 ? ` (próximo evento, en ${-dias(ult)} días)` : ` (hace ${dias(ult)} días)`
   console.log(`   Última/próxima vez: ${fmtF(ult)}${cuando}${ult&&dias(ult)>90?'  ⚠️ FRÍO':''}`)
   console.log(`   Últimos:`)
-  proy.slice(0,6).forEach(p=>console.log(`     ${fmtF(p.fe).padStart(10)} · #${p.nro} · ${money(p.total).padStart(13)} · ${p.proyecto.slice(0,40)}${p.pm?` · PM ${p.pm}`:''}`))
+  proy.slice(0,6).forEach(p=>console.log(`     ${fmtF(p.fe).padStart(10)} · #${p.nro} · ${money(p.total).padStart(13)} · ${p.proyecto.slice(0,40)}${p.via?` · vía ${p.via}`:''}${p.pm?` · PM ${p.pm}`:''}`))
 }
 
 // ---- facturación ----

@@ -16,3 +16,5 @@ de-sofi/
 
 # cache de los mails del contador (lo regenera scripts/contador-radar.mjs)
 scripts/.cache-contador-mails.json
+_para-edicion-*
+scripts/.programado/

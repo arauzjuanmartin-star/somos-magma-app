@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- El motor, tarea "radar": lunes y jueves 8:30 el agente oportunidades busca en diarios, medios de marketing, agendas de expos y licitaciones, y le manda a Juan el radar. Ver scripts/programado.mjs.
+       Instalar (una vez, y de nuevo si este archivo cambia):
+         launchctl unload ~/Library/LaunchAgents/com.somosmagma.programado-radar.plist 2>/dev/null
+         cp scripts/launchd/com.somosmagma.programado-radar.plist ~/Library/LaunchAgents/
+         launchctl load ~/Library/LaunchAgents/com.somosmagma.programado-radar.plist
+       Probar ahora:  launchctl start com.somosmagma.programado-radar
+       Frenar:        launchctl unload ~/Library/LaunchAgents/com.somosmagma.programado-radar.plist -->
+  <key>Label</key><string>com.somosmagma.programado-radar</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>scripts/programado.mjs</string>
+    <string>radar</string>
+    <string>--escribir</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/dronjuan/somos-magma-app</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/radar-stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/radar-stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+</dict>
+</plist>

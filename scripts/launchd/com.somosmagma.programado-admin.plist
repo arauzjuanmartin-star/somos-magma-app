@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- El motor, tarea "admin": lunes a viernes 9:00 el agente administracion le manda a Flor (admin@) la lista del día y deja en admin@ los borradores de reclamo de lo vencido. Ver scripts/programado.mjs.
+       Instalar (una vez, y de nuevo si este archivo cambia):
+         launchctl unload ~/Library/LaunchAgents/com.somosmagma.programado-admin.plist 2>/dev/null
+         cp scripts/launchd/com.somosmagma.programado-admin.plist ~/Library/LaunchAgents/
+         launchctl load ~/Library/LaunchAgents/com.somosmagma.programado-admin.plist
+       Probar ahora:  launchctl start com.somosmagma.programado-admin
+       Frenar:        launchctl unload ~/Library/LaunchAgents/com.somosmagma.programado-admin.plist -->
+  <key>Label</key><string>com.somosmagma.programado-admin</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>scripts/programado.mjs</string>
+    <string>admin</string>
+    <string>--escribir</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/dronjuan/somos-magma-app</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/admin-stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/admin-stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+</dict>
+</plist>
