@@ -173,9 +173,61 @@ function aplicarConfig(cfg, ahora) {
   return { form: out, clausulas, cambios }
 }
 
-function Presupuesto() {
-  const hoy = new Date().toISOString().slice(0,10)
-  const [form, setForm] = useState({
+// Un presu del sheet tal como lo arma la pantalla: servicios base con su costo, adicionales
+// con su precio al cliente, y la huella de los pedidos (si cambia, el PDF guardado se cruza
+// por nombre). La usan el generador de un presu y el del paquete.
+function leerPresu(p) {
+  const pedidosRaw = getPedidos(p)
+  // Mapeo precios y flags adicional/precio cliente manual por slot
+  const preciosRaw = []
+  for (const k of Object.keys(p)) {
+    const m = k.match(/^precio\s*(\d+)\s*$/i)
+    if (m) preciosRaw[parseInt(m[1])-1] = p[k]
+  }
+  const esAdicCSV = String(p['Es Adicional']||'').split('|')
+  const preciosClienteManualCSV = String(p['Precio Cliente Manual']||'').split('|')
+  // Quién lleva margen Magma. Sin CSV (presus viejos) asumimos que sí: es el caso normal.
+  const feeCSV = String(p['Fee Servicios']||'').split('|')
+  // "$" por línea (col "Precio visible"): el cliente ve el precio de ESE ítem aunque el presu vaya cerrado.
+  const visibleCSV = String(p['Precio visible']||'').split('|')
+  // Calcular factor del presu base para precio cliente automático de adicionales sin manual
+  const parseMontoLocal = v => { const n = parseFloat(String(v||'').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
+  const subtotalBase = pedidosRaw.reduce((s,_,i) => esAdicCSV[i]==='1' ? s : s+parseMontoLocal(preciosRaw[i]), 0)
+  const totalCliente = parseMontoLocal(p['Precio Final'])
+  const factor = subtotalBase>0 ? totalCliente/subtotalBase : 1
+  // Separar base y adicionales
+  // baseCostos va en paralelo a baseSvcs (mismo índice): es lo que necesita el
+  // desglose para abrir el precio por ítem. Sin esto sólo tendríamos los nombres.
+  // `origen` = el pedido tal como está en el sheet. Viaja en costos (base) y en cada
+  // adicional para que el PDF guardado se pueda cruzar línea por línea al reabrir.
+  const baseSvcs = [], baseCostos = [], adicionales = []
+  pedidosRaw.forEach((ped, i) => {
+    if (!ped) return
+    const nombre = prettifySvc(ped)
+    if (esAdicCSV[i] === '1') {
+      const costo = parseMontoLocal(preciosRaw[i])
+      const manual = parseMontoLocal(preciosClienteManualCSV[i])
+      const precioCliente = manual > 0 ? manual : Math.round(costo * factor)
+      adicionales.push({origen: ped, nombre, precio: precioCliente})
+    } else {
+      baseSvcs.push(nombre)
+      baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1', origen: ped, visible: visibleCSV[i] === '1' })
+    }
+  })
+  // Huella de los servicios del presu: si cambia, el PDF guardado se cruza por nombre
+  const pedidosKey = pedidosRaw.map((ped, i) => [ped, preciosRaw[i] || '', esAdicCSV[i] || '', feeCSV[i] || '', preciosClienteManualCSV[i] || ''].join('~')).join('|')
+  return { svcs: baseSvcs, costos: baseCostos, adicionales, pedidosKey, pedidosRaw }
+}
+
+// Lo que decía el presu al cargar. Se guarda junto con el PDF para que, al reabrir,
+// se sepa qué cambió en el sheet desde entonces (ver aplicarConfig).
+const baseDePresu = (p, pedidosKey) => ({
+  cliente: p['Cliente']||'', agencia: p['Agencia']||'', proyecto: p['Proyecto']||'',
+  fechaEvento: textoFechasCliente(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales']),
+  observaciones: p['Observaciones']||'', pedidos: pedidosKey, precioFinal: Math.round(parseMonto(p['Precio Final'])),
+})
+
+const formInicial = hoy => ({
     nro:'', fechaEmision:hoy, cliente:'', agencia:'', proyecto:'', fechaEvento:'',
     servicios:[''], adicionales:[], observaciones:'', descripcion:'', precioTotal:'',
     // costos[i] = {costo, fee} del servicio i, tal como está en el presu. Sólo lo usa el
@@ -189,7 +241,30 @@ function Presupuesto() {
     descPct:'', descMotivo:'',   // descuento comercial que el cliente ve desglosado en el PDF
     pagoAlt:false, pagoAltDias:'30', pagoAltMonto:'', plazo:'30',  // 30 días por default (reunión 14/08/2026)
     tipoPresu: 'cobertura',  // 'cobertura' (eventos, fotos, video) o 'produccion' (animación, motion, larga)
-  })
+})
+
+// Todo lo editable de la pantalla, más `base` (lo que decía el sheet) para poder
+// detectar al reabrir qué cambió en el presupuesto. `desglosar` no va: ya tiene su
+// columna (DJ) y los costos vuelven del presu. `extra` = { paquete } si el presu está en
+// un paquete de eventos: los textos del PDF del paquete viajan en la misma celda.
+const configDeForm = (nro, base, form, clausulas, extra) => ({
+  v: 1, nro, guardado: new Date().toISOString(),
+  base,
+  form: {
+    tipoPresu: form.tipoPresu, cliente: form.cliente, agencia: form.agencia, proyecto: form.proyecto, fechaEvento: form.fechaEvento,
+    lineas: form.servicios.map((texto, i) => ({ origen: form.costos?.[i]?.origen ?? null, texto, costo: { costo: form.costos?.[i]?.costo || 0, fee: form.costos?.[i]?.fee !== false, visible: !!form.costos?.[i]?.visible } })),
+    adicionales: (form.adicionales || []).map(a => ({ origen: a.origen ?? null, nombre: a.nombre, precio: a.precio })),
+    descripcion: form.descripcion, observaciones: form.observaciones,
+    precioTotal: form.precioTotal, descPct: form.descPct, descMotivo: form.descMotivo, preciosItem: form.preciosItem,
+    pagoAlt: form.pagoAlt, pagoAltDias: form.pagoAltDias, pagoAltMonto: form.pagoAltMonto, plazo: form.plazo,
+  },
+  clausulas,
+  ...(extra || {}),
+})
+
+function Presupuesto() {
+  const hoy = new Date().toISOString().slice(0,10)
+  const [form, setForm] = useState(formInicial(hoy))
   const [validez, setValidez] = useState(addDays(hoy, 5))
   // Cláusulas editables. Cambiar el tipo de presupuesto las reinicia con el template
   // (cambiarTipo); cargarlas del PDF guardado no las toca. Antes era un efecto sobre
@@ -208,6 +283,7 @@ function Presupuesto() {
   const baseRef = useRef(null)            // lo que decía el sheet al cargar (viaja con el PDF guardado)
   const cargadoRef = useRef(false)        // recién después de cargar se empieza a guardar
   const ultimoGuardadoRef = useRef('INIT')
+  const paqueteRef = useRef(null)         // textos del PDF del paquete (si el presu está en uno): se reescriben tal cual
   const [guardadoPdf, setGuardadoPdf] = useState(null)   // {estado:'guardando'|'ok'|'error', hora, msg}
   const [configInfo, setConfigInfo] = useState(null)     // del PDF recuperado: {fecha, por, deOtro, cambios}
 
@@ -222,48 +298,10 @@ function Presupuesto() {
       LABELS_SHEET = labelsDeListado(d.data?.listado?.serviciosFull)
       const p = (d.data?.presupuestos || []).find(x => String(x['Columna 1']) === String(nro))
       if (!p) { console.warn('Presu no encontrado:', nro); setLoading(false); return null }
-      const pedidosRaw = getPedidos(p)
-      // Mapeo precios y flags adicional/precio cliente manual por slot
-      const preciosRaw = []
-      for (const k of Object.keys(p)) {
-        const m = k.match(/^precio\s*(\d+)\s*$/i)
-        if (m) preciosRaw[parseInt(m[1])-1] = p[k]
-      }
-      const esAdicCSV = String(p['Es Adicional']||'').split('|')
-      const preciosClienteManualCSV = String(p['Precio Cliente Manual']||'').split('|')
-      // Quién lleva margen Magma. Sin CSV (presus viejos) asumimos que sí: es el caso normal.
-      const feeCSV = String(p['Fee Servicios']||'').split('|')
-      // "$" por línea (col "Precio visible"): el cliente ve el precio de ESE ítem aunque el presu vaya cerrado.
-      const visibleCSV = String(p['Precio visible']||'').split('|')
-      // Calcular factor del presu base para precio cliente automático de adicionales sin manual
-      const parseMontoLocal = v => { const n = parseFloat(String(v||'').replace(/[^\d.-]/g,'')); return isNaN(n)?0:n }
-      const subtotalBase = pedidosRaw.reduce((s,_,i) => esAdicCSV[i]==='1' ? s : s+parseMontoLocal(preciosRaw[i]), 0)
-      const totalCliente = parseMontoLocal(p['Precio Final'])
-      const factor = subtotalBase>0 ? totalCliente/subtotalBase : 1
-      // Separar base y adicionales
-      // baseCostos va en paralelo a baseSvcs (mismo índice): es lo que necesita el
-      // desglose para abrir el precio por ítem. Sin esto sólo tendríamos los nombres.
-      // `origen` = el pedido tal como está en el sheet. Viaja en costos (base) y en cada
-      // adicional para que el PDF guardado se pueda cruzar línea por línea al reabrir.
-      const baseSvcs = [], baseCostos = [], adicionales = []
-      pedidosRaw.forEach((ped, i) => {
-        if (!ped) return
-        const nombre = prettifySvc(ped)
-        if (esAdicCSV[i] === '1') {
-          const costo = parseMontoLocal(preciosRaw[i])
-          const manual = parseMontoLocal(preciosClienteManualCSV[i])
-          const precioCliente = manual > 0 ? manual : Math.round(costo * factor)
-          adicionales.push({origen: ped, nombre, precio: precioCliente})
-        } else {
-          baseSvcs.push(nombre)
-          baseCostos.push({ costo: parseMontoLocal(preciosRaw[i]), fee: feeCSV[i] === undefined || feeCSV[i] === '' ? true : feeCSV[i] === '1', origen: ped, visible: visibleCSV[i] === '1' })
-        }
-      })
-      // Huella de los servicios del presu: si cambia, el PDF guardado se cruza por nombre
-      const pedidosKey = pedidosRaw.map((ped, i) => [ped, preciosRaw[i] || '', esAdicCSV[i] || '', feeCSV[i] || '', preciosClienteManualCSV[i] || ''].join('~')).join('|')
-      console.log('[Presu '+nro+'] base:', baseSvcs, '· adicionales:', adicionales)
-      setUltimosServiciosDelSheet(baseSvcs)
-      return { p, svcs: baseSvcs, costos: baseCostos, adicionales, pedidosKey, pedidosRaw }
+      const leido = leerPresu(p)
+      console.log('[Presu '+nro+'] base:', leido.svcs, '· adicionales:', leido.adicionales)
+      setUltimosServiciosDelSheet(leido.svcs)
+      return { p, ...leido }
     } catch (e) {
       console.error('Error cargando presu:', e)
       setLoading(false)
@@ -298,11 +336,11 @@ function Presupuesto() {
         observaciones: p['Observaciones']||'',
         fechaEmision: fechaHoy,
       }
-      // Lo que decía el presu al cargar. Se guarda junto con el PDF para que, al reabrir,
-      // se sepa qué cambió en el sheet desde entonces (ver aplicarConfig).
-      baseRef.current = { cliente: delSheet.cliente, agencia: delSheet.agencia, proyecto: delSheet.proyecto, fechaEvento: fechaEv, observaciones: delSheet.observaciones, pedidos: pedidosKey, precioFinal }
+      baseRef.current = baseDePresu(p, pedidosKey)
       // Si este presu (o el que represupuestó) ya tiene un PDF armado, se arranca de ahí.
       const cfg = leerConfig(p['PDF Config'])
+      // Si está en un paquete, los textos del PDF del paquete viven en la misma celda: se conservan
+      paqueteRef.current = cfg?.paquete || null
       const rec = cfg ? aplicarConfig(cfg, { base: baseRef.current, svcs, raw: (costos || []).map(c => c.origen), costos: costos || [], adicionales: adicionales || [] }) : null
       setForm(prev => ({ ...prev, ...delSheet, ...(rec?.form || {}) }))
       if (rec?.clausulas) setClausulas(rec.clausulas)
@@ -365,22 +403,7 @@ function Presupuesto() {
   }
 
   // ---- Guardar el PDF en el presu ----
-  // Todo lo editable de esta pantalla, más `base` (lo que decía el sheet) para poder
-  // detectar al reabrir qué cambió en el presupuesto. `desglosar` no va: ya tiene su
-  // columna (DJ) y los costos vuelven del presu.
-  const armarConfig = () => ({
-    v: 1, nro: presuSheet?.nro || form.nro, guardado: new Date().toISOString(),
-    base: baseRef.current,
-    form: {
-      tipoPresu: form.tipoPresu, cliente: form.cliente, agencia: form.agencia, proyecto: form.proyecto, fechaEvento: form.fechaEvento,
-      lineas: form.servicios.map((texto, i) => ({ origen: form.costos?.[i]?.origen ?? null, texto, costo: { costo: form.costos?.[i]?.costo || 0, fee: form.costos?.[i]?.fee !== false, visible: !!form.costos?.[i]?.visible } })),
-      adicionales: (form.adicionales || []).map(a => ({ origen: a.origen ?? null, nombre: a.nombre, precio: a.precio })),
-      descripcion: form.descripcion, observaciones: form.observaciones,
-      precioTotal: form.precioTotal, descPct: form.descPct, descMotivo: form.descMotivo, preciosItem: form.preciosItem,
-      pagoAlt: form.pagoAlt, pagoAltDias: form.pagoAltDias, pagoAltMonto: form.pagoAltMonto, plazo: form.plazo,
-    },
-    clausulas,
-  })
+  const armarConfig = () => configDeForm(presuSheet?.nro || form.nro, baseRef.current, form, clausulas, paqueteRef.current ? { paquete: paqueteRef.current } : null)
   const huella = cfg => JSON.stringify({ ...cfg, guardado: null })
   const guardarConfig = async (cfg) => {
     const c = cfg || armarConfig()
@@ -1395,25 +1418,41 @@ function PreviewPDF({form, clausulas, desglose = []}) {
 // Mismo papel que el PDF de un presu (logo, paleta, cláusulas de cobertura). Los precios salen
 // del sheet: si el descuento ya se aplicó, el precio de lista está en "Precio lista".
 const ESTADOS_PAQUETE = ['EN ESPERA', 'APROBADO', 'EN CURSO', 'ENTREGADO']
-// Un evento del paquete tal como lo vio el cliente: si su PDF ya se armó (col "PDF Config"),
-// los textos de los servicios, la descripción y las observaciones salen de ahí — son los que
-// escribió el PM ("1 videógrafo en el escenario…"), no los nombres crudos del sheet.
-const eventoDePaquete = p => {
-  const cfg = leerConfig(p['PDF Config'])?.form
-  const esAdic = String(p['Es Adicional'] || '').split('|')
-  const crudos = getPedidos(p).map(ped => prettifySvc(ped)).filter((_, i) => esAdic[i] !== '1').filter(Boolean)
-  const delPdf = (cfg?.lineas || []).map(l => String(l.texto || '').trim()).filter(Boolean)
-  const final = Math.round(parseMonto(p['Precio Final'])), lista = Math.round(parseMonto(p['Precio lista'])) || final
-  return { nro: String(p['Columna 1']), proyecto: cfg?.proyecto || p['Proyecto'] || '', cliente: p['Cliente'] || '', agencia: p['Agencia'] || '',
-    fecha: textoFechasCliente(p['Fecha Evento'], p['Tipo Fechas'], p['Fechas Adicionales']), svcs: delPdf.length ? delPdf : crudos, lista, final,
-    pct: parseMonto(p['Desc. paquete']), aplicado: parseMonto(p['Precio lista']) > 0,
-    desc: String(cfg?.descripcion || '').trim(), obs: String(cfg?.observaciones ?? p['Observaciones'] ?? '').trim() }
+// Se edita como el PDF de un presu (pedido de Juan, 27/10/2026): cada evento carga el mismo form
+// que su generador (lo del sheet + su "PDF Config" encima) y lo que se toca acá se guarda en la
+// celda de ESE presu — si después abrís el presu suelto, dice lo mismo. Lo que es del paquete
+// (título, cliente, intro, nota, cláusulas) va en la clave `paquete` de la celda de cada evento.
+// null = el texto automático. Los precios no se tocan acá: salen del sheet (y el % del paquete).
+const eventoDePaquete = (p, hoy) => {
+  const leido = leerPresu(p)
+  const base = baseDePresu(p, leido.pedidosKey)
+  const cfg = leerConfig(p['PDF Config'])
+  const rec = cfg ? aplicarConfig(cfg, { base, svcs: leido.svcs, raw: leido.costos.map(c => c.origen), costos: leido.costos, adicionales: leido.adicionales }) : null
+  const delSheet = { nro: String(p['Columna 1'] || ''), cliente: base.cliente, agencia: base.agencia, proyecto: base.proyecto, fechaEvento: base.fechaEvento,
+    precioTotal: String(base.precioFinal), servicios: leido.svcs.length ? leido.svcs : [''], costos: leido.costos, adicionales: leido.adicionales, observaciones: base.observaciones }
+  const final = base.precioFinal, lista = Math.round(parseMonto(p['Precio lista'])) || final
+  return { nro: delSheet.nro, fila: p.__row || null, base, form: { ...formInicial(hoy), ...delSheet, ...(rec?.form || {}) },
+    clausulas: rec?.clausulas || (cfg?.form?.tipoPresu === 'produccion' ? CLAUSULAS_PROD : CLAUSULAS_COBERTURA),
+    paquete: cfg?.paquete || null, cambios: rec?.cambios || [],
+    lista, final, pct: parseMonto(p['Desc. paquete']), aplicado: parseMonto(p['Precio lista']) > 0 }
 }
+const PAQ_VACIO = { titulo: null, cliente: null, agencia: null, intro: null, nota: null, clausulas: null }
+
 function PaquetePDF({ codigo }) {
   const [evs, setEvs] = useState(null)
+  const [paq, setPaq] = useState(PAQ_VACIO)
   const [error, setError] = useState('')
   const [generando, setGenerando] = useState(false)
+  const [guardado, setGuardado] = useState(null)   // {estado:'guardando'|'ok'|'error', hora, msg}
+  const [pctIn, setPctIn] = useState('')
+  const [pctMsg, setPctMsg] = useState('')
+  const [pdfUrl, setPdfUrl] = useState('')
+  const huellasRef = useRef({})   // nro → lo último que se guardó en su celda
+  const imgsRef = useRef(null)
   const hoy = new Date().toISOString().slice(0, 10)
+
+  const cfgDe = (e, q) => configDeForm(e.nro, e.base, e.form, e.clausulas, { paquete: { codigo, ...q } })
+  const huella = c => JSON.stringify({ ...c, guardado: null })
 
   useEffect(() => {
     fetch('/api/data?fresh=1&_t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(d => {
@@ -1422,143 +1461,315 @@ function PaquetePDF({ codigo }) {
       if (!ps.length) { setError(`No encontré presupuestos vivos en el paquete ${codigo}.`); return }
       // En orden de fecha del evento: así lo lee el cliente
       const clave = p => { const f = fromSheet(String(p['Fecha Evento'] || '').split(/[,|]/)[0].trim()); return f || '9999' }
-      setEvs(ps.sort((a, b) => clave(a).localeCompare(clave(b))).map(eventoDePaquete))
+      const lista = ps.sort((a, b) => clave(a).localeCompare(clave(b))).map(p => eventoDePaquete(p, hoy))
+      const guardadoPaq = lista.find(e => e.paquete?.codigo === codigo)?.paquete
+      const q = { ...PAQ_VACIO, ...(guardadoPaq || {}) }; delete q.codigo
+      // Lo que se acaba de leer no se vuelve a escribir: se guarda recién cuando alguien toca algo
+      lista.forEach(e => { huellasRef.current[e.nro] = huella(cfgDe(e, q)) })
+      setPaq(q); setEvs(lista); setPctIn(String(lista[0].pct || ''))
     }).catch(e => setError('No pude leer el sheet: ' + e.message))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codigo])
+
+  // Guarda en la celda de cada evento lo que cambió, 1,5 s después del último cambio
+  const guardar = async () => {
+    if (!evs) return true
+    const pendientes = evs.map(e => ({ e, c: cfgDe(e, paq) })).filter(({ e, c }) => huella(c) !== huellasRef.current[e.nro])
+    if (!pendientes.length) return true
+    setGuardado({ estado: 'guardando' })
+    try {
+      // De a uno: con 3-4 eventos no se nota, y en paralelo Google corta con 429
+      for (const { e, c } of pendientes) {
+        const r = await fetch('/api/presupuesto-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ num: e.nro, fila: e.fila, config: c }) })
+        const j = await r.json()
+        if (!j.ok) throw new Error(`#${e.nro}: ${j.error || 'no se pudo guardar'}`)
+        huellasRef.current[e.nro] = huella(c)
+      }
+      setGuardado({ estado: 'ok', hora: new Date() })
+      return true
+    } catch (e) { setGuardado({ estado: 'error', msg: e.message }); return false }
+  }
+  useEffect(() => {
+    if (!evs) return
+    const t = setTimeout(guardar, 1500)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evs, paq])
+
+  const updEv = (k, cambio) => setEvs(l => l.map((e, j) => j === k ? { ...e, form: { ...e.form, ...cambio(e.form) } } : e))
+  const setCampo = (k, campo, v) => updEv(k, () => ({ [campo]: v }))
+  const setSvc = (k, i, v) => updEv(k, f => ({ servicios: f.servicios.map((s, j) => j === i ? v : s) }))
+  const addSvc = k => updEv(k, f => ({ servicios: [...f.servicios, ''], costos: [...(f.costos || []), { costo: 0, fee: true }] }))
+  const delSvc = (k, i) => updEv(k, f => ({ servicios: f.servicios.filter((_, j) => j !== i), costos: (f.costos || []).filter((_, j) => j !== i) }))
+  const setP = (campo, v) => setPaq(q => ({ ...q, [campo]: v }))
 
   const agrupar = svcs => { const m = {}, o = []; svcs.forEach(s => { if (!m[s]) { m[s] = 0; o.push(s) } m[s]++ }); return o.map(s => m[s] > 1 ? `${m[s]} × ${s}` : s) }
   const totLista = (evs || []).reduce((t, e) => t + e.lista, 0)
   const pct = evs?.[0]?.pct || 0
   const totFinal = !evs ? 0 : evs.some(e => e.aplicado) ? evs.reduce((t, e) => t + e.final, 0) : evs.reduce((t, e) => t + Math.round(e.lista * (1 - pct / 100) / 1000) * 1000, 0)
   const descMonto = totLista - totFinal
-  const cl = CLAUSULAS_COBERTURA
-  const notaPaquete = evs ? `Cada evento se puede confirmar por separado a su valor individual. ${pct > 0 ? `El descuento del ${pct}% aplica al confirmar los ${evs.length} eventos.` : ''}` : ''
+  const e0 = evs?.[0]?.form
+  const sinAgencia = a => /sin agencia|directo/i.test(a || '')
+  // Los textos que salen en el PDF: lo escrito acá, o el automático
+  const tx = {
+    titulo: paq.titulo ?? 'Propuesta servicio audiovisual',
+    cliente: paq.cliente ?? (e0?.cliente || ''),
+    agencia: paq.agencia ?? (sinAgencia(e0?.agencia) ? '' : (e0?.agencia || '')),
+    intro: paq.intro ?? `${evs?.length || 0} eventos. Cada uno con su valor; si confirman todos, el paquete tiene un precio especial.`,
+    nota: paq.nota ?? `Cada evento se puede confirmar por separado a su valor individual. ${pct > 0 ? `El descuento del ${pct}% aplica al confirmar los ${evs?.length || 0} eventos.` : ''}`.trim(),
+  }
+  const cl = paq.clausulas || CLAUSULAS_COBERTURA
+  const setCl = cambio => setPaq(q => ({ ...q, clausulas: cambio(q.clausulas || CLAUSULAS_COBERTURA) }))
+
+  const armarPDF = async () => {
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const W = 210, H = 297, M = 18, TOPE = H - 16, Y0 = 34
+    const C = { black: [9,9,9], magma: [206,38,55], azul: [21,67,248], grisL: [191,191,191], texto: [55,55,55], muted: [140,140,140] }
+    if (!imgsRef.current) imgsRef.current = await Promise.all(['logo-magma', 'linea-titulo', 'linea-total', 'linea-divider', 'banderin'].map(n => loadImageAsDataURL(`/branding/${n}.png`)))
+    const [logo, lTitulo, lTotal, lDiv, banderin] = imgsRef.current
+    const img = (im, x, yy, w, h) => { if (im) try { doc.addImage(im, 'PNG', x, yy, w, h) } catch (e) {} }
+    let y = 0
+    const nuevaPagina = () => {
+      doc.addPage(); img(logo, M, 12, 22.5, 10)
+      doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.texto); doc.text('Paquete ' + codigo, W-M, 19, { align: 'right' })
+      img(lDiv, M, 24, W-M*2, 2.5); y = Y0
+    }
+    const reservar = alto => { if (y + alto > TOPE) nuevaPagina() }
+    const lineaTotal = (lbl, valor, tam = 14) => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(tam); doc.setTextColor(...C.black)
+      doc.text(lbl, M, y); const lw = doc.getTextWidth(lbl), str = '$' + fmt$(valor) + ' + IVA', pw = doc.getTextWidth(str)
+      doc.setLineWidth(0.5); doc.setDrawColor(...C.black); doc.line(M+lw+4, y-0.5, W-M-pw-3, y-0.5); doc.text(str, W-M, y, { align: 'right' })
+    }
+
+    // Encabezado (igual al de un presupuesto)
+    img(logo, M, 14, 36, 16); img(banderin, W-M-26, 12, 22, 2.5)
+    doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.texto)
+    ;['Somos Magma', 'Buenos Aires', toDisplay(hoy), 'Presu. N° ' + evs.map(e => e.nro).join(' · ')].forEach((t, i) => doc.text(t, W-M, 19 + i*4, { align: 'right' }))
+    y = 38; img(lDiv, M, y-2, W-M*2, 2.5)
+    y += 12; doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...C.black)
+    doc.text(tx.titulo, M, y); img(lTitulo, M, y+1.8, 38, 3)
+    y += 14; const colW = (W-M*2)/2
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted); doc.text('CLIENTE', M, y); if (tx.agencia) doc.text('AGENCIA', M+colW, y)
+    y += 5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...C.black); doc.text(tx.cliente || '—', M, y); if (tx.agencia) doc.text(tx.agencia, M+colW, y)
+    y += 4; doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y)
+    y += 8; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+    if (tx.intro.trim()) { const intro = doc.splitTextToSize(tx.intro, W-M*2); doc.text(intro, M, y); y += intro.length*5 + 4 } else y += 1
+
+    // Un bloque por evento
+    evs.forEach((ev, k) => {
+      const f = ev.form
+      doc.setFont('helvetica','normal'); doc.setFontSize(10)
+      const items = agrupar(f.servicios.map(s => String(s || '').trim()).filter(Boolean)).map(s => doc.splitTextToSize(s, W-M*2-7))
+      const obs = String(f.observaciones || '').trim() ? doc.splitTextToSize(String(f.observaciones).trim(), W-M*2) : []
+      const desc = String(f.descripcion || '').trim() ? doc.splitTextToSize(String(f.descripcion).trim(), W-M*2) : []
+      doc.setFont('helvetica','bold'); doc.setFontSize(13)
+      const tit = doc.splitTextToSize(f.proyecto || '—', W-M*2-30)
+      const alto = 5 + tit.length*5.5 + 6 + desc.length*5 + items.reduce((t, l) => t + l.length*5, 0) + obs.length*4.5 + 12
+      reservar(Math.min(alto, TOPE - Y0))
+      doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.magma)
+      doc.text(`EVENTO ${k+1}`, M, y); doc.setTextColor(...C.muted); doc.text('Presu. N° ' + ev.nro, W-M, y, { align: 'right' })
+      y += 5.5; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...C.black); doc.text(tit, M, y); y += tit.length*5.5
+      if (String(f.fechaEvento || '').trim()) { doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(...C.magma); doc.text('Fecha: ' + f.fechaEvento, M, y); y += 6 } else y += 2
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+      if (desc.length) { doc.text(desc, M, y); y += desc.length*5 + 2 }
+      items.forEach(l => { reservar(l.length*5); doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F'); doc.text(l, M+5, y); y += l.length*5 })
+      if (obs.length) { doc.setFontSize(9); doc.setTextColor(...C.muted); reservar(obs.length*4.5); doc.text(obs, M, y+1); y += obs.length*4.5 + 1 }
+      y += 4; reservar(10); lineaTotal('Valor del evento', ev.lista, 11.5)
+      y += 5; doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y); y += 9
+    })
+
+    // Totales del paquete
+    reservar(36)
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
+    doc.text(`Suma de los ${evs.length} eventos`, M, y); doc.text('$' + fmt$(totLista) + ' + IVA', W-M, y, { align: 'right' }); y += 6
+    if (descMonto > 0) {
+      doc.setTextColor(...C.magma); doc.text(`Descuento ${pct}% confirmando los ${evs.length} eventos`, M, y); doc.text('- $' + fmt$(descMonto), W-M, y, { align: 'right' }); y += 8
+      lineaTotal('Valor del paquete', totFinal)
+    } else { y += 2; lineaTotal('Valor total', totLista) }
+    y += 5; img(lTotal, M, y, W-M*2, 4.5); y += 10
+    if (tx.nota) {
+      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...C.muted)
+      const nota = doc.splitTextToSize(tx.nota, W-M*2); doc.text(nota, M, y); y += nota.length*3.8 + 7
+    } else y += 3
+
+    // Condiciones (las de cobertura, como un presu de evento)
+    const parrafo = (titulo, texto) => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); const tw = doc.getTextWidth(titulo + ': ')
+      doc.setFont('helvetica','normal'); const ls = doc.splitTextToSize(texto, W-M*2-tw)
+      reservar(ls.length*3.5 + 1.5)
+      doc.setFont('helvetica','bold'); doc.setTextColor(...C.black); doc.text(titulo + ': ', M, y)
+      doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto); doc.text(ls[0] || '', M+tw, y)
+      for (let i = 1; i < ls.length; i++) { y += 3.5; doc.text(ls[i], M, y) }
+      y += 4.5
+    }
+    const seccion = t => { reservar(12); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.magma); doc.text(t, M, y); y += 4 }
+    seccion('CONDICIONES GENERALES'); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.texto)
+    const val = doc.splitTextToSize(cl.validez, W-M*2); doc.text(val, M, y); y += val.length*3.8 + 4
+    seccion('CONDICIONES DE PAGO'); cl.pago.forEach(c => parrafo(c.titulo, c.texto)); y += 2
+    seccion('CLÁUSULAS DEL SERVICIO'); cl.clausulas.forEach(c => parrafo(c.titulo, c.texto))
+
+    const n = doc.getNumberOfPages()
+    if (n > 1) for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('courier','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted); doc.text(`Página ${i} de ${n}`, W-M, H-9, { align: 'right' }) }
+    return doc
+  }
+
+  // Preview: el mismo PDF que se baja, redibujado medio segundo después de cada cambio
+  useEffect(() => {
+    if (!evs) return
+    let url = '', vivo = true
+    const t = setTimeout(async () => {
+      try {
+        const doc = await armarPDF()
+        if (!vivo) return
+        url = URL.createObjectURL(doc.output('blob'))
+        setPdfUrl(url)
+      } catch (e) { console.warn('Preview del paquete:', e.message) }
+    }, 600)
+    return () => { vivo = false; clearTimeout(t); if (url) setTimeout(() => URL.revokeObjectURL(url), 5000) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evs, paq])
 
   const bajarPDF = async () => {
     if (!evs) return
     setGenerando(true)
     try {
-      const { jsPDF } = await import('jspdf')
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const W = 210, H = 297, M = 18, TOPE = H - 16, Y0 = 34
-      const C = { black: [9,9,9], magma: [206,38,55], azul: [21,67,248], grisL: [191,191,191], texto: [55,55,55], muted: [140,140,140] }
-      const [logo, lTitulo, lTotal, lDiv, banderin] = await Promise.all(['logo-magma', 'linea-titulo', 'linea-total', 'linea-divider', 'banderin'].map(n => loadImageAsDataURL(`/branding/${n}.png`)))
-      const img = (im, x, yy, w, h) => { if (im) try { doc.addImage(im, 'PNG', x, yy, w, h) } catch (e) {} }
-      let y = 0
-      const nuevaPagina = () => {
-        doc.addPage(); img(logo, M, 12, 22.5, 10)
-        doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.texto); doc.text('Paquete ' + codigo, W-M, 19, { align: 'right' })
-        img(lDiv, M, 24, W-M*2, 2.5); y = Y0
-      }
-      const reservar = alto => { if (y + alto > TOPE) nuevaPagina() }
-      const lineaTotal = (lbl, valor, tam = 14) => {
-        doc.setFont('helvetica','bold'); doc.setFontSize(tam); doc.setTextColor(...C.black)
-        doc.text(lbl, M, y); const lw = doc.getTextWidth(lbl), str = '$' + fmt$(valor) + ' + IVA', pw = doc.getTextWidth(str)
-        doc.setLineWidth(0.5); doc.setDrawColor(...C.black); doc.line(M+lw+4, y-0.5, W-M-pw-3, y-0.5); doc.text(str, W-M, y, { align: 'right' })
-      }
-
-      // Encabezado (igual al de un presupuesto)
-      img(logo, M, 14, 36, 16); img(banderin, W-M-26, 12, 22, 2.5)
-      doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.texto)
-      ;['Somos Magma', 'Buenos Aires', toDisplay(hoy), 'Presu. N° ' + evs.map(e => e.nro).join(' · ')].forEach((t, i) => doc.text(t, W-M, 19 + i*4, { align: 'right' }))
-      y = 38; img(lDiv, M, y-2, W-M*2, 2.5)
-      y += 12; doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...C.black)
-      doc.text('Propuesta servicio audiovisual', M, y); img(lTitulo, M, y+1.8, 38, 3)
-      y += 14; const colW = (W-M*2)/2, e0 = evs[0], agencia = /sin agencia|directo/i.test(e0.agencia) ? '' : e0.agencia
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted); doc.text('CLIENTE', M, y); if (agencia) doc.text('AGENCIA', M+colW, y)
-      y += 5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...C.black); doc.text(e0.cliente || '—', M, y); if (agencia) doc.text(agencia, M+colW, y)
-      y += 4; doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y)
-      y += 8; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
-      doc.text(`${evs.length} eventos. Cada uno con su valor; si confirman todos, el paquete tiene un precio especial.`, M, y)
-      y += 9
-
-      // Un bloque por evento
-      evs.forEach((e, k) => {
-        doc.setFont('helvetica','normal'); doc.setFontSize(10)
-        const items = agrupar(e.svcs).map(s => doc.splitTextToSize(s, W-M*2-7))
-        const obs = e.obs ? doc.splitTextToSize(e.obs, W-M*2) : []
-        const desc = e.desc ? doc.splitTextToSize(e.desc, W-M*2) : []
-        doc.setFont('helvetica','bold'); doc.setFontSize(13)
-        const tit = doc.splitTextToSize(e.proyecto, W-M*2-30)
-        const alto = 5 + tit.length*5.5 + 6 + desc.length*5 + items.reduce((t, l) => t + l.length*5, 0) + obs.length*4.5 + 12
-        reservar(Math.min(alto, TOPE - Y0))
-        doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.setTextColor(...C.magma)
-        doc.text(`EVENTO ${k+1}`, M, y); doc.setTextColor(...C.muted); doc.text('Presu. N° ' + e.nro, W-M, y, { align: 'right' })
-        y += 5.5; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...C.black); doc.text(tit, M, y); y += tit.length*5.5
-        if (e.fecha) { doc.setFont('courier','normal'); doc.setFontSize(9); doc.setTextColor(...C.magma); doc.text('Fecha: ' + e.fecha, M, y); y += 6 } else y += 2
-        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
-        if (desc.length) { doc.text(desc, M, y); y += desc.length*5 + 2 }
-        items.forEach(l => { reservar(l.length*5); doc.setFillColor(...C.black); doc.rect(M, y-2, 1.5, 1.5, 'F'); doc.text(l, M+5, y); y += l.length*5 })
-        if (obs.length) { doc.setFontSize(9); doc.setTextColor(...C.muted); reservar(obs.length*4.5); doc.text(obs, M, y+1); y += obs.length*4.5 + 1 }
-        y += 4; reservar(10); lineaTotal('Valor del evento', e.lista, 11.5)
-        y += 5; doc.setDrawColor(...C.grisL); doc.setLineWidth(0.2); doc.line(M, y, W-M, y); y += 9
-      })
-
-      // Totales del paquete
-      reservar(36)
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...C.texto)
-      doc.text(`Suma de los ${evs.length} eventos`, M, y); doc.text('$' + fmt$(totLista) + ' + IVA', W-M, y, { align: 'right' }); y += 6
-      if (descMonto > 0) {
-        doc.setTextColor(...C.magma); doc.text(`Descuento ${pct}% confirmando los ${evs.length} eventos`, M, y); doc.text('- $' + fmt$(descMonto), W-M, y, { align: 'right' }); y += 8
-        lineaTotal('Valor del paquete', totFinal)
-      } else { y += 2; lineaTotal('Valor total', totLista) }
-      y += 5; img(lTotal, M, y, W-M*2, 4.5); y += 10
-      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...C.muted)
-      const nota = doc.splitTextToSize(notaPaquete, W-M*2); doc.text(nota, M, y); y += nota.length*3.8 + 7
-
-      // Condiciones (las de cobertura, como un presu de evento)
-      const parrafo = (titulo, texto) => {
-        doc.setFont('helvetica','bold'); doc.setFontSize(8); const tw = doc.getTextWidth(titulo + ': ')
-        doc.setFont('helvetica','normal'); const ls = doc.splitTextToSize(texto, W-M*2-tw)
-        reservar(ls.length*3.5 + 1.5)
-        doc.setFont('helvetica','bold'); doc.setTextColor(...C.black); doc.text(titulo + ': ', M, y)
-        doc.setFont('helvetica','normal'); doc.setTextColor(...C.texto); doc.text(ls[0] || '', M+tw, y)
-        for (let i = 1; i < ls.length; i++) { y += 3.5; doc.text(ls[i], M, y) }
-        y += 4.5
-      }
-      const seccion = t => { reservar(12); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.magma); doc.text(t, M, y); y += 4 }
-      seccion('CONDICIONES GENERALES'); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.texto)
-      const val = doc.splitTextToSize(cl.validez, W-M*2); doc.text(val, M, y); y += val.length*3.8 + 4
-      seccion('CONDICIONES DE PAGO'); cl.pago.forEach(c => parrafo(c.titulo, c.texto)); y += 2
-      seccion('CLÁUSULAS DEL SERVICIO'); cl.clausulas.forEach(c => parrafo(c.titulo, c.texto))
-
-      const n = doc.getNumberOfPages()
-      if (n > 1) for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('courier','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted); doc.text(`Página ${i} de ${n}`, W-M, H-9, { align: 'right' }) }
-      const tc = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join('-')
-      doc.save(['Presu', 'Paquete', evs.map(e => e.nro).join('-'), tc(e0.cliente) || 'Cliente'].join('-') + '.pdf')
+      await guardar()
+      const doc = await armarPDF()
+      const tc = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join('-')
+      doc.save(['Presu', 'Paquete', evs.map(e => e.nro).join('-'), tc(tx.cliente) || 'Cliente'].join('-') + '.pdf')
     } catch (e) { alert('Error: ' + e.message) }
     setGenerando(false)
   }
 
-  const caja = { background:'#111', border:'0.5px solid #1E1E1E', borderRadius:10, padding:20 }
+  // El % del paquete se cambia acá mismo (mientras no esté aplicado: eso se deshace en la ficha)
+  const guardarPct = async () => {
+    setPctMsg('guardando…')
+    try {
+      const r = await fetch('/api/paquete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ accion: 'pct', codigo, pct: pctIn }) })
+      const j = await r.json()
+      if (!r.ok || j.error) throw new Error(j.error || 'no se pudo guardar')
+      const nuevo = Math.min(50, Math.max(0, Number(String(pctIn).replace(',', '.')) || 0))
+      setEvs(l => l.map(e => ({ ...e, pct: nuevo })))
+      setPctMsg('✓ guardado')
+    } catch (e) { setPctMsg('⚠ ' + e.message) }
+  }
+
+  const S = {
+    inp: { background:'#111', border:'0.5px solid #2A2A2A', borderRadius:6, color:'#F0F0F0', fontSize:13, padding:'9px 12px', outline:'none', width:'100%', fontFamily:'inherit', boxSizing:'border-box' },
+    lbl: { fontSize:11, color:'#555', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.06em' },
+    card: { background:'#111', border:'0.5px solid #1E1E1E', borderRadius:10, padding:20 },
+    sec: { fontSize:10, textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:700, marginBottom:14 },
+  }
+  const ta = { ...S.inp, minHeight:52, resize:'vertical', fontSize:12, lineHeight:1.5 }
+  const btnX = { width:28, height:36, border:'0.5px solid #2A2A2A', background:'transparent', color:'#555', cursor:'pointer', borderRadius:6, fontSize:15 }
+  const auto = campo => paq[campo] != null && <button onClick={() => setP(campo, null)} style={{ fontSize:10, marginLeft:8, padding:'1px 6px', borderRadius:4, border:'0.5px solid #2A2A2A', background:'transparent', color:'#888', cursor:'pointer', textTransform:'none', letterSpacing:0 }}>volver al automático</button>
+
   return (<>
     <Head><title>Paquete {codigo} | Somos Magma</title></Head>
-    <div style={{ minHeight:'100vh', background:'#090909', color:'#F0F0F0', fontFamily:'system-ui,sans-serif', padding:'28px 20px 60px' }}>
-      <div style={{ maxWidth:720, margin:'0 auto' }}>
-        <a href="/" style={{ fontSize:12, color:'#888', textDecoration:'none' }}>← Volver a la app</a>
-        <h1 style={{ fontSize:22, fontWeight:900, margin:'10px 0 4px' }}>PDF del paquete <span style={{ color:'#CE2637' }}>{codigo}</span></h1>
-        <p style={{ color:'#888', fontSize:13, margin:'0 0 18px' }}>Un solo PDF con cada evento y su precio, y el descuento si confirman todos. Para cambiar servicios o precios de un evento, editalo en Trabajos y volvé a abrir esto.</p>
-        {error && <div style={{ ...caja, color:'#E0A040' }}>{error}</div>}
-        {!evs && !error && <div style={{ color:'#666' }}>Cargando…</div>}
-        {evs && <div style={caja}>
-          <div style={{ fontSize:13, color:'#AAA', marginBottom:10 }}>{evs[0].cliente}{evs[0].agencia && !/sin agencia|directo/i.test(evs[0].agencia) ? ' · ' + evs[0].agencia : ''}</div>
-          {evs.map((e, k) => <div key={e.nro} style={{ padding:'10px 0', borderTop: k ? '0.5px solid #222' : 'none' }}>
-            <div style={{ display:'flex', gap:10, alignItems:'baseline' }}>
-              <span style={{ fontSize:11, fontFamily:'monospace', color:'#CE2637' }}>EVENTO {k+1}</span>
-              <span style={{ flex:1, fontWeight:700 }}>{e.proyecto}</span>
-              <span style={{ fontFamily:'monospace' }}>${fmt$(e.lista)}</span>
-            </div>
-            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>#{e.nro}{e.fecha ? ' · ' + e.fecha : ''} · {agrupar(e.svcs).join(', ') || 'sin servicios'}</div>
-          </div>)}
-          <div style={{ borderTop:'0.5px solid #333', marginTop:6, paddingTop:10, fontSize:14 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', color:'#AAA' }}><span>Suma de los {evs.length} eventos</span><span style={{ fontFamily:'monospace' }}>${fmt$(totLista)}</span></div>
-            {descMonto > 0 && <div style={{ display:'flex', justifyContent:'space-between', color:'#CE2637', marginTop:4 }}><span>Descuento {pct}% si confirman todos</span><span style={{ fontFamily:'monospace' }}>- ${fmt$(descMonto)}</span></div>}
-            <div style={{ display:'flex', justifyContent:'space-between', fontWeight:800, fontSize:17, marginTop:8 }}><span>{descMonto > 0 ? 'Valor del paquete' : 'Valor total'}</span><span style={{ fontFamily:'monospace' }}>${fmt$(descMonto > 0 ? totFinal : totLista)} + IVA</span></div>
-          </div>
-          {!(pct > 0) && <div style={{ fontSize:12, color:'#E0A040', marginTop:10 }}>El paquete no tiene descuento cargado: ponelo en la ficha del trabajo (Trabajos → el presu → Paquete).</div>}
-          <button onClick={bajarPDF} disabled={generando} style={{ marginTop:16, width:'100%', padding:'12px', borderRadius:8, border:'none', background:'#F0F0F0', color:'#090909', fontSize:14, fontWeight:700, cursor:'pointer' }}>{generando ? 'Generando…' : 'Bajar el PDF del paquete'}</button>
-        </div>}
+    <div style={{ minHeight:'100vh', background:'#090909', color:'#F0F0F0', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ padding:'14px 28px', borderBottom:'0.5px solid #1A1A1A', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, background:'#090909', zIndex:10 }}>
+        <a href="/" style={{ textDecoration:'none', display:'flex', alignItems:'baseline', gap:4 }}>
+          <span style={{ fontSize:11, color:'#666' }}>somos</span>
+          <span style={{ fontSize:17, fontWeight:900, color:'#CE2637', letterSpacing:1 }}>MAGMA</span>
+          <span style={{ fontSize:14, color:'#1543F8', fontWeight:700 }}>//</span>
+        </a>
+        <span style={{ color:'#2A2A2A', fontSize:12 }}>→</span>
+        <span style={{ fontSize:12, color:'#555' }}>PDF del paquete</span>
+        <span style={{ fontSize:11, fontFamily:'monospace', color:'#1543F8', background:'#1543F810', padding:'2px 8px', borderRadius:4 }}>{codigo}</span>
+        {guardado && <span style={{ fontSize:11, color: guardado.estado === 'error' ? '#BA7517' : '#555', marginLeft:'auto' }}>
+          {guardado.estado === 'guardando' ? 'guardando en los presus…' : guardado.estado === 'ok' ? '✓ guardado en los presus ' + guardado.hora.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) : '⚠ no se guardó: ' + (guardado.msg || '')}
+        </span>}
       </div>
+
+      {error && <div style={{ maxWidth:720, margin:'24px auto', ...S.card, color:'#E0A040' }}>{error}</div>}
+      {!evs && !error && <div style={{ color:'#666', padding:28 }}>Cargando…</div>}
+      {evs && <div style={{ maxWidth:1480, margin:'0 auto', padding:'24px 20px 60px', display:'grid', gridTemplateColumns:'minmax(360px,1fr) minmax(440px,1.05fr)', gap:24 }}>
+        <div>
+          <h1 style={{ fontSize:22, fontWeight:900, margin:'0 0 4px', letterSpacing:-0.5 }}>PDF del <span style={{ color:'#CE2637' }}>paquete</span></h1>
+          <p style={{ color:'#555', fontSize:12, margin:'0 0 20px' }}>Editá los textos. El preview de la derecha es el PDF que se baja. Lo de cada evento queda guardado en su presupuesto: si lo abrís suelto, dice lo mismo. Los precios salen del sheet.</p>
+
+          <div style={{ display:'grid', gap:14 }}>
+            <div style={S.card}>
+              <div style={{ ...S.sec, color:'#1543F8' }}>Encabezado</div>
+              <label style={{ display:'block', marginBottom:10 }}><span style={S.lbl}>Título{auto('titulo')}</span><input style={S.inp} value={tx.titulo} onChange={e => setP('titulo', e.target.value)}/></label>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                <label><span style={S.lbl}>Cliente{auto('cliente')}</span><input style={S.inp} value={tx.cliente} onChange={e => setP('cliente', e.target.value)}/></label>
+                <label><span style={S.lbl}>Agencia{auto('agencia')}</span><input style={S.inp} value={tx.agencia} onChange={e => setP('agencia', e.target.value)} placeholder="vacío = no sale"/></label>
+              </div>
+              <label><span style={S.lbl}>Texto de arriba{auto('intro')}</span><textarea style={ta} value={tx.intro} onChange={e => setP('intro', e.target.value)}/></label>
+            </div>
+
+            {evs.map((ev, k) => { const f = ev.form; return (
+              <div key={ev.nro} style={S.card}>
+                <div style={{ ...S.sec, color:'#CE2637', display:'flex', alignItems:'center', gap:10 }}>
+                  <span>Evento {k+1}</span>
+                  <span style={{ fontFamily:'monospace', color:'#666', textTransform:'none', letterSpacing:0 }}>#{ev.nro}</span>
+                  <span style={{ marginLeft:'auto', fontFamily:'monospace', color:'#F0F0F0', textTransform:'none', letterSpacing:0, fontSize:12 }}>${fmt$(ev.lista)}</span>
+                  <a href={`/presupuesto?nro=${encodeURIComponent(ev.nro)}`} target="_blank" rel="noreferrer" title="Para cambiar el precio, la descripción de producción o el desglose" style={{ fontSize:10, color:'#888', textTransform:'none', letterSpacing:0 }}>abrir el presu ↗</a>
+                </div>
+                {ev.cambios.length > 0 && <div style={{ marginBottom:10, padding:'7px 10px', background:'#BA751708', border:'0.5px solid #BA751730', borderRadius:6, fontSize:11, color:'#BA7517' }}>
+                  ⚠ Desde que se armó el PDF cambió en el presupuesto: <strong>{ev.cambios.join(', ')}</strong>. Eso se tomó del presu — revisalo.
+                </div>}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                  <label><span style={S.lbl}>Título del evento</span><input style={S.inp} value={f.proyecto} onChange={e => setCampo(k, 'proyecto', e.target.value)}/></label>
+                  <label><span style={S.lbl}>Fecha</span><input style={S.inp} value={f.fechaEvento} onChange={e => setCampo(k, 'fechaEvento', e.target.value)}/></label>
+                </div>
+                <label style={{ display:'block', marginBottom:10 }}><span style={S.lbl}>Descripción</span><textarea style={ta} value={f.descripcion || ''} onChange={e => setCampo(k, 'descripcion', e.target.value)} placeholder="opcional: sale arriba de los servicios"/></label>
+                <span style={S.lbl}>Servicios</span>
+                <div style={{ display:'grid', gap:8, marginBottom:10 }}>
+                  {f.servicios.map((s, i) => <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 28px', gap:6 }}>
+                    <input style={S.inp} value={s} onChange={e => setSvc(k, i, e.target.value)} placeholder={'Servicio ' + (i+1)}/>
+                    <button onClick={() => delSvc(k, i)} style={btnX}>×</button>
+                  </div>)}
+                  <button onClick={() => addSvc(k)} style={{ padding:'7px', borderRadius:6, border:'0.5px dashed #2A2A2A', background:'transparent', color:'#555', fontSize:11, cursor:'pointer' }}>+ Agregar servicio</button>
+                </div>
+                <label><span style={S.lbl}>Observaciones</span><textarea style={ta} value={f.observaciones || ''} onChange={e => setCampo(k, 'observaciones', e.target.value)} placeholder="opcional"/></label>
+              </div>
+            )})}
+
+            <div style={S.card}>
+              <div style={{ ...S.sec, color:'#1D9E75' }}>Precio del paquete</div>
+              <div style={{ display:'flex', justifyContent:'space-between', color:'#AAA', fontSize:13 }}><span>Suma de los {evs.length} eventos</span><span style={{ fontFamily:'monospace' }}>${fmt$(totLista)}</span></div>
+              {descMonto > 0 && <div style={{ display:'flex', justifyContent:'space-between', color:'#CE2637', marginTop:4, fontSize:13 }}><span>Descuento {pct}% si confirman todos</span><span style={{ fontFamily:'monospace' }}>- ${fmt$(descMonto)}</span></div>}
+              <div style={{ display:'flex', justifyContent:'space-between', fontWeight:800, fontSize:16, marginTop:8 }}><span>{descMonto > 0 ? 'Valor del paquete' : 'Valor total'}</span><span style={{ fontFamily:'monospace' }}>${fmt$(descMonto > 0 ? totFinal : totLista)} + IVA</span></div>
+              <div style={{ display:'grid', gridTemplateColumns:'120px auto 1fr', gap:10, alignItems:'end', marginTop:14, borderTop:'0.5px solid #1A1A1A', paddingTop:14 }}>
+                <label><span style={S.lbl}>Descuento %</span><input style={{ ...S.inp, fontFamily:'monospace' }} type="number" min="0" max="50" value={pctIn} disabled={evs.some(e => e.aplicado)} onChange={e => { setPctIn(e.target.value); setPctMsg('') }}/></label>
+                <button onClick={guardarPct} disabled={evs.some(e => e.aplicado) || Number(pctIn || 0) === pct} style={{ height:38, padding:'0 14px', borderRadius:6, border:'none', background:'#1D9E75', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', opacity:(evs.some(e => e.aplicado) || Number(pctIn || 0) === pct) ? 0.4 : 1 }}>Guardar %</button>
+                <span style={{ fontSize:11, color:'#888' }}>{evs.some(e => e.aplicado) ? 'El descuento ya está aplicado a los presus: para cambiarlo, deshacelo en la ficha del trabajo.' : pctMsg}</span>
+              </div>
+              <label style={{ display:'block', marginTop:12 }}><span style={S.lbl}>Nota abajo del total{auto('nota')}</span><textarea style={ta} value={tx.nota} onChange={e => setP('nota', e.target.value)}/></label>
+            </div>
+
+            <div style={S.card}>
+              <div style={{ ...S.sec, color:'#555', display:'flex', alignItems:'center' }}><span>Términos y condiciones</span>{auto('clausulas')}</div>
+              <div style={{ fontSize:11, color:'#555', marginBottom:12 }}>Las de cobertura. Lo que cambies acá vale solo para el PDF del paquete.</div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, color:'#CE2637', fontWeight:600, marginBottom:4 }}>Validez (condiciones generales)</div>
+                <textarea style={{ ...S.inp, minHeight:48, resize:'vertical', fontSize:11 }} value={cl.validez} onChange={e => setCl(c => ({ ...c, validez: e.target.value }))}/>
+              </div>
+              {[['pago', 'Condiciones de Pago'], ['clausulas', 'Cláusulas']].map(([lista, nombre]) => <div key={lista} style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, color:'#CE2637', fontWeight:600, marginBottom:6 }}>{nombre} ({cl[lista].length} ítems)</div>
+                {cl[lista].map((c, i) => <div key={i} style={{ marginBottom:8, padding:'8px 10px', background:'#0D0D0D', borderRadius:6, border:'0.5px solid #1A1A1A' }}>
+                  <input style={{ ...S.inp, fontSize:11, fontWeight:600, marginBottom:6 }} value={c.titulo} onChange={e => setCl(x => ({ ...x, [lista]: x[lista].map((y, j) => j === i ? { ...y, titulo: e.target.value } : y) }))}/>
+                  <textarea style={{ ...S.inp, minHeight:44, resize:'vertical', fontSize:11 }} value={c.texto} onChange={e => setCl(x => ({ ...x, [lista]: x[lista].map((y, j) => j === i ? { ...y, texto: e.target.value } : y) }))}/>
+                </div>)}
+              </div>)}
+            </div>
+
+            <button onClick={bajarPDF} disabled={generando} style={{ padding:'15px', borderRadius:10, border:'none', background: generando ? '#333' : 'linear-gradient(135deg,#1543F8,#CE2637)', color:'#fff', fontSize:15, fontWeight:700, cursor: generando ? 'wait' : 'pointer', width:'100%', letterSpacing:0.5 }}>
+              {generando ? 'Generando…' : '↓  Bajar el PDF del paquete'}
+            </button>
+          </div>
+        </div>
+
+        {/* ════════════════ PREVIEW ════════════════ */}
+        <div style={{ position:'sticky', top:64, alignSelf:'flex-start', height:'calc(100vh - 84px)' }}>
+          <div style={{ fontSize:10, color:'#666', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8, fontWeight:600 }}>Preview del PDF</div>
+          {pdfUrl ? <iframe src={pdfUrl + '#toolbar=0&navpanes=0&view=FitH'} title="Preview del PDF del paquete" style={{ width:'100%', height:'calc(100% - 22px)', border:'0.5px solid #1E1E1E', borderRadius:8, background:'#fff' }}/>
+            : <div style={{ color:'#555', fontSize:12 }}>Armando el preview…</div>}
+        </div>
+      </div>}
     </div>
   </>)
 }
