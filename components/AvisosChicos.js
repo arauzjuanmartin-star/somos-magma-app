@@ -2,6 +2,7 @@
 // Lo que los freelancers dijeron desde Mi Magma y el equipo tiene que ver sin ir a buscarlo:
 //   · "no puedo" vigentes de trabajos que vienen (la persona sigue cargada: hay que poner a otra)
 //   · notas del rodaje para la editora (quedan en la bitácora de EDICION, acá se ven las de los últimos 2 días)
+//   · gastos que cargaron con la foto del ticket en los trabajos de este PM: los autoriza él (Juan, 27/10/2026)
 //   · quién confirmó en los últimos 2 días, y los días que avisaron que no pueden en las próximas 2 semanas
 // Nace de la pregunta de Juan del 03/10/2026: "si él me dice que no... ¿cómo lo veo yo?". El mail ya sale; esto es
 // para el que está en la app. Cada línea abre el trabajo.
@@ -10,6 +11,8 @@ import React, { useMemo, useState } from 'react'
 import { T, MONO } from '../lib/ui'
 import { leerDisponibilidad, noPuedenDe, queDe, estaVigente, fechaAR } from '../lib/disponibilidad.mjs'
 import { PREFIJO_NOTA } from '../lib/mi-magma'
+import { ticketsDelPM } from '../lib/tickets.mjs'
+import TicketsRevisar from './TicketsRevisar'
 
 const txt = v => String(v ?? '').trim()
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
@@ -18,8 +21,10 @@ const apodo = n => txt(n).split(' ')[0]
 // "02/10/2026 18:22" → hace cuánto, en días enteros
 const diasDesde = (s, hoy0) => { const f = fechaAR(s); return f ? Math.round((hoy0 - f) / 864e5) : 999 }
 
-export default function AvisosChicos({ data, goTo, cel }) {
+export default function AvisosChicos({ data, goTo, cel, mail = '', onRefresh, showToast }) {
   const [cerrado, setCerrado] = useState(false)
+  const [verGastos, setVerGastos] = useState(false)
+  const gastos = useMemo(() => ticketsDelPM(data?.tickets, data?.proyectos, mail), [data, mail])
   const [permiso, setPermiso] = useState(() => { try { return typeof Notification !== 'undefined' ? Notification.permission : 'nada' } catch (e) { return 'nada' } })
   const hoy0 = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }, [])
 
@@ -56,7 +61,7 @@ export default function AvisosChicos({ data, goTo, cel }) {
     return { noPueden, confirmaron, dias, notas }
   }, [data, hoy0])
 
-  const total = avisos.noPueden.length + avisos.notas.length + avisos.confirmaron.length + avisos.dias.length
+  const total = gastos.length + avisos.noPueden.length + avisos.notas.length + avisos.confirmaron.length + avisos.dias.length
   if (cerrado || !total) return null
   const abrirTrabajo = num => { goTo && goTo('presupuestos', { q: num }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const abrirPieza = id => { goTo && goTo('edicion', { abrir: id }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
@@ -82,6 +87,13 @@ export default function AvisosChicos({ data, goTo, cel }) {
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, fontWeight: 600, color: T.brand, whiteSpace: 'nowrap' }}>sigue cargado · poné a otro</span>
       </div>)}
+      {gastos.length > 0 && <div onClick={() => setVerGastos(true)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setVerGastos(true) }} title="Mirar la foto y autorizarlos" style={linea}>
+        <span style={{ width: 7, height: 7, borderRadius: 7, background: T.warn, flexShrink: 0 }} />
+        <span style={{ fontWeight: 600, color: T.ink }}>{gastos.length === 1 ? '1 gasto para autorizar' : `${gastos.length} gastos para autorizar`}</span>
+        <span style={{ color: T.ink2 }}>{[...new Set(gastos.map(g => apodo(g['Persona'])))].join(', ')} · {gastos.map(g => txt(g['Qué fue'])).slice(0, 3).join(', ')}{gastos.length > 3 ? '…' : ''} · <b style={{ fontFamily: MONO, fontWeight: 600, color: T.ink }}>${Math.round(gastos.reduce((s, g) => s + (parseFloat(String(g['Monto'] || '').replace(/[$,\s]/g, '')) || 0), 0)).toLocaleString('es-AR')}</b></span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, textDecoration: 'underline', whiteSpace: 'nowrap' }}>Autorizar</span>
+      </div>}
       {avisos.notas.map((x, i) => <div key={'t' + i} onClick={() => abrirPieza(x.id)} title="Abrir la pieza en el tablero" style={linea}>
         <span style={{ width: 7, height: 7, borderRadius: 7, background: T.ink, flexShrink: 0 }} />
         <span style={{ fontWeight: 600, color: T.ink }}>{x.quien} dejó una nota</span>
@@ -95,5 +107,6 @@ export default function AvisosChicos({ data, goTo, cel }) {
         {avisos.dias.length > 0 && <span>No pueden: {avisos.dias.map(d => `${d.quien} ${corto(`${d.f.getDate()}/${d.f.getMonth() + 1}/${d.f.getFullYear()}`)}`).join(' · ')}</span>}
       </div>}
     </div>
+    {verGastos && <TicketsRevisar data={data} modo="pm" mail={mail} onClose={() => setVerGastos(false)} onDone={() => { if (onRefresh) onRefresh() }} showToast={showToast || (() => {})} />}
   </div>
 }

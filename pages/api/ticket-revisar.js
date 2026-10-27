@@ -1,4 +1,5 @@
-// Administración revisa un ticket que cargó un freelancer desde Mi Magma (solapa TICKETS, ver lib/tickets.mjs).
+// El PM del trabajo autoriza un ticket que cargó un freelancer desde Mi Magma (solapa TICKETS, ver lib/tickets.mjs).
+// Si el trabajo no tiene PM activo, administración. Los socios, siempre (ver puedeAutorizar).
 //
 //   aprobar   → el monto se SUMA a los viáticos de ese trabajo en PAGOS_STAFF (columna "Viáticos"), en la fila de esa
 //               persona + mes + N° + servicio, y el ticket queda "Aprobado". Se le paga el 15 con sus trabajos.
@@ -13,7 +14,7 @@ import { getSheets, getAllData, withSheetsRetry } from '../../lib/sheets'
 import { lineasDeProyecto } from '../../lib/jornadas'
 import { requireAuth } from '../../lib/auth-helpers'
 import { canonStaff, canonKey } from '../../lib/staff'
-import { HOJA_TICKETS } from '../../lib/tickets.mjs'
+import { HOJA_TICKETS, puedeAutorizar } from '../../lib/tickets.mjs'
 
 const colLetra = c => { let s = '', n = c + 1; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) } return s }
 const txt = v => String(v ?? '').trim()
@@ -43,6 +44,15 @@ export default async function handler(req, res) {
     const iT = tRows.findIndex((r, i) => i > 0 && txt(r[tc('ID')]) === txt(id))
     if (iT < 0) return res.status(404).json({ error: 'No encontré ese ticket. Actualizá la página.' })
     const t = tRows[iT], filaT = iT + 1, val = n => txt(t[tc(n)])
+    // Quién puede: el PM del trabajo (PROYECTOS col PM). Se lee en el momento, no se confía en lo que manda el navegador.
+    const pH = ((await leer('PROYECTOS!1:1')).data.values || [[]])[0].map(txt), iPN = pH.indexOf('N° presupuesto'), iPM = pH.indexOf('PM')
+    let pm = ''
+    if (iPN >= 0 && iPM >= 0) {
+      const cols = (await withSheetsRetry(() => sheets.spreadsheets.values.batchGet({ spreadsheetId: SHEET_ID, ranges: [`PROYECTOS!${colLetra(iPN)}:${colLetra(iPN)}`, `PROYECTOS!${colLetra(iPM)}:${colLetra(iPM)}`] }))).data.valueRanges || []
+      const nros = cols[0]?.values || [], pms = cols[1]?.values || []
+      const k = nros.findIndex((r, i) => i > 0 && txt(r[0]) === val('N° trabajo')); if (k > 0) pm = txt(pms[k]?.[0])
+    }
+    if (!puedeAutorizar(mail, pm, { 'Cargado el': val('Cargado el') })) return res.status(403).json({ error: `Este gasto lo autoriza el PM del trabajo${pm ? ` (${pm})` : ''}.` })
     if (val('Estado') && !/^pendiente$/i.test(val('Estado'))) return res.status(409).json({ error: `Ese ticket ya figura como "${val('Estado')}". Actualizá la página.` })
 
     const ar = new Date(Date.now() - 3 * 3600e3)   // hora de Argentina

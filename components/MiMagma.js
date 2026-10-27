@@ -4,7 +4,7 @@
 // lib/mi-magma.js (la aduana): acá no hay nada que filtrar ni que esconder.
 //
 // Casi todo es SOLO LECTURA. Lo que escribe:
-//   · cargar un gasto de un trabajo con la foto del ticket (/api/mi/ticket → solapa TICKETS; lo aprueba administración)
+//   · cargar un gasto de un trabajo con la foto del ticket (/api/mi/ticket → solapa TICKETS; lo autoriza el PM del trabajo)
 //   · "Confirmo" / "No puedo" en la ficha de un trabajo, y "este día no puedo" en el calendario de la agenda
 //     (/api/mi/disponibilidad → solapa DISPONIBILIDAD; un "no puedo" le llega por mail al PM, la app no lo saca sola)
 //   · una nota para la editora desde la ficha del trabajo o desde "Cómo quedó" (/api/mi/nota → bitácora de EDICION + mail)
@@ -276,7 +276,7 @@ function leerArchivo(file) {
 }
 
 const ESTADO_GASTO = {
-  pendiente: g => <Pill tono="falta">lo está mirando administración</Pill>,
+  pendiente: g => <Pill tono="falta">lo tiene que autorizar tu PM</Pill>,
   aprobado: g => <Pill tono="ok">aprobado{g.sePaga ? ` · se paga el ${g.sePaga.slice(0, 5)}` : ''}</Pill>,
   aparte: g => <Pill tono="ok">ya te lo pagaron</Pill>,
   rechazado: g => <Pill tono="rojo">no se aprobó</Pill>,
@@ -314,7 +314,7 @@ function CargarGasto({ datos, inicial, onListo, onVolver }) {
   if (hecho) return <div>
     <p style={hola}>Listo, ya lo mandaste</p>
     <p style={sub}>{hecho.que} · {$(hecho.monto)} · {j ? j.cliente : hecho.trabajo}</p>
-    <div style={{ ...caja, marginTop: 16, fontSize: 13.5, lineHeight: 1.55, color: T.ink }}>Administración lo mira y, si está bien, <b>se suma a lo que cobrás el {hecho.sePaga ? hecho.sePaga.slice(0, 5) : '15'}</b>, junto con ese trabajo. Lo vas a ver en Facturar.</div>
+    <div style={{ ...caja, marginTop: 16, fontSize: 13.5, lineHeight: 1.55, color: T.ink }}>Tu PM lo mira y, si está bien, lo autoriza: <b>se suma a lo que cobrás el {hecho.sePaga ? hecho.sePaga.slice(0, 5) : '15'}</b>, junto con ese trabajo. Lo vas a ver en Facturar.</div>
     <button onClick={() => { setHecho(null); setQue(''); setMonto(''); setNota(''); setFoto(null) }} style={{ ...boton, marginTop: 6 }}>Cargar otro gasto</button>
     <button onClick={onVolver} style={{ ...boton, marginTop: 8, background: T.ink, borderColor: T.ink, color: '#fff' }}>Volver</button>
   </div>

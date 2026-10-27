@@ -329,7 +329,7 @@ export default function V2() {
         </div>
         <div style={{maxWidth:1180, margin:'0 auto', padding: cel?'12px 14px 60px':'14px 36px 80px'}}>
           {err && <div style={{background:T.brandSoft, color:T.brand, border:`1px solid ${T.brand}30`, borderRadius:10, padding:'12px 16px', fontSize:13, marginBottom:18}}>{err}</div>}
-          {data && puede('presupuestos') && <AvisosChicos data={data} goTo={goTo} cel={cel}/>}
+          {data && puede('presupuestos') && <AvisosChicos data={data} goTo={goTo} cel={cel} mail={mail} onRefresh={()=>load(true)} showToast={showToast}/>}
           {data && puede('edicion') && <Novedades data={data} mail={mail} persona={USER_NAME[mail]} goTo={goTo} cel={cel}/>}
           {loading || !data
             ? <Center>Cargando datos del sheet…</Center>
