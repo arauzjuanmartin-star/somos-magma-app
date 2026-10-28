@@ -19,9 +19,10 @@ import FotosProyecto from '../components/FotosProyecto'
 import Novedades from '../components/Novedades'
 import AvisosChicos from '../components/AvisosChicos'
 import HoraInput from '../components/HoraInput'
+import HorarioPorDia, { porDiaDesdeSheet, porDiaInicial, porDiaASheet } from '../components/HorarioPorDia'
 import CampoFechas from '../components/CampoFechas'
 import RepartoStaff from '../components/RepartoStaff'
-import { codificarFechas, decodificarFechas, tentativosDe, resumenFechas } from '../lib/fechas'
+import { codificarFechas, decodificarFechas, tentativosDe, resumenFechas, dmyAISO } from '../lib/fechas'
 import { TARJETAS_ACTIVAS } from '../lib/socios.mjs'
 import { tablaCotizaciones, convertir } from '../lib/cotizaciones.mjs'
 import { calcularCaja } from '../lib/caja.mjs'
@@ -1802,6 +1803,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
     tajuste:ajusteOrig<0?'-1':'1', ajuste:String(Math.abs(ajusteOrig)||'0'),
     observaciones:initialData['Observaciones']||'', horaIni:horasOrig.h1, horaFin:horasOrig.h2,
     ubicacion:initialData['Ubicación']||'', descPct:'', motivo:'',
+    porDia:porDiaDesdeSheet(initialData['Horario'], initialData['Ubicación'], decodificarFechas(initialData['Fecha Evento'], tipoOrig, adicOrig)),
     desglosar:presuDesglosado(initialData),
     edClase:initialData['Ed. Clase']||'', edFormato:initialData['Ed. Formato']||'', edRed:initialData['Ed. Red']||'', edGrafica:initialData['Ed. Gráfica']||'',
     entregaCrudo:/^s[ií]/i.test(String(initialData['Entrega crudo']||'').trim()) || /austral/i.test(String(initialData['Agencia']||'')+' '+String(initialData['Cliente']||'')), tipoTrabajo:String(initialData['Tipo de trabajo']||'').trim(),
@@ -2031,8 +2033,10 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
       'Ed. Material':materialDePedidos(valid.map(p=>p.svc)),
       'Observaciones':form.observaciones,
       'Entrega crudo':form.entregaCrudo?'Sí':'', 'Tipo de trabajo':tipoEfectivo,
-      'Horario':(form.horaIni&&form.horaFin)?`${form.horaIni} a ${form.horaFin} hs`:'',
-      'Ubicación':form.ubicacion,
+      ...(form.porDia && form.dias.length>1 ? porDiaASheet(form.porDia, form.dias) : {
+        'Horario':(form.horaIni&&form.horaFin)?`${form.horaIni} a ${form.horaFin} hs`:'',
+        'Ubicación':form.ubicacion,
+      }),
       'Contacto Lugar':form.contacto,          // por defecto = el mismo contacto; si es otro, se cambia en el Calendar
     }
     valid.forEach((p,idx)=>{ row[`Pedido ${idx+1}`]=p.svc; row[`Precio ${idx+1}`]=Math.round(parseFloat(p.precio)||0) })
@@ -2372,19 +2376,24 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
                 <span style={{flex:1}}>{fechasTxt||'Falta definir'}</span><span style={{fontSize:12.5, color:T.ink2}}>{verCal?'Listo ▲':'Calendario ▼'}</span>
               </button>
             </div>
-            <div style={{flex:0.8, minWidth:cel?'100%':170}}>
+            {!(form.porDia && form.dias.length>1) && <div style={{flex:0.8, minWidth:cel?'100%':170}}>
               <label style={lblP}>Horario</label>
               <div style={{display:'flex', gap:6, alignItems:'center'}}>
                 <HoraInput value={form.horaIni} onChange={v=>upd('horaIni',v)} style={{...inpP, width:'100%'}}/>
                 <span style={{fontSize:13, color:T.ink2}}>a</span>
                 <HoraInput value={form.horaFin} onChange={v=>upd('horaFin',v)} style={{...inpP, width:'100%'}}/>
               </div>
-            </div>
-            <div style={{flex:1.2, minWidth:cel?'100%':200}}>
+            </div>}
+            {!(form.porDia && form.dias.length>1) && <div style={{flex:1.2, minWidth:cel?'100%':200}}>
               <label style={lblP} title="El contacto del lugar queda igual al Contacto; si es otro, se cambia en el Calendar.">Ubicación</label>
               <input value={form.ubicacion} onChange={e=>upd('ubicacion',e.target.value)} placeholder="Falta definir" style={inpP}/>
-            </div>
+            </div>}
           </div>
+          {form.dias.length>1 && !form.porDia && <button type="button" onClick={()=>upd('porDia', porDiaInicial(form.dias, form.horaIni, form.horaFin, form.ubicacion))} style={{marginTop:8, background:'none', border:'none', padding:0, fontSize:12.5, color:T.ink2, textDecoration:'underline', cursor:'pointer'}}>Cada día tiene otro horario o lugar</button>}
+          {form.dias.length>1 && form.porDia && <div style={{marginTop:12}}>
+            <label style={lblP}>Horario y lugar de cada día</label>
+            <HorarioPorDia dias={form.dias} valor={form.porDia} onChange={v=>upd('porDia',v)} inp={inpP} onTodosIgual={()=>{ const v=form.porDia[form.dias[0]]||{}; setForm(f=>({...f, porDia:null, horaIni:v.h1||'', horaFin:v.h2||'', ubicacion:v.lugar||''})) }}/>
+          </div>}
           {verCal && <div style={{marginTop:12}}>
             <CampoFechas dias={form.dias} tentativos={form.tentativos} onChange={(d,t)=>setForm(f=>({...f, dias:d, tentativos:t}))}/>
           </div>}
@@ -3211,6 +3220,9 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
   // Horario + ubicación (van al Calendar). Se editan acá cuando hay presu.
   const hOrig=parseHorarioStr(presu?.['Horario'])
   const [horaIni,setHoraIni]=useState(hOrig.h1), [horaFin,setHoraFin]=useState(hOrig.h2), [ubicacion,setUbicacion]=useState(presu?.['Ubicación']||'')
+  // Si cada día va a otra hora o a otro lugar (ver components/HorarioPorDia.js)
+  const diasISO=useMemo(()=>[...new Set(fechasProyecto.map(dmyAISO).filter(Boolean))].sort(),[fechasProyecto])
+  const [porDia,setPorDia]=useState(()=>porDiaDesdeSheet(presu?.['Horario'], presu?.['Ubicación'], diasISO))
   const upd=(i,campo,val)=>setItems(it=>it.map((x,j)=>j===i?{...x,[campo]:val}:x))
   const addRow=()=>setItems(it=>[...it,{pedido:'',quien:'',precio:0}])
   const delRow=i=>setItems(it=>it.length>1?it.filter((_,j)=>j!==i):[{pedido:'',quien:'',precio:0}])
@@ -3248,9 +3260,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       // 1. Horario/ubicación → al presupuesto (el Calendar los lee de ahí)
       if(presu){
         const horario=(horaIni&&horaFin)?`${horaIni} a ${horaFin} hs`:''
+        const nuevo=porDia ? porDiaASheet(porDia, diasISO) : {'Horario':horario, 'Ubicación':ubicacion}
         const cambios={}
-        if(horario!==(presu['Horario']||'')) cambios['Horario']=horario
-        if(ubicacion!==(presu['Ubicación']||'')) cambios['Ubicación']=ubicacion
+        if(nuevo['Horario']!==(presu['Horario']||'')) cambios['Horario']=nuevo['Horario']
+        if(nuevo['Ubicación']!==(presu['Ubicación']||'')) cambios['Ubicación']=nuevo['Ubicación']
         if(Object.keys(cambios).length) await fetch('/api/presupuesto-editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({num, cambios})})
       }
       // 2. Staff → PROYECTOS
@@ -3280,7 +3293,11 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       {onEditarDatos && <button onClick={onEditarDatos} style={{...miniBtn, alignSelf:'center'}}>Editar datos (fecha, etc)</button>}
     </div>
     <DriveDelProyecto p={p} num={num} showToast={showToast} onRefresh={onRefresh} agencias={agencias} clientes={clientes}/>
-    {presu && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
+    {presu && porDia && <div style={{paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
+      <label style={lblV2}>Horario y lugar de cada día (va al Calendar)</label>
+      <HorarioPorDia dias={diasISO} valor={porDia} onChange={setPorDia} inp={inpV2} onTodosIgual={()=>{ const v=porDia[diasISO[0]]||{}; setHoraIni(v.h1||''); setHoraFin(v.h2||''); setUbicacion(v.lugar||''); setPorDia(null) }}/>
+    </div>}
+    {presu && !porDia && <div style={{display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-end', paddingBottom:12, marginBottom:10, borderBottom:`1px solid ${T.border}`}}>
       <div><label style={lblV2}>Horario (va al Calendar)</label>
         <div style={{display:'flex', gap:8, alignItems:'center'}}>
           <HoraInput value={horaIni} onChange={setHoraIni} style={{...inpV2, width:88}}/>
@@ -3289,6 +3306,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
         </div>
       </div>
       <div style={{flex:1, minWidth:200}}><label style={lblV2}>Ubicación</label><input value={ubicacion} onChange={e=>setUbicacion(e.target.value)} placeholder="Dirección del evento" style={inpV2}/></div>
+      {diasISO.length>1 && <button type="button" onClick={()=>setPorDia(porDiaInicial(diasISO, horaIni, horaFin, ubicacion))} style={miniBtn}>Cada día distinto</button>}
     </div>}
     {porFecha && <div style={{fontSize:11.5, color:T.ink2, background:T.surfaceAlt, border:`1px solid ${T.border}`, borderRadius:8, padding:'8px 11px', marginBottom:10, lineHeight:1.45}}>
       Este trabajo tiene <strong>{fechasProyecto.length} fechas</strong>. Poné qué día va cada uno: es lo que después le llega en el mail y lo que dice cuánto pagarle por jornada.

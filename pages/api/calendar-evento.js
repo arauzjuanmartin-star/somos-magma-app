@@ -11,6 +11,7 @@ import { getSheets } from '../../lib/sheets'
 import { requireAuth } from '../../lib/auth-helpers'
 import { compartirCarpeta, carpetaParaSubirFotos } from '../../lib/drive'
 import { esPedidoFoto, esPedidoFilm } from '../../lib/edicion'
+import { delDia, esPorDia, sumarDias } from '../../lib/fechas'
 
 const CALENDAR_ID = '5gc9hdvh4vi28bf8uemr2vfnn4@group.calendar.google.com'
 
@@ -72,9 +73,16 @@ const MAX_SLOTS_CAL = 60
 // trabajo ya tenga días firmes: Popstars filmó el 3 y el 4, y lo que queda del mes
 // es un solo bloque gris hasta que se definan.
 const bloqueTentativo = t => t && t.length ? [{ desde: t[0], hasta: t[t.length-1], allDay: true, tentativo: true }] : []
-function slotsDeCalendario(fechas) {
+// Si cada día tiene su horario o su lugar, el rango se abre en un evento por día:
+// un solo bloque no puede decir "el lunes en La Rural y el martes en Forbes".
+function slotsDeCalendario(fechas, separadoPorDia) {
   const tent = bloqueTentativo(fechas.tentativos)
   if (fechas.type === 'tentativa') return tent
+  if (fechas.type === 'rango' && porDia) {
+    const out = []
+    for (let d = fechas.desde; d <= fechas.hasta && out.length < MAX_SLOTS_CAL; d = sumarDias(d, 1)) out.push({ desde: d, hasta: d })
+    return out
+  }
   if (fechas.type === 'rango') return [{ desde: fechas.desde, hasta: fechas.hasta, allDay: true }]
   if (fechas.type === 'multi') return [...fechas.fechas.slice(0, MAX_SLOTS_CAL).map(d => ({ desde: d, hasta: d })), ...tent]
   return [{ desde: fechas.dia, hasta: fechas.dia }]
@@ -204,7 +212,11 @@ export default async function handler(req, res) {
         h2: pad(parseInt(m[3])) + ':' + (m[4]?pad(parseInt(m[4])):'00'),
       }
     }
-    const horas = parseHorario(horario)
+    // Horario y lugar pueden venir separados por día ("30/10: 16 a 18 hs | 03/11: …"):
+    // cada evento lleva los suyos. Ver leerPorDia en lib/fechas.js.
+    const separadoPorDia = esPorDia(horario) || esPorDia(ubicacion)
+    const horarioDe = dia => delDia(horario, dia)
+    const ubicacionDe = dia => delDia(ubicacion, dia)
 
     // Generar título y descripción del evento
     const partesNombre = [cliente, agencia && agencia !== cliente ? agencia : null].filter(Boolean).join(' · ')
@@ -218,9 +230,9 @@ export default async function handler(req, res) {
     // Datos operativos del día (lo que pide el equipo) — SIN el presupuesto ($) porque se invita a freelancers
     // Sin horario los chicos no saben ni si es a la mañana. Decirlo es mejor que
     // dejar el campo afuera y que cada uno suponga.
-    descripcionPartes.push(horario ? `⏰ Horario: ${horario}` : '⏰ Horario: A CONFIRMAR — te avisamos apenas lo tengamos')
-    if (ubicacion) descripcionPartes.push(`📍 Ubicación: ${ubicacion}`)
-    else descripcionPartes.push('📍 Ubicación: A CONFIRMAR')
+    // Las dos líneas del día se completan en cada evento (armarBody): en un trabajo
+    // por días el 30/10 y el 3/11 dicen cosas distintas.
+    descripcionPartes.push('{{HORARIO}}', '{{UBICACION}}')
     if (contacto) descripcionPartes.push(`📞 Contacto: ${contacto}`)
     if (contactoLugar) descripcionPartes.push(`👤 Contacto en el lugar: ${contactoLugar}`)
 
@@ -326,10 +338,10 @@ export default async function handler(req, res) {
       '',
       tagPresu(num),
     )
-    const descripcion = descripcionPartes.join('\n')
+    const descripcionBase = descripcionPartes.join('\n')
 
     const fechas = fechasEvento(fechaEv, tipoFechas, fechasAd)
-    const slots = slotsDeCalendario(fechas)
+    const slots = slotsDeCalendario(fechas, separadoPorDia)
     const TZ = 'America/Argentina/Buenos_Aires'
 
     // Un bloque tentativo avisa que los días están reservados, pero no le pone a
@@ -347,6 +359,14 @@ export default async function handler(req, res) {
     }
 
     const armarBody = (slot) => {
+      // Un bloque de varios días (rango o tentativo) usa lo general, o el texto entero si va por día.
+      const unDia = !slot.hasta || slot.hasta === slot.desde
+      const hor = unDia ? horarioDe(slot.desde) : (separadoPorDia ? horario : horarioDe(slot.desde))
+      const ubi = unDia ? ubicacionDe(slot.desde) : (separadoPorDia ? ubicacion : ubicacionDe(slot.desde))
+      const horas = parseHorario(hor)
+      const descripcion = descripcionBase
+        .replace('{{HORARIO}}', hor ? `⏰ Horario: ${hor}` : '⏰ Horario: A CONFIRMAR — te avisamos apenas lo tengamos')
+        .replace('{{UBICACION}}', ubi ? `📍 Ubicación: ${ubi}` : '📍 Ubicación: A CONFIRMAR')
       const body = {
         summary: slot.tentativo ? `⟨A CONFIRMAR⟩ ${titulo}` : titulo,
         description: slot.tentativo
@@ -359,7 +379,8 @@ export default async function handler(req, res) {
         // porque el update mergea sobre lo que ya estaba.
         attendees: slot.tentativo ? [] : attendeesDeSlot(slot),
       }
-      if (ubicacion) body.location = ubicacion
+      // Siempre explícito: el update mergea y un lugar viejo quedaría pegado.
+      body.location = ubi || ''
       if (horas && !slot.allDay) {
         body.start = { dateTime: `${slot.desde}T${horas.h1}:00`, timeZone: TZ }
         body.end   = { dateTime: `${slot.hasta || slot.desde}T${horas.h2}:00`, timeZone: TZ }

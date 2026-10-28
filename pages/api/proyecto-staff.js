@@ -3,6 +3,7 @@ import { requireAuth } from '../../lib/auth-helpers'
 import { armarAvisoStaff, mandarAviso } from '../../lib/staff-avisos'
 import { mandarPush } from '../../lib/push'
 import { fechaLarga } from '../../lib/staff-avisos'
+import { delDia } from '../../lib/fechas'
 
 const SHEET_ID = '1MEA9iBUVWZxRI2B187rWpv86g58oRAW-SUEl4iwFJLc'
 
@@ -257,7 +258,8 @@ export default async function handler(req, res) {
             persona: { nombre: a.freelancer, mail: mailDe(a.freelancer), servicio: a.servicio, monto: a.monto, miMagma: tieneMiMagma(a.freelancer) },
             // Si tiene día asignado, el mail habla de ESE día y no de las 30 fechas
             // del proyecto: al que va el 8 no le sirve la lista entera.
-            trabajo: a.fecha ? { ...trabajo, fechaEvento: a.fecha, fechasAdic: '' } : trabajo,
+            // Y con el horario y el lugar de ese día, si cada día va distinto.
+            trabajo: a.fecha ? { ...trabajo, fechaEvento: a.fecha, fechasAdic: '', horario: delDia(trabajo.horario, a.fecha), ubicacion: delDia(trabajo.ubicacion, a.fecha) } : trabajo,
             motivo: a.motivo,
           })
           if (!aviso) { sinMail.push(a.freelancer); continue }
@@ -268,7 +270,7 @@ export default async function handler(req, res) {
           if (!pasado && tieneMiMagma(a.freelancer)) {
             try {
               const r = await mandarPush({ sheets, SHEET_ID, personas: [a.freelancer], titulo: a.motivo === 'cambio' ? `Cambió lo acordado: #${num}` : `Te sumamos: ${[trabajo.cliente || trabajo.agencia, trabajo.proyecto].filter(Boolean).join(' · ')}`,
-                cuerpo: `${String(a.servicio||'').replace(/^[^\p{L}\p{N}]+/u, '').trim()} · ${fechaLarga(fechaDe)}${trabajo.horario ? ' · ' + trabajo.horario : ''}. ¿Vas? Confirmalo con un toque.`, url: `/mi?t=${encodeURIComponent(String(num))}`, tag: `trabajo-${num}` })
+                cuerpo: `${String(a.servicio||'').replace(/^[^\p{L}\p{N}]+/u, '').trim()} · ${fechaLarga(fechaDe)}${delDia(trabajo.horario, fechaDe) ? ' · ' + delDia(trabajo.horario, fechaDe) : ''}. ¿Vas? Confirmalo con un toque.`, url: `/mi?t=${encodeURIComponent(String(num))}`, tag: `trabajo-${num}` })
               if (r.mandados.length) alCelular.push(a.freelancer)
             } catch (e) { console.error('push staff:', e.message) }
           }
