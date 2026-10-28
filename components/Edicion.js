@@ -101,13 +101,14 @@ function puertaEstado(f, nuevo) {
   const de = estadoDe(f.Estado)
   if (nuevo === de) return { nada: true }
   if (nuevo === 'Editando' && /^Cambios/.test(de)) return { nada: true }
-  if (nuevo === 'Con el cliente') return { abrir: true, msg: 'Al cliente se manda desde la ficha: “Aprobar y mandar” pasa el archivo a Finales y le da acceso' }
+  if (nuevo === 'Con el cliente') return { abrir: true, msg: 'Se aprueba desde la ficha: “Aprobar” pasa el archivo a Finales y deja el link listo para mandar' }
   if (nuevo === 'Cambios internos' || nuevo === 'Cambios del cliente' || (nuevo === 'Editando' && (de === 'Para revisar' || de === 'Con el cliente'))) {
     return { abrir: true, msg: de === 'Para revisar' || de === 'Con el cliente'
       ? 'Los cambios se piden desde la ficha con el texto: le llegan al editor y se cuenta la vuelta'
       : 'Si hay cambios nuevos, escribilos en la bitácora de la ficha: le llegan al editor' }
   }
-  if (nuevo === 'Terminado' && de !== 'Con el cliente') return { confirmar: `“${nombrePieza(f)}” no pasó por el cliente (está en ${de}). ¿Cerrarla como Terminado igual?` }
+  // Terminado se puede marcar desde cualquier paso, sin pasar por "Con el cliente":
+  // muchas piezas se mandan por WhatsApp o mail y el paso sobraba (Sofi, 28/10/2026).
   return {}
 }
 const PLAZOS = [
@@ -998,11 +999,17 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
         body: JSON.stringify({ id: f.ID, mailsCliente: mails.split(/[,;\s]+/).filter(x => /@/.test(x)), confirmar: true }) })
       const j = await r.json()
       if (!j.ok) { showToast(j.error || 'No se pudo', 'err'); setYendo(false); return }
-      showToast((j.movido ? 'Con el cliente ✓ el archivo pasó a Finales' : 'Quedó con el cliente ✓') + (j.abierta ? ' y el link abre sin pedir permiso' : ''))
+      showToast((j.movido ? 'Aprobado ✓ el archivo pasó a Finales' : 'Aprobado ✓') + (j.abierta ? ' y el link abre sin pedir permiso' : '') + '. Mandale el link al cliente')
       guardar(f.ID, { Estado: 'Con el cliente' }, { paso: true })
       setModo(null); setPlan(null)
     } catch (e) { showToast('Error de conexión', 'err') }
     setYendo(false)
+  }
+
+  // Cerrar sin pasar por el cliente (Sofi, 28/10/2026).
+  const terminar = () => {
+    guardar(f.ID, { Estado: 'Terminado' }, { paso: true })
+    showToast && showToast(`${nombrePieza(f)} → Terminado ✓`)
   }
 
   // Sin texto no se puede: es lo que le llega al editor y lo que cuenta la vuelta.
@@ -1015,7 +1022,7 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
   return <div style={{ border: `1px solid ${T.ink}40`, background: T.surfaceAlt, borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
     <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Esperando tu OK · v{versionDe(f)}</div>
     <div style={{ fontSize: 12.5, color: T.ink2, marginBottom: 11 }}>
-      {f.Editor || 'El editor'} subió una versión. Si va, se la mandamos al cliente y queda esperando su OK; si no, vuelve sin que él se entere.
+      {f.Editor || 'El editor'} subió una versión. Si va, la aprobás: pasa a Finales y queda el link listo para que se lo mandes al cliente (la app no le manda nada). Si no, vuelve sin que él se entere.
     </div>
 
     {link
@@ -1027,7 +1034,8 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
       : <div style={{ fontSize: 12, color: T.warn, fontWeight: 600, marginBottom: 11 }}>No hay link de pre-entrega cargado — pedíselo antes de aprobar.</div>}
 
     {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
-      <button onClick={pedirPlan} style={{ ...btnPri, flex: 1, padding: '11px', background: T.pos }}>Aprobar y mandar al cliente</button>
+      <button onClick={pedirPlan} style={{ ...btnPri, flex: 1, padding: '11px', background: T.pos }}>Aprobar</button>
+      <button onClick={terminar} title="Ya se le mandó por otro lado o no hace falta su OK: se cierra directo" style={{ ...btn, flex: 1, padding: '11px' }}>Terminado</button>
       <button onClick={() => setModo('cambios')} style={{ ...btn, flex: 1, padding: '11px' }}>Pedir cambios</button>
     </div>}
 
@@ -1042,17 +1050,17 @@ function Revisar({ f, guardar, mailsCliente, showToast, cel }) {
     </div>}
 
     {modo === 'aprobar' && <div>
-      <label style={lbl}>Mails del cliente que reciben la entrega</label>
+      <label style={lbl}>Opcional · mails del cliente para que le aparezca en su Drive (no les llega ningún mail)</label>
       <input value={mails} onChange={e => setMails(e.target.value)} placeholder="mail@cliente.com, otro@cliente.com"
         style={{ ...inp, width: '100%', marginBottom: 9, fontSize: 12.5 }} />
       {plan && <div style={{ fontSize: 12, color: T.ink2, marginBottom: 10, lineHeight: 1.6 }}>
         {plan.moverArchivo ? `· ${plan.archivo ? '"' + plan.archivo + '"' : 'El archivo'} pasa a la carpeta Finales` : plan.sinLink ? '· Sin link de pre-entrega: no se mueve ningún archivo' : '· No encontré la carpeta Finales, se crea al aprobar'}<br />
         {plan.abrir === 'carpeta' ? <>· Finales queda abierta: el que tenga el link la ve sin pedir permiso<br /></> : plan.abrir === 'archivo' ? <>· El archivo queda abierto: el que tenga el link lo ve sin pedir permiso<br /></> : null}
         {plan.compartirCon?.length ? `· Además le aparece en su Drive a ${plan.compartirCon.length} ${plan.compartirCon.length === 1 ? 'mail' : 'mails'} — solo Finales, no el resto` : plan.abrir ? '· Sin mails cargados: no pasa nada, con el link alcanza' : '· Sin mails cargados: no se comparte con nadie todavía'}<br />
-        · Queda "Con el cliente" con la fecha de entrega de hoy. Se cierra como Terminado cuando él dé el OK.
+        · Queda "Con el cliente" con la fecha de entrega de hoy y el link listo para que se lo mandes vos. Se cierra como Terminado cuando él dé el OK.
       </div>}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={aprobar} disabled={yendo} style={{ ...btnPri, background: T.pos }}>{yendo ? 'Mandando…' : 'Confirmar y mandar'}</button>
+        <button onClick={aprobar} disabled={yendo} style={{ ...btnPri, background: T.pos }}>{yendo ? 'Aprobando…' : 'Confirmar'}</button>
         <button onClick={() => { setModo(null); setPlan(null) }} style={btn}>Cancelar</button>
       </div>
     </div>}
@@ -1094,7 +1102,13 @@ function OKCliente({ f, guardar, showToast, cel }) {
       display: 'block', textAlign: 'center', padding: cel ? '16px' : '12px', borderRadius: 9,
       background: T.surface, border: `1px solid ${T.border}`, color: T.ink, textDecoration: 'none',
       fontSize: 14, fontWeight: 600, marginBottom: 11,
-    }}>▶ Ver lo que se le mandó</a>}
+    }}>▶ Ver la entrega</a>}
+    {/* La app no le escribe al cliente: el PM elige si le pasa el link por WhatsApp o le arma el mail (Sofi, 28/10/2026). */}
+    {link && <div style={{ display: 'flex', gap: 8, marginBottom: 11 }}>
+      <BotonCopiar texto={link} etiqueta="Copiar link para el cliente" />
+      <a href={`mailto:?subject=${encodeURIComponent(`${f.Cliente ? f.Cliente + ' · ' : ''}${nombrePieza(f)}`)}&body=${encodeURIComponent(`Hola! Te comparto ${nombrePieza(f)}:\n${link}\n\nCualquier cambio nos avisás.`)}`}
+        style={{ ...btn, padding: '5px 11px', fontSize: 11.5, textDecoration: 'none' }}>Armar mail</a>
+    </div>}
 
     {!modo && <div style={{ display: 'flex', gap: 8, flexDirection: cel ? 'column' : 'row' }}>
       <button onClick={terminar} style={{ ...btnPri, flex: 1, padding: '11px', background: T.pos }}>El cliente dio el OK · Terminado</button>
