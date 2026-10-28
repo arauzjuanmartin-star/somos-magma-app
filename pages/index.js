@@ -3188,7 +3188,10 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
       // Sin arreglo para este trabajo no hay mínimo ni tarifa pactada: solo el contador. Si la persona tiene arreglos
       // pero ninguno cubre este trabajo, se avisa (la tarifa se pone a mano).
       if(!a) return {nro:previas+1, contador:`${previas+1}ª del mes`, soloContador:true, fuera:conArreglo(it.quien)}
-      return avisoJornada(a, previasAcuerdo(a, items, i, it.quien))
+      // El banco cuenta solo sus jornadas, pero al lado va el total del mes: Lucho decía "13/10" y en Pagos
+      // Staff tenía 15, porque las de Austral se pagan aparte ($145.000) y NO llenan las 10 (Juan, 28/10/2026).
+      const av=avisoJornada(a, previasAcuerdo(a, items, i, it.quien))
+      return av && av.nro!==previas+1 ? {...av, totalMes:previas+1} : av
     })
   }, [items, acDe, conArreglo, previasSheet, feEv, previasAcuerdo])
 
@@ -3325,7 +3328,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           {avisos[i] && (avisos[i].soloContador
             ? <span title="Veces que lo convocaste este mes (rodaje, sin contar edición)" style={{fontSize:12.5, display:'block', marginTop:3, color:T.ink3}}>{avisos[i].contador}{avisos[i].fuera?' · ninguno de sus arreglos cubre este trabajo: el monto va a mano':''}</span>
             : <span title={avisos[i].alcance} style={{fontSize:12.5, fontWeight:600, display:'block', marginTop:3, color:avisos[i].dentro?T.ink2:T.warn}}>
-                {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}</span>
+                {avisos[i].contador} · {fmt(avisos[i].precio)} <span style={{fontWeight:400, color:T.ink3}}>· {avisos[i].nota}{avisos[i].totalMes?` · ${avisos[i].totalMes} fechas en el mes contando las de otros arreglos`:''}</span>
               </span>)}
           {respuestas[i] && <span style={{fontSize:12.5, fontWeight:600, display:'block', marginTop:3, color:respuestas[i].tono}}>{respuestas[i].texto}</span>}
           {esFreelancerNuevo(s.quien) && <span style={{fontSize:12.5, color:T.warn, fontWeight:600, display:'block', marginTop:3}}>persona nueva · <button onClick={()=>setFreel(s.quien.trim())} style={{border:'none',background:'transparent',color:T.brand,fontWeight:600,cursor:'pointer',fontSize:10,padding:0,textDecoration:'underline'}}>completar datos</button></span>}
