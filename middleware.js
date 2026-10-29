@@ -60,7 +60,9 @@ export async function middleware(req) {
   // (/v1, /semana, /presupuesto…) le quedan fuera. Los endpoints los filtra
   // requireAuth; acá cerramos las páginas.
   const modulos = modulosDe(token.email)
-  if (modulos && !pathname.startsWith('/api/') && !paginasDe(modulos).includes(pathname)) {
+  // /branding (logo y líneas del PDF) queda afuera del recorte: si no, el fetch del logo
+  // recibe el redirect a "/" y el PDF de Sol salía sin logo (29/10/2026).
+  if (modulos && !pathname.startsWith('/api/') && !pathname.startsWith('/branding/') && !paginasDe(modulos).includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url))
   }
 
