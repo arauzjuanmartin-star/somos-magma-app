@@ -73,7 +73,7 @@ export default function TicketsRevisar({ data, onClose, onDone, showToast, modo 
             : <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 {txt(r['Foto']) ? <a href={txt(r['Foto'])} target="_blank" rel="noreferrer" style={{ ...btn(T.surface, T.ink, T.border), textDecoration: 'none' }}>Ver la foto</a> : <span style={{ fontSize: 12.5, color: T.warn }}>sin foto</span>}
                 <span style={{ fontSize: 12.5, color: T.ink2, marginLeft: 4 }}>Monto</span>
-                <input inputMode="numeric" value={monto} onChange={e => setMontoDe(o => ({ ...o, [id]: e.target.value.replace(/\D/g, '') }))} style={{ ...inp, width: 110, fontFamily: MONO, textAlign: 'right' }} />
+                <input inputMode="numeric" value={monto ? (parseInt(monto, 10) || 0).toLocaleString('es-AR') : ''} onChange={e => setMontoDe(o => ({ ...o, [id]: e.target.value.replace(/\D/g, '') }))} style={{ ...inp, width: 110, fontFamily: MONO, textAlign: 'right' }} />
                 <span style={{ flex: 1 }} />
                 <button disabled={ocupado} onClick={() => setRechazando(id)} style={btn(T.surface, T.ink2, T.border)}>Rechazar</button>
                 <button disabled={ocupado} onClick={() => revisar(r, 'aprobar')} style={btn(T.ink, '#fff')}>{ocupado ? 'Guardando…' : 'Autorizar'}</button>

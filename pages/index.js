@@ -1005,6 +1005,8 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const [nuevoPaq,setNuevoPaq]=useState(null)   // sumar un evento a un paquete (o armar uno desde este presu)
   // Seguimiento comercial: el presupuesto al que se le anota "hablé con el cliente", y el filtro "📞 Por llamar" de En espera
   const [seg,setSeg]=useState(null), [segSaving,setSegSaving]=useState(false), [soloLlamar,setSoloLlamar]=useState(false)
+  const [orden,setOrden]=useState(null)   // {col:'fecha'|'proyecto'|'cliente'|'total', dir:'asc'|'desc'} · null = el orden de siempre
+  const ordenarPor=col=>setOrden(o=> !o||o.col!==col ? {col, dir:col==='total'?'desc':'asc'} : o.dir===(col==='total'?'desc':'asc') ? {col, dir:col==='total'?'asc':'desc'} : null)
   // Llegar con un número (desde Facturación, el buscador, el dashboard) abre ese trabajo.
   const [abrirQ,setAbrirQ]=useState(null)
   useEffect(()=>{ if(nav?.mod==='presupuestos'||nav?.mod==='proyectos'){
@@ -1141,6 +1143,13 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
   const masViejo=llamarHoy[0]
   // En producción importa qué viene: lo próximo arriba, después lo que ya pasó (como estaba Proyectos).
   if(VISTAS_DE_PRODUCCION.includes(vista)) filtered=[...filtered].sort((a,b)=>{ const fa=parseD(dato(a,'Fecha Evento'))?.getTime()||0, fb=parseD(dato(b,'Fecha Evento'))?.getTime()||0; const hoy=Date.now()-864e5; const faF=fa>=hoy,fbF=fb>=hoy; if(faF&&!fbF)return -1; if(!faF&&fbF)return 1; if(faF&&fbF)return fa-fb; return fb-fa })
+  // Tocar el título de una columna ordena por ella; otro toque da vuelta el orden y el tercero vuelve al de
+  // siempre (Juan, 29/10/2026: "que podamos apretar arriba de fecha y se ordenen"). Los sin fecha van al final.
+  if(orden){ const val=it=> orden.col==='fecha' ? parseD(dato(it,'Fecha Evento'))?.getTime()
+      : orden.col==='total' ? totalDe(it)
+      : normTxt(orden.col==='cliente' ? (dato(it,'Cliente')||dato(it,'Agencia')) : dato(it,'Proyecto'))||null
+    filtered=[...filtered].sort((a,b)=>{ const va=val(a), vb=val(b); if(va==null||vb==null) return (va==null)-(vb==null)
+      return (va<vb?-1:va>vb?1:0)*(orden.dir==='asc'?1:-1) }) }
 
   useEffect(()=>{ if(!abrirQ||q!==abrirQ.q) return
     const exactos=filtered.filter(it=>it.num===String(abrirQ.q).trim()), uno=exactos.length===1?exactos[0]:filtered.length===1?filtered[0]:null
@@ -1182,6 +1191,10 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
       <select value={pm} onChange={e=>setPm(e.target.value)} style={selectStyle}><option value="todos">Todos los PM</option>{pms.map(p=><option key={p} value={p}>{p}</option>)}</select>
       <select value={anio} onChange={e=>setAnio(e.target.value)} style={selectStyle}><option value="todos">Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
       <select value={mes} onChange={e=>setMes(e.target.value)} style={selectStyle}><option value="todos">Mes</option>{MESES_LARGO.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
+      {/* En el celular no hay títulos de columna para tocar: el orden va acá */}
+      {cel && <select value={orden?`${orden.col}-${orden.dir}`:''} onChange={e=>{ const [col,dir]=e.target.value.split('-'); setOrden(col?{col,dir}:null) }} aria-label="Ordenar" style={selectStyle}>
+        <option value="">Orden: el de siempre</option><option value="fecha-asc">Fecha: más viejo primero</option><option value="fecha-desc">Fecha: más nuevo primero</option><option value="total-desc">Total: mayor primero</option><option value="cliente-asc">Cliente A→Z</option>
+      </select>}
     </div>
 
     {/* Las vistas: lo que antes eran dos solapas y sus chips */}
@@ -1219,7 +1232,10 @@ function Trabajos({data, onRefresh, showToast, nav, clearNav, goTo}){
     {/* Tabla */}
     <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden'}}>
       {!cel && <div style={{display:'grid', gridTemplateColumns:GRID_TRABAJOS, gap:0, padding:'10px 18px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontWeight:500, color:T.ink2}}>
-        <span>Evento</span><span>Proyecto</span><span>Cliente</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Lo que sigue</span><span style={{textAlign:'right'}}>Estado</span>
+        {[['fecha','Evento'],['proyecto','Proyecto'],['cliente','Cliente'],['total','Total']].map(([col,l])=>{ const on=orden?.col===col
+          return <button key={col} type="button" onClick={()=>ordenarPor(col)} title={`Ordenar por ${l.toLowerCase()}`} aria-sort={on?(orden.dir==='asc'?'ascending':'descending'):undefined}
+            style={{border:'none', background:'transparent', padding:0, font:'inherit', cursor:'pointer', textAlign:col==='total'?'right':'left', color:on?T.ink:T.ink2, fontWeight:on?700:500}}>{l}{on?(orden.dir==='asc'?' ↑':' ↓'):<span style={{opacity:0.35}}> ↕</span>}</button> })}
+        <span style={{textAlign:'right'}}>Lo que sigue</span><span style={{textAlign:'right'}}>Estado</span>
       </div>}
       {filtered.length===0 && <Empty>Sin resultados</Empty>}
       {filtered.slice(0,200).map((it,i)=>{
@@ -2284,7 +2300,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
                 <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Servicio" aria-label="Servicio" style={{...inpP, gridColumn:cel?'1 / -1':undefined}}/>
                 {/* 3 cápsulas = poner 3 acá, no cargar la misma línea tres veces */}
                 <input type="number" min="1" max={MAX_SLOTS} value={p.cant ?? 1} onChange={e=>updPed(i,{cant:e.target.value})} aria-label="Cantidad" title="Cuántos de este servicio" style={{...inpP, textAlign:'center', fontFamily:MONO, padding:'9px 4px', fontWeight:n>1?700:400}}/>
-                <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="0" aria-label="Costo por unidad" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                <PrecioInput value={p.precio} onChange={v=>updPed(i,{precio:v, manual:true})} placeholder="0" aria-label="Costo por unidad" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
                 {p.svc.trim()
                   ? edicion
                     ? <button type="button" onClick={()=>updPed(i,{freelance:!p.freelance})} title="La edición la hace Magma salvo que la marques freelance. Solo cambia lo que ves en el margen." style={{justifySelf:'start', padding:'4px 11px', borderRadius:999, fontSize:12.5, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${p.freelance?T.campo:T.posSoft}`, background:p.freelance?T.surface:T.posSoft, color:p.freelance?T.ink2:T.pos, fontWeight:p.freelance?400:600}}>{p.freelance?'Freelance':'Lo hace Magma'}</button>
@@ -2334,7 +2350,7 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
             <div style={{fontSize:13, fontWeight:600, color:T.ink, marginBottom:8}}>Servicio nuevo <span style={{fontWeight:400, color:T.ink2}}>· queda guardado para todos los presupuestos</span></div>
             <div style={{display:'grid', gridTemplateColumns:cel?'1fr':'1.5fr 130px', gap:8, marginBottom:8}}>
               <input value={svcNew.nombre} onChange={e=>setSvcNew(s=>({...s,nombre:e.target.value}))} placeholder="Ej: Locución" aria-label="Nombre del servicio" style={inpP} autoFocus/>
-              <input type="number" value={svcNew.precio} onChange={e=>setSvcNew(s=>({...s,precio:e.target.value}))} placeholder="precio" aria-label="Precio" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+              <PrecioInput value={svcNew.precio} onChange={v=>setSvcNew(s=>({...s,precio:v}))} placeholder="precio" aria-label="Precio" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
             </div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink, marginBottom:10, cursor:'pointer'}}>
               <input type="checkbox" checked={svcNew.fee} onChange={e=>setSvcNew(s=>({...s,fee:e.target.checked}))}/>
@@ -2356,8 +2372,8 @@ function NuevoPresupuesto({data, onClose, onGuardado, showToast, initialData, pa
               <div key={p.id} style={{marginBottom:8}}>
                 <div style={{display:'grid', gridTemplateColumns:cel?'1fr 1fr 30px':'1fr 120px 120px 30px', gap:8, alignItems:'center'}}>
                   <input list="np-svc" value={p.svc} onChange={e=>selSvc(i,e.target.value)} placeholder="Opcional" aria-label="Opcional" style={{...inpP, gridColumn:cel?'1 / -1':undefined}}/>
-                  <input type="number" value={p.precio} onChange={e=>updPed(i,{precio:e.target.value, manual:true})} placeholder="costo" aria-label="Costo" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
-                  <input type="number" value={p.precioCliente} onChange={e=>updPed(i,{precioCliente:e.target.value})} placeholder="auto" aria-label="Precio cliente" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                  <PrecioInput value={p.precio} onChange={v=>updPed(i,{precio:v, manual:true})} placeholder="costo" aria-label="Costo" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
+                  <PrecioInput value={p.precioCliente} onChange={v=>updPed(i,{precioCliente:v})} placeholder="auto" aria-label="Precio cliente" style={{...inpP, textAlign:'right', fontFamily:MONO}}/>
                   <button type="button" onClick={()=>delPed(i)} aria-label="Sacar este opcional" style={{border:'none', background:'transparent', color:T.ink2, cursor:'pointer', fontSize:18}}>×</button>
                 </div>
                 <div style={{...ayudaP, paddingLeft:2}}>En el PDF el cliente ve <strong style={{color:T.ink}}>{fmt(cli)} + IVA</strong>{man<=0?' (con tu margen; escribí un precio cliente para fijarlo)':''}</div>
@@ -2558,7 +2574,7 @@ function ResguardoModal({presu, onClose, onConfirm, condicion=''}){
             <label style={lab}>Motivo (obligatorio)<input id="resg-motivo" value={ref} onChange={e=>setRef(e.target.value)} placeholder="cliente de confianza, paga a la entrega, lo decidió Juan…" style={inp}/></label>
           </div>
         : tipo==='sena' ? <div style={{marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
-            <label style={lab}>Monto cobrado (sugerido: 30% de {fmt(total)})<input id="resg-monto" type="number" value={monto} onChange={e=>setMonto(e.target.value)} style={inp}/></label>
+            <label style={lab}>Monto cobrado (sugerido: 30% de {fmt(total)})<PrecioInput id="resg-monto" value={monto} onChange={setMonto} style={inp}/></label>
             <label style={lab}>Fecha<input id="resg-fecha" value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></label>
             <label style={{...lab, gridColumn:'1 / -1'}}>Cómo entró (opcional)<input id="resg-ref" value={ref} onChange={e=>setRef(e.target.value)} placeholder="transferencia BBVA, efectivo…" style={inp}/></label>
           </div>
@@ -2722,6 +2738,7 @@ const sinErr = v => { const s = String(v||'').trim(); return ERR_SHEET.test(s) ?
 // estar como quedó — mes, día elegido, capa y de quién — y no otra vez en "todo el
 // equipo". Vive lo que dura la pestaña.
 const calMem={}
+const VERDE_FIRME='#17603F'   // trabajo aprobado con el día confirmado: lo único que va lleno en la grilla
 function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
   const proyectos=data.proyectos||[], presus=data.presupuestos||[], rrhh=data.rrhh||[]
   const now=new Date()
@@ -3000,17 +3017,22 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
             if(!d) return <div key={i} style={{minHeight:cel?64:104, minWidth:0, borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, background:T.bg}}/>
             const k=dayKey(d)
             const ap=verRod?(aprobadosPorDia[k]||[]):[], es=verRod?(enEsperaPorDia[k]||[]):[], en=verEnt?(entregasPorDia[k]||[]):[]
-            // Orden: lo firme primero, lo "a confirmar" al final (Popstars ocupa todo el mes en gris y tapaba lo demás).
+            // Tres pesos (Juan, 29/10/2026: "lo no confirmado nos ocupa mucho espacio"):
+            // trabajo Y fecha confirmados → bloque verde oscuro; una de las dos → solo el nombre,
+            // sin fondo; ninguna de las dos (en espera con día a confirmar) → una sola línea
+            // "○ N sin confirmar" por día. El detalle sigue en el panel al tocar el día.
             const firmes=ap.filter(p=>!esTentDia(k,p)), tents=ap.filter(p=>esTentDia(k,p))
+            const esFirmes=es.filter(p=>!esTentDia(k,p)), dudosos=es.filter(p=>esTentDia(k,p))
             const items=[
-              ...firmes.map((p,j)=>()=> <div key={'a'+j} style={{...chipCal, background:T.posSoft, color:T.ink}}>{punto(T.pos)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
-              ...es.map((p,j)=>()=> <div key={'e'+j} style={{...chipCal, background:T.warnSoft, color:T.ink}}>{puntoHueco(T.warn)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              ...firmes.map((p,j)=>()=> <div key={'a'+j} style={{...chipCal, background:VERDE_FIRME, color:'#fff', fontWeight:600}}><span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              ...esFirmes.map((p,j)=>()=> <div key={'e'+j} title="En espera" style={{...chipCal, color:T.ink2}}>{puntoHueco(T.warn)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
               // ✂ Entregas: el color es el semáforo del trabajo (rojo atrasado, ámbar esta semana,
               // verde en fecha, gris entregado). Cursiva = fecha del manual, el PM no la confirmó.
               ...en.map((f,j)=>()=>{ const c=COLOR_SEM_ED[f.__sem.nivel]||COLOR_SEM_ED.verde
                 return <div key={'n'+j} role={goTo?'button':undefined} tabIndex={goTo?0:undefined} onKeyDown={goTo?tecla(()=>abrirEntrega(f,d)):undefined} onClick={goTo?e=>{e.stopPropagation(); abrirEntrega(f,d)}:undefined} title={`${nombrePiezaEd(f)} · ${f.Cliente||f.Agencia||''} · ${String(f.Editor||'').trim()||'sin asignar'} · ${f.__sem.txt}${f.__estimada?' · fecha del manual':''}${goTo?' — clic para abrirla':''}`} style={{...chipCal, cursor:goTo?'pointer':undefined, background:c.bg, color:f.__cerrado?T.ink3:T.ink, fontStyle:f.__estimada?'italic':undefined}}>{punto(c.fg)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>✂ {limpiarPedidoEd(f.Entregable)} · {f.Cliente||f.Agencia||'—'}</span></div>
               }),
-              ...tents.map((p,j)=>()=> <div key={'t'+j} title="Día a confirmar" style={{...chipCal, background:T.surfaceAlt, color:T.ink3}}>{puntoHueco(T.ink3)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              ...tents.map((p,j)=>()=> <div key={'t'+j} title="Aprobado · día a confirmar" style={{...chipCal, color:T.ink3}}>{puntoHueco(T.pos)}<span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{p['Cliente']||p['Agencia']||'—'}</span></div>),
+              ...(dudosos.length?[()=> <div key="d" title={'Sin confirmar (ni el trabajo ni el día): '+dudosos.map(p=>p['Cliente']||p['Agencia']||'—').join(', ')} style={{fontSize:11.5, color:T.ink3, padding:'1px 6px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>○ {dudosos.length} sin confirmar</div>]:[]),
             ]
             const TOPE=cel?2:(capa==='todo'?4:3)
             const sel = diaSel&&dayKey(diaSel)===k
@@ -3027,9 +3049,10 @@ function Calendario({data, onRefresh, showToast, soloVer=false, goTo, mail}){
         {/* Leyenda: el estado no puede depender solo del color */}
         <div style={{display:'flex', gap:16, flexWrap:'wrap', padding:'10px 14px', fontSize:12.5, color:T.ink2}}>
           {verRod && <>
-            <span style={{display:'flex', alignItems:'center', gap:6}}>{punto(T.pos)} Aprobado</span>
+            <span style={{display:'flex', alignItems:'center', gap:6}}><span aria-hidden style={{width:12, height:9, borderRadius:2, background:VERDE_FIRME}}/> Confirmado con fecha</span>
+            <span style={{display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.pos)} Aprobado, día a confirmar</span>
             <span style={{display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.warn)} En espera</span>
-            <span style={{display:'flex', alignItems:'center', gap:6}}>{puntoHueco(T.ink3)} Día a confirmar</span>
+            <span>○ N sin confirmar = ni trabajo ni fecha</span>
           </>}
           {verEnt && <span>✂ Entrega de edición · <i>cursiva</i> = fecha estimada</span>}
         </div>
@@ -3337,7 +3360,7 @@ function StaffEditor({p, num, rrhhNames, rrhh=[], serviciosConocidos=[], presu, 
           <option value="">— sin día —</option>
           {fechasProyecto.map(f=><option key={f} value={f}>{f}</option>)}
         </select>}
-        <input type="number" value={s.precio||''} onChange={e=>upd(i,'precio',e.target.value)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
+        <PrecioInput value={s.precio||''} onChange={v=>upd(i,'precio',v)} placeholder="0" style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>
         <button onClick={()=>delRow(i)} title="Quitar línea" style={{border:'none', background:'transparent', color:T.ink3, cursor:'pointer', fontSize:17, padding:0, alignSelf:'center'}}>×</button>
       </div>
     ))}
@@ -4448,7 +4471,7 @@ function NuevaFactura({pendientes, agencias=[], contactos=[], initialSel=null, i
           <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end', marginBottom:8}}>
             <div style={{width:160}}><label style={lblV2}>Monto neto (sin IVA)</label>{varios
               ? <div title="Con varios trabajos, cada uno entra por lo que le falta facturar" style={{...inpV2, textAlign:'right', fontFamily:MONO, background:T.surfaceAlt, color:T.ink2}}>{Math.round(neto).toLocaleString('es-AR')}</div>
-              : <input type="number" value={montoNeto} onChange={e=>setMontoNeto(e.target.value)} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>}</div>
+              : <PrecioInput value={montoNeto} onChange={setMontoNeto} style={{...inpV2, textAlign:'right', fontFamily:MONO}}/>}</div>
             <div style={{width:120}}><label style={lblV2}>Plazo</label><select value={plazo} onChange={e=>setPlazo(e.target.value)} style={inpV2}>{[...new Set([...PLAZOS_FACTURA, plazo])].sort((x,y)=>x-y).map(d=><option key={d} value={d}>{d==='0'?'Contado':d+' días'}</option>)}</select>{plazoDeAgencia(agencias, sel?.p)===plazo && <div style={{fontSize:10.5, color:T.ink3, marginTop:3, whiteSpace:'nowrap'}}>el plazo de {facturarA}</div>}</div>
             <label style={{display:'flex', gap:7, alignItems:'center', fontSize:13, color:T.ink2, cursor:'pointer', paddingBottom:9}}><input type="checkbox" checked={conIVA} onChange={e=>setConIVA(e.target.checked)}/> Con IVA 21%</label>
           </div>
@@ -4865,7 +4888,7 @@ function YaCobradaModal({x, onClose, onConfirm}){
       </div>
       <div style={{padding:'20px 22px'}}>
         <label style={lblV2}>{yaCobrada?'¿Cuánto cobraste en realidad? (neto sin IVA)':'¿Por cuánto la facturaste? (neto sin IVA)'}</label>
-        <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} autoFocus style={{...inpV2, textAlign:'right', fontFamily:MONO, fontSize:16, marginBottom:8}}/>
+        <PrecioInput value={monto} onChange={setMonto} autoFocus style={{...inpV2, textAlign:'right', fontFamily:MONO, fontSize:16, marginBottom:8}}/>
         <div style={{fontSize:11.5, color:T.ink3}}>Presupuestado: <span style={{fontFamily:MONO}}>{fmt(presupuestado)}</span>{dif!==0 && <span style={{color:dif>0?T.pos:T.brand, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif>0?'de más':'de menos'}</span>}</div>
         <label style={{display:'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', marginTop:14, background:yaCobrada?T.surfaceAlt:T.warnSoft, border:`1px solid ${yaCobrada?T.border:T.warn}`, borderRadius:10, padding:'10px 12px'}}>
           <input type="checkbox" checked={yaCobrada} onChange={e=>setYaCobrada(e.target.checked)} style={{marginTop:2}}/>
@@ -5062,7 +5085,7 @@ function CobroModal({f, hermanas=[], cuentas, onClose, onRefresh, showToast}){
         </label>}
         <div style={{textAlign:'center', marginBottom:18}}>
           <div style={{fontSize:11, textTransform:'uppercase', letterSpacing:0.4, color:T.ink3, fontWeight:600, marginBottom:6}}>Monto cobrado (lo que realmente entró)</div>
-          <input type="number" disabled={entera&&hermanas.length>0} value={entera&&hermanas.length>0?String(totalEntera):montoCobrado} onChange={e=>setMontoCobrado(e.target.value)} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
+          <PrecioInput disabled={entera&&hermanas.length>0} value={entera&&hermanas.length>0?String(totalEntera):montoCobrado} onChange={setMontoCobrado} style={{width:'100%', textAlign:'center', fontSize:28, fontWeight:700, fontFamily:MONO, color:T.pos, border:`1px solid ${T.border}`, borderRadius:10, padding:'8px 6px', outline:'none'}}/>
           <div style={{fontSize:11, color:T.ink3, marginTop:5, display:(entera&&hermanas.length>0)?'none':'block'}}>Facturado: <b style={{color:T.ink}}>{fmt(total)}</b>{ivaF>0?` (neto ${fmt(netoF)} + IVA ${fmt(ivaF)})`:' (sin IVA)'}{dif!==0 && <span style={{color:dif>0?T.pos:T.warn, fontWeight:600}}> · {dif>0?'+':''}{fmt(dif)} {dif<0?'(retenciones / cobraste menos)':'(cobraste más)'}</span>}</div>
         </div>
         <label style={{display:(entera&&hermanas.length>0)?'none':'flex', gap:9, alignItems:'flex-start', fontSize:13, color:T.ink2, cursor:'pointer', background:parcial?T.brandSoft:T.surfaceAlt, border:`1px solid ${parcial?T.brand:T.border}`, borderRadius:10, padding:'10px 12px', marginBottom:14}}>
@@ -5418,7 +5441,7 @@ function PagosStaff({data, onRefresh, showToast, nav, clearNav}){
                 {t.pagado
                   ? (t.viaticos>0 ? <span style={{fontSize:12.5, color:T.ink2, fontFamily:MONO, whiteSpace:'nowrap'}}>viáticos {fmt(t.viaticos)}</span> : null)
                   : t.monotributo ? null : <label title="Viáticos de este trabajo: se suman al pago. Enter o clic afuera para guardar." style={{display:'flex', alignItems:'center', gap:5, fontSize:12.5, color:T.ink2, whiteSpace:'nowrap'}}>viáticos
-                      <input value={viatDraft[t.key]!==undefined?viatDraft[t.key]:(t.viaticos?String(t.viaticos):'')} onChange={e=>setViatDraft(d=>({...d,[t.key]:e.target.value}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" inputMode="numeric" style={{width:84, padding:'5px 8px', borderRadius:6, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13, fontFamily:MONO, textAlign:'right'}}/>
+                      <MontoInput value={viatDraft[t.key]!==undefined?viatDraft[t.key]:numAMontoAR(t.viaticos)} onChange={v=>setViatDraft(d=>({...d,[t.key]:v}))} onBlur={e=>guardarViaticos(persona,t,e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') e.currentTarget.blur() }} placeholder="0" style={{width:84, padding:'5px 8px', borderRadius:6, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13, fontFamily:MONO, textAlign:'right'}}/>
                     </label>}
                 <span style={{fontSize:13.5, fontFamily:MONO, color:T.ink, whiteSpace:'nowrap'}}>{fmt(t.precio)}{t.viaticos>0&&<span style={{fontSize:12.5, color:T.ink2}}> +{fmt(t.viaticos)}</span>}</span>
                 {t.pagado
@@ -6052,8 +6075,8 @@ function Historico({data, mail}){
   const [anio,setAnio]=useState(String(anioHoy))
   const [vista,setVista]=useState('usd')   // usd · hoy · pesos
   const [mesF,setMesF]=useState(0)
-  const [q,setQ]=useState(''), [cuantos,setCuantos]=useState(100)
-  useEffect(()=>{ setCuantos(100) },[anio, mesF, q])
+  const [q,setQ]=useState(''), [cuantos,setCuantos]=useState(100), [abierto,setAbierto]=useState(null)
+  useEffect(()=>{ setCuantos(100); setAbierto(null) },[anio, mesF, q])
   const tabla=useMemo(()=>tablaCotizaciones(data.cotizaciones), [data.cotizaciones])
   const hayCot=tabla.meses.length>0
   const vistaR=hayCot?vista:'pesos'
@@ -6065,16 +6088,17 @@ function Historico({data, mail}){
   const cuenta=r=>r.agencia||r.cliente||'—'
 
   const todas=useMemo(()=>{
-    const fcByNro={}; fc.forEach(f=>{fcByNro[String(f['N° Presupuesto'])]=f})
+    const fcByNro={}, fcsByNro={}; fc.forEach(f=>{ const n=String(f['N° Presupuesto']); fcByNro[n]=f; if(!String(f['Nro de Factura']||'').toUpperCase().startsWith('ANULADA')) (fcsByNro[n]=fcsByNro[n]||[]).push(f) })
     const out=[]
     proyectos.forEach(p=>{ const d=parseD(p['Fecha Evento']); if(!d||d.getFullYear()<2026) return; const f=fcByNro[String(p['N° presupuesto'])]
-      const staff=[]; for(let j=1;j<=MAX_SLOTS;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(s) staff.push(s) }
+      // det = las líneas de staff, para la ficha que se abre en la misma fila (Juan, 29/10/2026: "verlo ahí, no meterse en otro lado")
+      const staff=[], det=[]; for(let j=1;j<=MAX_SLOTS;j++){ const s=String(p['Staff '+j]||(j===1?p['Staff']:'')||'').trim(); if(s){ staff.push(s); det.push({quien:s, pedido:String(p['Pedido '+j]||(j===1?p['Pedido']:'')||'').trim(), monto:parseMonto(p['Precio '+j]||(j===1?p['Precio']:''))}) } }
       out.push({d, anio:d.getFullYear(), mes:d.getMonth()+1, nro:p['N° presupuesto'], cliente:String(p['Cliente']||'').trim(), agencia:String(p['Agencia']||'').trim(), proyecto:p['Proyecto'],
-        total:parseMonto(p['Total ']||p['Total']), magma:gananciaProyecto(p), cobrado:f?isCobrada(f):false, pm:String(p['PM']||'').trim(), socios:staff.some(s=>esSocioN(canonStaff(s))) }) })
+        total:parseMonto(p['Total ']||p['Total']), magma:gananciaProyecto(p), cobrado:f?isCobrada(f):false, pm:String(p['PM']||'').trim(), socios:staff.some(s=>esSocioN(canonStaff(s))), det, facs:fcsByNro[String(p['N° presupuesto'])]||[] }) })
     ;[['2023',data.historico2023],['2024',data.historico2024],['2025',data.historico2025]].forEach(([a,src])=>(src||[]).forEach(r=>{
       const d=parseD(r['Fecha'])||new Date(+a, (parseInt(r['Mes'])||1)-1, 15); const total=parseMonto(r['Presupuesto'])||parseMonto(r['Total'])
-      let st=0, socios=false; for(let j=1;j<=6;j++){ const s=String(r['Staff '+j]||'').trim(); if(!s) continue; if(esSocioN(canonStaff(s))) socios=true; if(!/somos magma|^magma$/i.test(s)) st+=parseMonto(r['Pago '+j]) }
-      out.push({d, anio:+a, mes:d.getMonth()+1, nro:r['Nro'], cliente:String(r['Cliente']||'').trim(), agencia:String(r['Agencia']||'').trim(), proyecto:r['Proyecto'], total, magma:total-st, cobrado:si(r['Cobrado']), pm:'', socios}) }))
+      let st=0, socios=false; const det=[]; for(let j=1;j<=6;j++){ const s=String(r['Staff '+j]||'').trim(); if(!s) continue; det.push({quien:s, pedido:'', monto:parseMonto(r['Pago '+j])}); if(esSocioN(canonStaff(s))) socios=true; if(!/somos magma|^magma$/i.test(s)) st+=parseMonto(r['Pago '+j]) }
+      out.push({d, anio:+a, mes:d.getMonth()+1, nro:r['Nro'], cliente:String(r['Cliente']||'').trim(), agencia:String(r['Agencia']||'').trim(), proyecto:r['Proyecto'], total, magma:total-st, cobrado:si(r['Cobrado']), pm:'', socios, det, facs:[]}) }))
     return out
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[data])
@@ -6193,6 +6217,26 @@ function Historico({data, mail}){
       {!hayCot && plata && <div style={{fontSize:12.5, color:T.warn, marginTop:6}}>No pude leer la solapa COTIZACIONES: los montos van en pesos sin ajustar.</div>}
     </div>
 
+    {/* Los cuadros del mes, como en el Dashboard: el mes tocado en el gráfico, o el actual */}
+    {(()=>{ const mS=mesF||(esActual?hoy.getMonth()+1:12), del=rs=>rs.filter(r=>r.mes===mS), a=del(filasAll), b=del(previas)
+      const cob=a.filter(r=>r.cobrado)
+      const tiles=plata ? [
+        ['Facturado', fmtV(sumV(a,'total')), b.length?`${prevLbl}: ${fmtV(sumV(b,'total'))} (${signo(pct(sumV(a,'total'),sumV(b,'total')))})`:'sin datos del año anterior'],
+        ['Ganancia', fmtV(sumV(a,'magma')), sumV(a,'total')?`${Math.round(sumV(a,'magma')/sumV(a,'total')*100)}% de margen`:'—'],
+        ['Trabajos', String(a.length), b.length?`${prevLbl}: ${b.length}`:''],
+        ['Cobrado', fmtV(sumV(cob,'total')), a.length-cob.length?`falta cobrar ${a.length-cob.length} · ${fmtV(sumV(a,'total')-sumV(cob,'total'))}`:'todo cobrado ✓'],
+      ] : [['Trabajos', String(a.length), b.length?`${prevLbl}: ${b.length}`:'']]
+      return <div style={{marginBottom:14}}>
+        <div style={{...etiqueta, marginBottom:8}}>{MESES_LARGO[mS-1]} {anio}{!mesF&&' · tocá un mes en el gráfico para ver otro'}</div>
+        <div style={{display:'grid', gridTemplateColumns:`repeat(${cel?2:tiles.length},minmax(0,1fr))`, gap:12}}>
+          {tiles.map(([l,v,s])=><div key={l} style={{...card, padding:'16px 18px'}}>
+            <div style={etiqueta}>{l}</div>
+            <div style={{fontSize:cel?22:28, fontWeight:700, color:T.ink, fontFamily:MONO, letterSpacing:-0.5, marginTop:4}}>{v}</div>
+            <div style={{...etiqueta, marginTop:4}}>{s}</div>
+          </div>)}
+        </div>
+      </div> })()}
+
     {/* Lo que mira un dueño o un comprador */}
     <div style={{...card, overflow:'hidden', marginBottom:14}}>
       <div style={{padding:'12px 18px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', alignItems:'baseline'}}>
@@ -6246,8 +6290,9 @@ function Historico({data, mail}){
           <input value={q} onChange={e=>setQ(e.target.value)} aria-label="Buscar en el año" placeholder="Buscar trabajo, cliente o N°…" style={{flex:'0 1 240px', padding:'7px 11px', borderRadius:9, border:`1px solid ${T.campo}`, background:T.surface, color:T.ink, fontSize:13, outline:'none'}}/>
         </div>
         {filas.length===0 && <Empty>{filasAll.length?'Nada con esa búsqueda':`Sin datos para ${anio}`}</Empty>}
-        {filas.slice(0,cuantos).map((r,i)=>{ const pc=r.total>0?Math.round(r.magma/r.total*100):0
-          return <div key={i} style={{display:'grid', gridTemplateColumns:cel?(plata?'1fr 90px':'1fr'):(plata?'60px 1.6fr 1fr 100px 100px 50px 30px':'60px 1.6fr 1fr 30px'), gap:8, padding:'9px 16px', borderTop:i?`1px solid ${T.border}`:'none', alignItems:'center', fontSize:13}}>
+        {filas.slice(0,cuantos).map((r,i)=>{ const pc=r.total>0?Math.round(r.magma/r.total*100):0, k=`${r.anio}|${r.nro}|${i}`, on=abierto===k
+          return <div key={k} style={{borderTop:i?`1px solid ${T.border}`:'none', background:on?T.surfaceAlt:undefined}}>
+          <div role="button" tabIndex={0} aria-expanded={on} onClick={()=>setAbierto(on?null:k)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); setAbierto(on?null:k) } }} style={{cursor:'pointer', display:'grid', gridTemplateColumns:cel?(plata?'1fr 90px':'1fr'):(plata?'60px 1.6fr 1fr 100px 100px 50px 30px':'60px 1.6fr 1fr 30px'), gap:8, padding:'9px 16px', alignItems:'center', fontSize:13}}>
             {cel ? <span style={{minWidth:0}}><span style={{display:'block', color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.proyecto||'—'}</span><span style={{display:'block', ...etiqueta}}>{r.d.getDate()}/{r.d.getMonth()+1} · {r.cliente||r.agencia||'—'}</span></span>
               : <><span style={{color:T.ink2, fontSize:12.5}}>{r.d.getDate()}/{r.d.getMonth()+1}</span>
                 <span style={{minWidth:0, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{r.proyecto||'—'}{r.nro&&<span style={{fontFamily:MONO, fontSize:12.5, color:T.ink2}}> #{r.nro}</span>}</span>
@@ -6256,6 +6301,14 @@ function Historico({data, mail}){
             {plata && !cel && <><span style={{textAlign:'right', fontFamily:MONO, color:T.ink}}>{fmtV(V(r.magma,r.d))}</span>
               <span style={{textAlign:'right', fontSize:12.5, color:r.total>0?(pc>=60?T.pos:pc>=45?T.ink2:T.warn):T.ink3, fontWeight:r.total>0&&pc<45?600:400}}>{r.total>0?pc+'%':'—'}</span></>}
             {!cel && <span style={{textAlign:'center', color:r.cobrado?T.pos:T.ink3}} title={r.cobrado?'Cobrado':'Sin cobrar'}>{r.cobrado?'✓':'·'}</span>}
+          </div>
+          {on && <div style={{padding:'4px 16px 14px', fontSize:13, color:T.ink2, lineHeight:1.6}}>
+            <div><b style={{color:T.ink}}>{r.proyecto||'—'}</b>{r.nro&&<span style={{fontFamily:MONO}}> · #{r.nro}</span>} · {r.d.getDate()}/{r.d.getMonth()+1}/{r.anio}</div>
+            <div>{[r.agencia&&`Agencia: ${r.agencia}`, r.cliente&&`Cliente: ${r.cliente}`, r.pm&&`PM: ${r.pm}`].filter(Boolean).join(' · ')||'—'}</div>
+            {plata && <div>Total <b style={{fontFamily:MONO, color:T.ink}}>{fmt(r.total)}</b> · ganancia <b style={{fontFamily:MONO, color:T.ink}}>{fmt(r.magma)}</b>{r.total>0&&` (${pc}%)`} · {r.cobrado?<span style={{color:T.pos, fontWeight:600}}>cobrado</span>:'sin cobrar'}</div>}
+            {r.det.length>0 && <div style={{marginTop:6}}><span style={{color:T.ink3}}>Staff:</span> {r.det.map((x,j)=><span key={j}>{j?', ':''}{x.quien}{x.pedido&&` (${x.pedido})`}{plata&&x.monto>0&&<span style={{fontFamily:MONO}}> {fmt(x.monto)}</span>}</span>)}</div>}
+            {plata && r.facs.length>0 && <div style={{marginTop:4}}><span style={{color:T.ink3}}>Facturas:</span> {r.facs.map((f,j)=><span key={j}>{j?' · ':''}{f['Nro de Factura']||'s/n'} {fmt(parseMonto(f['Precio FINAL']))} {isCobrada(f)?'✓ cobrada':`· emitida ${f['Fecha emision']||'—'}`}</span>)}</div>}
+          </div>}
           </div> })}
         {filas.length>cuantos && <button onClick={()=>setCuantos(c=>c+200)} style={{display:'block', width:'100%', border:'none', borderTop:`1px solid ${T.border}`, background:'transparent', padding:'11px', fontSize:13, color:T.ink, textDecoration:'underline', cursor:'pointer'}}>Ver {Math.min(200, filas.length-cuantos)} más (quedan {filas.length-cuantos})</button>}
       </div>
@@ -6390,7 +6443,7 @@ function MovimientoSocio({socio, tipo, onClose, onHecho, showToast}){
         : 'Plata que el socio puso en Magma (un VEP, un préstamo). Se suma a lo que tiene a favor.'}</p>
       <label style={{fontSize:11, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Monto</label>
       <div style={{display:'flex', gap:8, margin:'4px 0 12px'}}>
-        <input autoFocus inputMode="decimal" value={monto} onChange={e=>setMonto(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')guardar()}} placeholder="0" style={{flex:1, padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:15, fontFamily:MONO, textAlign:'right', outline:'none', background:T.surface, color:T.ink}}/>
+        <MontoInput autoFocus value={monto} onChange={setMonto} onKeyDown={e=>{if(e.key==='Enter')guardar()}} placeholder="0" style={{flex:1, padding:'9px 11px', borderRadius:8, border:`1px solid ${T.border}`, fontSize:15, fontFamily:MONO, textAlign:'right', outline:'none', background:T.surface, color:T.ink}}/>
         <select value={moneda} onChange={e=>setMoneda(e.target.value)} style={{...selectStyle, width:78}}><option>ARS</option><option>USD</option></select>
       </div>
       <label style={{fontSize:11, fontWeight:700, color:T.ink3, textTransform:'uppercase', letterSpacing:.3}}>Concepto</label>
@@ -8176,6 +8229,16 @@ function MontoInput({ value, onChange, style, ...rest }){
     let n=0,i=0; while(i<out.length && n<signif){ if(/[\d,]/.test(out[i])) n++; i++ }
     caret.current=i; onChange(out) }
   return <input ref={ref} value={value??''} onChange={handle} inputMode="decimal" style={style} {...rest}/>
+}
+// Lo mismo para los campos que guardan el NÚMERO pelado (precio de un servicio, staff, cobro): se ve
+// "100.000" y por afuera sigue saliendo "100000", así no cambia nada de lo que se calcula ni de lo que
+// va al sheet (Juan, 29/10/2026: "no poner 100000 sino 100.000"). El texto vive acá adentro para que
+// "100.000," se pueda escribir; si el valor cambia de afuera (precio automático) se vuelve a dibujar.
+const numATxt = v => { if(v===''||v==null) return ''; const n=Number(v); return isNaN(n) ? fmtMontoAR(v) : n.toLocaleString('es-AR',{maximumFractionDigits:2}) }
+function PrecioInput({ value, onChange, ...rest }){
+  const [txt,setTxt]=useState(()=>numATxt(value))
+  useEffect(()=>{ if(parseMontoAR(txt)!==(Number(value)||0)) setTxt(numATxt(value)) /* eslint-disable-next-line */ },[value])
+  return <MontoInput value={txt} onChange={t=>{ setTxt(t); onChange(t==='' ? '' : String(parseMontoAR(t))) }} {...rest}/>
 }
 const navBtn = { width:34, height:34, borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:14, cursor:'pointer' }
 const miniBtn = { padding:'6px 11px', borderRadius:7, border:`1px solid ${T.border}`, background:T.surface, color:T.ink2, fontSize:12, fontWeight:500, cursor:'pointer', textDecoration:'none', display:'inline-block' }
