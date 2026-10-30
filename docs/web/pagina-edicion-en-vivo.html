@@ -1,0 +1,128 @@
+<style>
+.fe-block:has(.mg){grid-column:1/-1!important;grid-row:1/2!important}
+.fluid-engine:has(.mg){grid-template-rows:auto!important;min-height:0!important;row-gap:0!important}
+section.page-section:has(.mg) .content-wrapper{padding:0!important;max-width:none!important}
+section.page-section:has(.mg){padding:0!important;min-height:0!important}
+.sqs-block-code:has(.mg){padding:0!important}
+</style>
+<style>
+.mg{--r:#CE2637;--n:#0a0a0a;--g:#f0efec;font-family:'Archivo',Arial,sans-serif;color:var(--n);line-height:1.5}
+.mg *{box-sizing:border-box}
+.mg a{color:inherit}
+.mg .w{max-width:1180px;margin:0 auto;padding:0 20px}
+.mg h1,.mg h2,.mg .big{font-family:'Anton',Impact,sans-serif;font-weight:400;text-transform:uppercase;line-height:1.02;margin:0}
+.mg h1{font-size:clamp(40px,7vw,92px);color:#fff}
+.mg h2{font-size:clamp(32px,4.6vw,60px);margin-bottom:28px}
+.mg .num{color:var(--r);font-weight:700;font-size:18px;margin-bottom:10px;display:block}
+.mg .hero{position:relative;min-height:78vh;display:flex;align-items:flex-end;background:#000 url('https://images.squarespace-cdn.com/content/v1/6865c44b77d39b36bac20b70/de22d4f9-153e-4663-827d-db92351f0245/quilmes-galaxia-01.jpg?format=2500w') center/cover no-repeat}
+.mg .hero:before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.15) 0%,rgba(0,0,0,.8) 100%)}
+.mg .hero .w{position:relative;padding-top:120px;padding-bottom:64px}
+.mg .hero p{color:#fff;font-size:clamp(17px,1.6vw,21px);max-width:720px;margin:22px 0 30px}
+.mg .btn{display:inline-block;background:var(--r);color:#fff!important;text-decoration:none;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:16px 28px;border-radius:999px;margin:0 10px 10px 0}
+.mg .btn.o{background:transparent;border:2px solid #fff}
+.mg .stats{background:var(--r);color:#fff}
+.mg .stats .w{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding-top:44px;padding-bottom:44px}
+.mg .stats b{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:clamp(44px,5vw,68px);display:block;line-height:1}
+.mg .stats span{font-size:15px;display:block;margin-top:6px}
+.mg section.s{padding:84px 0}
+.mg section.gr{background:var(--g)}
+.mg .cols{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+.mg .item{border-top:3px solid var(--n);padding-top:16px}
+.mg .item h3{font-family:'Archivo',Arial,sans-serif;font-weight:700;font-size:20px;margin:0 0 6px;text-transform:uppercase}
+.mg .item p{margin:0;font-size:17px}
+.mg ol.pasos{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:p}
+.mg ol.pasos li{counter-increment:p;font-size:17px}
+.mg ol.pasos li:before{content:'0' counter(p);display:block;font-family:'Anton',Impact,sans-serif;font-size:54px;color:var(--r);line-height:1;margin-bottom:10px}
+.mg .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.mg .card{background:#fff}
+.mg .card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.mg .card div{padding:18px}
+.mg .card h3{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:26px;text-transform:uppercase;margin:0 0 6px;line-height:1.1}
+.mg .card p{margin:0;font-size:16px}
+.mg .muro{display:flex;flex-wrap:wrap;gap:12px 34px;font-family:'Anton',Impact,sans-serif;font-size:clamp(22px,2.6vw,34px);text-transform:uppercase;color:#9a9a9a}
+.mg .muro span{white-space:nowrap}
+.mg .faq details{border-top:2px solid var(--n);padding:20px 0}
+.mg .faq details:last-child{border-bottom:2px solid var(--n)}
+.mg .faq summary{font-weight:700;font-size:19px;cursor:pointer;list-style:none}
+.mg .faq summary::-webkit-details-marker{display:none}
+.mg .faq summary:after{content:'+';float:right;color:var(--r);font-size:26px;line-height:1}
+.mg .faq details[open] summary:after{content:'\2013'}
+.mg .faq p{margin:12px 0 0;font-size:17px;max-width:820px}
+.mg .cierre{background:var(--n);color:#fff;text-align:center}
+.mg .cierre h2{color:#fff}
+.mg .cierre p{font-size:19px;margin:0 0 28px}
+.mg h1,.mg h2,.mg h3,.mg p,.mg li,.mg summary,.mg span,.mg b{color:inherit!important;opacity:1!important;transform:none!important}
+.mg .hero,.mg .stats,.mg .cierre{color:#fff}
+.mg .num{color:var(--r)!important}
+.mg .muro span{color:#8a8a8a!important}
+@media(max-width:860px){
+.mg .stats .w{grid-template-columns:repeat(2,1fr)}
+.mg .cols,.mg .cards{grid-template-columns:1fr}
+.mg ol.pasos{grid-template-columns:repeat(2,1fr)}
+.mg section.s{padding:60px 0}
+.mg .hero{min-height:70vh}
+}
+</style>
+<style>
+.mg .stats .w{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.mg .otros{margin:26px 0 0;font-size:16px}
+.mg .otros a{margin:0 8px;white-space:nowrap}
+</style>
+<div class="mg">
+
+<header class="hero" style="background-image:url('https://images.squarespace-cdn.com/content/v1/6865c44b77d39b36bac20b70/01ad9704-bcb6-41a6-80a3-9a3804bd337c/quilmes-galaxia-03.jpg?format=2500w')"><div class="w">
+<h1>Edici&#243;n en vivo de video y fotos durante el evento</h1>
+<p>Un editor trabaja en el lugar con el material que filma el equipo. El resumen, los reels y las fotos salen antes de que termine el evento.</p>
+<a class="btn" href="https://wa.me/5491130116883?text=Hola%20Magma%2C%20quiero%20cotizar%20edici%C3%B3n%20en%20vivo%20para%20un%20evento" target="_blank" rel="noopener">Cotiz&#225; por WhatsApp</a>
+<a class="btn o" href="#trabajos">Ver trabajos</a>
+</div></header>
+
+<div class="stats"><div class="w">
+<div><b>10</b><span>trabajos de 2026 con edici&#243;n en vivo</span></div>
+<div><b>3</b><span>d&#237;as seguidos editando en el SIT de Personal</span></div>
+<div><b>10</b><span>personas en Galaxia 2026, edici&#243;n incluida</span></div>
+</div></div>
+
+<section class="s"><div class="w">
+<span class="num">01 / Qu&#233; editamos</span>
+<h2>Para usar en el momento</h2>
+<div class="cols">
+<div class="item"><h3>Resumen para el cierre</h3><p>Un video del d&#237;a que se proyecta en las pantallas antes de que termine el evento.</p></div>
+<div class="item"><h3>Reels para redes</h3><p>Piezas verticales cortas para publicar mientras el evento sigue. En CeraVe salieron el mismo d&#237;a.</p></div>
+<div class="item"><h3>Fotos editadas</h3><p>Una selecci&#243;n de fotos editadas durante la jornada, para prensa y redes.</p></div>
+<div class="item"><h3>Eventos de varios d&#237;as</h3><p>Cada jornada con su entrega. En el SIT 2026 editamos los tres d&#237;as.</p></div>
+</div>
+</div></section>
+
+<section class="s gr" id="trabajos"><div class="w">
+<span class="num">02 / Algunos trabajos</span>
+<h2>Edici&#243;n en vivo en 2026</h2>
+<div class="cards">
+<article class="card"><a href="/trabajos#quilmes-galaxia" style="text-decoration:none"><img src="https://images.squarespace-cdn.com/content/v1/6865c44b77d39b36bac20b70/01ad9704-bcb6-41a6-80a3-9a3804bd337c/quilmes-galaxia-03.jpg?format=1000w" alt="Show en vivo bajo el ne&#243;n de Pepsi Music en Galaxia 2026" loading="lazy"><div><h3>Quilmes &#183; Galaxia 2026</h3><p>El video se edit&#243; durante el evento.</p></div></a></article>
+<article class="card"><a href="/trabajos#personal-sit" style="text-decoration:none"><img src="https://images.squarespace-cdn.com/content/v1/6865c44b77d39b36bac20b70/99a2cd5b-9a60-42ee-bcab-0307f0ab0ea1/personal-sit-03.jpg?format=1000w" alt="Asistente festejando en los molinetes de SIT 2026" loading="lazy"><div><h3>Personal &#183; SIT 2026</h3><p>Tres d&#237;as con edici&#243;n en vivo y motion. Con Ostara 360.</p></div></a></article>
+<article class="card"><a href="/trabajos#cerave" style="text-decoration:none"><img src="https://images.squarespace-cdn.com/content/v1/6865c44b77d39b36bac20b70/943ab9b0-c2c2-4697-a8b6-d165021f7406/cerave-02.jpg?format=1000w" alt="Pareja mostrando la tira del photobooth de CeraVe" loading="lazy"><div><h3>CeraVe</h3><p>Reels editados el mismo d&#237;a. Con Pop Up.</p></div></a></article>
+</div>
+<div class="cols" style="margin-top:40px">
+<div class="item"><h3>Banco Provincia</h3><p>Plenario y reconocimientos con edici&#243;n durante la jornada. Con Pop Up.</p></div>
+<div class="item"><h3>Iveco y Santander &#183; Expoagro</h3><p>Dos marcas con edici&#243;n en vivo en la misma feria.</p></div>
+<div class="item"><h3>Iveco &#183; Oil & Gas</h3><p>Edici&#243;n en vivo y drone. Con ADN.</p></div>
+<div class="item"><h3>Compartir 2026</h3><p>Prearmado y d&#237;a del evento. Con Ostara 360.</p></div>
+</div>
+</div></section>
+
+<section class="s faq"><div class="w faq">
+<span class="num">03 / Preguntas frecuentes</span>
+<h2>Lo que nos preguntan</h2>
+<details><summary>&#191;Cu&#225;nto tarda el resumen?</summary><p>Depende de la duraci&#243;n del evento. Lo armamos para que est&#233; listo antes del cierre.</p></details>
+<details><summary>&#191;Se pueden editar video y fotos a la vez?</summary><p>S&#237;. Hay eventos donde editamos los dos en paralelo.</p></details>
+<details><summary>&#191;Entregan tambi&#233;n el material completo despu&#233;s?</summary><p>S&#237;. Lo editado en vivo es una entrega m&#225;s y el resto llega por Drive.</p></details>
+</div></section>
+
+<section class="s cierre"><div class="w">
+<h2>&#191;Necesit&#225;s el video antes del cierre?</h2>
+<p>Contanos la fecha y te armamos el presupuesto en el d&#237;a.</p>
+<a class="btn" href="https://wa.me/5491130116883?text=Hola%20Magma%2C%20quiero%20cotizar%20edici%C3%B3n%20en%20vivo%20para%20un%20evento" target="_blank" rel="noopener">Cotiz&#225; por WhatsApp</a>
+<p class="otros"><a href="/cobertura-eventos-corporativos">Eventos corporativos</a> &middot; <a href="/fotografia-de-eventos">Fotograf&#237;a</a> &middot; <a href="/video-corporativo">Video corporativo</a> &middot; <a href="/drone-fpv">Drone y FPV</a> &middot; <a href="/activaciones-de-marca">Activaciones</a> &middot; <a href="/trabajos">Trabajos</a></p>
+</div></section>
+
+</div>

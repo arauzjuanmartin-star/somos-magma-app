@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "anton",
+        "createdAt": "2026-10-29T21:53:32.898Z",
+        "reason": "Claude: Anton es la tipografía de títulos del sitio somosmagma.com (Squarespace), ya usada en docs/web/pagina-*.html; DESIGN.md documenta la app, no la web"
+      }
+    ]
+  }
+}
