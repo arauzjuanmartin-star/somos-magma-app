@@ -106,7 +106,8 @@ A) Para cada agencia de [${comentar.join(', ')}]: 2 comentarios de ejemplo para 
    PROHIBIDO inventar: ninguna cifra, porcentaje o dato que no esté en las memorias, y ninguna experiencia que no pasó ("me sorprendió", "me tocó ver", "vengo siguiendo"). Si no sabés algo del post, preguntá en vez de afirmar. Juan los va a pegar con su nombre delante de sus clientes.
 B) Si hoy sale un post de la página según el cronograma: una línea para que Juan lo comparta desde su perfil (en primera persona, cuenta por qué ese trabajo le gustó o qué resolvimos, 2 líneas como máximo, sin cifras inventadas). Si hoy no sale nada, "compartir": null.
 C) La mejora del día: ${mejoraHoy ? `"${mejoraHoy.titulo}" (id ${mejoraHoy.id})` : 'ninguna (ya se hicieron todas): proponé una nueva útil para captar agencias'}. Explicala para alguien que no sabe usar LinkedIn: para qué le sirve en plata o en clientes (1 frase), y los pasos exactos de dónde tocar en la web de LinkedIn (máximo 5 pasos cortos, nombrando los botones como aparecen en español). Si la mejora necesita un texto (titular, acerca de, pedido de recomendación), escribilo listo para copiar.
-D) Un consejo de una línea sobre algo que hoy conviene tener en cuenta.
+D) Un consejo práctico de una línea sobre algo que hoy conviene tener en cuenta. Sin estadísticas ni "es el día que más…": nada que no puedas respaldar.
+En el titular y en cualquier texto sobre Magma: el equipo son freelancers que arma Magma, no "equipo propio".
 
 Tu respuesta final es SOLO un bloque JSON, sin texto antes ni después:
 {"comentarios":[{"agencia":"…","evento":"texto","anuncio":"texto"}],"compartir":{"post":"qué post sale hoy","texto":"…"} ,"mejora":{"id":"…","titulo":"…","para_que":"…","pasos":["…"],"texto":"texto para copiar o vacío"},"consejo":"…"}`
