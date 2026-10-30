@@ -41,6 +41,12 @@ export default function WhatsApp(){
       .catch(()=>{ setPPensando(false); setPInfo({error:'Error de conexión'}) })
   }
 
+  // Alta del número en Meta (solo Juan, se usa una vez): ver cómo está y registrarlo con el PIN.
+  const [alta,setAlta]=useState(null),[pin,setPin]=useState(''),[altaCargando,setAltaCargando]=useState(false)
+  const pedirAlta=(body)=>{ setAltaCargando(true)
+    fetch('/api/whatsapp-bandeja'+(body?'':'?alta=1'), body?{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({alta:'activar', ...body})}:undefined)
+      .then(r=>r.json()).then(j=>{ setAltaCargando(false); setAlta(j); if(!j.error) setPin('') }).catch(()=>{ setAltaCargando(false); setAlta({error:'Error de conexión'}) }) }
+
   const traer=()=>fetch('/api/whatsapp-bandeja').then(r=>r.json()).then(j=>{ if(j.error)setErr(j.error); else { setErr(''); setD(j) } }).catch(()=>setErr('Error de conexión'))
   useEffect(()=>{ if(!mail) return; traer(); const t=setInterval(traer, 20000); return ()=>clearInterval(t) /* eslint-disable-next-line */ },[mail])
   useEffect(()=>{ if(router.query.tel) setSel(String(router.query.tel)) },[router.query.tel])
@@ -77,6 +83,23 @@ export default function WhatsApp(){
         <Link href="/" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>← app</Link>
       </div>
       {d && !d.conectado && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 14px', fontSize:13, marginBottom:12}}>Todavía no está conectado a Meta: faltan WHATSAPP_PHONE_ID y WHATSAPP_TOKEN en Vercel. Se puede mirar, no mandar.</div>}
+      {mail==='juan@somosmagma.com' && d && (!d.conectado || alta) && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'12px 16px', marginBottom:12, fontSize:13.5}}>
+        <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+          <div style={{flex:1, fontWeight:700}}>Activar el número en Meta</div>
+          <button onClick={()=>pedirAlta()} disabled={altaCargando} style={{padding:'6px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>{altaCargando?'…':'Ver estado'}</button>
+        </div>
+        {alta?.error && <div style={{color:T.brand, marginTop:8}}>⚠️ {alta.error}</div>}
+        {alta?.numeros?.map(n=><div key={n.id} style={{marginTop:10, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+          <span style={{fontWeight:600}}>{n.display_phone_number} · {n.verified_name}</span>
+          <Pill color={n.status==='CONNECTED'?T.pos:T.warn} soft={n.status==='CONNECTED'?T.posSoft:T.warnSoft}>{n.status||'?'}</Pill>
+          <span style={{fontFamily:MONO, fontSize:12, color:T.ink2}}>ID {n.id}{alta.phoneIdCargado===n.id?' ✓ cargado en Vercel':''}</span>
+          {n.status!=='CONNECTED' && <>
+            <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,6))} type="password" inputMode="numeric" placeholder="PIN de 6 dígitos" style={{width:140, border:`1px solid ${T.border}`, borderRadius:8, padding:'6px 9px', fontSize:13}}/>
+            <button onClick={()=>pedirAlta({phoneId:n.id, pin})} disabled={altaCargando||pin.length!==6} style={{padding:'6px 12px', borderRadius:9, border:'none', background:'#25D366', color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer', opacity:(altaCargando||pin.length!==6)?.5:1}}>Activar</button>
+          </>}
+        </div>)}
+        {alta?.numeros && <div style={{marginTop:8, fontSize:12, color:T.ink3}}>Apps que reciben los mensajes: {alta.apps?.length ? alta.apps.join(', ') : 'ninguna todavía'}</div>}
+      </div>}
       {err && <div style={{background:T.brandSoft, color:T.brand, borderRadius:10, padding:'10px 14px', fontSize:13, marginBottom:12}}>{err}</div>}
       {!d && !err && <div style={{color:T.ink3, fontSize:14}}>Cargando conversaciones…</div>}
 
