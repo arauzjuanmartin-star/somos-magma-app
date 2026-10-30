@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- La rutina de LinkedIn de Juan: lunes a viernes 8:45 arma el día (a quién invitar, qué comentar, la mejora) en la solapa LINKEDIN y le manda el mail con el botón a /linkedin. Ver scripts/linkedin-dia.mjs.
+       Instalar (una vez, y de nuevo si este archivo cambia):
+         launchctl unload ~/Library/LaunchAgents/com.somosmagma.linkedin-dia.plist 2>/dev/null
+         cp scripts/launchd/com.somosmagma.linkedin-dia.plist ~/Library/LaunchAgents/
+         launchctl load ~/Library/LaunchAgents/com.somosmagma.linkedin-dia.plist
+       Probar ahora:  launchctl start com.somosmagma.linkedin-dia
+       Frenar:        launchctl unload ~/Library/LaunchAgents/com.somosmagma.linkedin-dia.plist -->
+  <key>Label</key><string>com.somosmagma.linkedin-dia</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>scripts/linkedin-dia.mjs</string>
+    <string>--escribir</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/dronjuan/somos-magma-app</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/linkedin-stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/dronjuan/somos-magma-app/scripts/.programado/linkedin-stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+</dict>
+</plist>
