@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res)
   if (!auth) return
   if (req.query.alta || req.body?.alta) {
-    if (auth.mail !== 'juan@somosmagma.com') return res.status(403).json({ error: 'Solo Juan' })
+    if (!['juan@somosmagma.com', 'arauzjuanmartin@gmail.com'].includes(auth.mail)) return res.status(403).json({ error: 'Solo Juan' })
     return alta(req, res)
   }
   if (req.method === 'POST') {

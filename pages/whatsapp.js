@@ -83,7 +83,7 @@ export default function WhatsApp(){
         <Link href="/" style={{fontSize:13, color:T.azul, textDecoration:'none'}}>← app</Link>
       </div>
       {d && !d.conectado && <div style={{background:T.warnSoft, color:T.warn, borderRadius:10, padding:'10px 14px', fontSize:13, marginBottom:12}}>Todavía no está conectado a Meta: faltan WHATSAPP_PHONE_ID y WHATSAPP_TOKEN en Vercel. Se puede mirar, no mandar.</div>}
-      {mail==='juan@somosmagma.com' && d && (!d.conectado || alta) && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'12px 16px', marginBottom:12, fontSize:13.5}}>
+      {['juan@somosmagma.com','arauzjuanmartin@gmail.com'].includes(mail) && d && (!d.conectado || alta) && <div style={{background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:'12px 16px', marginBottom:12, fontSize:13.5}}>
         <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
           <div style={{flex:1, fontWeight:700}}>Activar el número en Meta</div>
           <button onClick={()=>pedirAlta()} disabled={altaCargando} style={{padding:'6px 12px', borderRadius:9, border:`1px solid ${T.border}`, background:T.surface, fontSize:12.5, fontWeight:600, cursor:'pointer'}}>{altaCargando?'…':'Ver estado'}</button>
