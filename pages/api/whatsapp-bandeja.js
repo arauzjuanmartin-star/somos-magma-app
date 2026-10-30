@@ -27,9 +27,14 @@ async function alta(req, res) {
       await meta(`${phoneId}/register`, { method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', pin }) })
       await meta(`${WABA}/subscribed_apps`, { method: 'POST' })
     }
-    const numeros = await meta(`${WABA}/phone_numbers?fields=id,display_phone_number,verified_name,status,code_verification_status,name_status,platform_type,quality_rating`)
-    const apps = await meta(`${WABA}/subscribed_apps`)
-    res.json({ waba: WABA, numeros: numeros.data || [], apps: (apps.data || []).map(a => a.whatsapp_business_api_data?.name || a.name || a.id), phoneIdCargado: process.env.WHATSAPP_PHONE_ID || '' })
+    // Cada consulta por separado: si Meta rechaza una, se ve cuál y las otras igual muestran lo suyo.
+    const probar = p => meta(p).catch(e => ({ error: e.message }))
+    const [cuenta, numeros, apps] = await Promise.all([
+      probar(`${WABA}?fields=id,name,account_review_status,business_verification_status,ownership_type`),
+      probar(`${WABA}/phone_numbers`),
+      probar(`${WABA}/subscribed_apps`),
+    ])
+    res.json({ waba: WABA, cuenta, numeros: numeros.data || [], errorNumeros: numeros.error, apps: (apps.data || []).map(a => a.whatsapp_business_api_data?.name || a.name || a.id), errorApps: apps.error, phoneIdCargado: process.env.WHATSAPP_PHONE_ID || '' })
   } catch (e) { res.status(500).json({ error: e.message }) }
 }
 export default async function handler(req, res) {
